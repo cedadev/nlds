@@ -57,7 +57,7 @@ async def get(transaction_id: UUID,
     if not filepath:
         response_error = ResponseError(
                 loc = ["files", "get"],
-                msg = "Filepath not supplied.",
+                msg = "filepath not supplied.",
                 type = "Incomplete request."
             )
         raise HTTPException(
@@ -68,6 +68,45 @@ async def get(transaction_id: UUID,
     response = FileResponse(
         uuid = transaction_id,
         msg = (f"GET transaction with id {transaction_id} accepted for "
+                "processing.")
+    )
+
+    return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
+                        content = response.json())
+
+
+############################ GET LIST METHOD ########################
+@router.put("/getlist",
+            status_code = status.HTTP_202_ACCEPTED,
+            responses = {
+                status.HTTP_202_ACCEPTED: {"model" : FileResponse},
+                status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
+                status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
+                status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
+            }
+        )
+async def put(transaction_id: UUID,
+              filelist: FileList,
+              user: str = Depends(authenticate_user),
+              group: str = Depends(authenticate_group),
+              token: str = Depends(authenticate_token)):
+
+    # validate filepath and filelist - one or the other has to exist
+    if not filelist:
+        response_error = ResponseError(
+                loc = ["files", "getlist"],
+                msg = "filelist not supplied.",
+                type = "Incomplete request."
+            )
+        raise HTTPException(
+            status_code = status.HTTP_400_BAD_REQUEST,
+            detail = response_error.json()
+        )
+    print(filelist)
+    # return response, transaction id accepted for processing
+    response = FileResponse(
+        uuid = transaction_id,
+        msg = (f"GETLIST transaction with id {transaction_id} accepted for "
                 "processing.")
     )
 
