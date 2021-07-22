@@ -43,15 +43,17 @@ class FileResponse(BaseModel):
             responses = {
                 status.HTTP_202_ACCEPTED: {"model" : FileResponse},
                 status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
+                status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
                 status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
                 status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
             }
         )
 async def get(transaction_id: UUID,
+              token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
-              filepath: str = None,
-              token: str = Depends(authenticate_token)):
+              filepath: str = None
+              ):
 
     # validate filepath and filelist - one or the other has to exist
     if not filepath:
@@ -81,15 +83,16 @@ async def get(transaction_id: UUID,
             responses = {
                 status.HTTP_202_ACCEPTED: {"model" : FileResponse},
                 status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
+                status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
                 status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
                 status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
             }
         )
 async def put(transaction_id: UUID,
               filelist: FileList,
+              token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
-              group: str = Depends(authenticate_group),
-              token: str = Depends(authenticate_token)):
+              group: str = Depends(authenticate_group)):
 
     # validate filepath and filelist - one or the other has to exist
     if not filelist:
@@ -120,6 +123,7 @@ async def put(transaction_id: UUID,
             responses = {
                 status.HTTP_202_ACCEPTED: {"model" : FileResponse},
                 status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
+                status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
                 status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
                 status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
             }

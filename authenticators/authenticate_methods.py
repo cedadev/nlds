@@ -28,7 +28,7 @@ async def authenticate_token(token: str = Depends(oauth2_scheme)):
                 type = "Resource not found."
             )
             raise HTTPException(
-                status_code = status.HTTP_403_FORBIDDEN,
+                status_code = status.HTTP_401_UNAUTHORIZED,
                 detail = response_error.json()
             )
     else:
@@ -51,8 +51,8 @@ async def authenticate_user(user: str, token: str = Depends(oauth2_scheme)):
     elif not authenticator.authenticate_user(token, user):
         response_error = ResponseError(
             loc = ["authenticate_methods", "authenticate_user"],
-            msg = f"User {user} could not be found or has invalid OAuth token.",
-            type = "Resource not found."
+            msg = f"User {user} could not be found.",
+            type = "Forbidden."
         )
         raise HTTPException(
             status_code = status.HTTP_404_NOT_FOUND,
