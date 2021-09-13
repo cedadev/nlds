@@ -1,6 +1,16 @@
 @startuml
 
 left to right direction
+skinparam arrowcolor black
+skinparam objectbordercolor black
+skinparam objectcolor automatic
+skinparam legendbackgroundcolor white
+legend top right 
+    NLDS 
+    V1.0 Neil/Bryan 14/09/21
+end legend
+
+package client #azure {
 
 object "Client" as client
 client : library = Requests
@@ -11,18 +21,35 @@ httpapi : library = FastAPI
 object "JASMIN Accounts Portal" as jasminap
 jasminap : library = OAuth2
 
+} 
+
+package engine #peachpuff {
+
 object "Work Queue" as workqueue
 workqueue : program = RabbitMQ
-
-object "Work Processor" as workproc
-workproc : language = Python
 
 object "Transfer Processor" as transproc
 transproc : library = FTS3
 
+object "Tape" as tape
+tape : interface = CTA
+
+object "Object Storage" as objstore
+objstore : interface = s3
+
+}
+
+package tools #seashell {
+
+object "Work Processor" as workproc
+workproc : language = Python
+
 object "File Scanner" as filescan
 filescan : language = Python
 
+}
+
+package system  #mistyrose {
 object "Cache Processor" as cacheproc
 cacheproc : language = Python
 
@@ -34,10 +61,8 @@ dbproc : language = Python
 
 object "Database" as db
 db : type = ElasticSearch
+}
 
-object "Tape" as tape
-
-object "Object Storage" as objstore
 
 client --> httpapi
 client <-- jasminap : Token
@@ -57,5 +82,7 @@ transproc --> objstore
 transproc --> tape
 
 db --> cacheproc
+
+
 
 @enduml
