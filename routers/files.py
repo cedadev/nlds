@@ -129,11 +129,11 @@ async def put(transaction_id: UUID,
             }
         )
 async def put(transaction_id: UUID,
+              token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
               filepath: Optional[str]=None,
-              filelist: Optional[FileList]=None,
-              token: str = Depends(authenticate_token)
+              filelist: Optional[FileList]=None
               ):
 
     # validate filepath and filelist - one or the other has to exist
