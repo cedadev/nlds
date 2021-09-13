@@ -1,0 +1,61 @@
+@startuml
+
+left to right direction
+
+object "Client" as client
+client : library = Requests
+
+object "HTTP API" as httpapi
+httpapi : library = FastAPI
+
+object "JASMIN Accounts Portal" as jasminap
+jasminap : library = OAuth2
+
+object "Work Queue" as workqueue
+workqueue : program = RabbitMQ
+
+object "Work Processor" as workproc
+workproc : language = Python
+
+object "Transfer Processor" as transproc
+transproc : library = FTS3
+
+object "File Scanner" as filescan
+filescan : language = Python
+
+object "Cache Processor" as cacheproc
+cacheproc : language = Python
+
+object "Cache Policies" as cachepol
+cachepol : library = Open Policy Agent
+
+object "Database Processor" as dbproc
+dbproc : language = Python
+
+object "Database" as db
+db : type = ElasticSearch
+
+object "Tape" as tape
+
+object "Object Storage" as objstore
+
+client --> httpapi
+client <-- jasminap : Token
+httpapi <--> jasminap : Authenticate
+httpapi --> workqueue
+
+cacheproc <-- cachepol
+workqueue <--> workproc
+workqueue <--> transproc
+cacheproc --> workqueue
+workqueue --> dbproc
+workqueue <--> filescan
+
+db <-- dbproc
+
+transproc --> objstore
+transproc --> tape
+
+db --> cacheproc
+
+@enduml
