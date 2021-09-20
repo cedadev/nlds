@@ -1,6 +1,6 @@
 import json
 import os.path
-from .setup import CONFIG_FILE_LOCATION
+from .nlds_setup import CONFIG_FILE_LOCATION
 
 def validate_config_file(json_config):
     """Validate the JSON config file to match the schema in load_config_file."""
