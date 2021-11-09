@@ -17,6 +17,9 @@ setup(
         'requests'
     ],
     include_package_data=True,
+    package_data={
+        'nlds': ['templates/*.j2']
+    },
     license='LICENSE.txt',  # example license
     description=('REST-API server for CEDA Near-Line Data Store'),
     long_description=README,
