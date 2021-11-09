@@ -1,0 +1,10 @@
+# Generic python files to ignore
+**/__pycache__/
+.pytest_cache/
+*egg-info
+.venv/
+build/
+dist/
+
+# nlds config files to ignore
+**/.server_config

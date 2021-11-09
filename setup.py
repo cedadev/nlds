@@ -1,5 +1,5 @@
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open(os.path.join(os.path.dirname(__file__), 'README.md')) as readme:
     README = readme.read()
@@ -10,13 +10,16 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 setup(
     name='nlds',
     version='0.0.1',
-    packages=['nlds'],
+    packages=find_packages(),
     install_requires=[
         'fastapi',
         'uvicorn',
         'requests'
     ],
     include_package_data=True,
+    package_data={
+        'nlds': ['templates/*.j2']
+    },
     license='LICENSE.txt',  # example license
     description=('REST-API server for CEDA Near-Line Data Store'),
     long_description=README,

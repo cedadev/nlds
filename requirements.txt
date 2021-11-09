@@ -1,0 +1,13 @@
+asgiref==3.4.1
+certifi==2021.5.30
+charset-normalizer==2.0.6
+click==8.0.1
+fastapi==0.68.1
+h11==0.12.0
+idna==3.2
+pydantic==1.8.2
+requests==2.26.0
+starlette==0.14.2
+typing-extensions==3.10.0.2
+urllib3==1.26.6
+uvicorn==0.15.0
