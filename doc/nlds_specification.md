@@ -103,7 +103,6 @@ archive via ingest process.
 2. Tape system
 
 **Actions:**
-
 * Ingest.
 * Deposit.
 * Storage allocation - what data should go where (should be policy driven 
@@ -122,6 +121,7 @@ rather than list driven).
 # Software components
 
 ## NLDS client
+
 * The user interacts with the NLDS client.
 * Authorisation tokens are obtained from the OAuth server.
 * Commands are issued to the NLDS server, along with the authorisation tokens.
@@ -129,11 +129,13 @@ rather than list driven).
 flow through the system.
 
 ## NLDS server
+
 * NLDS client commands are received, along with their authorisation tokens.
 * Authorisation tokens are checked with the OAuth server.
 * Commands are translated to RabbitMQ commands and pushed to the queue.
 
 ## OAuth server
+
 * Performs generation and authorisation of tokens
 * Currently JASMIN accounts portal.  Should be able to be something else as 
 well.
@@ -144,20 +146,20 @@ The interaction of the NLDS client, NLDS server, OAuth server and the ingest of 
 :-:
 | **Figure 2** Interaction of NLDS client, server, OAuth server and Rabbit MQ message broker. |
 
+# Rabbit MQ queue
 
-## Rabbit MQ queue
 The Rabbit MQ queue will have a number of subscribers to it.  These are:
 * Work processor
 * File / directory scanner
 * Transfer processor
 * Database processor
 
-### Work Processor
+## Work Processor
 This takes the description of work to do and pre-processes it.  One example is 
 if a user has supplied a list of files to transfer, this list might be broken 
 up into smaller work units and re-pushed onto the queue.
 
-### File scanner
+## File scanner
 This takes the description of work that the Work Processor pushed onto the 
 queue and starts to build a file list.
 
@@ -174,15 +176,103 @@ If a threshold number of files has been reached then it can:
 * Push a message to transfer the files
 * Push a message to scan the remainder of the directories
 
-### Transfer processor
+## Transfer processor
 This takes the list of files from the File Scanner and transfers them from one 
 storage medium to another
 At the end it pushes a message to the queue to say it has completed.
 
-### Database processor
+## Database processor
 Add files and metadata to a file catalogue database.  Intake database?
 
-## Monitoring
+# Monitoring
 Important!
 How do we know when a transfer has completed, if it has been split into 
 multiple components?
+
+# Message formats
+
+Messages are in JSON format so as to aid human and machine readability.  The user entry point is the NLDS server, which presents a HTTP API (REST-ful), implemented in FAST-API.  This HTTP API fulfills two different classes of operations for NLDS: the CRUD (Create, Read, Update, Delete) operations, and search. 
+
+## CRUD operations
+
+These consist of just 6 commands
+
+1. `put` : transfer a single file to the NLDS.
+2. `putlist` : transfer a user-supplied list of files to the NLDS.
+3. `get` : retrieve a single file from the NLDS.
+4. `getlist` : retrieve a user-supplied list of files from the NLDS.
+5. `del` : remove a single file from the NLDS.
+6. `dellist` : remove a user-supplied list of files from the NLDS.
+
+### PUT command
+
+| API endpoint | /files |
+|---|---|
+| HTTP method  | PUT |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+|              | filepath |
+| Body         | none |
+| Example      | `/files/put?transaction_id=1;user="bob";group="root";filepath="myfile.txt"` |
+
+### PUTLIST command
+
+| API endpoint | /files |
+|---|---|
+| HTTP method  | PUT |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+| Body         | JSON|
+| Example      | `PUT /files/transaction_id=1;user="bob";group="root"`|
+| Body example | `{"filepath" : ["file1", "file2", "file3"]}`|
+
+
+### GET command
+
+| API endpoint | /files |
+|---|---|
+| HTTP method  | GET |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+|              | filepath |
+| Body         | none |
+| Example      | `GET /files/transaction_id=1;user="bob";group="root";filepath="myfile.txt"` |
+
+### GETLIST command
+
+| API endpoint | /files/getlist |
+|---|---|
+| HTTP method  | PUT |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+| Body         | JSON|
+| Example      | `/files/getlist?transaction_id=1;user="bob";group="root";`|
+| Body example | `{"filepath" : ["file1", "file2", "file3"]}`|
+
+### DEL command
+
+| API endpoint | /files |
+|---|---|
+| HTTP method  | DELETE |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+|              | filepath |
+| Body         | none |
+| Example      | `/files/getlist?transaction_id=1;user="bob";group="root";filepath="myfile.txt" `|
+
+### DELLIST command
+
+| API endpoint | /files/dellist |
+|---|---|
+| HTTP method  | PUT |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+| Body         | JSON|
+| Example      | `/files/dellist?transaction_id=1;user="bob";group="root"`|
+| Body example | `{"filepath" : ["file1", "file2", "file3"]}`|
