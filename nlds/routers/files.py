@@ -10,6 +10,9 @@ from ..errors import ResponseError
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
+from .routing_methods import rabbit_publish_response
+from ..utils.constants import GET, GETLIST, PUT, POST, DELETE
+
 router = APIRouter()
 
 # uuid (for testing)
@@ -30,6 +33,9 @@ class FileList(BaseModel):
                 ]
             }
         }
+
+    def to_str(self) -> str:
+        return ",".join(*self.filelist)
 
 
 class FileResponse(BaseModel):
@@ -72,6 +78,7 @@ async def get(transaction_id: UUID,
         msg = (f"GET transaction with id {transaction_id} accepted for "
                 "processing.")
     )
+    rabbit_publish_response(transaction_id, GET, filepath)
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -112,6 +119,7 @@ async def put(transaction_id: UUID,
         msg = (f"GETLIST transaction with id {transaction_id} accepted for "
                 "processing.")
     )
+    rabbit_publish_response(transaction_id, GETLIST, filelist.to_str())
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -160,12 +168,17 @@ async def put(transaction_id: UUID,
             status_code = status.HTTP_400_BAD_REQUEST,
             detail = response_error.json()
         )
+
+    contents = filepath if not filelist else filelist
+
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
         msg = (f"PUT transaction with id {transaction_id} accepted for "
                 "processing.")
     )
+    rabbit_publish_response(transaction_id, PUT, contents)
+    
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
 
