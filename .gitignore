@@ -8,3 +8,4 @@ dist/
 
 # nlds config files to ignore
 **/.server_config
+**/.rabbit_config

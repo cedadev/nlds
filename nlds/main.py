@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from .nlds_setup import API_VERSION
 
 from .routers import collections, files
+from .routers.routing_methods import rabbit_connection
 
 nlds = FastAPI()
 

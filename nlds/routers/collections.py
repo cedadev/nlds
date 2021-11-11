@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from .routing_methods import rabbit_publish_response
 
 router = APIRouter()
 
