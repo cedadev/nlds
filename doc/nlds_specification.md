@@ -189,13 +189,41 @@ Important!
 How do we know when a transfer has completed, if it has been split into 
 multiple components?
 
-# Message formats
+# Messaging
 
-Messages are in JSON format so as to aid human and machine readability.  The user entry point is the NLDS server, which presents a HTTP API (REST-ful), implemented in FAST-API.  This HTTP API fulfills two different classes of operations for NLDS: the CRUD (Create, Read, Update, Delete) operations, and search. 
+The NLDS relies on passing messages between different components in the 
+system.  These messages have to be formatted to match the receiving sysmtem and so different message formats are used:
+
+1.  HTTP API / JSON
+2.  RabbitMQ
+3.  FTS3
+4.  S3
+
+## Rabbit MQ queue structure
+
+| ![client_server_seq](./uml/queue_structure.png) |
+:-:
+| **Figure 3** Structure and interaction of Rabbit Queues|
+
+## Message flow
+
+| ![client_server_seq](./uml/message_flow_put.png) |
+:-:
+| **Figure 4** Flow of messages for a putlist case of transferring a list 
+of files to the NLDS. |
+
+## Message formats
+
+Messages are in JSON format so as to aid human and machine readability.  
+The user entry point is the NLDS server, which presents a HTTP API 
+(REST-ful), implemented in FAST-API.  This HTTP API fulfills two different 
+classes of operations for NLDS: the CRUD (Create, Read, Update, Delete) 
+operations, and search operations. 
 
 ## CRUD operations
 
-These consist of just 6 commands
+These messages are sent to the NLDS server.  These consist of just 6 
+commands.
 
 1. `put` : transfer a single file to the NLDS.
 2. `putlist` : transfer a user-supplied list of files to the NLDS.

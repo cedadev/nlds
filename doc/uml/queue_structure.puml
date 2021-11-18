@@ -1,0 +1,44 @@
+@startuml
+
+left to right direction
+agent api_server as "API server" 
+
+together {
+    agent exchange as "Exchange" 
+    note bottom of exchange: type = direct
+}
+together {
+    queue q1 as "Scan Q" #lightblue
+    queue q2 as "Transfer Q" #gold
+    queue q3 as "Catalog Q" #springgreen
+}
+queue q4 as "Monitor Q" #tomato
+
+together {
+    component scan1 as "Scanner 1" #lightblue
+    component scan2 as "Scanner 2" #lightblue
+}
+
+component tran1 as "Transfer" #gold
+component cat1 as "Catalog" #springgreen
+component mon1 as "Monitor" #tomato
+person user as "User"
+
+api_server --> exchange
+exchange --> q1 : key=scan
+exchange --> q2 : key=transfer
+exchange --> q3 : key=ingest
+exchange --> q4 : key=monitor
+api_server --> mon1
+
+q1 --> scan1 : prefetch=1
+q1 --> scan2 : prefetch=1
+q2 --> tran1 : prefetch=1
+q3 --> cat1 : prefetch=1
+q4 --> mon1 : prefetch=1
+
+scan1 --> exchange
+cat1 --> exchange : key=monitor
+
+user -> mon1
+@enduml

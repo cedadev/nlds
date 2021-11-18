@@ -105,7 +105,6 @@ async def put(transaction_id: UUID,
             status_code = status.HTTP_400_BAD_REQUEST,
             detail = response_error.json()
         )
-    print(filelist)
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,

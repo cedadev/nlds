@@ -1,0 +1,48 @@
+@startuml message_flow_put
+
+actor user as "User"
+participant client as "Client"
+participant server as "API server"
+participant exchange as "Exchange"
+
+queue q1 as "Scan Q" #lightblue
+collections scan as "Scanners" #lightblue
+
+queue q2 as "Transfer Q" #gold
+
+user -> client : PUT(filelist,target)
+activate client
+client -> server : id=id\nPUT(filelist,target)
+deactivate client
+activate server
+server -> exchange : id=id\nkey=scan\nmsg=(filelist)
+deactivate server
+activate exchange
+exchange -> q1 : key=scan\nmsg=(filelist,id)
+deactivate exchange
+activate q1
+q1 -> scan : key=scan\nmsg=(filelist,id)
+deactivate q1
+activate scan
+loop #lightgrey for file in filelist 
+    alt file is directory
+        scan -> exchange : key=scan\nmsg=(file,id)
+        activate exchange
+    else else
+        scan -> scan : add file to\ntransfer_list
+    end
+end
+scan -> q2 : key=tran\nmsg=(transfer_list,target)
+deactivate scan
+exchange -> q1 : key=scan\nmsg=(filelist,id)
+deactivate exchange
+activate q1
+q1 -> scan : key=scan\nmsg=(filelist,id)
+deactivate q1
+activate scan
+loop #lightgrey for file in filelist 
+    scan -> scan : add file to\ntransfer_list
+end
+scan -> q2 : key=tran\nmsg=(transfer_list,target)
+deactivate scan
+@enduml
