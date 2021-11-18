@@ -1,42 +1,58 @@
 import json
 import os.path
+
 from .nlds_setup import CONFIG_FILE_LOCATION
+from .utils.constants import CONFIG_SCHEMA
 
-def validate_config_file(json_config):
-    """Validate the JSON config file to match the schema in load_config_file."""
-    # Server section
-    try:
-        auth_section = json_config["authentication"]
-    except KeyError:
-        raise RuntimeError(
-            f"The config file at {CONFIG_FILE_LOCATION} does not contain an "
-            "['authentication'] section."
-        )
+def validate_config_file(json_config: dict) -> None:
+    """
+    Validate the JSON config file matches the schema defined in nlds_setup. 
+    Currently only checks that required headings and subheadings exist, i.e. only 
+    scans one layer deep and does no value checking. 
 
-    for key in ["authenticator_backend"]:
+    :param json_config:     Config file loaded using json.load()
+    
+    """
+    # Convert defined schema into a dictionary for ease of iteration
+    schema = dict(CONFIG_SCHEMA)
+
+    # Loop through and check that required headings and labels exist
+    for section_heading, section_labels in schema.items():
         try:
-            value = auth_section[key]
+            section = json_config[section_heading]
         except KeyError:
-            raise KeyError(
-                f"The config file at {CONFIG_FILE_LOCATION} does not "
-                f"contain {key} in the ['authentication'] section."
+            raise RuntimeError(
+                f"The config file at {CONFIG_FILE_LOCATION} does not contain a(n) "
+                f"['{section_heading}'] section."
             )
+        for sl in section_labels:
+            try:
+                _ = section[sl]
+            except KeyError:
+                raise KeyError(
+                    f"The config file at {CONFIG_FILE_LOCATION} does not "
+                    f"contain '{sl}' in the ['{section}'] section."
+                )
 
 
-def load_config():
+def load_config(config_file_path: str = CONFIG_FILE_LOCATION) -> dict:
     """Config file for the server contains:
         authentication : {
             authenticator_backend : <authenticator backend>,
+            ... optional settings for authenticator backend ...
         }
-        ... optional settings for authenticator backend ...
+        rabbitMQ : {
+            ... Rabbit server configuration info ...
+        }
+
     """
     # Location of config file is ./.serverconfig.  Open it, checking that it
     # exists as well.
     try:
-        fh = open(os.path.abspath(f"{CONFIG_FILE_LOCATION}"))
+        fh = open(os.path.abspath(f"{config_file_path}"))
     except FileNotFoundError:
         raise FileNotFoundError(
-            f"{CONFIG_FILE_LOCATION}",
+            f"{config_file_path}",
             "The config file cannot be found."
         )
 
@@ -45,7 +61,7 @@ def load_config():
         json_config = json.load(fh)
     except json.JSONDecodeError as je:
         raise RuntimeError(
-            f"The config file at {CONFIG_FILE_LOCATION} has an error at "
+            f"The config file at {config_file_path} has an error at "
             f"character {je.pos}: {je.msg}."
         )
 

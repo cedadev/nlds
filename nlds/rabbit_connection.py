@@ -1,20 +1,23 @@
-from configparser import ConfigParser
 from datetime import datetime
 from typing import List, Union
 import os
-import uuid
+from uuid import UUID
 
 import pika
+from pika import exchange_type
 
-from .nlds_setup import RABBIT_CONFIG_FILE_LOCATION
+from .utils.constants import RABBIT_CONFIG_SECTION
+from .server_config import load_config
+
 
 class RabbitMQConnection():
 
-    def __init__(self, config: str = RABBIT_CONFIG_FILE_LOCATION):
-        self.conf = ConfigParser()
-        self.conf.read(os.path.abspath(f"{config}"))
+    def __init__(self):
+        # Get rabbit-specific section of config file
+        whole_config = load_config()
+        self.config = whole_config[RABBIT_CONFIG_SECTION]
 
-        self.queue = self.conf.get('server', 'rabbit_queue')
+        self.exchange = self.config["exchange"]
 
         self.connection = None
         self.channel = None
@@ -23,30 +26,30 @@ class RabbitMQConnection():
     def get_connection(self):
         if self.connection is None or not (self.connection.is_open and self.channel.is_open):
             # Get the username and password for rabbit
-            rabbit_user = self.conf.get('server', 'rabbit_user')
-            rabbit_password = self.conf.get('server', 'rabbit_password')
+            rabbit_user = self.config["user"]
+            rabbit_password = self.config["password"]
 
             # Start the rabbitMQ connection
             connection = pika.BlockingConnection(
                 pika.ConnectionParameters(
-                    self.conf.get('server', 'rabbit_server'),
+                    self.config["server"],
                     credentials=pika.PlainCredentials(rabbit_user, rabbit_password),
-                    virtual_host=self.conf.get('server', 'rabbit_vhost'),
-                    heartbeat=300
+                    virtual_host=self.config["vhost"],
+                    heartbeat=60
                 )
             )
 
             # Create a new channel
             channel = connection.channel()
 
-            # Declare relevant queue
-            channel.queue_declare(queue=self.queue)
+            # Declare relevant exchanges
+            channel.exchange_declare(exchange=self.exchange["name"], exchange_type=self.exchange["type"])
 
             self.connection = connection
             self.channel = channel
 
     @staticmethod
-    def create_message(transaction_id: uuid, action: str, contents: str) -> str:
+    def create_message(transaction_id: UUID, action: str, contents: str) -> str:
         """
         Create message to add to rabbit queue. Message matches format of deposit logs.
         date_time:transaction_id:action:message_contents
@@ -59,10 +62,10 @@ class RabbitMQConnection():
 
         return f"{time}:{transaction_id}:{action}:[{contents}]"
 
-    def publish_message(self, msg: str) -> None:
+    def publish_message(self, routing_key: str, msg: str) -> None:
         self.channel.basic_publish(
-            exchange='',
-            routing_key=self.queue,
+            exchange=self.exchange['name'],
+            routing_key=routing_key,
             body=msg
         )
 
