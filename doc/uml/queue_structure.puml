@@ -1,4 +1,4 @@
-@startuml
+@startuml queue_structure
 
 left to right direction
 agent api_server as "API server" 

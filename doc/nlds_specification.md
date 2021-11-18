@@ -209,8 +209,7 @@ system.  These messages have to be formatted to match the receiving sysmtem and 
 
 | ![client_server_seq](./uml/message_flow_put.png) |
 :-:
-| **Figure 4** Flow of messages for a putlist case of transferring a list 
-of files to the NLDS. |
+| **Figure 4** Flow of messages for a putlist case of transferring a list of files to the NLDS. |
 
 ## Message formats
 

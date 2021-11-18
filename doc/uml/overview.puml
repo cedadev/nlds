@@ -1,4 +1,4 @@
-@startuml 
+@startuml overview
 
 actor user as "User"
 agent client as "Client API / CLI"
