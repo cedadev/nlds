@@ -4,31 +4,23 @@ left to right direction
 agent api_server as "API server" 
 
 together {
-    agent wex as "Work\nExchange" 
-    note bottom of wex: type=topic
     queue wq as "Work Q" #lightgrey
     component work as "Work" #lightgrey
 }
-wex --> wq : key=work.*
-wq --> work : prefetch=1
 
 together {
-    agent pex as "Process\nExchange"
-    note bottom of pex: type=topic
+    agent pex as "Exchange"
+    note top of pex: type=topic
 }
+
+pex --> wq : key=work.*
+wq -> work : prefetch=1
+
 together {
     queue sq as "Scan Q" #lightblue
     queue tq as "Transfer Q" #gold
     queue cq as "Catalog Q" #springgreen
 }
-
-note as N
-    These could be
-    the same exchange
-end note
-
-wex . N
-pex . N
 
 pex --> sq : key=scan.*
 pex --> tq : key=tran.*
@@ -39,7 +31,7 @@ work --> pex : key=tran.*
 work --> pex : key=cat.*
 
 queue mq as "Monitor Q" #tomato
-wex --> mq : key=mon.*
+pex --> mq : key=mon.*
 
 together {
     component scan1 as "Scanner 1" #lightblue
@@ -53,7 +45,7 @@ together {
     person user as "User"
 }
 
-api_server --> wex
+api_server -> pex
 
 sq --> scan1 : prefetch=1
 sq --> scan2 : prefetch=1
@@ -61,8 +53,8 @@ tq --> tran1 : prefetch=1
 cq --> cat1 : prefetch=1
 mq --> mon1 : prefetch=1
 
-user -> mon1
+mon1 <- user
 
-scan1 --> wex : key=work.scancomplete
+scan1 --> pex : key=scan.complete
 
 @enduml
