@@ -4,15 +4,42 @@ left to right direction
 agent api_server as "API server" 
 
 together {
-    agent exchange as "Exchange" 
-    note bottom of exchange: type = direct
+    agent wex as "Work\nExchange" 
+    note bottom of wex: type=topic
+    queue wq as "Work Q" #lightgrey
+    component work as "Work" #lightgrey
+}
+wex --> wq : key=work.*
+wq --> work : prefetch=1
+
+together {
+    agent pex as "Process\nExchange"
+    note bottom of pex: type=topic
 }
 together {
-    queue q1 as "Scan Q" #lightblue
-    queue q2 as "Transfer Q" #gold
-    queue q3 as "Catalog Q" #springgreen
+    queue sq as "Scan Q" #lightblue
+    queue tq as "Transfer Q" #gold
+    queue cq as "Catalog Q" #springgreen
 }
-queue q4 as "Monitor Q" #tomato
+
+note as N
+    These could be
+    the same exchange
+end note
+
+wex . N
+pex . N
+
+pex --> sq : key=scan.*
+pex --> tq : key=tran.*
+pex --> cq : key=cat.*
+
+work --> pex : key=scan.*
+work --> pex : key=tran.*
+work --> pex : key=cat.*
+
+queue mq as "Monitor Q" #tomato
+wex --> mq : key=mon.*
 
 together {
     component scan1 as "Scanner 1" #lightblue
@@ -21,24 +48,21 @@ together {
 
 component tran1 as "Transfer" #gold
 component cat1 as "Catalog" #springgreen
-component mon1 as "Monitor" #tomato
-person user as "User"
+together {
+    component mon1 as "Monitor" #tomato
+    person user as "User"
+}
 
-api_server --> exchange
-exchange --> q1 : key=scan
-exchange --> q2 : key=transfer
-exchange --> q3 : key=ingest
-exchange --> q4 : key=monitor
-api_server --> mon1
+api_server --> wex
 
-q1 --> scan1 : prefetch=1
-q1 --> scan2 : prefetch=1
-q2 --> tran1 : prefetch=1
-q3 --> cat1 : prefetch=1
-q4 --> mon1 : prefetch=1
-
-scan1 --> exchange
-cat1 --> exchange : key=monitor
+sq --> scan1 : prefetch=1
+sq --> scan2 : prefetch=1
+tq --> tran1 : prefetch=1
+cq --> cat1 : prefetch=1
+mq --> mon1 : prefetch=1
 
 user -> mon1
+
+scan1 --> wex : key=work.scancomplete
+
 @enduml

@@ -3,46 +3,59 @@
 actor user as "User"
 participant client as "Client"
 participant server as "API server"
-participant exchange as "Exchange"
+participant wex as "Work\nExchange"
 
-queue q1 as "Scan Q" #lightblue
+queue qw as "Work Q" #lightgrey
+collections work as "Work" #lightgrey
+
+participant pex as "Process\nExchange"
+queue qs as "Scan Q" #lightblue
 collections scan as "Scanners" #lightblue
-
-queue q2 as "Transfer Q" #gold
 
 user -> client : PUT(filelist,target)
 activate client
 client -> server : id=id\nPUT(filelist,target)
 deactivate client
 activate server
-server -> exchange : id=id\nkey=scan\nmsg=(filelist)
+server -> wex : id=id\nkey=work.put\nmsg=(filelist)
 deactivate server
-activate exchange
-exchange -> q1 : key=scan\nmsg=(filelist,id)
-deactivate exchange
-activate q1
-q1 -> scan : key=scan\nmsg=(filelist,id)
-deactivate q1
+activate wex
+wex -> qw : key=work.scan\nmsg=(filelist,id)
+deactivate wex
+activate qw
+qw -> work : key=work.scan\nmsg=(filelist,id)
+deactivate qw
+activate work
+loop #lightgrey for subfilelist in filelist
+    work -> pex : key=scan.scan\nmsg=(subfilelist,id)
+    deactivate work
+    activate pex
+end
+pex -> qs : key=scan.scan\nmsg=(filelist,id)
+deactivate pex
+activate qs
+qs -> scan : key=scan.scan\nmsg=(filelist,id)
+deactivate qs
 activate scan
 loop #lightgrey for file in filelist 
     alt file is directory
-        scan -> exchange : key=scan\nmsg=(file,id)
-        activate exchange
+        scan -> pex : key=scan.scan\nmsg=(file,id)
+        activate pex
     else else
         scan -> scan : add file to\ntransfer_list
     end
 end
-scan -> q2 : key=tran\nmsg=(transfer_list,target)
+scan -> wex : key=work.scancomplete\nmsg=(transfer_list,id)
 deactivate scan
-exchange -> q1 : key=scan\nmsg=(filelist,id)
-deactivate exchange
-activate q1
-q1 -> scan : key=scan\nmsg=(filelist,id)
-deactivate q1
+pex -> qs : key=scan.scan\nmsg=(filelist,id)
+deactivate pex
+activate qs
+qs -> scan : key=scan.scan\nmsg=(filelist,id)
+deactivate qs
 activate scan
 loop #lightgrey for file in filelist 
     scan -> scan : add file to\ntransfer_list
 end
-scan -> q2 : key=tran\nmsg=(transfer_list,target)
+scan -> wex : key=work.scancomplete\nmsg=(transfer_list,id)
 deactivate scan
 @enduml

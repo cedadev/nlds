@@ -203,13 +203,14 @@ system.  These messages have to be formatted to match the receiving sysmtem and 
 
 | ![client_server_seq](./uml/queue_structure.png) |
 :-:
-| **Figure 3** Structure and interaction of Rabbit Queues|
+| **Figure 3** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Scanner 1` and `Scanner 2` write `work.scancomplete` messages to the `Work Exchange`.|
 
 ## Message flow
 
+### Message flow for a `putlist` command
 | ![client_server_seq](./uml/message_flow_put.png) |
 :-:
-| **Figure 4** Flow of messages for a putlist case of transferring a list of files to the NLDS. |
+| **Figure 4** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. |
 
 ## Message formats
 
