@@ -4,8 +4,9 @@ left to right direction
 agent api_server as "API server" 
 
 together {
-    queue wq as "Work Q" #lightgrey
-    component work as "Work" #lightgrey
+    queue wq as "NLDS Q" #lightgrey
+    component work as "NLDS" #lightgrey
+    database iddb as "TransactionDB" #lightgrey
 }
 
 together {
@@ -13,8 +14,9 @@ together {
     note top of pex: type=topic
 }
 
-pex --> wq : key=work.*
+pex --> wq : key=nlds.*
 wq -> work : prefetch=1
+work -> iddb : SQL
 
 together {
     queue sq as "Scan Q" #lightblue
@@ -22,16 +24,16 @@ together {
     queue cq as "Catalog Q" #springgreen
 }
 
-pex --> sq : key=scan.*
-pex --> tq : key=tran.*
-pex --> cq : key=cat.*
+pex --> sq : key=nlds.scan.*
+pex --> tq : key=nlds.tran.*
+pex --> cq : key=nlds.cat.*
 
-work --> pex : key=scan.*
-work --> pex : key=tran.*
-work --> pex : key=cat.*
+work --> pex : key=nlds.scan.*
+work --> pex : key=nlds.tran.*
+work --> pex : key=nlds.cat.*
 
 queue mq as "Monitor Q" #tomato
-pex --> mq : key=mon.*
+pex --> mq : key=nlds.mon.*
 
 together {
     component scan1 as "Scanner 1" #lightblue
@@ -55,6 +57,6 @@ mq --> mon1 : prefetch=1
 
 mon1 <- user
 
-scan1 --> pex : key=scan.complete
+scan1 --> pex : key=nlds.scan.complete
 
 @enduml

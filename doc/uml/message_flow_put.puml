@@ -7,7 +7,7 @@ participant wex as "Exchange"
 
 queue qw as "NLDS Q" #lightgrey
 collections work as "NLDS\nWorker" #lightgrey
-database iddb as "Transaction DB"
+database iddb as "Transaction DB" #lightgrey
 
 queue qs as "Scan Q" #lightblue
 collections scan as "Scanners" #lightblue
@@ -43,7 +43,6 @@ activate qs
 qs -> scan : key=*.scan.start\nmsg=(filelist,id)
 deactivate qs
 activate scan
-
 loop #lightgrey for subfile in filelist[::1000]
     scan -> wex : key=*.scan.scan\nmsg=(subfilelist,id)
     activate wex
