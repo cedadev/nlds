@@ -5,8 +5,9 @@ participant client as "Client"
 participant server as "API server"
 participant wex as "Exchange"
 
-queue qw as "Work Q" #lightgrey
-collections work as "Work" #lightgrey
+queue qw as "NLDS Q" #lightgrey
+collections work as "NLDS\nWorker" #lightgrey
+database iddb as "Transaction DB"
 
 queue qs as "Scan Q" #lightblue
 collections scan as "Scanners" #lightblue
@@ -16,45 +17,63 @@ activate client
 client -> server : PUT(filelist,target,id)
 deactivate client
 activate server
-server -> wex : key=work.put\nmsg=(filelist,id)
+server -> wex : key=nlds.put\nmsg=(filelist,id,target)
 deactivate server
 activate wex
-wex -> qw : key=work.put\nmsg=(filelist,id)
+wex -> qw : key=nlds.put\nmsg=(filelist,id,target)
 deactivate wex
 activate qw
-qw -> work : key=work.put\nmsg=(filelist,id)
+qw -> work : key=nlds.put\nmsg=(filelist,id,target)
 deactivate qw
+
 activate work
-loop #lightgrey for subfilelist in filelist
-    work -> wex : key=scan.scan\nmsg=(subfilelist,id)
-    deactivate work
+work -> wex : key=nlds.scan.start\nmsg=(filelist,id)
+activate wex
+work -> iddb : INSERT(id,target)
+deactivate work
+wex -> qs : key=nlds.scan.start\nmsg=(filelist,id)
+deactivate wex
+note right of qs
+    * here will match the calling
+    application.
+    `nlds` in this case.
+    `gws` for group workspace scanner.
+end note
+activate qs
+qs -> scan : key=*.scan.start\nmsg=(filelist,id)
+deactivate qs
+activate scan
+
+loop #lightgrey for subfile in filelist[::1000]
+    scan -> wex : key=*.scan.scan\nmsg=(subfilelist,id)
     activate wex
 end
-wex -> qs : key=scan.scan\nmsg=(filelist,id)
+deactivate scan
+wex -> qs : key=*.scan.scan\nmsg=(filelist,id)
 deactivate wex
 activate qs
-qs -> scan : key=scan.scan\nmsg=(filelist,id)
+qs -> scan : key=*.scan.scan\nmsg=(filelist,id)
 deactivate qs
 activate scan
 loop #lightgrey for file in filelist 
     alt file is directory
-        scan -> wex : key=scan.scan\nmsg=(file,id)
+        scan -> wex : key=*.scan.scan\nmsg=(file,id)
         activate wex
     else else
         scan -> scan : add file to\nscanned_list
     end
 end
-scan -> wex : key=scan.complete\nmsg=(scanned_list,id)
+scan -> wex : key=*.scan.complete\nmsg=(scanned_list,id)
 deactivate scan
-wex -> qs : key=scan.scan\nmsg=(filelist,id)
+wex -> qs : key=*.scan.scan\nmsg=(filelist,id)
 deactivate wex
 activate qs
-qs -> scan : key=scan.scan\nmsg=(filelist,id)
+qs -> scan : key=*.scan.scan\nmsg=(filelist,id)
 deactivate qs
 activate scan
 loop #lightgrey for file in filelist 
     scan -> scan : add file to\nscanned_list
 end
-scan -> wex : key=scan.complete\nmsg=(scanned_list,id)
+scan -> wex : key=*.scan.complete\nmsg=(scanned_list,id)
 deactivate scan
 @enduml
