@@ -62,7 +62,7 @@ deactivate qs
 activate scan
 loop #lightgrey for file in subfilelist 
     alt file is directory
-        scan -> wex : key=*.scan.scan\nmsg=(file,id)
+        scan -> wex : key=nlds.scan.scan\nmsg=(file,id)
         activate wex
     else else
         scan -> scan : add file to\nscanned_list
