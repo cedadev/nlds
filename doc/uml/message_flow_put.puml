@@ -18,24 +18,24 @@ note over qs
 end note
 collections scan as "Scanners" #lightblue
 
-user -> client : PUT(filelist,target)
+user -> client : PUT(filelist,target,\n\tuser,group)
 activate client
-client -> server : PUT(filelist,target,id)
+client -> server : PUT(filelist,target,\n\tuser,group,id)
 deactivate client
 activate server
-server -> wex : key=nlds.put\nmsg=(filelist,id,target)
+server -> wex : key=nlds.put\nmsg=(filelist,target,\n\tuser,group,id)
 deactivate server
 activate wex
-wex -> qw : key=nlds.put\nmsg=(filelist,id,target)
+wex -> qw : key=nlds.put\nmsg=(filelist,target,\n\tuser,group,id)
 deactivate wex
 activate qw
-qw -> work : key=nlds.put\nmsg=(filelist,id,target)
+qw -> work : key=nlds.put\nmsg=(filelist,target,\n\tuser,group,id)
 deactivate qw
 
 activate work
 work -> wex : key=nlds.scan.start\nmsg=(filelist,id)
 activate wex
-work -> iddb : INSERT(id,target)
+work -> iddb : INSERT(id,target,\n\tuser,group)
 deactivate work
 wex -> qs : key=nlds.scan.start\nmsg=(filelist,id)
 deactivate wex
@@ -54,13 +54,13 @@ loop #lightgrey for subfile in filelist[::1000]
     activate wex
 end
 deactivate scan
-wex -> qs : key=nlds.scan.scan\nmsg=(filelist,id)
+wex -> qs : key=nlds.scan.scan\nmsg=(subfilelist,id)
 deactivate wex
 activate qs
-qs -> scan : key=nlds.scan.scan\nmsg=(filelist,id)
+qs -> scan : key=nlds.scan.scan\nmsg=(subfilelist,id)
 deactivate qs
 activate scan
-loop #lightgrey for file in filelist 
+loop #lightgrey for file in subfilelist 
     alt file is directory
         scan -> wex : key=*.scan.scan\nmsg=(file,id)
         activate wex
@@ -70,8 +70,11 @@ loop #lightgrey for file in filelist
 end
 scan -> wex : key=nlds.scan.complete\nmsg=(scanned_list,id)
 deactivate scan
+/'
 wex -> qs : key=nlds.scan.scan\nmsg=(filelist,id)
+'/
 deactivate wex
+/'
 activate qs
 qs -> scan : key=nlds.scan.scan\nmsg=(filelist,id)
 deactivate qs
@@ -81,4 +84,5 @@ loop #lightgrey for file in filelist
 end
 scan -> wex : key=nlds.scan.complete\nmsg=(scanned_list,id)
 deactivate scan
+'/
 @enduml

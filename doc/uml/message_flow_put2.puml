@@ -29,23 +29,23 @@ activate qw
 qw -> work : key=nlds.scan.complete\nmsg=(scanned_list,id)
 deactivate qw
 activate work
-work -> iddb : SELECT target WHERE id
+work -> iddb : SELECT target,user,group WHERE id
 activate iddb
-iddb -> work : (id,target)
+iddb -> work : (target,user,group,id)
 deactivate iddb
-work -> wex  : key=nlds.tran.transfer\nmsg=(scanned_list,id,target)
+work -> wex  : key=nlds.tran.transfer\nmsg=(scanned_list,target,\n\tuser,group,id)
 deactivate work
 activate wex
-wex -> qt : key=nlds.tran.transfer\nmsg=(scanned_list,id,target)
+wex -> qt : key=nlds.tran.transfer\nmsg=(scanned_list,target,\n\tuser,group,id)
 deactivate wex
 activate qt
-qt -> tran : key=nlds.tran.transfer\nmsg=(scanned_list,id,target)
+qt -> tran : key=nlds.tran.transfer\nmsg=(scanned_list,target,\n\tuser,group,id)
 deactivate qt
 
 activate tran
 loop #lightgrey for file in scanned_list 
     tran -> obj : move file to storage
 end
-tran -> wex : key=nlds.tran.complete
+tran -> wex : key=nlds.tran.complete\nmsg=(scanned_list,target,\n\tuser,group,id)
 deactivate tran
 @enduml
