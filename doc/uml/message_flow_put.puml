@@ -6,10 +6,16 @@ participant server as "API server"
 participant wex as "Exchange"
 
 queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic = nlds.#
+end note
 collections work as "NLDS\nWorker" #lightgrey
 database iddb as "Transaction DB" #lightgrey
 
 queue qs as "Scan Q" #lightblue
+note over qs
+    topic = *.scan.*
+end note
 collections scan as "Scanners" #lightblue
 
 user -> client : PUT(filelist,target)
@@ -40,18 +46,18 @@ note right of qs
     `gws` for group workspace scanner.
 end note
 activate qs
-qs -> scan : key=*.scan.start\nmsg=(filelist,id)
+qs -> scan : key=nlds.scan.start\nmsg=(filelist,id)
 deactivate qs
 activate scan
 loop #lightgrey for subfile in filelist[::1000]
-    scan -> wex : key=*.scan.scan\nmsg=(subfilelist,id)
+    scan -> wex : key=nlds.scan.scan\nmsg=(subfilelist,id)
     activate wex
 end
 deactivate scan
-wex -> qs : key=*.scan.scan\nmsg=(filelist,id)
+wex -> qs : key=nlds.scan.scan\nmsg=(filelist,id)
 deactivate wex
 activate qs
-qs -> scan : key=*.scan.scan\nmsg=(filelist,id)
+qs -> scan : key=nlds.scan.scan\nmsg=(filelist,id)
 deactivate qs
 activate scan
 loop #lightgrey for file in filelist 
@@ -62,17 +68,17 @@ loop #lightgrey for file in filelist
         scan -> scan : add file to\nscanned_list
     end
 end
-scan -> wex : key=*.scan.complete\nmsg=(scanned_list,id)
+scan -> wex : key=nlds.scan.complete\nmsg=(scanned_list,id)
 deactivate scan
-wex -> qs : key=*.scan.scan\nmsg=(filelist,id)
+wex -> qs : key=nlds.scan.scan\nmsg=(filelist,id)
 deactivate wex
 activate qs
-qs -> scan : key=*.scan.scan\nmsg=(filelist,id)
+qs -> scan : key=nlds.scan.scan\nmsg=(filelist,id)
 deactivate qs
 activate scan
 loop #lightgrey for file in filelist 
     scan -> scan : add file to\nscanned_list
 end
-scan -> wex : key=*.scan.complete\nmsg=(scanned_list,id)
+scan -> wex : key=nlds.scan.complete\nmsg=(scanned_list,id)
 deactivate scan
 @enduml

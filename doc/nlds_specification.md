@@ -210,7 +210,19 @@ system.  These messages have to be formatted to match the receiving sysmtem and 
 ### Message flow for a `putlist` command
 | ![client_server_seq](./uml/message_flow_put.png) |
 :-:
-| **Figure 4** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. |
+| **Figure 4.1** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 1: from the user submitting the request to the completion of the file scanning|
+
+The file scanner fulfills three purposes:
+
+1. It ensures that the files that the user has supplied in a filelist are actually present.
+2. It recursively scans any directories that are in the filelist.
+3. It splits the filelist into smaller batches to allow for restarting the transfer, asynchronicity of transfers and allow parallel transfers.
+
+| ![client_server_seq](./uml/message_flow_put2.png) |
+:-:
+| **Figure 4.2** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 2: from the file scan completing (for a sublist of files) to the transfer completing (for the sublist)|
+
+Asynchronicity of the transfers is a desirable byproduct of the scanner splitting the filelist into smaller batches.  It also allows for parallel transfer, with multiple transfer workers.  Finally, if a transfer worker fails, and does not return an acknowledgement message to the Exchange, the message will be sent out again, after a suitable timeout period.
 
 ## Message formats
 

@@ -1,0 +1,51 @@
+@startuml message_flow_put2
+
+collections scan as "Scanners" #lightblue
+
+participant wex as "Exchange"
+
+queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic = nlds.#
+end note
+collections work as "NLDS\nWorker" #lightgrey
+database iddb as "Transaction DB" #lightgrey
+
+queue qt as "Transfer Q" #gold
+note over qt
+    topic = *.tran.*
+end note
+collections tran as "Transfers" #gold
+
+participant obj as "Object\nStore" #GhostWhite
+
+activate scan
+scan -> wex : key=nlds.scan.complete\nmsg=(scanned_list,id)
+deactivate scan
+activate wex
+wex -> qw : key=nlds.scan.complete\nmsg=(scanned_list,id)
+deactivate wex
+activate qw
+qw -> work : key=nlds.scan.complete\nmsg=(scanned_list,id)
+deactivate qw
+activate work
+work -> iddb : SELECT target WHERE id
+activate iddb
+iddb -> work : (id,target)
+deactivate iddb
+work -> wex  : key=nlds.tran.transfer\nmsg=(scanned_list,id,target)
+deactivate work
+activate wex
+wex -> qt : key=nlds.tran.transfer\nmsg=(scanned_list,id,target)
+deactivate wex
+activate qt
+qt -> tran : key=nlds.tran.transfer\nmsg=(scanned_list,id,target)
+deactivate qt
+
+activate tran
+loop #lightgrey for file in scanned_list 
+    tran -> obj : move file to storage
+end
+tran -> wex : key=nlds.tran.complete
+deactivate tran
+@enduml
