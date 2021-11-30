@@ -4,9 +4,9 @@ PUT = "PUT"
 POST = "POST"
 DELETE = "DELETE"
 
-AUTH_CONFIG_SECITON = "authentication"
+AUTH_CONFIG_SECTION = "authentication"
 RABBIT_CONFIG_SECTION = "rabbitMQ"
 CONFIG_SCHEMA = (
-    (AUTH_CONFIG_SECITON, ("authenticator_backend", )),
+    (AUTH_CONFIG_SECTION, ("authenticator_backend", )),
     (RABBIT_CONFIG_SECTION, ("user", "password", "server", "vhost", "exchange")),
 )
