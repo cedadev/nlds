@@ -150,7 +150,7 @@ The interaction of the NLDS client, NLDS server, OAuth server and the ingest of 
 
 The Rabbit MQ queue will have a number of subscribers to it.  These are:
 * Work processor
-* File / directory scanner
+* File / directory indexer / scanner
 * Transfer processor
 * Database processor
 
@@ -159,7 +159,7 @@ This takes the description of work to do and pre-processes it.  One example is
 if a user has supplied a list of files to transfer, this list might be broken 
 up into smaller work units and re-pushed onto the queue.
 
-## File scanner
+## File Indexer / Scanner
 This takes the description of work that the Work Processor pushed onto the 
 queue and starts to build a file list.
 
@@ -169,16 +169,16 @@ Questions :
 * Should it work on tape catalogue?
 
 At the end it can push two different messages to the queue:
-* Scan a directory
+* Index a directory
 * Transfer a list of files from one data storage system to another
 
 If a threshold number of files has been reached then it can:
 * Push a message to transfer the files
-* Push a message to scan the remainder of the directories
+* Push a message to index the remainder of the directories
 
 ## Transfer processor
-This takes the list of files from the File Scanner and transfers them from one 
-storage medium to another
+This takes the list of files from the File Indexer and transfers them from 
+one storage medium to another
 At the end it pushes a message to the queue to say it has completed.
 
 ## Database processor
@@ -203,26 +203,26 @@ system.  These messages have to be formatted to match the receiving sysmtem and 
 
 | ![client_server_seq](./uml/queue_structure.png) |
 :-:
-| **Figure 3** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Scanner 1` and `Scanner 2` write `work.scancomplete` messages to the `Work Exchange`.|
+| **Figure 3** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Indexer 1` and `Indexer 2` write `work.indexcomplete` messages to the `Work Exchange`.|
 
 ## Message flow
 
 ### Message flow for a `putlist` command
 | ![client_server_seq](./uml/message_flow_put.png) |
 :-:
-| **Figure 4.1** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 1: from the user submitting the request to the completion of the file scanning|
+| **Figure 4.1** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 1: from the user submitting the request to the completion of the file indexing|
 
-The file scanner fulfills three purposes:
+The file indexer fulfills three purposes:
 
 1. It ensures that the files that the user has supplied in a filelist are actually present.
-2. It recursively scans any directories that are in the filelist.
+2. It recursively indexes any directories that are in the filelist.
 3. It splits the filelist into smaller batches to allow for restarting the transfer, asynchronicity of transfers and allow parallel transfers.
 
 | ![client_server_seq](./uml/message_flow_put2.png) |
 :-:
-| **Figure 4.2** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 2: from the file scan completing (for a sublist of files) to the transfer completing (for the sublist)|
+| **Figure 4.2** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 2: from the file index completing (for a sublist of files) to the transfer completing (for the sublist)|
 
-Asynchronicity of the transfers is a desirable byproduct of the scanner splitting the filelist into smaller batches.  It also allows for parallel transfer, with multiple transfer workers.  Finally, if a transfer worker fails, and does not return an acknowledgement message to the Exchange, the message will be sent out again, after a suitable timeout period.
+Asynchronicity of the transfers is a desirable byproduct of the indexer splitting the filelist into smaller batches.  It also allows for parallel transfer, with multiple transfer workers.  Finally, if a transfer worker fails, and does not return an acknowledgement message to the Exchange, the message will be sent out again, after a suitable timeout period.
 
 ## Message formats
 

@@ -1,6 +1,6 @@
 @startuml message_flow_put2
 
-collections scan as "Scanners" #lightblue
+collections index as "Indexers" #lightblue
 
 participant wex as "Exchange"
 
@@ -19,33 +19,33 @@ collections tran as "Transfers" #gold
 
 participant obj as "Object\nStore" #GhostWhite
 
-activate scan
-scan -> wex : key=nlds.scan.complete\nmsg=(scanned_list,id)
-deactivate scan
+activate index
+index -> wex : key=nlds.index.complete\nmsg=(indexed_list,id)
+deactivate index
 activate wex
-wex -> qw : key=nlds.scan.complete\nmsg=(scanned_list,id)
+wex -> qw : key=nlds.index.complete\nmsg=(indexed_list,id)
 deactivate wex
 activate qw
-qw -> work : key=nlds.scan.complete\nmsg=(scanned_list,id)
+qw -> work : key=nlds.index.complete\nmsg=(indexed_list,id)
 deactivate qw
 activate work
 work -> iddb : SELECT target,user,group WHERE id
 activate iddb
 iddb -> work : (target,user,group,id)
 deactivate iddb
-work -> wex  : key=nlds.tran.transfer\nmsg=(scanned_list,target,\n\tuser,group,id)
+work -> wex  : key=nlds.tran.transfer\nmsg=(indexed_list,target,\n\tuser,group,id)
 deactivate work
 activate wex
-wex -> qt : key=nlds.tran.transfer\nmsg=(scanned_list,target,\n\tuser,group,id)
+wex -> qt : key=nlds.tran.transfer\nmsg=(indexed_list,target,\n\tuser,group,id)
 deactivate wex
 activate qt
-qt -> tran : key=nlds.tran.transfer\nmsg=(scanned_list,target,\n\tuser,group,id)
+qt -> tran : key=nlds.tran.transfer\nmsg=(indexed_list,target,\n\tuser,group,id)
 deactivate qt
 
 activate tran
-loop #lightgrey for file in scanned_list 
+loop #lightgrey for file in indexed_list 
     tran -> obj : move file to storage
 end
-tran -> wex : key=nlds.tran.complete\nmsg=(scanned_list,target,\n\tuser,group,id)
+tran -> wex : key=nlds.tran.complete\nmsg=(indexed_list,target,\n\tuser,group,id)
 deactivate tran
 @enduml
