@@ -19,16 +19,16 @@ wq -> work : prefetch=1
 work -> iddb : SQL
 
 together {
-    queue sq as "Scan Q" #lightblue
+    queue sq as "Index Q" #lightblue
     queue tq as "Transfer Q" #gold
     queue cq as "Catalog Q" #springgreen
 }
 
-pex --> sq : key=nlds.scan.*
+pex --> sq : key=nlds.index.*
 pex --> tq : key=nlds.tran.*
 pex --> cq : key=nlds.cat.*
 
-work --> pex : key=nlds.scan.*
+work --> pex : key=nlds.index.*
 work --> pex : key=nlds.tran.*
 work --> pex : key=nlds.cat.*
 
@@ -36,8 +36,8 @@ queue mq as "Monitor Q" #tomato
 pex --> mq : key=nlds.mon.*
 
 together {
-    component scan1 as "Scanner 1" #lightblue
-    component scan2 as "Scanner 2" #lightblue
+    component scan1 as "Indexer 1" #lightblue
+    component scan2 as "Indexer 2" #lightblue
 }
 
 component tran1 as "Transfer" #gold
@@ -57,6 +57,6 @@ mq --> mon1 : prefetch=1
 
 mon1 <- user
 
-scan1 --> pex : key=nlds.scan.complete
+scan1 --> pex : key=nlds.index.complete
 
 @enduml

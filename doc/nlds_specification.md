@@ -303,7 +303,7 @@ commands.
 |              | group |
 |              | filepath |
 | Body         | none |
-| Example      | `/files/getlist?transaction_id=1;user="bob";group="root";filepath="myfile.txt" `|
+| Example      | `/files/transaction_id=1;user="bob";group="root";filepath="myfile.txt" `|
 
 ### DELLIST command
 
