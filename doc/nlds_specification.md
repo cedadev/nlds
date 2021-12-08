@@ -203,7 +203,7 @@ system.  These messages have to be formatted to match the receiving sysmtem and 
 
 | ![client_server_seq](./uml/queue_structure.png) |
 :-:
-| **Figure 3** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Indexer 1` and `Indexer 2` write `work.indexcomplete` messages to the `Work Exchange`.|
+| **Figure 3** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Indexer 1` and `Indexer 2` write `work.index.complete` messages to the `Work Exchange`.|
 
 ## Message flow
 
@@ -234,8 +234,7 @@ operations, and search operations.
 
 ## CRUD operations
 
-These messages are sent to the NLDS server.  These consist of just 6 
-commands.
+These messages are sent to the NLDS server.  These consist of just 6 commands.
 
 1. `put` : transfer a single file to the NLDS.
 2. `putlist` : transfer a user-supplied list of files to the NLDS.
@@ -316,3 +315,126 @@ commands.
 | Body         | JSON|
 | Example      | `/files/dellist?transaction_id=1;user="bob";group="root"`|
 | Body example | `{"filepath" : ["file1", "file2", "file3"]}`|
+
+## Inter-process communication
+
+Communication between processes is carried out by submitting a RabbitMQ message 
+to the Exchange.  The RabbitMQ messages consist of the message metadata and a
+JSON document containing the data required to carry out the processes.  The API 
+server will submit the initial message into the Exchange.
+
+All messages retain all parts of the `details` field in the JSON message.  This
+allows the details of the transaction to be passed from process to process, even
+when the process does not require some of the sub-fields in the `details` field.
+
+## Worker processes
+
+The worker processes interact with each other via the Exchange and their topic 
+queues.  The `NLDS` worker acts as a marshalling process - i.e. it controls the
+flow of the data through the system and knows which worker to send a message to
+when another worker has finished.
+
+### NLDS
+
+This acts as a marshalling process.  Its first action, when a new `nlds.put` 
+message is consumed is to initiate the indexer with a `nlds.index.start` message.
+The NLDS Fast API server constructs the JSON from the parameters passed in the 
+URL.
+
+#### ---> Input message
+
+**Binding** : `nlds.put`
+
+**Message** :
+
+    {
+        details {
+            transaction_id : <string>,
+            user           : <string>,
+            group          : <string>,
+            target         : <string>
+        },
+        data {
+            filelist       : <list<string>>
+        }
+    }
+
+#### <--- Output message
+
+**Binding** : `nlds.index.start`
+
+**Message** :
+
+    {
+        details {
+            transaction_id : <string>,
+            user           : <string>,
+            group          : <string>,
+            target         : <string>
+        },
+        data {
+            filelist       : <list<string>>
+        }
+    }
+
+### Indexer
+
+This indexes the filelist by scanning the files to make sure they are present,
+splitting up the filelist into manageable chunks and recursively scanning any
+directories that are in the filelist.
+
+`(optional)` below indicates that the Indexer does not require those subfields to
+operate.  However, it should echo back any subfields that occur in the `details`
+field.
+
+#### ---> Input message
+
+**Binding** : `nlds.index.start`
+
+**Message** :
+
+    {
+        details {
+            transaction_id : <string>,
+            user           : <string> (optional),
+            group          : <string> (optional),
+            target         : <string> (optional)
+        },
+        data {
+            filelist       : <list<string>>
+        }
+    }
+
+#### <--- Output messages
+
+**Binding** : `nlds.index.index`
+
+**Message** :
+
+    {
+        details {
+            transaction_id : <string>,
+            user           : <string> (optional),
+            group          : <string> (optional),
+            target         : <string> (optional)
+        },
+        data {
+            filelist       : <list<string>>
+        }
+    }
+
+**Binding** : `nlds.index.complete`
+
+**Message** :
+
+    {
+        details {
+            transaction_id : <string>,
+            user           : <string> (optional),
+            group          : <string> (optional),
+            target         : <string> (optional)
+        },
+        data {
+            filelist       : <list<string>>
+        }            
+    }

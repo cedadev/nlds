@@ -10,8 +10,9 @@ note over qw
     topic = nlds.#
 end note
 collections work as "NLDS\nWorker" #lightgrey
+/'
 database iddb as "Transaction DB" #lightgrey
-
+'/
 queue qs as "Index Q" #lightblue
 note over qs
     topic = *.index.*
@@ -23,22 +24,23 @@ activate client
 client -> server : PUT(filelist,target,\n\tuser,group,id)
 deactivate client
 activate server
-server -> wex : key=nlds.put\nmsg=(filelist,target,\n\tuser,group,id)
+server -> wex : key=nlds.put.start
 deactivate server
 activate wex
-wex -> qw : key=nlds.put\nmsg=(filelist,target,\n\tuser,group,id)
+wex -> qw : key=nlds.put.start
 deactivate wex
 activate qw
-qw -> work : key=nlds.put\nmsg=(filelist,target,\n\tuser,group,id)
+qw -> work : key=nlds.put.start
 deactivate qw
 
 activate work
-work -> wex : key=nlds.index.start\nmsg=(filelist,id)
-activate wex
-work -> iddb : INSERT(id,target,\n\tuser,group)
+work -> wex : key=nlds.index.start
 deactivate work
-wex -> qs : key=nlds.index.start\nmsg=(filelist,id)
+activate wex
+/'work -> iddb : INSERT(id,target,\n\tuser,group)'/
+wex -> qs : key=nlds.index.start
 deactivate wex
+
 note right of qs
     * here will match the calling
     application.
@@ -46,43 +48,43 @@ note right of qs
     `gws` for group workspace scanner.
 end note
 activate qs
-qs -> index : key=nlds.index.start\nmsg=(filelist,id)
+qs -> index : key=nlds.index.start
 deactivate qs
 activate index
 loop #lightgrey for subfile in filelist[::1000]
-    index -> wex : key=nlds.index.index\nmsg=(subfilelist,id)
+    index -> wex : key=nlds.index.index
     activate wex
 end
 deactivate index
-wex -> qs : key=nlds.index.index\nmsg=(subfilelist,id)
+wex -> qs : key=nlds.index.index
 deactivate wex
 activate qs
-qs -> index : key=nlds.index.index\nmsg=(subfilelist,id)
+qs -> index : key=nlds.index.index
 deactivate qs
 activate index
 loop #lightgrey for file in subfilelist 
     alt file is directory
-        index -> wex : key=nlds.index.index\nmsg=(file,id)
+        index -> wex : key=nlds.index.index
         activate wex
     else else
         index -> index : add file to\nindexed_list
     end
 end
-index -> wex : key=nlds.index.complete\nmsg=(indexed_list,id)
+index -> wex : key=nlds.index.complete
 deactivate index
 /'
-wex -> qs : key=nlds.index.index\nmsg=(filelist,id)
+wex -> qs : key=nlds.index.index
 '/
 deactivate wex
 /'
 activate qs
-qs -> index : key=nlds.index.index\nmsg=(filelist,id)
+qs -> index : key=nlds.index.index
 deactivate qs
 activate index
 loop #lightgrey for file in filelist 
     index -> index : add file to\nindexed_list
 end
-index -> wex : key=nlds.index.complete\nmsg=(indexed_list,id)
+index -> wex : key=nlds.index.complete
 deactivate index
 '/
 @enduml

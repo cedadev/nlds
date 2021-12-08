@@ -6,7 +6,7 @@ agent api_server as "API server"
 together {
     queue wq as "NLDS Q" #lightgrey
     component work as "NLDS" #lightgrey
-    database iddb as "TransactionDB" #lightgrey
+    /'database iddb as "TransactionDB" #lightgrey'/
 }
 
 together {
@@ -16,7 +16,7 @@ together {
 
 pex --> wq : key=nlds.*
 wq -> work : prefetch=1
-work -> iddb : SQL
+/'work -> iddb : SQL'/
 
 together {
     queue sq as "Index Q" #lightblue
