@@ -6,6 +6,12 @@
 build/
 dist/
 
+# Various IDEs
+.project
+.idea/
+*.tmproj
+.vscode/
+
 # nlds config files to ignore
 **/.server_config
-**/.rabbit_config
+**/.processor_config

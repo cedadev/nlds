@@ -88,7 +88,7 @@ async def get(transaction_id: UUID,
         msg = (f"GET transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response(transaction_id, GET, filepath)
+    rabbit_publish_response(transaction_id, "nlds.mon.high", filepath)
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -187,7 +187,7 @@ async def put(transaction_id: UUID,
         msg = (f"PUT transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response(transaction_id, PUT, contents)
+    rabbit_publish_response(transaction_id, "nlds_triage.put.low", contents)
     
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
