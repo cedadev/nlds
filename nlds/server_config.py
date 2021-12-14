@@ -36,9 +36,7 @@ def validate_config_file(json_config: dict) -> None:
                 f"['{section_heading}'] section."
             )
         for sl in section_labels:
-            try:
-                _ = section[sl]
-            except KeyError:
+            if sl not in section:
                 raise KeyError(
                     f"The config file at {CONFIG_FILE_LOCATION} does not "
                     f"contain '{sl}' in the ['{section}'] section."
