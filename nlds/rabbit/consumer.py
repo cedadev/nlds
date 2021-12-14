@@ -11,7 +11,7 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 import functools
 from abc import ABC, abstractmethod
 import logging
-from typing import List
+from typing import Dict, List
 
 from pika.exceptions import StreamLostError
 from pika.channel import Channel
@@ -22,7 +22,7 @@ from pika.spec import Channel
 from pydantic import BaseModel
 
 from nlds.rabbit.publisher import RabbitMQPublisher
-from nlds.utils.constants import RABBIT_CONFIG_QUEUES
+from nlds.utils.constants import RABBIT_CONFIG_QUEUES, DETAILS
 logger = logging.getLogger()
 
 
@@ -43,9 +43,10 @@ class RabbitQueue(BaseModel):
 
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
-    DEFAULT_QUEUE_NAME = 'test_q'
-    DEFAULT_ROUTING_KEY = 'test'
-    DEFAULT_EXCHANGE_NAME = 'test_exchange'
+    DEFAULT_QUEUE_NAME = "test_q"
+    DEFAULT_ROUTING_KEY = "test"
+    DEFAULT_EXCHANGE_NAME = "test_exchange"
+    DEFAULT_REROUTING_INFO = "->"
 
     def __init__(self, queue=None):
         super().__init__()
@@ -104,6 +105,15 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             raise ValueError(f"Routing key ({routing_key}) malformed, should consist of 3 parts.")
         return rk_parts
 
+    def append_route_info(self, body: Dict, route_info: str = None):
+        if route_info is None: 
+            route_info = self.DEFAULT_REROUTING_INFO
+        if 'route' in body[DETAILS]:
+            body[DETAILS]['route'] += route_info
+        else:
+            body[DETAILS]['route'] = route_info
+        return body
+    
     def run(self):
         """
         Method to run when thread is started. Creates an AMQP connection
