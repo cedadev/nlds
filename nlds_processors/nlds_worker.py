@@ -7,6 +7,8 @@ __copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
+import json
+
 # Typing imports
 from pika.channel import Channel
 from pika.connection import Connection
@@ -16,22 +18,25 @@ from pika.frame import Header
 # NLDS imports
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.utils.constants import PUT
-from utils.constants import CATALOGUE, COMPLETE, INDEX, INITIATE, MONITOR, ROOT, TRANSFER, TRIAGE, LOG_INFO 
+from utils.constants import CATALOGUE, COMPLETE, INDEX, INITIATE, MONITOR,\
+                            ROOT, TRANSFER, TRIAGE, LOG_INFO, WILD
 
 class NLDSWorkerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "nlds_q"
-    DEFAULT_ROUTING_KEY = f"{TRIAGE}.*.*"
-    DEFAULT_ROUTING_INFO = "->NLDS_Q->Exchange"
+    DEFAULT_ROUTING_KEY = f"{TRIAGE}.{WILD}.{WILD}"
+    DEFAULT_REROUTING_INFO = "->NLDS_Q"
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
     
-    def callback(self, ch: Channel, method: Method, properties: Header, body: bytes, connection: Connection):
+    def callback(self, ch: Channel, method: Method, properties: Header, 
+                 body: bytes, connection: Connection):
         # Convert body from bytes to string for ease of manipulation
-        body = body.decode("utf-8")
+        body_json = json.loads(body)
 
         print(f" [x] Received {body} ({method.routing_key})")
-        print(f" [x] Appending rerouting information to message: {self.DEFAULT_ROUTING_INFO} ")
+        print(f" [x] Appending rerouting information to message: {self.DEFAULT_REROUTING_INFO} ")
+        body_json = self.append_route_info(body_json)
 
         print(f" [x]  Checking routing_key and re-routing")
         try:
@@ -48,7 +53,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             rk_parts[1] = INDEX
             print(f" [x]  Sending put command to be indexed")
             new_routing_key = ".".join(rk_parts)
-            self.publish_message(new_routing_key, f"{body}{self.DEFAULT_ROUTING_INFO}")
+            self.publish_message(new_routing_key, json.dumps(body_json))
+        
         # If index complete then pass for transfer and cataloging
         elif rk_parts[1] == f"{INDEX}" and rk_parts[2] == f"{COMPLETE}":
             print(f" [x] Scan successful, pass message back to transfer and cataloging queues")
@@ -58,7 +64,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                 new_rk_parts = [ROOT, queue, INITIATE]
                 new_routing_key = ".".join(new_rk_parts)
                 # For prototyping purposes append additional message trail info.
-                self.publish_message(new_routing_key, f"{body}{self.DEFAULT_ROUTING_INFO}")        
+                self.publish_message(new_routing_key, json.dumps(body_json))        
 
     def publish_message(self, routing_key: str, msg: str) -> None:
         """

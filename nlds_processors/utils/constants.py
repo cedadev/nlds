@@ -1,6 +1,7 @@
 # Exchange routing key parts – root
 ROOT = "nlds"
 TRIAGE = f"{ROOT}_triage"
+WILD = "*"
 
 # Exchange routing key parts – queues
 INDEX = "index"

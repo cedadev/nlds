@@ -1,21 +1,26 @@
-from utils.constants import COMPLETE, ROOT, INDEX, TRIAGE
+import json
+
+from utils.constants import COMPLETE, ROOT, INDEX, TRIAGE, WILD
 from nlds.rabbit.consumer import RabbitMQConsumer
 
 class IndexerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "indexer_q"
-    DEFAULT_ROUTING_KEY = f"{ROOT}.{INDEX}.*"
-    DEFAULT_ROUTING_INFO = f"->INDEX_Q->Exchange"
+    DEFAULT_ROUTING_KEY = f"{ROOT}.{INDEX}.{WILD}"
+    DEFAULT_REROUTING_INFO = f"->INDEX_Q"
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
     
     def callback(self, ch, method, properties, body, connection):
         # Convert body from bytes to string for ease of manipulation
-        body = body.decode("utf-8")
+        body_json = json.loads(body)
 
-        print(f" [x] Received {body} from {self.queues[0].name} ({method.routing_key})")
+        print(f" [x] Received {body} from {self.queues[0].name}"
+              f"({method.routing_key})")
         print(f" [...] Scan goes here...")
-        print(f" [x] Returning file list to worker and appending route info ({self.DEFAULT_ROUTING_INFO})")
+        print(f" [x] Returning file list to worker and appending route info "
+              f"({self.DEFAULT_REROUTING_INFO})")
+        body_json = self.append_route_info(body_json)
 
         rk_parts = method.routing_key.split('.')
         try:
@@ -29,7 +34,7 @@ class IndexerConsumer(RabbitMQConsumer):
         rk_parts[2] = COMPLETE
 
         new_routing_key = ".".join(rk_parts)
-        self.publish_message(new_routing_key, f"{body}{self.DEFAULT_ROUTING_INFO}")
+        self.publish_message(new_routing_key, json.dumps(body_json))
 
         print(f" [x] DONE! \n")
        

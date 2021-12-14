@@ -1,9 +1,9 @@
 from nlds.rabbit.consumer import RabbitMQConsumer
-from utils.constants import ROOT, TRANSFER
+from utils.constants import ROOT, TRANSFER, WILD
 
 class TransferConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "transfer_q"
-    DEFAULT_ROUTING_KEY = f"{ROOT}.{TRANSFER}.*"
+    DEFAULT_ROUTING_KEY = f"{ROOT}.{TRANSFER}.{WILD}"
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
