@@ -1,18 +1,15 @@
 { 
     "rabbitMQ": {
-        "queues": {
-            "test": {
-                "binding": {
-                    "exchange": "test_exchange",
-                    "routing_key": "PUT"
-                }
-            },
-            "test_2": {
-                "binding": {
-                    "exchange": "test_exchange",
-                    "routing_key": "GET"
-                }
+        "queues": [
+            {
+                "name": "{{ rabbit_queue_name }}",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "{{ rabbit_routing_key }}"
+                    }
+                ]
             }
-        }
+        ]
     }
 }
