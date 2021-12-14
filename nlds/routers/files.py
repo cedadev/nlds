@@ -88,7 +88,8 @@ async def get(transaction_id: UUID,
         msg = (f"GET transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response(transaction_id, "nlds.mon.high", filepath)
+    rabbit_publish_response("nlds.mon.info", transaction_id, user, group, 
+                            filepath)
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -122,14 +123,15 @@ async def put(transaction_id: UUID,
             status_code = status.HTTP_400_BAD_REQUEST,
             detail = response_error.json()
         )
-    print(filelist)
+    
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
         msg = (f"GETLIST transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response(transaction_id, GETLIST, filelist.to_str())
+    rabbit_publish_response("nlds.getlist.start", transaction_id, user, group,
+                            filelist.to_str())
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -187,7 +189,8 @@ async def put(transaction_id: UUID,
         msg = (f"PUT transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response(transaction_id, "nlds_triage.put.low", contents)
+    rabbit_publish_response("nlds_triage.put.start", transaction_id, user, group,
+                            contents)
     
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())

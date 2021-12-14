@@ -10,10 +10,12 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 from datetime import datetime
 from uuid import UUID
+import json
 
 import pika
 
-from ..utils.constants import RABBIT_CONFIG_SECTION
+from ..utils.constants import RABBIT_CONFIG_SECTION, DETAILS, TRANSACT_ID, USER
+from ..utils.constants import GROUP, TARGET, DATA, DATA_FILELIST, TIMESTAMP
 from ..server_config import load_config
 
 
@@ -59,26 +61,48 @@ class RabbitMQPublisher():
             self.declare_bindings()
 
     def declare_bindings(self) -> None:
-        self.channel.exchange_declare(exchange=self.exchange["name"], exchange_type=self.exchange["type"])
+        self.channel.exchange_declare(exchange=self.exchange["name"], 
+                                      exchange_type=self.exchange["type"])
 
     @staticmethod
-    def create_message(transaction_id: UUID, action: str, contents: str) -> str:
+    def create_message(transaction_id: UUID, data: str, user: str = None, 
+                       group: str = str, target: str = None) -> str:
         """
-        Create message to add to rabbit queue. Message matches format of deposit logs.
-        date_time:transaction_id:action:message_contents
+        Create message to add to rabbit queue. Message is in json format with 
+        metadata described in DETAILS and data, i.e. the filelist of interest,
+        under DATA. 
 
         :param transaction_id: ID of transaction as provided by fast-api
-        :param action: Action constant (GET, PUT etc.)
-        :return: string containing essential information for processor
-        """
-        time = datetime.now().isoformat(sep='-')
+        :param data:    (str)   file or filelist of interest
+        :param user:        (str)   user who sent request
+        :param group:       (str)   group that user belongs to 
+        :param target:      (str)   target that files are being moved to (only 
+                                    valid for PUT, PUTLIST commands)
 
-        return f"{time}:{transaction_id}:{action}:[{contents}]"
+        :return:    JSON encoded string in the proper format for message passing
+
+        """
+        timestamp = datetime.now().isoformat(sep='-')
+        message_dict = {
+            DETAILS: {
+                TRANSACT_ID: str(transaction_id),
+                TIMESTAMP: timestamp,
+                USER: user,
+                GROUP: group,
+                TARGET: target
+            }, 
+            DATA: {
+                DATA_FILELIST: data
+            }
+        }
+
+        return json.dumps(message_dict)
 
     def publish_message(self, routing_key: str, msg: str) -> None:
         self.channel.basic_publish(
             exchange=self.exchange['name'],
             routing_key=routing_key,
+            properties=pika.BasicProperties(content_encoding='application/json'),
             body=msg
         )
 
