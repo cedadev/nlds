@@ -21,8 +21,8 @@ from pika.amqp_object import Method
 from pika.spec import Channel
 from pydantic import BaseModel
 
-from nlds.rabbit.publisher import RabbitMQPublisher
-from nlds.utils.constants import RABBIT_CONFIG_QUEUES, DETAILS
+from .publisher import RabbitMQPublisher
+from ..utils.constants import RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES, DETAILS
 logger = logging.getLogger()
 
 
@@ -48,19 +48,27 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_EXCHANGE_NAME = "test_exchange"
     DEFAULT_REROUTING_INFO = "->"
 
-    def __init__(self, queue=None):
+    def __init__(self, queue: str = None):
         super().__init__()
-
-        # Load queue config if it exists in .server_config file.
-        if RABBIT_CONFIG_QUEUES in self.config:
-            self.queues = [RabbitQueue(**q) for q in self.config[RABBIT_CONFIG_QUEUES]]
-            # If queue specified then select only that configuration
-            if queue and queue in self.queues:
-                self.queues = self.queues.pop(queue)
-            else: 
-                # TODO: Replace with logging
-                print("Requested queue not in configuration.")
-        else:
+        # TODO: Replace all printing with logging
+        try:
+            if queue is not None:
+                # If queue specified then select only that configuration
+                if RABBIT_CONFIG_QUEUES in self.config:
+                    # Load queue config if it exists in .server_config file.
+                    self.queues = [RabbitQueue(**q) for q in self.config[RABBIT_CONFIG_QUEUES] 
+                                   if q[RABBIT_CONFIG_QUEUE_NAME] == queue]
+                else: 
+                    raise ValueError("Not rabbit queues found in config.")
+                
+                if queue not in [q.name for q in self.queues]:
+                    raise ValueError("Requested queue not in configuration.")
+            
+            else:
+                raise ValueError("No queue specified, switching to default config.")
+                
+        except Exception as e:
+            print(str(e))
             print("WARN: Using default queue config - only fit for testing purposes.")
             self.queues = [RabbitQueue.from_defaults(
                 self.DEFAULT_QUEUE_NAME,
