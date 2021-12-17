@@ -88,7 +88,7 @@ async def get(transaction_id: UUID,
         msg = (f"GET transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response("nlds.mon.info", transaction_id, user, group, 
+    rabbit_publish_response("nlds.route.get", transaction_id, user, group, 
                             filepath)
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
@@ -130,7 +130,7 @@ async def put(transaction_id: UUID,
         msg = (f"GETLIST transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response("nlds.getlist.start", transaction_id, user, group,
+    rabbit_publish_response("nlds.route.getlist", transaction_id, user, group,
                             filelist.to_str())
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
@@ -189,7 +189,7 @@ async def put(transaction_id: UUID,
         msg = (f"PUT transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response("nlds_triage.put.start", transaction_id, user, group,
+    rabbit_publish_response("nlds.route.put", transaction_id, user, group,
                             contents)
     
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,

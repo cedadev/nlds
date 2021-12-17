@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 import logging
 from typing import Dict, List
 
-from pika.exceptions import StreamLostError
+from pika.exceptions import StreamLostError, AMQPConnectionError, AMQPChannelError
 from pika.channel import Channel
 from pika.connection import Connection
 from pika.frame import Method, Header
@@ -23,7 +23,8 @@ from pydantic import BaseModel
 
 from .publisher import RabbitMQPublisher
 from ..utils.constants import RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES, DETAILS
-logger = logging.getLogger()
+
+logger = logging.getLogger(__name__)
 
 
 class RabbitQEBinding(BaseModel):
@@ -145,7 +146,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 self.channel.stop_consuming()
                 break
 
-            except StreamLostError as e:
+            except (StreamLostError, AMQPConnectionError) as e:
                 # Log problem
                 logger.error('Connection lost, reconnecting', exc_info=e)
                 continue

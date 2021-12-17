@@ -19,11 +19,11 @@ from pika.frame import Header
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.utils.constants import PUT
 from utils.constants import CATALOGUE, COMPLETE, INDEX, INITIATE, MONITOR,\
-                            ROOT, TRANSFER, TRIAGE, LOG_INFO, WILD
+                            ROOT, TRANSFER, ROUTE, LOG_INFO, WILD
 
 class NLDSWorkerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "nlds_q"
-    DEFAULT_ROUTING_KEY = f"{TRIAGE}.{WILD}.{WILD}"
+    DEFAULT_ROUTING_KEY = f"{ROOT}.{ROUTE}.{WILD}"
     DEFAULT_REROUTING_INFO = "->NLDS_Q"
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -38,47 +38,58 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         print(f" [x] Appending rerouting information to message: {self.DEFAULT_REROUTING_INFO} ")
         body_json = self.append_route_info(body_json)
 
-        print(f" [x]  Checking routing_key and re-routing")
+        print(f" [x] Checking routing_key and re-routing")
         try:
             rk_parts = self.verify_routing_key(method.routing_key)
         except ValueError:
             print(' [XXX] Routing key inappropriate length, exiting callback.')
             return
         
-        # Edit routing key when reinserting message into exchange to avoid infinite loop
-        rk_parts[0] = ROOT
-
         # If putting then first scan file/filelist
-        if PUT in rk_parts[1].upper():
-            rk_parts[1] = INDEX
-            print(f" [x]  Sending put command to be indexed")
-            new_routing_key = ".".join(rk_parts)
+        if PUT in rk_parts[2].upper():
+            print(f" [x] Sending put command to be indexed")
+            
+            new_routing_key = ".".join([ROOT, INDEX, INITIATE])
             self.publish_message(new_routing_key, json.dumps(body_json))
         
-        # If index complete then pass for transfer and cataloging
-        elif rk_parts[1] == f"{INDEX}" and rk_parts[2] == f"{COMPLETE}":
-            print(f" [x] Scan successful, pass message back to transfer and cataloging queues")
+        # If a task has completed, initiate new tasks
+        elif rk_parts[2] == f"{COMPLETE}":
+            # If index completed then pass file list for transfer and cataloging
+            if rk_parts[1] == f"{INDEX}":
+                print(f" [x] Scan successful, pass message back to transfer and" 
+                      " cataloging queues")
+                for queue in [TRANSFER, CATALOGUE]:
+                    print(f" [x]  Sending to {queue} queue")
+                    new_routing_key = ".".join([ROOT, queue, INITIATE])
+                    self.publish_message(new_routing_key, json.dumps(body_json))
 
-            for queue in [TRANSFER, CATALOGUE]:
-                print(f" [x]  Sending to {queue} queue")
-                new_rk_parts = [ROOT, queue, INITIATE]
-                new_routing_key = ".".join(new_rk_parts)
-                # For prototyping purposes append additional message trail info.
-                self.publish_message(new_routing_key, json.dumps(body_json))        
+            # If transfer or catalogue completed then forward confirmation to 
+            # monitor
+            # TODO This might not be strictly necessary, could get those 
+            # consumers to do so directly instead of going back via the NLDS 
+            # worker
+            elif rk_parts[1] == f"{CATALOGUE}" or rk_parts[1] == f"{TRANSFER}":
+                print(f" [x]  Sending to {MONITOR} queue")
+                new_routing_key = ".".join([ROOT, MONITOR, rk_parts[2]])
+                self.publish_message(new_routing_key, json.dumps(body_json), 
+                                     monitor_fl=False)
+                                     
+        print(f" [x] DONE! \n")
 
-    def publish_message(self, routing_key: str, msg: str) -> None:
+    def publish_message(self, routing_key: str, msg: str, monitor_fl=True) -> None:
         """
         Wrapper around original publish message to additionally send message to monitoring
         queue. 
         """
         super().publish_message(routing_key, msg)
 
-        # Additionally send same message to monitoring.
-        rk_parts = routing_key.split(".")
-        rk_parts[1] = MONITOR
-        rk_parts[2] = LOG_INFO
-        new_routing_key = ".".join(rk_parts)
-        super().publish_message(new_routing_key, msg)
+        if monitor_fl:
+            # Additionally send same message to monitoring.
+            rk_parts = routing_key.split(".")
+            rk_parts[1] = MONITOR
+            rk_parts[2] = LOG_INFO
+            new_routing_key = ".".join(rk_parts)
+            super().publish_message(new_routing_key, msg)
 
 if __name__ == "__main__":
     consumer = NLDSWorkerConsumer()
