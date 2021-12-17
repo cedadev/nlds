@@ -11,10 +11,11 @@ together {
 
 together {
     agent pex as "Exchange"
-    note top of pex: type=topic
+    ' note top of pex: type=topic
 }
 
-pex --> wq : key=nlds.*
+pex --> wq : key=nlds.*.complete
+pex --> wq : key=nlds.route.*
 wq -> work : prefetch=1
 /'work -> iddb : SQL'/
 
@@ -24,12 +25,14 @@ together {
     queue cq as "Catalog Q" #springgreen
 }
 
-pex --> sq : key=nlds.index.*
+pex --> sq : key=nlds.index.init
+pex --> sq : key=nlds.index.index
 pex --> tq : key=nlds.tran.*
 pex --> cq : key=nlds.cat.*
 
 work --> pex : key=nlds.index.*
 work --> pex : key=nlds.tran.*
+work --> pex : key=nlds.mon.*
 work --> pex : key=nlds.cat.*
 
 queue mq as "Monitor Q" #tomato
@@ -47,16 +50,19 @@ together {
     person user as "User"
 }
 
-api_server -> pex
+api_server -> pex : key=nlds.route.*
+
 
 sq --> scan1 : prefetch=1
 sq --> scan2 : prefetch=1
 tq --> tran1 : prefetch=1
 cq --> cat1 : prefetch=1
-mq --> mon1 : prefetch=1
 
-mon1 <- user
+mq --> mon1 : prefetch=1
+mon1 -> user
+
 
 scan1 --> pex : key=nlds.index.complete
+scan1 --> pex : key=nlds.index.index
 
 @enduml
