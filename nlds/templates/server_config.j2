@@ -6,5 +6,15 @@
             "user_services_url" : "{{ user_services_url }}",
             "oauth_token_introspect_url" : "{{ token_introspect_url }}"
         }
+    },
+    "rabbitMQ": {
+        "user": "{{ rabbit_user }}",
+        "password": "{{ rabbit_password }}",
+        "server": "{{ rabbit_server }}",
+        "vhost": "{{ rabbit_vhost }}",
+        "exchange": {
+            "name": "{{ rabbit_exchange_name }}",
+            "type": "{{ rabbit_exchange_type }}"
+        }
     }
 }

@@ -1,8 +1,19 @@
+# encoding: utf-8
+"""
+
+"""
+__author__ = 'Neil Massey and Jack Leland'
+__date__ = '30 Nov 2021'
+__copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
+__license__ = 'BSD - see LICENSE file in top-level package directory'
+__contact__ = 'neil.massey@stfc.ac.uk'
+
 from fastapi import FastAPI
 
 from .nlds_setup import API_VERSION
 
 from .routers import collections, files
+from .routers.routing_methods import rabbit_publisher
 
 nlds = FastAPI()
 
