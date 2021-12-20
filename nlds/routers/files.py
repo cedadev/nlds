@@ -1,3 +1,13 @@
+# encoding: utf-8
+"""
+
+"""
+__author__ = 'Neil Massey and Jack Leland'
+__date__ = '30 Nov 2021'
+__copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
+__license__ = 'BSD - see LICENSE file in top-level package directory'
+__contact__ = 'neil.massey@stfc.ac.uk'
+
 from fastapi import Depends, APIRouter, status, Query
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
@@ -10,6 +20,9 @@ from ..errors import ResponseError
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
+from .routing_methods import rabbit_publish_response
+from ..utils.constants import GET, GETLIST, PUT, POST, DELETE
+
 router = APIRouter()
 
 # uuid (for testing)
@@ -30,6 +43,9 @@ class FileList(BaseModel):
                 ]
             }
         }
+
+    def to_str(self) -> str:
+        return ",".join(*self.filelist)
 
 
 class FileResponse(BaseModel):
@@ -72,6 +88,8 @@ async def get(transaction_id: UUID,
         msg = (f"GET transaction with id {transaction_id} accepted for "
                 "processing.")
     )
+    rabbit_publish_response("nlds.route.get", transaction_id, user, group, 
+                            filepath)
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -111,6 +129,8 @@ async def put(transaction_id: UUID,
         msg = (f"GETLIST transaction with id {transaction_id} accepted for "
                 "processing.")
     )
+    rabbit_publish_response("nlds.route.getlist", transaction_id, user, group,
+                            filelist.to_str())
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -159,12 +179,18 @@ async def put(transaction_id: UUID,
             status_code = status.HTTP_400_BAD_REQUEST,
             detail = response_error.json()
         )
+
+    contents = filepath if not filelist else filelist
+
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
         msg = (f"PUT transaction with id {transaction_id} accepted for "
                 "processing.")
     )
+    rabbit_publish_response("nlds.route.put", transaction_id, user, group,
+                            contents)
+    
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
 

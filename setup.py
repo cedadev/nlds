@@ -14,7 +14,8 @@ setup(
     install_requires=[
         'fastapi',
         'uvicorn',
-        'requests'
+        'requests',
+        'pika'
     ],
     include_package_data=True,
     package_data={
