@@ -14,8 +14,8 @@ together {
     ' note top of pex: type=topic
 }
 
-pex --> wq : key=nlds.*.complete
-pex --> wq : key=nlds.route.*
+pex --> wq : key=nlds-api.*.complete
+pex --> wq : key=nlds-api.route.*
 wq -> work : prefetch=1
 /'work -> iddb : SQL'/
 
@@ -25,18 +25,18 @@ together {
     queue cq as "Catalog Q" #springgreen
 }
 
-pex --> sq : key=nlds.index.init
-pex --> sq : key=nlds.index.index
-pex --> tq : key=nlds.tran.*
-pex --> cq : key=nlds.cat.*
+pex --> sq : key=#.index.init
+pex --> sq : key=#.index.start
+pex --> tq : key=#.tran.*
+pex --> cq : key=#.cat.*
 
-work --> pex : key=nlds.index.*
-work --> pex : key=nlds.tran.*
-work --> pex : key=nlds.mon.*
-work --> pex : key=nlds.cat.*
+work --> pex : key=nlds-api.index.*
+work --> pex : key=nlds-api.tran.*
+work --> pex : key=nlds-api.mon.*
+work --> pex : key=nlds-api.cat.*
 
 queue mq as "Monitor Q" #tomato
-pex --> mq : key=nlds.mon.*
+pex --> mq : key=#.mon.*
 
 together {
     component scan1 as "Indexer 1" #lightblue
@@ -50,8 +50,7 @@ together {
     person user as "User"
 }
 
-api_server -> pex : key=nlds.route.*
-
+api_server -> pex : key=nlds-api.nlds.*
 
 sq --> scan1 : prefetch=1
 sq --> scan2 : prefetch=1
@@ -61,8 +60,15 @@ cq --> cat1 : prefetch=1
 mq --> mon1 : prefetch=1
 mon1 -> user
 
+scan1 --> pex : key=#.index.complete
+scan1 --> pex : key=(#).index.init
 
-scan1 --> pex : key=nlds.index.complete
-scan1 --> pex : key=nlds.index.index
+note right of scan1
+    (#) here denotes the application
+    part of the calling key, which 
+    is used by the worker to form 
+    the application part of the
+    return key
+end note
 
 @enduml

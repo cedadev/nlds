@@ -7,7 +7,7 @@ participant wex as "Exchange"
 
 queue qw as "NLDS Q" #lightgrey
 note over qw
-    topic = nlds.#
+    topic = nlds-api.nlds.#
 end note
 collections work as "NLDS\nWorker" #lightgrey
 /'
@@ -15,7 +15,7 @@ database iddb as "Transaction DB" #lightgrey
 '/
 queue qs as "Index Q" #lightblue
 note over qs
-    topic = *.index.*
+    topic = #.index.#
 end note
 collections index as "Indexers" #lightblue
 
@@ -24,53 +24,53 @@ activate client
 client -> server : PUT(filelist,target,\n\tuser,group,id)
 deactivate client
 activate server
-server -> wex : key=nlds.put.start
+server -> wex : key=nlds-api.nlds.put
 deactivate server
 activate wex
-wex -> qw : key=nlds.put.start
+wex -> qw : key=nlds-api.nlds.put
 deactivate wex
 activate qw
-qw -> work : key=nlds.put.start
+qw -> work : key=nlds-api.nlds.put
 deactivate qw
 
 activate work
-work -> wex : key=nlds.index.start
+work -> wex : key=nlds-api.index.init
 deactivate work
 activate wex
 /'work -> iddb : INSERT(id,target,\n\tuser,group)'/
-wex -> qs : key=nlds.index.start
+wex -> qs : key=nlds-api.index.init
 deactivate wex
 
 note right of qs
-    * here will match the calling
+    (#) here will match the calling
     application.
-    `nlds` in this case.
-    `gws` for group workspace scanner.
+    `nlds-api` in this case.
+    `gws-api` for group workspace scanner.
 end note
 activate qs
-qs -> index : key=nlds.index.start
+qs -> index : key=(#).index.init
 deactivate qs
 activate index
 loop #lightgrey for subfile in filelist[::1000]
-    index -> wex : key=nlds.index.index
+    index -> wex : key=(#).index.start
     activate wex
 end
 deactivate index
-wex -> qs : key=nlds.index.index
+wex -> qs : key=(#).index.start
 deactivate wex
 activate qs
-qs -> index : key=nlds.index.index
+qs -> index : key=(#).index.start
 deactivate qs
 activate index
 loop #lightgrey for file in subfilelist 
     alt file is directory
-        index -> wex : key=nlds.index.index
+        index -> wex : key=(#).index.start
         activate wex
     else else
         index -> index : add file to\nindexed_list
     end
 end
-index -> wex : key=nlds.index.complete
+index -> wex : key=(#).index.complete
 deactivate index
 /'
 wex -> qs : key=nlds.index.index

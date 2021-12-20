@@ -6,7 +6,7 @@ participant wex as "Exchange"
 
 queue qw as "NLDS Q" #lightgrey
 note over qw
-    topic = nlds.#
+    topic = nlds-api.nlds.#
 end note
 collections work as "NLDS\nWorker" #lightgrey
 /'
@@ -14,20 +14,20 @@ database iddb as "Transaction DB" #lightgrey
 '/
 queue qt as "Transfer Q" #gold
 note over qt
-    topic = *.tran.*
+    topic = #.tran.#
 end note
 collections tran as "Transfers" #gold
 
 participant obj as "Object\nStore" #GhostWhite
 
 activate index
-index -> wex : key=nlds.index.complete
+index -> wex : key=nlds-api.index.complete
 deactivate index
 activate wex
-wex -> qw : key=nlds.index.complete
+wex -> qw : key=nlds-api.index.complete
 deactivate wex
 activate qw
-qw -> work : key=nlds.index.complete
+qw -> work : key=nlds-api.index.complete
 deactivate qw
 activate work
 /'
@@ -36,19 +36,25 @@ activate iddb
 iddb -> work : (target,user,group,id)
 deactivate iddb
 '/
-work -> wex  : key=nlds.tran.transfer
+work -> wex  : key=nlds-api.tran.transfer
 deactivate work
 activate wex
-wex -> qt : key=nlds.tran.transfer
+wex -> qt : key=nlds-api.tran.transfer
 deactivate wex
 activate qt
-qt -> tran : key=nlds.tran.transfer
+qt -> tran : key=(#).tran.transfer
 deactivate qt
+note right of qt
+    (#) here will match the calling
+    application.
+    `nlds-api` in this case.
+    `gws-api` for group workspace scanner.
+end note
 
 activate tran
 loop #lightgrey for file in indexed_list 
     tran -> obj : move file to storage
 end
-tran -> wex : key=nlds.tran.complete
+tran -> wex : key=(#).tran.complete
 deactivate tran
 @enduml
