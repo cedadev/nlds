@@ -8,4 +8,6 @@ __copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
+# NRM - I'm not sure what this file is for?
+
 from fastapi import HTTPException

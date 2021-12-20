@@ -1,4 +1,8 @@
 # API Commands
+
+# NRM - Are these constants used in more than file?  If not, we might not need
+# this as an import.  We could just declare them in the file they are used in.
+
 GET = "GET"
 GETLIST = "GETLIST"
 PUT = "PUT"

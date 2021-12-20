@@ -109,6 +109,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         :return: 3-tuple of routing key parts
         """
+        # NRM - rename this as function as split_routing_key.  Verification can
+        # be a side effect.
         rk_parts = routing_key.split('.')
         if len(rk_parts) != 3:
             raise ValueError(f"Routing key ({routing_key}) malformed, should consist of 3 parts.")

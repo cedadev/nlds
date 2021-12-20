@@ -18,6 +18,10 @@ from pika.frame import Header
 # NLDS imports
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.utils.constants import PUT
+
+# NRM - is it necessary to import all these constants?  We could just 
+# instantiate them in the base class (here), then they would be available to
+# to all the inherited classes.
 from utils.constants import CATALOGUE, COMPLETE, INDEX, INITIATE, MONITOR,\
                             ROOT, TRANSFER, ROUTE, LOG_INFO, WILD
 
@@ -31,6 +35,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
     
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection):
+        # NRM - more comments for the function methods, please!
         # Convert body from bytes to string for ease of manipulation
         body_json = json.loads(body)
 
