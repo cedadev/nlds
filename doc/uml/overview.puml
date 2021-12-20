@@ -1,0 +1,34 @@
+@startuml overview
+
+actor user as "User"
+agent client as "Client API / CLI"
+agent API_server as "API server"
+queue message_broker as "Message broker"
+agent monitoring as "Monitoring"
+database catalogue as "Catalogue"
+cloud object_storage as "Object Storage"
+agent transfer as "Transfer system"
+component posix as "POSIX disk"
+component tape as "Tape"
+
+package Microservices {
+node micro_service_1 as "Microservice"
+node micro_service_2 as "Microservice"
+node micro_service_3 as "Microservice"
+}  
+
+user-->client
+client<-->API_server
+API_server-->message_broker
+message_broker <--> micro_service_1
+message_broker <--> micro_service_2
+message_broker <--> micro_service_3
+micro_service_3 --> monitoring
+micro_service_1 --> catalogue
+monitoring --> API_server
+micro_service_3 <--> transfer
+transfer <--> object_storage
+transfer <--> posix
+transfer <--> tape
+
+@enduml 

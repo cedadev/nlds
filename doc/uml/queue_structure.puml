@@ -1,0 +1,74 @@
+@startuml queue_structure
+
+left to right direction
+agent api_server as "API server" 
+
+together {
+    queue wq as "NLDS Q" #lightgrey
+    component work as "NLDS" #lightgrey
+    /'database iddb as "TransactionDB" #lightgrey'/
+}
+
+together {
+    agent pex as "Exchange"
+    ' note top of pex: type=topic
+}
+
+pex --> wq : key=nlds-api.*.complete
+pex --> wq : key=nlds-api.route.*
+wq -> work : prefetch=1
+/'work -> iddb : SQL'/
+
+together {
+    queue sq as "Index Q" #lightblue
+    queue tq as "Transfer Q" #gold
+    queue cq as "Catalog Q" #springgreen
+}
+
+pex --> sq : key=#.index.init
+pex --> sq : key=#.index.start
+pex --> tq : key=#.tran.*
+pex --> cq : key=#.cat.*
+
+work --> pex : key=nlds-api.index.*
+work --> pex : key=nlds-api.tran.*
+work --> pex : key=nlds-api.mon.*
+work --> pex : key=nlds-api.cat.*
+
+queue mq as "Monitor Q" #tomato
+pex --> mq : key=#.mon.*
+
+together {
+    component scan1 as "Indexer 1" #lightblue
+    component scan2 as "Indexer 2" #lightblue
+}
+
+component tran1 as "Transfer" #gold
+component cat1 as "Catalog" #springgreen
+together {
+    component mon1 as "Monitor" #tomato
+    person user as "User"
+}
+
+api_server -> pex : key=nlds-api.nlds.*
+
+sq --> scan1 : prefetch=1
+sq --> scan2 : prefetch=1
+tq --> tran1 : prefetch=1
+cq --> cat1 : prefetch=1
+
+mq --> mon1 : prefetch=1
+mon1 -> user
+
+scan1 --> pex : key=#.index.complete
+scan1 --> pex : key=(#).index.init
+
+note right of scan1
+    (#) here denotes the application
+    part of the calling key, which 
+    is used by the worker to form 
+    the application part of the
+    return key
+end note
+
+@enduml

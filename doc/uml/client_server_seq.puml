@@ -1,0 +1,79 @@
+@startuml client_server_sequence
+
+actor user as "User"
+participant client as "Client API"
+database token_store as "User's token\nstore"
+participant oauth_server as "OAuth server"
+participant server as "NLDS server"
+queue rabbit as "RabbitMQ"
+
+user -> client : command
+activate client
+loop #lightgrey
+client -> token_store  : read token
+activate token_store
+alt no token case
+    token_store --> client : no token
+    client -> user : get password
+    deactivate client
+    activate user
+    user --> client
+    deactivate user
+    activate client
+    client -> oauth_server  : get token
+    activate oauth_server
+    oauth_server --> client : token
+    deactivate oauth_server
+    client -> token_store : write token
+else token returned case
+    token_store --> client : token
+    deactivate token_store
+end
+
+client -> server : command
+deactivate client
+activate server
+server -> oauth_server : check token
+deactivate server
+activate oauth_server
+
+oauth_server --> server : token expired
+activate server
+server --> client : token expired
+deactivate server
+group token expired
+    activate client
+    client -> oauth_server : get token from refresh
+    activate oauth_server
+    oauth_server --> client : token
+    deactivate oauth_server
+    client -> token_store : write token
+    deactivate client
+end
+
+oauth_server --> server : token invalid
+server --> client : token invalid
+
+activate client
+group token invalid
+    client -> user : get password
+    deactivate client
+    activate user
+    user --> client
+    deactivate user
+    activate client
+    client -> oauth_server  : get token
+    activate oauth_server
+    oauth_server --> client : token
+    deactivate oauth_server
+    client -> token_store : write token
+    deactivate client
+end
+
+oauth_server --> server : token valid
+deactivate oauth_server
+activate server
+end
+server -> rabbit : command
+deactivate server
+@enduml
