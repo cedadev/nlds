@@ -21,13 +21,23 @@ Installation
 3.  Install the nlds package with editing capability:
     `pip install -e ~/Coding/nlds`
 
-Running
--------
+Running - Dec 2021
+------------------
 
-NLDS currently uses `uvicorn` to run.  The command line to invoke it is:
+1. NLDS currently uses `uvicorn` to run.  The command line to invoke it is:
 ```uvicorn nlds.main:nlds --reload```
 
-This will create the NLDS REST-API server at the IP-address: `http://127.0.0.1:8000/`
+    This will create the NLDS REST-API server at the IP-address: `http://127.0.0.1:8000/`
+
+2. To run the processors, you have two options:
+    1. In unique terminals start each processor individually, after 
+    activating the virtual env, for example:
+        ```source ~/nlds-venv/bin/activate; python nlds_processors/index.py```
+       This will send the output to the terminal.
+
+    2. Use the script `test_run_processor.sh`.  This will run all four processors
+       in the background, sending the output to four logs in the `~/nlds_log/`
+       directory.
 
 Viewing the API docs
 --------------------
