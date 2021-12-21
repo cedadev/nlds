@@ -26,7 +26,7 @@ class MonitorConsumer(RabbitMQConsumer):
         body_json = json.loads(body)
 
         print(f" [x] Received {body} from {self.queues[0].name} ({method.routing_key})")
-        rk_parts = self.verify_routing_key(method.routing_key)
+        rk_parts = self.split_routing_key(method.routing_key)
 
         self._logging_function[rk_parts[2]](json.dumps(body_json))
 

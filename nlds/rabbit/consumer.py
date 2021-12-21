@@ -114,14 +114,12 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                        auto_ack=True)
     
     @staticmethod
-    def verify_routing_key(routing_key: str) -> None:
+    def split_routing_key(routing_key: str) -> None:
         """
         Method to simply verify and split the routing key into parts. 
 
         :return: 3-tuple of routing key parts
         """
-        # NRM - rename this as function as split_routing_key.  Verification can
-        # be a side effect.
         rk_parts = routing_key.split('.')
         if len(rk_parts) != 3:
             raise ValueError(f"Routing key ({routing_key}) malformed, should consist of 3 parts.")

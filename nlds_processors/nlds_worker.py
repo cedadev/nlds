@@ -38,7 +38,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
         print(f" [x] Checking routing_key and re-routing")
         try:
-            rk_parts = self.verify_routing_key(method.routing_key)
+            rk_parts = self.split_routing_key(method.routing_key)
         except ValueError:
             print(' [XXX] Routing key inappropriate length, exiting callback.')
             return
