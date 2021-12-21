@@ -17,17 +17,10 @@ from pika.frame import Header
 
 # NLDS imports
 from nlds.rabbit.consumer import RabbitMQConsumer
-from nlds.utils.constants import PUT
-
-# NRM - is it necessary to import all these constants?  We could just 
-# instantiate them in the base class (here), then they would be available to
-# to all the inherited classes.
-from utils.constants import CATALOGUE, COMPLETE, INDEX, INITIATE, MONITOR,\
-                            ROOT, TRANSFER, ROUTE, LOG_INFO, WILD
 
 class NLDSWorkerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "nlds_q"
-    DEFAULT_ROUTING_KEY = f"{ROOT}.{ROUTE}.{WILD}"
+    DEFAULT_ROUTING_KEY = f"{RabbitMQConsumer.RK_ROOT}.{RabbitMQConsumer.RK_ROUTE}.{RabbitMQConsumer.RK_WILD}"
     DEFAULT_REROUTING_INFO = "->NLDS_Q"
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -51,21 +44,21 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             return
         
         # If putting then first scan file/filelist
-        if PUT in rk_parts[2].upper():
+        if self.RK_PUT in rk_parts[2].upper():
             print(f" [x] Sending put command to be indexed")
             
-            new_routing_key = ".".join([ROOT, INDEX, INITIATE])
+            new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_INITIATE])
             self.publish_message(new_routing_key, json.dumps(body_json))
         
         # If a task has completed, initiate new tasks
-        elif rk_parts[2] == f"{COMPLETE}":
+        elif rk_parts[2] == f"{self.RK_COMPLETE}":
             # If index completed then pass file list for transfer and cataloging
-            if rk_parts[1] == f"{INDEX}":
+            if rk_parts[1] == f"{self.RK_INDEX}":
                 print(f" [x] Scan successful, pass message back to transfer and" 
                       " cataloging queues")
-                for queue in [TRANSFER, CATALOGUE]:
+                for queue in [self.RK_TRANSFER, self.RK_CATALOGUE]:
                     print(f" [x]  Sending to {queue} queue")
-                    new_routing_key = ".".join([ROOT, queue, INITIATE])
+                    new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_INITIATE])
                     self.publish_message(new_routing_key, json.dumps(body_json))
 
             # If transfer or catalogue completed then forward confirmation to 
@@ -73,9 +66,9 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             # TODO This might not be strictly necessary, could get those 
             # consumers to do so directly instead of going back via the NLDS 
             # worker
-            elif rk_parts[1] == f"{CATALOGUE}" or rk_parts[1] == f"{TRANSFER}":
-                print(f" [x]  Sending to {MONITOR} queue")
-                new_routing_key = ".".join([ROOT, MONITOR, rk_parts[2]])
+            elif rk_parts[1] == f"{self.RK_CATALOGUE}" or rk_parts[1] == f"{self.RK_TRANSFER}":
+                print(f" [x]  Sending to {self.RK_MONITOR} queue")
+                new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, rk_parts[2]])
                 self.publish_message(new_routing_key, json.dumps(body_json), 
                                      monitor_fl=False)
                                      
@@ -91,8 +84,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         if monitor_fl:
             # Additionally send same message to monitoring.
             rk_parts = routing_key.split(".")
-            rk_parts[1] = MONITOR
-            rk_parts[2] = LOG_INFO
+            rk_parts[1] = self.RK_MONITOR
+            rk_parts[2] = self.RK_LOG_INFO
             new_routing_key = ".".join(rk_parts)
             super().publish_message(new_routing_key, msg)
 

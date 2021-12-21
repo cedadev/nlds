@@ -1,19 +1,25 @@
 import json
 from logging import ERROR
 
-from nlds.utils.constants import DATA, DATA_FILELIST
-from nlds.nlds_setup import INDEX_FILELIST_THRESHOLD
-from nlds_processors.utils.constants import INITIATE, MONITOR
-from utils.constants import COMPLETE, ROOT, INDEX, WILD
 from nlds.rabbit.consumer import RabbitMQConsumer
+from nlds.rabbit.publisher import RabbitMQPublisher
 
 class IndexerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "index_q"
-    DEFAULT_ROUTING_KEY = f"{ROOT}.{INDEX}.{WILD}"
+    DEFAULT_ROUTING_KEY = f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_INDEX}.{RabbitMQPublisher.RK_WILD}"
     DEFAULT_REROUTING_INFO = f"->INDEX_Q"
+
+    DEFAULT_FILELIST_THRESHOLD = 1000
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
+
+        # JEL - probably a nicer way of doing this so user knows to specify 
+        # filelist_threshold in the config file. 
+        if "filelist_threshold" in self.consumer_config:
+            self.threshold = self.consumer_config["filelist_threshold"]
+        else: 
+            self.threshold = self.DEFAULT_FILELIST_THRESHOLD
     
     def callback(self, ch, method, properties, body, connection):
         try:
@@ -31,7 +37,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 return
             
             # Verify filelist is, in fact, a list
-            filelist = list(body_json[DATA][DATA_FILELIST])
+            filelist = list(body_json[self.MSG_DATA][self.MSG_FILELIST])
             try:
                 filelist_len = len(filelist)
             except TypeError as e:
@@ -39,36 +45,36 @@ class IndexerConsumer(RabbitMQConsumer):
                       "incorrect format given.")
                 raise e
             
-            if rk_parts[2] == INITIATE:
+            if rk_parts[2] == self.RK_INITIATE:
                 # Split the filelist into batches of 1000 and resubmit
-                new_routing_key = ".".join([ROOT, INDEX, INDEX])
+                new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_INDEX])
                 
-                if filelist_len > INDEX_FILELIST_THRESHOLD:
-                    for filesublist in filelist[::INDEX_FILELIST_THRESHOLD]:
-                        body_json[DATA][DATA_FILELIST] = filesublist
+                if filelist_len > self.threshold:
+                    for filesublist in filelist[::self.threshold]:
+                        body_json[self.MSG_FILELIST][self.MSG_FILELIST] = filesublist
                         self.publish_message(new_routing_key, json.dumps(body_json))
                 else:
                     # Resubmit list as is for indexing
                     self.publish_message(new_routing_key, json.dumps(body_json))
 
-            if rk_parts[2] == INDEX:
+            if rk_parts[2] == self.RK_INDEX:
                 if filelist_len > 1000:
                     # TODO: Perhaps allow some dispensation/configuration to 
                     # allow the filelist to be broken down if this does happen?
                     raise ValueError(f"List with larger than allowed length "
-                                     f"submitted for indexing ({INDEX_FILELIST_THRESHOLD})")
+                                     f"submitted for indexing ({self.threshold})")
                 print(f" [...] Scannning! ")
                 # TODO: Dummy filelist inserted, replace this with indexer call
                 indexed_filelist = ['dummy', 'file', 'list']
 
-                body_json[DATA][DATA_FILELIST] = indexed_filelist
+                body_json[self.MSG_DATA][self.MSG_FILELIST] = indexed_filelist
                 
                 
                 print(f" [x] Returning file list to worker and appending route info "
                       f"({self.DEFAULT_REROUTING_INFO})")
                 body_json = self.append_route_info(body_json)
 
-                new_routing_key = ".".join([ROOT, INDEX, COMPLETE])
+                new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_COMPLETE])
                 self.publish_message(new_routing_key, json.dumps(body_json))
 
             # TODO: Log this?
@@ -76,8 +82,8 @@ class IndexerConsumer(RabbitMQConsumer):
 
         except Exception as e:
             print(f"Encountered error ({e}), sending to monitor.")
-            body_json[DATA][ERROR] = str(e)
-            new_routing_key = ".".join([ROOT, MONITOR, ERROR])
+            body_json[self.MSG_DATA][self.MSG_ERROR] = str(e)
+            new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, self.RK_ERROR])
             self.publish_message(new_routing_key, json.dumps(body_json))
        
         

@@ -16,12 +16,12 @@ from pydantic import BaseModel
 from uuid import UUID
 from typing import Optional, List
 
+from ..rabbit.publisher import RabbitMQPublisher
 from ..errors import ResponseError
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
 from .routing_methods import rabbit_publish_response
-from ..utils.constants import GET, GETLIST, PUT, POST, DELETE
 
 router = APIRouter()
 
@@ -45,7 +45,7 @@ class FileList(BaseModel):
         }
 
     def to_str(self) -> str:
-        return ",".join(*self.filelist)
+        return "[" + ",".join(*self.filelist) + "]"
 
 
 class FileResponse(BaseModel):
@@ -88,8 +88,9 @@ async def get(transaction_id: UUID,
         msg = (f"GET transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response("nlds.route.get", transaction_id, user, group, 
-                            filepath)
+    rabbit_publish_response(f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}."
+                            f"{RabbitMQPublisher.RK_GET}", 
+                            transaction_id, user, group, filepath)
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -129,8 +130,9 @@ async def put(transaction_id: UUID,
         msg = (f"GETLIST transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response("nlds.route.getlist", transaction_id, user, group,
-                            filelist.to_str())
+    rabbit_publish_response(f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}"
+                            f".{RabbitMQPublisher.RK_GETLIST}", 
+                            transaction_id, user, group, filelist.to_str())
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -188,8 +190,9 @@ async def put(transaction_id: UUID,
         msg = (f"PUT transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response("nlds.route.put", transaction_id, user, group,
-                            contents)
+    rabbit_publish_response(f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}."
+                            f"{RabbitMQPublisher.RK_PUT}", 
+                            transaction_id, user, group, contents)
     
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())

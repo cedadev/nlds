@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 import logging
 from typing import Dict, List
 
-from pika.exceptions import StreamLostError, AMQPConnectionError, AMQPChannelError
+from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
 from pika.connection import Connection
 from pika.frame import Method, Header
@@ -22,7 +22,7 @@ from pika.spec import Channel
 from pydantic import BaseModel
 
 from .publisher import RabbitMQPublisher
-from ..utils.constants import RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES, DETAILS
+from ..utils.constants import RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES, CONSUMER_CONFIG_SECTION
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     def __init__(self, queue: str = None):
         super().__init__()
         # TODO: Replace all printing with logging
+        # TODO: (2021-12-21) Only one queue can be specified at the moment, 
+        # should be able to specify multiple queues to subscribe to but this 
+        # isn't a priority.
+        self.queue = queue
         try:
             if queue is not None:
                 # If queue specified then select only that configuration
@@ -71,11 +75,18 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         except Exception as e:
             print(str(e))
             print("WARN: Using default queue config - only fit for testing purposes.")
+            self.queue = self.DEFAULT_QUEUE_NAME
             self.queues = [RabbitQueue.from_defaults(
                 self.DEFAULT_QUEUE_NAME,
                 self.DEFAULT_EXCHANGE_NAME, 
                 self.DEFAULT_ROUTING_KEY
-            )]    
+            )]  
+
+        # Load consumer-specific config
+        if self.queue in self.whole_config:
+            self.consumer_config = self.whole_config[self.queue]
+        else: 
+            self.consumer_config = None
     
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, body: bytes, 
@@ -119,10 +130,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     def append_route_info(self, body: Dict, route_info: str = None):
         if route_info is None: 
             route_info = self.DEFAULT_REROUTING_INFO
-        if 'route' in body[DETAILS]:
-            body[DETAILS]['route'] += route_info
+        if self.MSG_ROUTE in body[self.MSG_DETAILS]:
+            body[self.MSG_DETAILS][self.MSG_ROUTE] += route_info
         else:
-            body[DETAILS]['route'] = route_info
+            body[self.MSG_DETAILS][self.MSG_ROUTE] = route_info
         return body
     
     def run(self):

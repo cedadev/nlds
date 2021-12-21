@@ -14,18 +14,58 @@ import json
 
 import pika
 
-from ..utils.constants import RABBIT_CONFIG_SECTION, DETAILS, TRANSACT_ID, USER
-from ..utils.constants import GROUP, TARGET, DATA, DATA_FILELIST, TIMESTAMP
+from ..utils.constants import RABBIT_CONFIG_SECTION
 from ..server_config import load_config
 
 
 class RabbitMQPublisher():
+    # Routing key constants
+    RK_PUT = "put"
+    RK_GET = "get"
+    RK_DEL = "del"
+    RK_PUTLIST = "putlist"
+    RK_GETLIST = "getlist"
+    RK_DELLIST = "dellist"
+
+    # Exchange routing key parts – root
+    RK_ROOT = "nlds"
+    RK_WILD = "*"
+
+    # Exchange routing key parts – queues
+    RK_INDEX = "index"
+    RK_CATALOGUE = "cat"
+    RK_MONITOR = "mon"
+    RK_TRANSFER = "tran"
+    RK_ROUTE = "route"
+
+    # Exchange routing key parts – actions
+    RK_INITIATE = "init"
+    RK_COMPLETE = "complete"
+
+    # Exchange routing key parts – monitoring levels
+    RK_LOG_INFO = "info"
+    RK_LOG_WARNING = "warn"
+    RK_LOG_ERROR = "err"
+    RK_LOG_DEBUG = "debug"
+    RK_LOG_CRITICAL = "critical"
+
+    # Message json sections
+    MSG_DETAILS = "details"
+    MSG_TRANSACT_ID = "transaction_id"
+    MSG_TIMESTAMP = "timestamp"
+    MSG_USER = "user"
+    MSG_GROUP = "group"
+    MSG_TARGET = "target"
+    MSG_ROUTE = "route"
+    MSG_ERROR = "error"
+    MSG_DATA = "data"
+    MSG_FILELIST = "filelist"
 
     def __init__(self):
         # Get rabbit-specific section of config file
-        whole_config = load_config()
-        self.config = whole_config[RABBIT_CONFIG_SECTION]
-
+        self.whole_config = load_config()
+        self.config = self.whole_config[RABBIT_CONFIG_SECTION]
+        
         # Load exchange section of config as this is the only required part for 
         # sending messages
         self.exchange = self.config["exchange"]
@@ -64,8 +104,8 @@ class RabbitMQPublisher():
         self.channel.exchange_declare(exchange=self.exchange["name"], 
                                       exchange_type=self.exchange["type"])
 
-    @staticmethod
-    def create_message(transaction_id: UUID, data: str, user: str = None, 
+    @classmethod
+    def create_message(cls, transaction_id: UUID, data: str, user: str = None, 
                        group: str = str, target: str = None) -> str:
         """
         Create message to add to rabbit queue. Message is in json format with 
@@ -84,15 +124,15 @@ class RabbitMQPublisher():
         """
         timestamp = datetime.now().isoformat(sep='-')
         message_dict = {
-            DETAILS: {
-                TRANSACT_ID: str(transaction_id),
-                TIMESTAMP: timestamp,
-                USER: user,
-                GROUP: group,
-                TARGET: target
+            cls.MSG_DETAILS: {
+                cls.MSG_TRANSACT_ID: str(transaction_id),
+                cls.MSG_TIMESTAMP: timestamp,
+                cls.MSG_USER: user,
+                cls.MSG_GROUP: group,
+                cls.MSG_TARGET: target
             }, 
-            DATA: {
-                DATA_FILELIST: data
+            cls.MSG_DATA: {
+                cls.MSG_DATA_FILELIST: data
             }
         }
 
