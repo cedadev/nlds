@@ -22,7 +22,7 @@ from pika.spec import Channel
 from pydantic import BaseModel
 
 from .publisher import RabbitMQPublisher
-from ..utils.constants import RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES, CONSUMER_CONFIG_SECTION
+from ..utils.constants import RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES
 
 logger = logging.getLogger(__name__)
 

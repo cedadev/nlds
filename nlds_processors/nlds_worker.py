@@ -44,7 +44,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             return
         
         # If putting then first scan file/filelist
-        if self.RK_PUT in rk_parts[2].upper():
+        if self.RK_PUT in rk_parts[2]:
             print(f" [x] Sending put command to be indexed")
             
             new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_INITIATE])
