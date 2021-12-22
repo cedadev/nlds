@@ -15,6 +15,17 @@
         "exchange": {
             "name": "{{ rabbit_exchange_name }}",
             "type": "{{ rabbit_exchange_type }}"
-        }
+        },
+        "queues": [
+            {
+                "name": "{{ rabbit_queue_name }}",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "{{ rabbit_queue_routing_key }}"
+                    }
+                ]
+            }
+        ]
     }
 }
