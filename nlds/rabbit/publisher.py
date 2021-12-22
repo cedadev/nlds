@@ -11,12 +11,17 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 from datetime import datetime
 from uuid import UUID
 import json
+import logging
 
 import pika
+from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, AMQPChannelError, AMQPError
+from retry import retry
 
 from ..utils.constants import RABBIT_CONFIG_SECTION
 from ..server_config import load_config
+from ..errors import RabbitRetryError
 
+logger = logging.getLogger(__name__)
 
 class RabbitMQPublisher():
     # Routing key constants
@@ -28,7 +33,7 @@ class RabbitMQPublisher():
     RK_DELLIST = "dellist"
 
     # Exchange routing key parts – root
-    RK_ROOT = "nlds"
+    RK_ROOT = "nlds-api"
     RK_WILD = "*"
 
     # Exchange routing key parts – queues
@@ -72,33 +77,37 @@ class RabbitMQPublisher():
       
         self.connection = None
         self.channel = None
-        
+    
+    @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
     def get_connection(self):
-        if self.connection is None or not (self.connection.is_open and self.channel.is_open):
-            # Get the username and password for rabbit
-            rabbit_user = self.config["user"]
-            rabbit_password = self.config["password"]
+        try:
+            if self.connection is None or not (self.connection.is_open and self.channel.is_open):
+                # Get the username and password for rabbit
+                rabbit_user = self.config["user"]
+                rabbit_password = self.config["password"]
 
-            # Start the rabbitMQ connection
-            connection = pika.BlockingConnection(
-                pika.ConnectionParameters(
-                    self.config["server"],
-                    credentials=pika.PlainCredentials(rabbit_user, rabbit_password),
-                    virtual_host=self.config["vhost"],
-                    heartbeat=60
+                # Start the rabbitMQ connection
+                connection = pika.BlockingConnection(
+                    pika.ConnectionParameters(
+                        self.config["server"],
+                        credentials=pika.PlainCredentials(rabbit_user, rabbit_password),
+                        virtual_host=self.config["vhost"],
+                        heartbeat=60
+                    )
                 )
-            )
 
-            # Create a new channel
-            channel = connection.channel()
-            channel.basic_qos(prefetch_count=1)
+                # Create a new channel
+                channel = connection.channel()
+                channel.basic_qos(prefetch_count=1)
 
-            self.connection = connection
-            self.channel = channel
+                self.connection = connection
+                self.channel = channel
 
-            # Declare the exchange config. Also provides a hook for other bindings (e.g. queues) 
-            # to be declared in child classes.
-            self.declare_bindings()
+                # Declare the exchange config. Also provides a hook for other bindings (e.g. queues) 
+                # to be declared in child classes.
+                self.declare_bindings()
+        except (AMQPError, AMQPChannelError, AMQPConnectionError, AMQPHeartbeatTimeout) as e:
+            raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
         self.channel.exchange_declare(exchange=self.exchange["name"], 
@@ -132,7 +141,7 @@ class RabbitMQPublisher():
                 cls.MSG_TARGET: target
             }, 
             cls.MSG_DATA: {
-                cls.MSG_DATA_FILELIST: data
+                cls.MSG_FILELIST: data
             }
         }
 
