@@ -14,6 +14,8 @@ source ~/nlds-venv/bin/activate; python -u nlds_processors/transfer.py > ~/nlds_
 echo "    Running transfer with PID "${!}
 source ~/nlds-venv/bin/activate; python -u nlds_processors/monitor.py > ~/nlds_log/monitor.log &
 echo "    Running monitor with PID "${!}
+source ~/nlds-venv/bin/activate; python -u nlds_processors/catalog.py > ~/nlds_log/catalog.log &
+echo "    Running monitor with PID "${!}
 
 # kill all sub processors on CTRL-C
 trap 'kill 0' SIGINT;

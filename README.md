@@ -35,8 +35,8 @@ Running - Dec 2021
         ```source ~/nlds-venv/bin/activate; python nlds_processors/index.py```
        This will send the output to the terminal.
 
-    2. Use the script `test_run_processor.sh`.  This will run all four processors
-       in the background, sending the output to four logs in the `~/nlds_log/`
+    2. Use the script `test_run_processor.sh`.  This will run all five processors
+       in the background, sending the output to five logs in the `~/nlds_log/`
        directory.
 
 Viewing the API docs
