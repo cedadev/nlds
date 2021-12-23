@@ -115,7 +115,7 @@ class RabbitMQPublisher():
 
     @classmethod
     def create_message(cls, transaction_id: UUID, data: str, user: str = None, 
-                       group: str = str, target: str = None) -> str:
+                       group: str = None, target: str = None) -> str:
         """
         Create message to add to rabbit queue. Message is in json format with 
         metadata described in DETAILS and data, i.e. the filelist of interest,

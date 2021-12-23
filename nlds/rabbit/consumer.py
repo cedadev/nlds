@@ -125,13 +125,14 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             raise ValueError(f"Routing key ({routing_key}) malformed, should consist of 3 parts.")
         return rk_parts
 
-    def append_route_info(self, body: Dict, route_info: str = None):
+    @classmethod
+    def append_route_info(cls, body: Dict, route_info: str = None):
         if route_info is None: 
-            route_info = self.DEFAULT_REROUTING_INFO
-        if self.MSG_ROUTE in body[self.MSG_DETAILS]:
-            body[self.MSG_DETAILS][self.MSG_ROUTE] += route_info
+            route_info = cls.DEFAULT_REROUTING_INFO
+        if cls.MSG_ROUTE in body[cls.MSG_DETAILS]:
+            body[cls.MSG_DETAILS][cls.MSG_ROUTE] += route_info
         else:
-            body[self.MSG_DETAILS][self.MSG_ROUTE] = route_info
+            body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
         return body
     
     def run(self):
