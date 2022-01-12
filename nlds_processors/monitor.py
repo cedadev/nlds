@@ -31,7 +31,11 @@ class MonitorConsumer(RabbitMQConsumer):
         self._logging_function[rk_parts[2]](json.dumps(body_json))
 
         print(f" [x] DONE! \n")
+
         
-if __name__ == "__main__":
+def main():
     consumer = MonitorConsumer()
     consumer.run()
+
+if __name__ == "__main__":
+    main()

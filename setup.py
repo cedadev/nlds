@@ -42,4 +42,13 @@ setup(
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
+    entry_points = {
+        'console_scripts': [
+            'nlds_q=nlds_processors.nlds_worker:main',
+            'catalog_q=nlds_processors.catalog:main',
+            'index_q=nlds_processors.index:main',
+            'monitor_q=nlds_processors.monitor:main',
+            'transfer_q=nlds_processors.transfer:main',            
+        ],
+    }
 )

@@ -87,6 +87,9 @@ class IndexerConsumer(RabbitMQConsumer):
             self.publish_message(new_routing_key, json.dumps(body_json))
        
         
-if __name__ == "__main__":
+def main():
     consumer = IndexerConsumer()
     consumer.run()
+
+if __name__ == "__main__":
+    main()

@@ -89,6 +89,10 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             new_routing_key = ".".join(rk_parts)
             super().publish_message(new_routing_key, msg)
 
-if __name__ == "__main__":
+            
+def main():
     consumer = NLDSWorkerConsumer()
     consumer.run()
+
+if __name__ == "__main__":
+    main()

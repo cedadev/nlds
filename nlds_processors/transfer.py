@@ -12,7 +12,11 @@ class TransferConsumer(RabbitMQConsumer):
         body = body.decode("utf-8")
 
         print(f" [x] Received {body} from {self.queues[0].name} ({method.routing_key})")
-        
-if __name__ == "__main__":
+
+
+def main():
     consumer = TransferConsumer()
     consumer.run()
+
+if __name__ == "__main__":
+    main()
