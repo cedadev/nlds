@@ -1,0 +1,58 @@
+@startuml message_flow_get2
+
+collections catalog as "Cataloguers" #springgreen
+
+participant wex as "Exchange"
+
+queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic = nlds-api.nlds.#
+end note
+collections work as "NLDS\nWorker" #lightgrey
+
+queue qt as "Transfer Q" #gold
+note over qt
+    topic = #.tran.#
+end note
+collections tran as "Transfers" #gold
+
+participant obj as "Object\nStore" #GhostWhite
+
+activate catalog
+catalog -> wex : key=nlds-api.catalog.get_complete
+deactivate catalog
+
+activate wex
+wex -> qw : key=nlds-api.catalog.get_complete
+deactivate wex
+
+activate qw
+qw -> work : key=nlds-api.catalog.get_complete
+deactivate qw
+
+activate work
+work -> wex : key=nlds-api.tran.start_get
+deactivate work
+
+activate wex
+wex -> qt : key=nlds-api.tran.start_get
+deactivate wex
+
+activate qt
+qt -> tran : key=(#)tran.start_get
+deactivate qt
+activate tran
+
+note right of qt
+    (#) here will match the calling
+    application.
+    `nlds-api` in this case.
+end note
+
+loop #lightgrey for file in filelist 
+    tran -> obj : copy file to target
+end
+tran -> wex : key=(#).tran.get_complete
+deactivate tran
+
+@enduml

@@ -1,0 +1,65 @@
+@startuml message_flow_get1
+
+actor user as "User"
+participant client as "Client"
+participant server as "API server"
+participant wex as "Exchange"
+
+queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic = nlds-api.nlds.#
+end note
+collections work as "NLDS\nWorker" #lightgrey
+
+queue qc as "Catalog Q" #springgreen
+collections catalog as "Cataloguers" #springgreen
+database catalog_db as "Catalog DB" #springgreen
+note over qc
+    topic = #.catalog.#
+end note
+
+user -> client : GET(filelist,target,\n\tuser,group,id)
+
+activate client
+client -> server : GET(filelist,target,\n\tuser,group,id)
+deactivate client
+
+activate server
+server -> wex : key=nlds-api.nlds.get
+deactivate server
+
+activate wex
+wex -> qw : key=nlds-api.nlds.get
+deactivate wex
+
+activate qw
+qw -> work : key=nlds-api.nlds.get
+deactivate qw
+
+activate work
+work -> wex : key=(nlds-api).catalog.get_start
+deactivate work
+
+activate wex
+wex -> qc : key=(#).catalog.get_start
+deactivate wex
+
+activate qc
+qc -> catalog : key=(#).catalog.get_start
+deactivate qc
+note right of qc
+    (#) here will match the calling
+    application.
+    `nlds-api` in this case.
+end note
+activate catalog
+loop #lightgrey for file in filelist 
+    catalog -> catalog_db : SELECT(user, group, file)
+    activate catalog_db
+    catalog_db -> catalog : TRUE || FALSE
+    deactivate catalog_db
+end
+catalog -> wex : key=(#).catalog.get_complete
+deactivate catalog
+
+@enduml
