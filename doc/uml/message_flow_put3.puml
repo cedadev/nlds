@@ -1,0 +1,57 @@
+@startuml message_flow_put3
+
+collections tran as "Transfers" #gold
+
+participant wex as "Exchange"
+
+queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic = nlds-api.nlds.#
+end note
+collections work as "NLDS\nWorker" #lightgrey
+
+queue qc as "Catalog Q" #springgreen
+collections catalog as "Cataloguers" #springgreen
+database catalog_db as "Catalog DB" #springgreen
+note over qc
+    topic = #.catalog.#
+end note
+
+activate tran
+tran -> wex : key=nlds-api.tran.put_complete
+deactivate tran
+
+activate wex
+wex -> qw : key=nlds-api.tran.put_complete
+deactivate wex
+
+activate qw
+qw -> work : key=nlds-api.tran.put_complete
+deactivate qw
+
+activate work
+work -> wex : key=nlds-api.catalog.put_start
+deactivate work
+
+activate wex
+wex -> qc : key=nlds-api.catalog.put_start
+deactivate wex
+
+activate qc
+qc -> catalog : key=(#).catalog.put_start
+deactivate qc
+note right of qc
+    (#) here will match the calling
+    application.
+    `nlds-api` in this case.
+end note
+
+activate catalog
+loop #lightgrey for file in transferred_list 
+    catalog -> catalog_db : INSERT(user, group, id, target, file)
+end
+catalog -> wex : key=(#).catalog.put_complete
+deactivate catalog
+
+
+@enduml

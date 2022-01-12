@@ -36,13 +36,13 @@ activate iddb
 iddb -> work : (target,user,group,id)
 deactivate iddb
 '/
-work -> wex  : key=nlds-api.tran.transfer
+work -> wex  : key=nlds-api.tran.put_start
 deactivate work
 activate wex
-wex -> qt : key=nlds-api.tran.transfer
+wex -> qt : key=nlds-api.tran.put_start
 deactivate wex
 activate qt
-qt -> tran : key=(#).tran.transfer
+qt -> tran : key=(#).tran.put_start
 deactivate qt
 note right of qt
     (#) here will match the calling
@@ -55,6 +55,6 @@ activate tran
 loop #lightgrey for file in indexed_list 
     tran -> obj : move file to storage
 end
-tran -> wex : key=(#).tran.complete
+tran -> wex : key=(#).tran.put_complete
 deactivate tran
 @enduml

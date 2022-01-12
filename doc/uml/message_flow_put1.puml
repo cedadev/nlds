@@ -1,4 +1,4 @@
-@startuml message_flow_put
+@startuml message_flow_put1
 
 actor user as "User"
 participant client as "Client"
