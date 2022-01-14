@@ -150,8 +150,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.get_connection()
 
             try:
-                logger.info('READY')
-                print('READY')
+                startup_message = f"{self.DEFAULT_QUEUE_NAME} - READY"
+                logger.info(startup_message)
+                print(startup_message)
                 self.channel.start_consuming()
 
             except KeyboardInterrupt:
