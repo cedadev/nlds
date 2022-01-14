@@ -12,9 +12,7 @@
             }
         ]
     },
-    "consumer": {
-        "{{ rabbit_queue_name }}": {
-            {{ rabbit_queue_options }}
-        }
+    "{{ rabbit_queue_name }}": {
+        {{ rabbit_queue_options }}
     }
 }
