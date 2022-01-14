@@ -16,7 +16,7 @@ class CatalogConsumer(RabbitMQConsumer):
         print(f" [x] Received {json.dumps(body)} from {self.queues[0].name} " +
               f"({method.routing_key})")
         
-        
+
 def main():
     consumer = CatalogConsumer()
     consumer.run()
