@@ -35,8 +35,13 @@ work --> pex : key=nlds-api.tran.*
 work --> pex : key=nlds-api.mon.*
 work --> pex : key=nlds-api.cat.*
 
-queue mq as "Monitor Q" #tomato
+together {
+    queue mq as "Monitor Q" #tomato
+    queue lq as "Logging Q" #hotpink
+}
+
 pex --> mq : key=#.mon.*
+pex --> lq : key=#.log.*
 
 together {
     component scan1 as "Indexer 1" #lightblue
@@ -50,6 +55,11 @@ together {
     person user as "User"
 }
 
+together {
+    component log1 as "Logging" #hotpink
+    person sysadmin as "SysAdmin"
+}
+
 api_server -> pex : key=nlds-api.nlds.*
 
 sq --> scan1 : prefetch=1
@@ -57,8 +67,11 @@ sq --> scan2 : prefetch=1
 tq --> tran1 : prefetch=1
 cq --> cat1 : prefetch=1
 
-mq --> mon1 : prefetch=1
+mq --> mon1
+lq --> log1
+
 mon1 -> user
+sysadmin <- log1
 
 scan1 --> pex : key=#.index.complete
 scan1 --> pex : key=(#).index.init
