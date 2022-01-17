@@ -1,7 +1,6 @@
 import json
 import os
 import pathlib as pth
-from logging import ERROR
 from typing import List
 
 from nlds.rabbit.consumer import RabbitMQConsumer
@@ -13,6 +12,7 @@ class IndexerConsumer(RabbitMQConsumer):
     DEFAULT_REROUTING_INFO = f"->INDEX_Q"
 
     DEFAULT_FILELIST_THRESHOLD = 1000
+    DEFAULT_MESSAGE_THRESHOLD = 1000
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
@@ -23,6 +23,11 @@ class IndexerConsumer(RabbitMQConsumer):
             self.threshold = self.consumer_config["filelist_threshold"]
         else: 
             self.threshold = self.DEFAULT_FILELIST_THRESHOLD
+
+        if "message_threshold" in self.consumer_config:
+            self.msg_threshold = self.consumer_config["message_threshold"]
+        else: 
+            self.msg_threshold = self.DEFAULT_MESSAGE_THRESHOLD
     
     def callback(self, ch, method, properties, body, connection):
         try:
@@ -66,19 +71,18 @@ class IndexerConsumer(RabbitMQConsumer):
                     # allow the filelist to be broken down if this does happen?
                     raise ValueError(f"List with larger than allowed length "
                                      f"submitted for indexing ({self.threshold})")
-                print(f" [...] Scannning! ")
-                # TODO: Dummy filelist inserted, replace this with indexer call
-                indexed_filelist = ['dummy', 'file', 'list']
+                                     
+                print(f" [...] Beginning scan! ")
 
-                body_json[self.MSG_DATA][self.MSG_FILELIST] = indexed_filelist
-                
-                
-                print(f" [x] Returning file list to worker and appending route info "
-                      f"({self.DEFAULT_REROUTING_INFO})")
-                body_json = self.append_route_info(body_json)
+                for indexed_filelist in self.index(filelist):
+                    body_json[self.MSG_DATA][self.MSG_FILELIST] = indexed_filelist
+                    
+                    print(f" [x] Returning file list to worker and appending route info "
+                        f"({self.DEFAULT_REROUTING_INFO})")
+                    body_json = self.append_route_info(body_json)
 
-                new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_COMPLETE])
-                self.publish_message(new_routing_key, json.dumps(body_json))
+                    new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_COMPLETE])
+                    self.publish_message(new_routing_key, json.dumps(body_json))
 
             # TODO: Log this?
             print(f" [x] DONE! \n")
@@ -89,14 +93,20 @@ class IndexerConsumer(RabbitMQConsumer):
             new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, self.RK_ERROR])
             self.publish_message(new_routing_key, json.dumps(body_json))
 
-    def index(self, filelist, max_depth=-1):
+    def index(self, filelist: List(str), max_depth: int = -1):
+        """
+        Iterates through a filelist, yielding an 'indexed' filelist whereby 
+        directories in the passed filelist are walked and properly indexed.
+        Is a generator, and so yields an indexed_filelist of maximum length 
+        self.message_threshold, set through .server_config (defaults to 1000).
+        """
         indexed_filelist = []
 
-        # 
         for item in filelist:
             item_p = pth.Path(item)
 
-            # index directories by walking them
+            # Index directories by walking them, otherwise add to output 
+            # filelist
             if item_p.is_dir():
                 for directory, subdirs, subfiles in os.walk(item_p):
                     # Check how deep this iteration has come from starting dir
@@ -104,48 +114,22 @@ class IndexerConsumer(RabbitMQConsumer):
                     depth = len(pth.Path(directory).relative_to(item_p).parts)
                     if max_depth >= 0 and depth >= max_depth:
                         continue
-
+                    
+                    # Loop through subfiles and append each to output filelist, 
+                    # checking at each appension whether the message list length 
+                    # threshold is breached and yielding appropriately
                     for f in subfiles:
                         indexed_filelist.append(os.path.join(directory, f))
                         self.check_filelist(indexed_filelist)
             else:
                 indexed_filelist.append(item_p)
-        
-        # Get the full path
-        abs_root = os.path.abspath(args.dir)
-
-        # Submit items to rabbit queue for re-scan
-        rabbit_connection = RabbitMQConnection(args.conf)
-
-        # Add the root directory
-        msg = rabbit_connection.create_message(abs_root, MKDIR)
-        rabbit_connection.publish_message(msg)
-
-        # If -r flag, walk the whole tree, if not walk only the immediate directory
-        if args.recursive:
-            max_depth = None
-        else:
-            max_depth = 1
-
-        for root, dirs, files in walk_storage_links(abs_root, max_depth=max_depth):
-
-            # Add directories
-            if not args.nodirs:
-                for _dir in dirs:
-                    msg = rabbit_connection.create_message(os.path.join(root, _dir), MKDIR)
-                    rabbit_connection.publish_message(msg)
-
-            # Add files
-            if not args.nofiles:
-                for file in files:
-                    msg = rabbit_connection.create_message(os.path.join(root, file), DEPOSIT)
-                    rabbit_connection.publish_message(msg)
-
-                    if os.path.basename(file) == README:
-                        msg = rabbit_connection.create_message(os.path.join(root, file), README)
-                        rabbit_connection.publish_message(msg)
+                self.check_filelist(indexed_filelist)
 
     def check_filelist(self, filelist: List(str)):
+        """
+        Yield filelist if it is greater than the maximum message length, as 
+        defined in .server_config through consumer-specific variables. 
+        """
         if len(filelist) >= self.message_threshold:
             yield filelist
         
