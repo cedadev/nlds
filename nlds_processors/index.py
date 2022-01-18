@@ -71,7 +71,7 @@ class IndexerConsumer(RabbitMQConsumer):
                     # allow the filelist to be broken down if this does happen?
                     raise ValueError(f"List with larger than allowed length "
                                      f"submitted for indexing ({self.threshold})")
-                                     
+
                 print(f" [...] Beginning scan! ")
 
                 for indexed_filelist in self.index(filelist):
@@ -93,7 +93,7 @@ class IndexerConsumer(RabbitMQConsumer):
             new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, self.RK_ERROR])
             self.publish_message(new_routing_key, json.dumps(body_json))
 
-    def index(self, filelist: List(str), max_depth: int = -1):
+    def index(self, filelist: List[str], max_depth: int = -1):
         """
         Iterates through a filelist, yielding an 'indexed' filelist whereby 
         directories in the passed filelist are walked and properly indexed.
@@ -125,7 +125,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 indexed_filelist.append(item_p)
                 self.check_filelist(indexed_filelist)
 
-    def check_filelist(self, filelist: List(str)):
+    def check_filelist(self, filelist: List[str]):
         """
         Yield filelist if it is greater than the maximum message length, as 
         defined in .server_config through consumer-specific variables. 
