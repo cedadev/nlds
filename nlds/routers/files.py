@@ -45,7 +45,10 @@ class FileList(BaseModel):
         }
 
     def to_str(self) -> str:
-        return "[" + ",".join(*self.filelist) + "]"
+        return "[" + ",".join([f for f in self.filelist]) + "]"
+    
+    def get_cleaned_list(self) -> List[str]:
+        return [f.rstrip('\n') for f in self.filelist]
 
 
 class FileResponse(BaseModel):
@@ -132,7 +135,7 @@ async def put(transaction_id: UUID,
     )
     rabbit_publish_response(f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}"
                             f".{RabbitMQPublisher.RK_GETLIST}", 
-                            transaction_id, user, group, filelist.to_str())
+                            transaction_id, user, group, filelist.get_cleaned_list())
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -182,7 +185,8 @@ async def put(transaction_id: UUID,
             detail = response_error.json()
         )
 
-    contents = filepath if not filelist else filelist
+    # Convert filepath or filelist to lists for JSON serialisation
+    contents = [filepath, ] if not filelist else filelist.get_cleaned_list()
 
     # return response, transaction id accepted for processing
     response = FileResponse(
