@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from .nlds_setup import API_VERSION
 
-from .routers import collections, files
+from .routers import collections, files, probe
 from .routers.routing_methods import rabbit_publisher
 
 nlds = FastAPI()
@@ -28,4 +28,9 @@ nlds.include_router(
     files.router,
     tags = ["files",],
     prefix = PREFIX + "/files"
+)
+nlds.include_router(
+    probe.router,
+    tags=["probe", ],
+    prefix = "/probe"
 )
