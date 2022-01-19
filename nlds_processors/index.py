@@ -2,6 +2,7 @@ import json
 import os
 import pathlib as pth
 from typing import List
+import traceback
 
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher
@@ -28,6 +29,11 @@ class IndexerConsumer(RabbitMQConsumer):
             self.msg_threshold = self.consumer_config["message_threshold"]
         else: 
             self.msg_threshold = self.DEFAULT_MESSAGE_THRESHOLD
+        
+        if "print_tracebacks_fl" in self.consumer_config:
+            self.print_tracebacks = self.consumer_config["print_tracebacks_fl"]
+        else:
+            self.print_tracebacks = False
     
     def callback(self, ch, method, properties, body, connection):
         try:
@@ -73,6 +79,7 @@ class IndexerConsumer(RabbitMQConsumer):
                                      f"submitted for indexing ({self.threshold})")
 
                 print(f" [...] Beginning scan! ")
+                print(filelist)
 
                 for indexed_filelist in self.index(filelist):
                     body_json[self.MSG_DATA][self.MSG_FILELIST] = indexed_filelist
@@ -88,15 +95,18 @@ class IndexerConsumer(RabbitMQConsumer):
             print(f" [x] DONE! \n")
 
         except Exception as e:
+            if self.print_tracebacks:
+                tb = traceback.format_exc()
+                print(tb)
             print(f"Encountered error ({e}), sending to monitor.")
             body_json[self.MSG_DATA][self.MSG_ERROR] = str(e)
-            new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, self.RK_ERROR])
+            new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, self.RK_LOG_ERROR])
             self.publish_message(new_routing_key, json.dumps(body_json))
 
     def index(self, filelist: List[str], max_depth: int = -1):
         """
         Iterates through a filelist, yielding an 'indexed' filelist whereby 
-        directories in the passed filelist are walked and properly indexed.
+        directories in the passed filelist are walked and properly walked.
         Is a generator, and so yields an indexed_filelist of maximum length 
         self.message_threshold, set through .server_config (defaults to 1000).
         """
@@ -120,19 +130,17 @@ class IndexerConsumer(RabbitMQConsumer):
                     # threshold is breached and yielding appropriately
                     for f in subfiles:
                         indexed_filelist.append(os.path.join(directory, f))
-                        self.check_filelist(indexed_filelist)
+                        if len(indexed_filelist) >= self.msg_threshold:
+                            yield indexed_filelist
             else:
-                indexed_filelist.append(item_p)
-                self.check_filelist(indexed_filelist)
-
-    def check_filelist(self, filelist: List[str]):
-        """
-        Yield filelist if it is greater than the maximum message length, as 
-        defined in .server_config through consumer-specific variables. 
-        """
-        if len(filelist) >= self.message_threshold:
-            yield filelist
+                indexed_filelist.append(item)
+                if len(indexed_filelist) >= self.msg_threshold:
+                    yield indexed_filelist
         
+        # Yield whatever has been indexed after all directories have been walked
+        yield indexed_filelist
+
+
 def main():
     consumer = IndexerConsumer()
     consumer.run()
