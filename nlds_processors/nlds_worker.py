@@ -56,7 +56,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             if rk_parts[1] == f"{self.RK_INDEX}":
                 print(f" [x] Scan successful, pass message back to transfer and" 
                       " cataloging queues")
-                for queue in [self.RK_TRANSFER, self.RK_CATALOGUE]:
+                for queue in [self.RK_TRANSFER]:
                     print(f" [x]  Sending to {queue} queue")
                     new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_INITIATE])
                     self.publish_message(new_routing_key, json.dumps(body_json))
@@ -68,7 +68,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             # worker
             elif rk_parts[1] == f"{self.RK_CATALOGUE}" or rk_parts[1] == f"{self.RK_TRANSFER}":
                 print(f" [x]  Sending to {self.RK_MONITOR} queue")
-                new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, rk_parts[2]])
+                new_routing_key = ".".join([self.RK_ROOT, self.RK_LOG, rk_parts[2]])
                 self.publish_message(new_routing_key, json.dumps(body_json), 
                                      monitor_fl=False)
                                      
@@ -82,14 +82,14 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         super().publish_message(routing_key, msg)
 
         if monitor_fl:
-            # Additionally send same message to monitoring.
+            # Additionally send same message to logging.
             rk_parts = routing_key.split(".")
-            rk_parts[1] = self.RK_MONITOR
+            rk_parts[1] = self.RK_LOG
             rk_parts[2] = self.RK_LOG_INFO
             new_routing_key = ".".join(rk_parts)
             super().publish_message(new_routing_key, msg)
 
-            
+
 def main():
     consumer = NLDSWorkerConsumer()
     consumer.run()

@@ -61,7 +61,7 @@ class IndexerConsumer(RabbitMQConsumer):
             
             if rk_parts[2] == self.RK_INITIATE:
                 # Split the filelist into batches of 1000 and resubmit
-                new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_INDEX])
+                new_routing_key = ".".join([rk_parts[0], self.RK_INDEX, self.RK_INDEX])
                 
                 if filelist_len > self.threshold:
                     for filesublist in filelist[::self.threshold]:
@@ -88,7 +88,7 @@ class IndexerConsumer(RabbitMQConsumer):
                         f"({self.DEFAULT_REROUTING_INFO})")
                     body_json = self.append_route_info(body_json)
 
-                    new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_COMPLETE])
+                    new_routing_key = ".".join([rk_parts[0], self.RK_INDEX, self.RK_COMPLETE])
                     self.publish_message(new_routing_key, json.dumps(body_json))
 
             # TODO: Log this?
@@ -100,7 +100,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 print(tb)
             print(f"Encountered error ({e}), sending to monitor.")
             body_json[self.MSG_DATA][self.MSG_ERROR] = str(e)
-            new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, self.RK_LOG_ERROR])
+            new_routing_key = ".".join([self.RK_ROOT, self.RK_LOG, self.RK_LOG_ERROR])
             self.publish_message(new_routing_key, json.dumps(body_json))
 
     def index(self, filelist: List[str], max_depth: int = -1):

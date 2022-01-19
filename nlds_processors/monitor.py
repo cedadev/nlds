@@ -32,7 +32,7 @@ class MonitorConsumer(RabbitMQConsumer):
 
         print(f" [x] DONE! \n")
 
-        
+
 def main():
     consumer = MonitorConsumer()
     consumer.run()

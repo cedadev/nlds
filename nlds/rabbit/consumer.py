@@ -86,7 +86,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         if self.queue in self.whole_config:
             self.consumer_config = self.whole_config[self.queue]
         else: 
-            self.consumer_config = None
+            self.consumer_config = dict()
     
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, body: bytes, 

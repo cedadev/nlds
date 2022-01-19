@@ -42,12 +42,14 @@ class RabbitMQPublisher():
     RK_MONITOR = "mon"
     RK_TRANSFER = "tran"
     RK_ROUTE = "route"
+    RK_LOG = "log"
 
     # Exchange routing key parts – actions
     RK_INITIATE = "init"
     RK_COMPLETE = "complete"
 
     # Exchange routing key parts – monitoring levels
+    RK_LOG_NONE = "none"
     RK_LOG_INFO = "info"
     RK_LOG_WARNING = "warn"
     RK_LOG_ERROR = "err"
