@@ -78,17 +78,16 @@ class IndexerConsumer(RabbitMQConsumer):
                     raise ValueError(f"List with larger than allowed length "
                                      f"submitted for indexing ({self.threshold})")
 
-                print(f" [...] Beginning scan! ")
-                print(filelist)
+                # Append routing info and then run the index
+                body_json = self.append_route_info(body_json)
+                new_routing_key = ".".join([rk_parts[0], self.RK_INDEX, self.RK_COMPLETE])
+                print(" [x] Running scan...")
 
                 for indexed_filelist in self.index(filelist):
+                    # Change message filelist info to new indexed list and send 
+                    # that back to the exchange.
+                    print(" [x] Sending indexed list back to exchange")
                     body_json[self.MSG_DATA][self.MSG_FILELIST] = indexed_filelist
-                    
-                    print(f" [x] Returning file list to worker and appending route info "
-                        f"({self.DEFAULT_REROUTING_INFO})")
-                    body_json = self.append_route_info(body_json)
-
-                    new_routing_key = ".".join([rk_parts[0], self.RK_INDEX, self.RK_COMPLETE])
                     self.publish_message(new_routing_key, json.dumps(body_json))
 
             # TODO: Log this?
@@ -131,11 +130,15 @@ class IndexerConsumer(RabbitMQConsumer):
                     for f in subfiles:
                         indexed_filelist.append(os.path.join(directory, f))
                         if len(indexed_filelist) >= self.msg_threshold:
+                            # Yield and reset filelist
                             yield indexed_filelist
+                            indexed_filelist = []
             else:
                 indexed_filelist.append(item)
                 if len(indexed_filelist) >= self.msg_threshold:
+                    # Yield and reset filelist
                     yield indexed_filelist
+                    indexed_filelist = []
         
         # Yield whatever has been indexed after all directories have been walked
         yield indexed_filelist
