@@ -1,5 +1,5 @@
 CEDA Near-Line Data Store
-========================
+=========================
 
 This is the HTTP API server code for the CEDA Near-Line Data Store (NLDS).
 It requires the use of the NLDS client, either the command line or library:
