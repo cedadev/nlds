@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Near Line Data Store (NLDS) &mdash; Near-line Data Store 0.1 documentation</title><link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Core content of the nlds-server" href="nlds-server.html" />
+    <link rel="prev" title="CEDA Near-Line Data Store" href="home.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> Near-line Data Store
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Specification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Near-line Data Store</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Near Line Data Store (NLDS)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/specification.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="near-line-data-store-nlds">
+<h1>Near Line Data Store (NLDS)<a class="headerlink" href="#near-line-data-store-nlds" title="Permalink to this headline">¶</a></h1>
+<p># Software specification
+<strong>Neil Massey 02/11/2021</strong></p>
+<p># Introduction</p>
+<p>As a successor to the Joint Data Migration Application (JDMA), a new storage
+solution is proposed.  This is based on the idea of hot, warm and cold storage:</p>
+<ul class="simple">
+<li><p>hot  = POSIX disk, or SSD.  Expensive in cost and power requirements.</p></li>
+<li><p>warm = Object Storage.  Less expensive in cost and power requirements.</p></li>
+<li><p>cold = Tape.  Cheapest in cost and power requirements.</p></li>
+</ul>
+<p>(This is all “in theory” costing.)</p>
+<p>The main idea is that users are presented with a single (and simple)
+application or API, that follows the CRUD (create, read, update, destroy)
+mnemonic.  Users can issue commands to POST a list of files (a list may
+contain exactly one file), GET a list of files, DELETE a list of files and PUT
+a list of files (update).</p>
+<p>This can be via the command line client, or the API that the CLI is built
+upon.  Users issue a transfer command and the NLDS system performs the
+transfer on their behalf.  For example:</p>
+<p><code class="docutils literal notranslate"><span class="pre">`nlds</span> <span class="pre">put</span> <span class="pre">&lt;file&gt;`</span></code></p>
+<p>puts a single file onto the NLDS system.</p>
+<p><code class="docutils literal notranslate"><span class="pre">`nlds</span> <span class="pre">putlist</span> <span class="pre">&lt;filelist&gt;`</span></code></p>
+<p>will open the <cite>&lt;filelist&gt;</cite> file, read the file names out of the file and put
+those files onto the NLDS.</p>
+<p>There are equivalent <cite>nlds get &lt;file&gt;</cite> and <cite>nlds getlist &lt;filelist&gt;</cite> files.
+Also, we will have to support <cite>nlds del &lt;file&gt;</cite> and <cite>nlds dellist &lt;filelist&gt;</cite>
+commands.</p>
+<p>Eventually, we will add monitoring commands as well.</p>
+<p>To overcome some of the problems we had with the JDMA, we propose that the
+NLDS architecture has a “micro-services” setup.  This consists of:</p>
+<ol class="arabic simple">
+<li><p>An API server, that clients connect to and issue commands to.  The commands are, as above, the CRUD commands: <cite>put</cite>, <cite>putlist</cite>, <cite>get</cite>, <cite>getlist</cite>, <cite>del</cite>, <cite>dellist</cite>.</p></li>
+<li><p>A message-broker queue.  The API server translates the user’s commands to messages and pushes them onto the message-broker queue.</p></li>
+<li><p>Micro-service subscribers to the queue.  These micro-services take a message from the queue, perform a task that is encoded in the message, and then push the results back onto the queue for further action.</p></li>
+<li><p>A transfer processor.</p></li>
+<li><p>A monitoring and notification system.</p></li>
+<li><p>A catalogue database, containing the NLDS holdings.</p></li>
+</ol>
+<p>This basic architecture is shown in Figure 1:</p>
+<div class="line-block">
+<div class="line">![overview](./uml/overview.png) |</div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">-</dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<div class="line-block">
+<div class="line"><strong>Figure 1</strong> High-level deployment diagram of NLDS. |</div>
+</div>
+<p># Use cases</p>
+<p>## Group Workspace Tape Management</p>
+<p><strong>Purpose</strong>: A group workspace is an allocation of storage to a user or group
+of users (a project) on JASMIN.  It can use different storage media. There is
+a quota for each media type.</p>
+<p><strong>Actors:</strong>
+1. GWS user
+2. GWS Manager
+3. CEDA Archive Manager</p>
+<p><strong>Entities:</strong>
+1. GWS
+2. Tape system
+3. CEDA Archive</p>
+<p><strong>Actions:</strong></p>
+<ul class="simple">
+<li><p>A user makes an incremental copy</p></li>
+<li><p>A user performs a “back-up” (full or incremental) from other storage to tape</p></li>
+</ul>
+<p>(the first backup is an increment on nothing)
+* Someone writes to tape from Archer and then restores onto disk on JASMIN.
+* A GWS user needs to make space on their GWS disk.  They write data to tape
+and then remove the data from disk that has been copied to tape.
+* A user wants to discover and pull data from tape, run an analysis and then
+write their results back to tape afterwards.
+* Implies metadata scraping on the way in?
+* Put data into “time-limited cold storage” for limited period following
+completion of project (limit = 18 months TBC).
+* Retrieve GWS data from tape ready for it to be incorporated into the CEDA
+archive via ingest process.
+* GWS Manager can check overall tape usage against quota, for their GWS.</p>
+<p>## CEDA Archive</p>
+<p><strong>Purpose:</strong> storage management for the CEDA Archive</p>
+<p><strong>Actors:</strong>
+1. CEDA Archive manager</p>
+<p><strong>Entities:</strong>
+1. CEDA Archive
+2. Tape system</p>
+<p><strong>Actions:</strong>
+* Ingest.
+* Deposit.
+* Storage allocation - what data should go where (should be policy driven
+rather than list driven).
+* Setting up a policy for dataset - e.g. disk-only copy with MODIS.
+* Maintenance.
+* Make archive copies - exact copy of what is in the archive for redundancy.
+* Tidy cache copies - partial copies on performance storage.
+* Recovery copies - copies with deleted and modified (Backup).
+* Fixity Audit.
+* Migration - copy and remove (could be archive, cache or recovery copies).
+* Access (either for a download service or direct from mounted file system)
+* Search
+* Request data to cache copy (NLA type behaviour)</p>
+<p># Software components</p>
+<p># NLDS client</p>
+<ul class="simple">
+<li><p>The user interacts with the NLDS client.</p></li>
+<li><p>Authorisation tokens are obtained from the OAuth server.</p></li>
+<li><p>Commands are issued to the NLDS server, along with the authorisation tokens.</p></li>
+<li><p>A transaction ID is generated, which is attached to every message as they</p></li>
+</ul>
+<p>flow through the system.</p>
+<p># NLDS server</p>
+<ul class="simple">
+<li><p>NLDS client commands are received, along with their authorisation tokens.</p></li>
+<li><p>Authorisation tokens are checked with the OAuth server.</p></li>
+<li><p>Commands are translated to RabbitMQ commands and pushed to the queue.</p></li>
+</ul>
+<p>## CRUD operations</p>
+<p>These messages are sent to the NLDS server.  These consist of just 6 commands.</p>
+<ol class="arabic simple">
+<li><p><cite>put</cite> : transfer a single file to the NLDS.</p></li>
+<li><p><cite>putlist</cite> : transfer a user-supplied list of files to the NLDS.</p></li>
+<li><p><cite>get</cite> : retrieve a single file from the NLDS.</p></li>
+<li><p><cite>getlist</cite> : retrieve a user-supplied list of files from the NLDS.</p></li>
+<li><p><cite>del</cite> : remove a single file from the NLDS.</p></li>
+<li><p><cite>dellist</cite> : remove a user-supplied list of files from the NLDS.</p></li>
+</ol>
+<p>### PUT command</p>
+<div class="line-block">
+<div class="line">API endpoint | /files |</div>
+</div>
+<p><a href="#id23"><span class="problematic" id="id24">|---|</span></a>—|
+| HTTP method  | PUT |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+|              | filepath |
+| Body         | none |
+| Example      | <cite>/files/put?transaction_id=1;user=”bob”;group=”root”;filepath=”myfile.txt”</cite> |</p>
+<p>### PUTLIST command</p>
+<div class="line-block">
+<div class="line">API endpoint | /files |</div>
+</div>
+<p><a href="#id25"><span class="problematic" id="id26">|---|</span></a>—|
+| HTTP method  | PUT |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+| Body         | JSON|
+| Example      | <a href="#id1"><span class="problematic" id="id2">`</span></a>PUT /files/transaction_id=1;user=”bob”;group=”root”<a href="#id3"><span class="problematic" id="id4">`</span></a>|
+| Body example | <a href="#id5"><span class="problematic" id="id6">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
+<p>### GET command</p>
+<div class="line-block">
+<div class="line">API endpoint | /files |</div>
+</div>
+<p><a href="#id27"><span class="problematic" id="id28">|---|</span></a>—|
+| HTTP method  | GET |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+|              | filepath |
+| Body         | none |
+| Example      | <cite>GET /files/transaction_id=1;user=”bob”;group=”root”;filepath=”myfile.txt”</cite> |</p>
+<p>### GETLIST command</p>
+<div class="line-block">
+<div class="line">API endpoint | /files/getlist |</div>
+</div>
+<p><a href="#id29"><span class="problematic" id="id30">|---|</span></a>—|
+| HTTP method  | PUT |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+| Body         | JSON|
+| Example      | <a href="#id7"><span class="problematic" id="id8">`</span></a>/files/getlist?transaction_id=1;user=”bob”;group=”root”;`|
+| Body example | <a href="#id9"><span class="problematic" id="id10">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
+<p>### DEL command</p>
+<div class="line-block">
+<div class="line">API endpoint | /files |</div>
+</div>
+<p><a href="#id31"><span class="problematic" id="id32">|---|</span></a>—|
+| HTTP method  | DELETE |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+|              | filepath |
+| Body         | none |
+| Example      | <a href="#id11"><span class="problematic" id="id12">`</span></a>/files/transaction_id=1;user=”bob”;group=”root”;filepath=”myfile.txt” <a href="#id13"><span class="problematic" id="id14">`</span></a><a href="#id15"><span class="problematic" id="id16">|</span></a></p>
+<p>### DELLIST command</p>
+<div class="line-block">
+<div class="line">API endpoint | /files/dellist |</div>
+</div>
+<p><a href="#id33"><span class="problematic" id="id34">|---|</span></a>—|
+| HTTP method  | PUT |
+| Parameters   | transaction_id |
+|              | user |
+|              | group |
+| Body         | JSON|
+| Example      | <a href="#id17"><span class="problematic" id="id18">`</span></a>/files/dellist?transaction_id=1;user=”bob”;group=”root”<a href="#id19"><span class="problematic" id="id20">`</span></a>|
+| Body example | <a href="#id21"><span class="problematic" id="id22">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
+<p>## OAuth server</p>
+<ul class="simple">
+<li><p>Performs generation and authorisation of tokens</p></li>
+<li><p>Currently JASMIN accounts portal.  Should be able to be something else as</p></li>
+</ul>
+<p>well.</p>
+<p>The interaction of the NLDS client, NLDS server, OAuth server and the ingest of the Rabbit MQ queue is shown in Figure 2.</p>
+<div class="line-block">
+<div class="line">![client_server_seq](./uml/client_server_seq.png) |</div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">-</dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<div class="line-block">
+<div class="line"><strong>Figure 2</strong> Interaction of NLDS client, server, OAuth server and Rabbit MQ message broker. |</div>
+</div>
+<p># Rabbit MQ Exchange</p>
+<p>The Rabbit MQ system consists of an Exchange, with a number of Topic Queues
+with a subscriber to each topic queue.
+These are:
+* Work processor
+* File / directory indexer / scanner
+* Transfer processor
+* Database processor
+* Monitor</p>
+<p>## Messaging</p>
+<p>The NLDS relies on passing messages between different components in the
+system.  These messages have to be formatted to match the receiving system and
+so different message formats are used:</p>
+<ol class="arabic simple">
+<li><p>HTTP API / JSON</p></li>
+<li><p>RabbitMQ</p></li>
+<li><p>FTS3</p></li>
+<li><p>S3</p></li>
+</ol>
+<p>## Rabbit MQ Exchange Structure</p>
+<div class="line-block">
+<div class="line">![client_server_seq](./uml/queue_structure.png) |</div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">-</dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<div class="line-block">
+<div class="line"><strong>Figure 3</strong> Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both <cite>Indexer 1</cite> and <cite>Indexer 2</cite> write <cite>work.index.complete</cite> messages to the <cite>Work Exchange</cite>.|</div>
+</div>
+<p>## Message flow</p>
+<p>### Message flow for a <cite>putlist</cite> command
+| ![message_flow_put1](./uml/message_flow_put1.png) |
+:-:
+| <strong>Figure 4.1</strong> Flow of messages for a <cite>putlist</cite> case of transferring a list of files to the NLDS. Part 1: from the user submitting the request to the completion of the file indexing|</p>
+<div class="line-block">
+<div class="line">![message_flow_put2](./uml/message_flow_put2.png) |</div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">-</dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<div class="line-block">
+<div class="line"><strong>Figure 4.2</strong> Flow of messages for a <cite>putlist</cite> case of transferring a list of files to the NLDS. Part 2: from the file index completing (for a sublist of files) to the transfer completing (for the sublist)|</div>
+</div>
+<div class="line-block">
+<div class="line">![message_flow_put3](./uml/message_flow_put3.png) |</div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">-</dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<div class="line-block">
+<div class="line"><strong>Figure 4.3</strong> Flow of messages for a <cite>putlist</cite> case of transferring a list of files to the NLDS. Part 3: from a successful completion of a transfer (for a sublist of files) to the cataloguing of the sublist|</div>
+</div>
+<p>### Message flow for a <cite>getlist</cite> command
+| ![message_flow_get1](./uml/message_flow_get1.png) |
+:-:
+| <strong>Figure 5.1</strong> Flow of messages for a <cite>getlist</cite> case of retrieving a list of files from the NLDS. Part 1: from the user submitting the request to the finding of the requested files in the catalogue|</p>
+<div class="line-block">
+<div class="line">![message_flow_get2](./uml/message_flow_get2.png) |</div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">-</dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<div class="line-block">
+<div class="line"><strong>Figure 5.2</strong> Flow of messages for a <cite>getlist</cite> case of retrieving a list of files from the NLDS. Part 2: from the catalogue request completing to the transfer completing|</div>
+</div>
+<p>## Message formats</p>
+<p>Message content are in JSON format so as to aid human and machine readability.
+The user entry point is the NLDS server, which presents a HTTP API
+(REST-ful), implemented in FAST-API.  This HTTP API fulfills two different
+classes of operations for NLDS: the CRUD (Create, Read, Update, Delete)
+operations, and search operations.</p>
+<p>## Inter-process communication</p>
+<p>Communication between processes is carried out by submitting a RabbitMQ message
+to the Exchange.  The  NLDS API server will submit the initial message into the
+Exchange.  The RabbitMQ messages consist of a routing key and a JSON document
+containing the data required to carry out the processes:</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt;,
+group          : &lt;string&gt;,
+target         : &lt;string&gt;</p>
+</dd>
+</dl>
+<p>},
+data {
+}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>All messages retain all parts of the <cite>details</cite> field in the JSON message.  This
+allows the details of the transaction to be passed from process to process, even
+when the process does not require some of the sub-fields in the <cite>details</cite> field.</p>
+<p>The routing keys for the RabbitMQ messages have three components: the calling
+application, the worker to act upon and the state or command for the worker.
+The calling application part of the routing key will remain constant throughout
+the operations lifecycle. This will allow multiple applications to use the
+worker processes without interpreting messages destined for the other
+applications.</p>
+<p><cite>application.worker.state</cite></p>
+<p>### Applications</p>
+<ul class="simple">
+<li><p><cite>nlds-api</cite> - the calling API from the NLDS Fast API server</p></li>
+<li><p><cite>gws-api</cite> - the calling API from the Group Workspace Scanner</p></li>
+</ul>
+<p>### Workers</p>
+<ul class="simple">
+<li><p><cite>nlds</cite> - the NLDS marshalling application</p></li>
+<li><p><cite>index</cite> - the indexer, available to the <cite>nlds-api</cite> and <cite>gws-api</cite> applications.</p></li>
+</ul>
+<p>### State</p>
+<p>These will vary between workers, but an example subset could be:</p>
+<ul class="simple">
+<li><p><cite>init</cite></p></li>
+<li><p><cite>start</cite></p></li>
+<li><p><cite>complete</cite></p></li>
+</ul>
+<p>### Key processing</p>
+<p>RabbitMQ APIs for Python, such as Pika, can retrieve the key that has bound to
+a queue, even if that key contains a wildcard (<cite>#</cite> or <cite>*</cite>).  The worker
+processes use this capability to form the key for the return message, keeping
+the same <cite>application</cite> portion of the key, but appending new <cite>worker</cite> and / or
+<cite>state</cite> portions.</p>
+<p>For example, consider two different scenarios.</p>
+<p>1. the <cite>nlds-worker</cite> may issue the command <cite>nlds-api.index.start</cite> to
+the Exchange.  This will bind to the <cite>index</cite> queue, which has the binding
+<cite>#.index.*</cite>.  The <cite>Indexer</cite> process will parse the key, replacing the <cite>#</cite> part
+with <cite>nlds-api</cite> and the <cite>*</cite> part with <cite>start</cite>.  From this the <cite>Indexer</cite> can form
+the return key of <cite>nlds-api.index.complete</cite>.  This will bind to the <cite>nlds</cite>
+queue and the <cite>nlds-worker</cite> will interpret this message.</p>
+<p>2. an external application, the Group Workspace Scanner issues the command
+<cite>gws-api.index.start</cite>.  This will, as before, bind to the <cite>index</cite> queue, and the
+<cite>Indexer</cite> will parse the key.  This time, the return key will be
+<cite>gws-api.index.complete</cite> and it will be left to the calling <cite>gws-api</cite> application
+as to what happens next.  Note that there will be no queue in the NLDS system
+that will bind to the key or interpret the message.</p>
+<p>This is the mechanism that allows multiple applications to use parts of the NLDS
+without consuming another application’s messages.</p>
+<p>## Worker processes</p>
+<p>The worker processes interact with each other via the Exchange and their topic
+queues.  The <cite>NLDS</cite> worker acts as a marshalling process - i.e. it controls the
+flow of the data through the system and knows which worker to send a message to
+when another worker has finished.</p>
+<p>### NLDS</p>
+<p>This acts as a marshalling process.  Its first action, when a new
+<cite>nlds-api.nlds.put</cite> message is consumed is to initiate the indexer with a
+<cite>nlds-api.index.start</cite> message.
+The NLDS Fast API server constructs the JSON from the parameters passed in the
+URL.</p>
+<p>#### —&gt; Input message</p>
+<p><strong>Binding</strong> : <cite>nlds-api.nlds.put</cite></p>
+<p><strong>Message</strong> :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt;,
+group          : &lt;string&gt;,
+target         : &lt;string&gt;</p>
+</dd>
+</dl>
+<p>},
+data {</p>
+<blockquote>
+<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+</div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>#### &lt;— Output message</p>
+<p><strong>Binding</strong> : <cite>nlds-api.index.start</cite></p>
+<p><strong>Message</strong> :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt;,
+group          : &lt;string&gt;,
+target         : &lt;string&gt;</p>
+</dd>
+</dl>
+<p>},
+data {</p>
+<blockquote>
+<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+</div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>### Indexer</p>
+<p>This takes the description of work that the Work Processor pushed onto the
+queue and starts to build a file list.</p>
+<p>Questions :
+* Should this work on just POSIX file sets?
+* Should it work with object store?
+* Should it work on tape catalogue?</p>
+<p>At the end it can push two different messages to the queue:
+* Index a directory
+* Transfer a list of files from one data storage system to another</p>
+<p>If a threshold number of files has been reached then it can:
+* Push a message to transfer the files
+* Push a message to index the remainder of the directories</p>
+<p>The file indexer fulfills three purposes:</p>
+<ol class="arabic simple">
+<li><p>It ensures that the files that the user has supplied in a filelist are actually present.</p></li>
+<li><p>It recursively indexes any directories that are in the filelist.</p></li>
+<li><p>It splits the filelist into smaller batches to allow for restarting the transfer, asynchronicity of transfers and allow parallel transfers.</p></li>
+</ol>
+<p>This indexes the filelist by scanning the files to make sure they are present,
+splitting up the filelist into manageable chunks and recursively scanning any
+directories that are in the filelist.</p>
+<p><cite>(optional)</cite> below indicates that the Indexer does not require those subfields to
+operate.  However, it should echo back any subfields that occur in the <cite>details</cite>
+field.</p>
+<p><cite>(#)</cite> in a message below indicates that part of the key is matched to a single
+word in the calling key and then the <cite>#</cite> in the return key is replaced with the
+matched value.</p>
+<p>#### —&gt; Input messages</p>
+<p><strong>Binding</strong> : <cite>#.index.init</cite></p>
+<p><strong>Message</strong> :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt; (optional),
+group          : &lt;string&gt; (optional),
+target         : &lt;string&gt; (optional)</p>
+</dd>
+</dl>
+<p>},
+data {</p>
+<blockquote>
+<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+</div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p><strong>Binding</strong> : <cite>#.index.start</cite></p>
+<p><strong>Message</strong> :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt; (optional),
+group          : &lt;string&gt; (optional),
+target         : &lt;string&gt; (optional)</p>
+</dd>
+</dl>
+<p>},
+data {</p>
+<blockquote>
+<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+</div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>#### &lt;— Output messages</p>
+<p><strong>Binding</strong> : <cite>(#).index.start</cite></p>
+<p><strong>Message</strong> :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt; (optional),
+group          : &lt;string&gt; (optional),
+target         : &lt;string&gt; (optional)</p>
+</dd>
+</dl>
+<p>},
+data {</p>
+<blockquote>
+<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+</div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p><strong>Binding</strong> : <cite>(#).index.complete</cite></p>
+<p><strong>Message</strong> :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt; (optional),
+group          : &lt;string&gt; (optional),
+target         : &lt;string&gt; (optional)</p>
+</dd>
+</dl>
+<p>},
+data {</p>
+<blockquote>
+<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+</div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>## Transfer processor
+This takes the list of files from the File Indexer and transfers them from
+one storage medium to another
+At the end it pushes a message to the queue to say it has completed.</p>
+<p>Asynchronicity of the transfers is a desirable byproduct of the indexer splitting the filelist into smaller batches.  It also allows for parallel transfer, with multiple transfer workers.  Finally, if a transfer worker fails, and does not return an acknowledgement message to the Exchange, the message will be sent out again, after a suitable timeout period.</p>
+<p>## Database processor
+Add files and metadata to a file catalogue database.  Intake database?</p>
+<p>## Monitoring
+Important!
+How do we know when a transfer has completed, if it has been split into
+multiple components?</p>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="home.html" class="btn btn-neutral float-left" title="CEDA Near-Line Data Store" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="nlds-server.html" class="btn btn-neutral float-right" title="Core content of the nlds-server" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Neil Massey &amp; Jack Leland.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
