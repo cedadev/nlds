@@ -1,1 +1,1 @@
-../../doc/nlds_specification.md
+../spec/nlds_specification.md

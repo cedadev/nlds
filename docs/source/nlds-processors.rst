@@ -6,6 +6,7 @@ The Consumer class
 
 .. automodule:: nlds.rabbit.consumer
     :members:
+    :show-inheritance:
 
 The processors
 --------------
