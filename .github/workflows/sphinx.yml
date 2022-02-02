@@ -6,6 +6,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    # Checkout and build the docs with sphinx
     - uses: actions/checkout@v2
     - name: Build HTML
       uses: ammaraskar/sphinx-action@0.4
@@ -14,6 +15,8 @@ jobs:
       with:
         name: html-docs
         path: docs/build/html/
+    # Deploys to the gh-pages branch if the commit was made to main, the 
+    # gh-pages then takes over serving the html
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
       if: github.ref == 'refs/heads/main'
