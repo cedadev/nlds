@@ -44,14 +44,14 @@ def validate_config_file(json_config: dict) -> None:
 
 
 def load_config(config_file_path: str = CONFIG_FILE_LOCATION) -> dict:
-    """Config file for the server contains:
-        authentication : {
-            authenticator_backend : <authenticator backend>,
-            ... optional settings for authenticator backend ...
-        }
-        rabbitMQ : {
-            ... Rabbit server configuration info ...
-        }
+    """
+    Config file for the server contains authentication and rabbitMQ sections,
+    the required contents of which are set by the schema in utils.constants. 
+    This function opens the config file (at a preset, configurable location) 
+    then verifies it. 
+
+    :parameter config_file_path:
+    :type str:
 
     """
     # Location of config file is ./.serverconfig.  Open it, checking that it
