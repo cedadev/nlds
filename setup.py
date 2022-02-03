@@ -15,11 +15,13 @@ setup(
         'fastapi',
         'uvicorn',
         'requests',
+        'retry',
         'pika'
     ],
     include_package_data=True,
     package_data={
-        'nlds': ['templates/*.j2']
+        'nlds': ['templates/*.j2'],
+        'nlds_processors': ['templates/*.j2']
     },
     license='LICENSE.txt',  # example license
     description=('REST-API server for CEDA Near-Line Data Store'),
@@ -40,4 +42,14 @@ setup(
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
+    entry_points = {
+        'console_scripts': [
+            'nlds_q=nlds_processors.nlds_worker:main',
+            'catalog_q=nlds_processors.catalog:main',
+            'index_q=nlds_processors.index:main',
+            'monitor_q=nlds_processors.monitor:main',
+            'transfer_q=nlds_processors.transfer:main',
+            'logging_q=nlds_processors.logger:main'            
+        ],
+    }
 )

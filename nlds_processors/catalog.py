@@ -1,11 +1,10 @@
 import json
 
 from nlds.rabbit.consumer import RabbitMQConsumer
-from utils.constants import ROOT, CATALOGUE, WILD
-
 class CatalogConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "catalog_q"
-    DEFAULT_ROUTING_KEY = f"{ROOT}.{CATALOGUE}.{WILD}"
+    DEFAULT_ROUTING_KEY = f"{RabbitMQConsumer.RK_ROOT}.{RabbitMQConsumer.RK_CATALOGUE}."\
+                          f"{RabbitMQConsumer.RK_WILD}"
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
@@ -17,6 +16,10 @@ class CatalogConsumer(RabbitMQConsumer):
         print(f" [x] Received {json.dumps(body)} from {self.queues[0].name} " +
               f"({method.routing_key})")
         
-if __name__ == "__main__":
+
+def main():
     consumer = CatalogConsumer()
     consumer.run()
+
+if __name__ == "__main__":
+    main()

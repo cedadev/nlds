@@ -11,5 +11,4 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 API_VERSION = "0.1"
 CONFIG_FILE_LOCATION = ".server_config"
-# can we move this into a config file?
-INDEX_FILELIST_THRESHOLD = 1000
+
