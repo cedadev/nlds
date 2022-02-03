@@ -41,7 +41,7 @@
 <li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">NLDS Processors API</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#the-consumer-class">The Consumer class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-nlds.rabbit.consumer">The Consumer class</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#the-processors">The processors</a></li>
 </ul>
 </li>
@@ -73,12 +73,97 @@
              
   <section id="core-content-of-the-nlds-processors">
 <h1>Core content of the nlds-processors<a class="headerlink" href="#core-content-of-the-nlds-processors" title="Permalink to this headline">¶</a></h1>
-<section id="the-consumer-class">
-<h2>The Consumer class<a class="headerlink" href="#the-consumer-class" title="Permalink to this headline">¶</a></h2>
+<section id="module-nlds.rabbit.consumer">
+<span id="the-consumer-class"></span><h2>The Consumer class<a class="headerlink" href="#module-nlds.rabbit.consumer" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="nlds.rabbit.consumer.RabbitMQConsumer">
+<em class="property">class </em><code class="sig-prename descclassname">nlds.rabbit.consumer.</code><code class="sig-name descname">RabbitMQConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue: str = None</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code>, <a class="reference internal" href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher" title="nlds.rabbit.publisher.RabbitMQPublisher"><code class="xref py py-class docutils literal notranslate"><span class="pre">nlds.rabbit.publisher.RabbitMQPublisher</span></code></a></p>
+<dl class="method">
+<dt id="nlds.rabbit.consumer.RabbitMQConsumer.declare_bindings">
+<code class="sig-name descname">declare_bindings</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.declare_bindings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Overridden method from Publisher, additionally declares the queues and queue-exchange 
+bindings outlined in the config file. If no queues were set then the default - generated 
+within __init__, is used instead.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="nlds.rabbit.consumer.RabbitMQConsumer.run">
+<code class="sig-name descname">run</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method to run when thread is started. Creates an AMQP connection
+and sets some exception handling.</p>
+<p>A common exception which occurs is StreamLostError.
+The connection should get reset if that happens.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="nlds.rabbit.consumer.RabbitMQConsumer.split_routing_key">
+<em class="property">static </em><code class="sig-name descname">split_routing_key</code><span class="sig-paren">(</span><em class="sig-param">routing_key: str</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.split_routing_key" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method to simply verify and split the routing key into parts.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>3-tuple of routing key parts</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 <section id="the-processors">
 <h2>The processors<a class="headerlink" href="#the-processors" title="Permalink to this headline">¶</a></h2>
 <p>Also referred to as ‘microservices’</p>
+<span class="target" id="module-nlds_processors.nlds_worker"></span><dl class="class">
+<dt id="nlds_processors.nlds_worker.NLDSWorkerConsumer">
+<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.nlds_worker.</code><code class="sig-name descname">NLDSWorkerConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='nlds_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.nlds_worker.NLDSWorkerConsumer" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt id="nlds_processors.nlds_worker.NLDSWorkerConsumer.publish_message">
+<code class="sig-name descname">publish_message</code><span class="sig-paren">(</span><em class="sig-param">routing_key: str</em>, <em class="sig-param">msg: str</em>, <em class="sig-param">monitor_fl=True</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#nlds_processors.nlds_worker.NLDSWorkerConsumer.publish_message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper around original publish message to additionally send message to monitoring
+queue.</p>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-nlds_processors.index"></span><dl class="class">
+<dt id="nlds_processors.index.IndexerConsumer">
+<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.index.</code><code class="sig-name descname">IndexerConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='index_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.index.IndexerConsumer" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt id="nlds_processors.index.IndexerConsumer.index">
+<code class="sig-name descname">index</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.index.IndexerConsumer.index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterates through a filelist, yielding an ‘indexed’ filelist whereby 
+directories in the passed filelist are walked and properly walked.
+Is a generator, and so yields an indexed_filelist of maximum length 
+self.message_threshold, set through .server_config (defaults to 1000).</p>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-nlds_processors.transfer"></span><dl class="class">
+<dt id="nlds_processors.transfer.TransferConsumer">
+<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.transfer.</code><code class="sig-name descname">TransferConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='transfer_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.transfer.TransferConsumer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.catalog"></span><dl class="class">
+<dt id="nlds_processors.catalog.CatalogConsumer">
+<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.catalog.</code><code class="sig-name descname">CatalogConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='catalog_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.CatalogConsumer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.monitor"></span><dl class="class">
+<dt id="nlds_processors.monitor.MonitorConsumer">
+<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.monitor.</code><code class="sig-name descname">MonitorConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='monitor_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.MonitorConsumer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.logger"></span><dl class="class">
+<dt id="nlds_processors.logger.LoggingConsumer">
+<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.logger.</code><code class="sig-name descname">LoggingConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='logging_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.logger.LoggingConsumer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </section>
 </section>
 

@@ -41,7 +41,7 @@
 <li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">NLDS Server API</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#the-publisher-class">The Publisher class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-nlds.rabbit.publisher">The Publisher class</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#the-routers">The routers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#module-nlds.authenticators.base_authenticator">The authenticators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#module-nlds.server_config">The server config module</a></li>
@@ -76,8 +76,37 @@
              
   <section id="core-content-of-the-nlds-server">
 <h1>Core content of the nlds-server<a class="headerlink" href="#core-content-of-the-nlds-server" title="Permalink to this headline">¶</a></h1>
-<section id="the-publisher-class">
-<h2>The Publisher class<a class="headerlink" href="#the-publisher-class" title="Permalink to this headline">¶</a></h2>
+<section id="module-nlds.rabbit.publisher">
+<span id="the-publisher-class"></span><h2>The Publisher class<a class="headerlink" href="#module-nlds.rabbit.publisher" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="nlds.rabbit.publisher.RabbitMQPublisher">
+<em class="property">class </em><code class="sig-prename descclassname">nlds.rabbit.publisher.</code><code class="sig-name descname">RabbitMQPublisher</code><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="nlds.rabbit.publisher.RabbitMQPublisher.create_message">
+<em class="property">classmethod </em><code class="sig-name descname">create_message</code><span class="sig-paren">(</span><em class="sig-param">transaction_id: uuid.UUID</em>, <em class="sig-param">data: str</em>, <em class="sig-param">user: str = None</em>, <em class="sig-param">group: str = None</em>, <em class="sig-param">target: str = None</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.create_message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create message to add to rabbit queue. Message is in json format with 
+metadata described in DETAILS and data, i.e. the filelist of interest,
+under DATA.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>transaction_id</strong> – ID of transaction as provided by fast-api</p></li>
+<li><p><strong>data</strong> – (str)   file or filelist of interest</p></li>
+<li><p><strong>user</strong> – (str)   user who sent request</p></li>
+<li><p><strong>group</strong> – (str)   group that user belongs to</p></li>
+<li><p><strong>target</strong> – (str)   target that files are being moved to (only 
+valid for PUT, PUTLIST commands)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>JSON encoded string in the proper format for message passing</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 <section id="the-routers">
 <h2>The routers<a class="headerlink" href="#the-routers" title="Permalink to this headline">¶</a></h2>
@@ -111,6 +140,37 @@ instructions on accessing these can be found in <a class="reference internal" hr
 <dt id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_user">
 <code class="sig-name descname">authenticate_user</code><span class="sig-paren">(</span><em class="sig-param">user: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_user" title="Permalink to this definition">¶</a></dt>
 <dd><p>Validate whether the Bearer of the token is a valid user.</p>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-nlds.authenticators.jasmin_authenticator"></span><dl class="class">
+<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator">
+<em class="property">class </em><code class="sig-prename descclassname">nlds.authenticators.jasmin_authenticator.</code><code class="sig-name descname">JasminAuthenticator</code><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_collection">
+<code class="sig-name descname">authenticate_collection</code><span class="sig-paren">(</span><em class="sig-param">oauth_token: str</em>, <em class="sig-param">collection: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_collection" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_group">
+<code class="sig-name descname">authenticate_group</code><span class="sig-paren">(</span><em class="sig-param">oauth_token: str</em>, <em class="sig-param">group: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_group" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a call to the JASMIN services for a user to determine whether
+the user with the token is part of the requested group.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_token">
+<code class="sig-name descname">authenticate_token</code><span class="sig-paren">(</span><em class="sig-param">oauth_token: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_token" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a call to the JASMIN token introspection to determine whether
+the token is a true token and whether it is valid.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_user">
+<code class="sig-name descname">authenticate_user</code><span class="sig-paren">(</span><em class="sig-param">oauth_token: str</em>, <em class="sig-param">user: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_user" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a call to the JASMIN services for a user to determine whether
+the user with the token is a valid user.</p>
 </dd></dl>
 
 </dd></dl>
