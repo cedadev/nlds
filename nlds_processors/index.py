@@ -12,28 +12,77 @@ class IndexerConsumer(RabbitMQConsumer):
     DEFAULT_ROUTING_KEY = f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_INDEX}.{RabbitMQPublisher.RK_WILD}"
     DEFAULT_REROUTING_INFO = f"->INDEX_Q"
 
-    DEFAULT_FILELIST_THRESHOLD = 1000
-    DEFAULT_MESSAGE_THRESHOLD = 1000
+    # Possible options to set in config file
+    _FILELIST_THRESHOLD = "filelist_threshold"
+    _MESSAGE_THRESHOLD = "message_threshold"
+    _PRINT_TRACEBACKS = "print_tracebacks_fl"
+    _SCANNABLE_ROOT_DIRS = "scannable_root_dirs"
+    
+    DEFAULT_ROOT_DIRS = (
+        pth.Path('/gws'),
+        pth.Path('/group_workspaces'),
+    )
+    DEFAULT_CONSUMER_CONFIG = {
+        _FILELIST_THRESHOLD: 1000,
+        _MESSAGE_THRESHOLD: 1000,
+        _PRINT_TRACEBACKS: False,
+        _SCANNABLE_ROOT_DIRS: DEFAULT_ROOT_DIRS,
+    }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-        # JEL - probably a nicer way of doing this so user knows to specify 
-        # filelist_threshold in the config file. 
-        if "filelist_threshold" in self.consumer_config:
-            self.threshold = self.consumer_config["filelist_threshold"]
-        else: 
-            self.threshold = self.DEFAULT_FILELIST_THRESHOLD
+        # Load config options or fall back to default values.
+        self.filelist_threshold = self.load_config_value(self._FILELIST_THRESHOLD)
+        self.message_threshold = self.load_config_value(self._MESSAGE_THRESHOLD)
+        self.print_tracebacks = self.load_config_value(self._PRINT_TRACEBACKS)
+        self.scannable_root_dirs = self.load_config_value(self._SCANNABLE_ROOT_DIRS, path_listify_fl=True)
 
-        if "message_threshold" in self.consumer_config:
-            self.msg_threshold = self.consumer_config["message_threshold"]
-        else: 
-            self.msg_threshold = self.DEFAULT_MESSAGE_THRESHOLD
-        
-        if "print_tracebacks_fl" in self.consumer_config:
-            self.print_tracebacks = self.consumer_config["print_tracebacks_fl"]
+    def load_config_value(self, config_option: str, path_listify_fl: bool = False):
+        """
+        Function for verification and loading of options from the indexer 
+        section of the .server_config file. Attempts to load from the config 
+        section and reverts to hardcoded default value if an error is 
+        encountered. Will not attempt to load an option if no default value is 
+        available. 
+
+        :param config_option:   (str) The option in the indexer section of the 
+                                .server_config file to be verified and loaded.
+        :param path_listify:    (boolean) Optional argument to control whether 
+                                value should be treated as a list and each item 
+                                converted to a pathlib.Path() object. 
+        :returns:   The value at config_option, otherwise the default value as 
+                    defined in IndexerConsumer.DEFAULT_CONSUMER_CONFIG
+
+        """
+        # Check if the given config option is valid (i.e. whether there is an 
+        # available default option)
+        if config_option not in self.DEFAULT_CONSUMER_CONFIG:
+            raise ValueError(f"Configuration option {config_option} not valid.\n"
+                             f"Must be one of {list(self.DEFAULT_CONSUMER_CONFIG.keys())}")
         else:
-            self.print_tracebacks = False
+            return_val = self.DEFAULT_CONSUMER_CONFIG[config_option]
+
+        if config_option in self.consumer_config:
+            try:
+                return_val = self.consumer_config[config_option]
+                if path_listify_fl:
+                    # TODO: (2022-02-17) This is very specific to the use-case 
+                    # here, could potentially be divided up into listify and 
+                    # convert functions, but that's probably only necessary if 
+                    # we refactor this into Consumer – which is probably a good 
+                    # idea when we start fleshing out other consumers
+                    return_val_list = self.consumer_config[config_option]
+                    # Make sure returned value is a list and not a string
+                    # Note: it can't be any other iterable because it's loaded 
+                    # from a json
+                    assert isinstance(return_val_list, list)
+                    return_val = [pth.Path(item) for item in return_val_list] 
+            except:
+                print(f"Invalid value for {config_option} in config file.\n"
+                      f"Using default value instead.") 
+
+        return return_val
     
     def callback(self, ch, method, properties, body, connection):
         try:
@@ -63,8 +112,8 @@ class IndexerConsumer(RabbitMQConsumer):
                 # Split the filelist into batches of 1000 and resubmit
                 new_routing_key = ".".join([rk_parts[0], self.RK_INDEX, self.RK_INDEX])
                 
-                if filelist_len > self.threshold:
-                    for filesublist in filelist[::self.threshold]:
+                if filelist_len > self.filelist_threshold:
+                    for filesublist in filelist[::self.filelist_threshold]:
                         body_json[self.MSG_FILELIST][self.MSG_FILELIST] = filesublist
                         self.publish_message(new_routing_key, json.dumps(body_json))
                 else:
@@ -76,7 +125,7 @@ class IndexerConsumer(RabbitMQConsumer):
                     # TODO: Perhaps allow some dispensation/configuration to 
                     # allow the filelist to be broken down if this does happen?
                     raise ValueError(f"List with larger than allowed length "
-                                     f"submitted for indexing ({self.threshold})")
+                                     f"submitted for indexing ({self.filelist_threshold})")
 
                 # Append routing info and then run the index
                 body_json = self.append_route_info(body_json)
@@ -114,10 +163,21 @@ class IndexerConsumer(RabbitMQConsumer):
         for item in filelist:
             item_p = pth.Path(item)
 
-            # Index directories by walking them, otherwise add to output 
-            # filelist
+            # Check if item is (a) fully resolved, and (b) in one of the allowed 
+            # root directories - e.g. where the group workspaces are mounted
+            root = pth.Path('/')
+            if root in item_p.parents():
+                # TODO: This may not work as intended, a requirement should be 
+                # that all paths are resolved client-side otherwise unintended 
+                # files could be indexed/transferred
+                item_p = item_p.resolve()
+            # If item is not in any of the allowed root dirs, skip
+            if not any([item_p.is_relative_to(root_dir) for root_dir in self.scannable_root_dirs]):
+                continue
+
             if item_p.is_dir():
-                for directory, subdirs, subfiles in os.walk(item_p):
+                # Index directories by walking them
+                for directory, _, subfiles in os.walk(item_p):
                     # Check how deep this iteration has come from starting dir
                     # and skip if greater than allowed maximum depth
                     depth = len(pth.Path(directory).relative_to(item_p).parts)
@@ -129,13 +189,14 @@ class IndexerConsumer(RabbitMQConsumer):
                     # threshold is breached and yielding appropriately
                     for f in subfiles:
                         indexed_filelist.append(os.path.join(directory, f))
-                        if len(indexed_filelist) >= self.msg_threshold:
+                        if len(indexed_filelist) >= self.message_threshold:
                             # Yield and reset filelist
                             yield indexed_filelist
                             indexed_filelist = []
             else:
+                # Index files directly
                 indexed_filelist.append(item)
-                if len(indexed_filelist) >= self.msg_threshold:
+                if len(indexed_filelist) >= self.message_threshold:
                     # Yield and reset filelist
                     yield indexed_filelist
                     indexed_filelist = []
