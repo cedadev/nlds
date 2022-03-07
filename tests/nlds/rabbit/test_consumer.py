@@ -34,10 +34,10 @@ def test_constructor(monkeypatch, template_config, queue_param):
         # Or without first instantiating the callback method
         MockConsumerNoCallback()
     
-    # Check standard consumer with defined callback can be instantiated
+    # Check that a standard consumer with a defined callback can be instantiated
     consumer = MockConsumer(queue=queue_param)  
-    # None should have consumer-specific configuration
-    assert consumer.consumer_config is None
+    # It should not have consumer-specific configuration (which should be an empty dict)
+    assert isinstance(consumer.consumer_config, dict) and not consumer.consumer_config 
 
 def test_split_routing_key(edge_values):
     assert len(RabbitMQConsumer.split_routing_key("test.test.test")) == 3
