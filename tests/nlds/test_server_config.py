@@ -6,8 +6,8 @@ from typing import Iterable
 import pytest
 
 # from fixtures import template_config, TEMPLATE_CONFIG_PATH
-from nlds.server_config import load_config, validate_config_file
-from nlds.utils.constants import RABBIT_CONFIG_SECTION, AUTH_CONFIG_SECTION, CONFIG_SCHEMA
+from nlds.server_config import load_config, validate_config_file, \
+                               RABBIT_CONFIG_SECTION, AUTH_CONFIG_SECTION, CONFIG_SCHEMA
 
 
 TEMPLATE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 
