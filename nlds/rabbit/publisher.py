@@ -8,17 +8,22 @@ __copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
+from glob import glob
+import sys
 from datetime import datetime
 from uuid import UUID
 import json
 import logging
 
 import pika
-from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, AMQPChannelError, AMQPError
+from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, \
+                            AMQPChannelError, AMQPError
 from retry import retry
 
-from ..utils.constants import RABBIT_CONFIG_SECTION
-from ..server_config import load_config
+from ..server_config import LOGGING_CONFIG_STDOUT, load_config, RABBIT_CONFIG_SECTION, \
+                            LOGGING_CONFIG_SECTION, LOGGING_CONFIG_LEVEL, \
+                            LOGGING_CONFIG_STDOUT_LEVEL, LOGGING_CONFIG_FORMAT, \
+                            LOGGING_CONFIG_ENABLE
 from ..errors import RabbitRetryError
 
 logger = logging.getLogger(__name__)
@@ -68,7 +73,7 @@ class RabbitMQPublisher():
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
 
-    def __init__(self):
+    def __init__(self, setup_logging_fl=False):
         # Get rabbit-specific section of config file
         self.whole_config = load_config()
         self.config = self.whole_config[RABBIT_CONFIG_SECTION]
@@ -79,6 +84,8 @@ class RabbitMQPublisher():
       
         self.connection = None
         self.channel = None
+        
+        self.setup_logging(enable=setup_logging_fl)
     
     @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
     def get_connection(self):
@@ -159,3 +166,61 @@ class RabbitMQPublisher():
 
     def close_connection(self) -> None:
         self.connection.close()
+
+    _default_logging_conf = {
+        LOGGING_CONFIG_ENABLE: True,
+        LOGGING_CONFIG_LEVEL: RK_LOG_INFO,
+        LOGGING_CONFIG_FORMAT: '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        LOGGING_CONFIG_STDOUT: False,
+        LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_INFO,
+    }
+    def setup_logging(self, enable=True, log_level: str = None, log_format: str = None,
+                      add_stdout_fl: bool = False, stdout_log_level: str = None) -> None:
+        """
+        Sets up logging for a publisher (i.e. the nlds-api server) with each of 
+        the configuration options able to be overridden by kwargs.
+             
+        """
+        # Do not configure logging if not enabled at the internal level
+        if not enable:
+            return
+            
+        # Attempt to load config from 'logging' section of .server_config file.
+        try:
+            global_logging_config = self.whole_config[LOGGING_CONFIG_SECTION]
+
+            # Merge with default config dict to ensure all options have a value
+            global_logging_config = dict(**self._default_logging_conf, **global_logging_config)
+        except KeyError as e:
+            logger.info('Failed to find logging configuration in .server_config'
+                        ' file, using defaults instead.')
+            global_logging_config = self._default_logging_conf
+
+        # Skip rest of config if logging not enabled at the server config level
+        if not global_logging_config[LOGGING_CONFIG_ENABLE]:
+            return
+
+        # Set logging level, using the kwarg as a priority 
+        if log_level is None:
+            log_level = global_logging_config[LOGGING_CONFIG_LEVEL]
+        logger.setLevel(getattr(logging, log_level.upper()))
+
+        # Add formatting, using the kwarg as a priority
+        if log_format is None:
+            log_format = global_logging_config[LOGGING_CONFIG_FORMAT]
+        sh = logging.StreamHandler()
+        sh.setLevel(getattr(logging, log_level.upper()))
+        formatter = logging.Formatter(log_format)
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+
+        # Optionally add stdout printing in addition to default stderr
+        if add_stdout_fl or (LOGGING_CONFIG_STDOUT in global_logging_config 
+                             and global_logging_config[LOGGING_CONFIG_STDOUT]):
+            if stdout_log_level is None:
+                stdout_log_level = global_logging_config[LOGGING_CONFIG_STDOUT_LEVEL]
+            sh = logging.StreamHandler(sys.stdout)
+            sh.setLevel(getattr(logging, stdout_log_level.upper()))
+            sh.setFormatter(formatter)
+
+            logger.addHandler(sh)
