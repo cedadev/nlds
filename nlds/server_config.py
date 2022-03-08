@@ -12,7 +12,27 @@ import json
 import os.path
 
 from .nlds_setup import CONFIG_FILE_LOCATION
-from .utils.constants import CONFIG_SCHEMA
+
+# Config file section strings
+AUTH_CONFIG_SECTION = "authentication"
+
+RABBIT_CONFIG_SECTION = "rabbitMQ"
+RABBIT_CONFIG_EXCHANGES = "exchanges"
+RABBIT_CONFIG_QUEUES = "queues"
+RABBIT_CONFIG_QUEUE_NAME = "name"
+
+LOGGING_CONFIG_SECTION = "logging"
+LOGGING_CONFIG_LEVEL = "log_level"
+LOGGING_CONFIG_STDOUT = "add_stdout_fl"
+LOGGING_CONFIG_STDOUT_LEVEL = "stdout_log_level"
+LOGGING_CONFIG_FORMAT = "log_format"
+LOGGING_CONFIG_ENABLE = "enable"
+
+# Defines the compulsory server config file sections
+CONFIG_SCHEMA = (
+    (AUTH_CONFIG_SECTION, ("authenticator_backend", )),
+    (RABBIT_CONFIG_SECTION, ("user", "password", "server", "vhost", "exchange", "queues"))
+)
 
 def validate_config_file(json_config: dict) -> None:
     """
@@ -54,7 +74,7 @@ def load_config(config_file_path: str = CONFIG_FILE_LOCATION) -> dict:
     :type str:
 
     """
-    # Location of config file is ./.serverconfig.  Open it, checking that it
+    # Location of config file is ./.server_config.  Open it, checking that it
     # exists as well.
     try:
         fh = open(os.path.abspath(f"{config_file_path}"))
