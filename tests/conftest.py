@@ -4,6 +4,8 @@ from uuid import UUID
 
 import pytest
 
+from nlds.rabbit.publisher import RabbitMQPublisher
+
 
 TEMPLATE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 
                                     '../nlds/templates/server_config.j2')
@@ -21,3 +23,19 @@ def test_uuid():
 @pytest.fixture
 def edge_values():
     return ("", " ", ".", None, "None")
+
+class MockRabbitMethod():
+    def __init__(self, routing_key=''):
+        self.routing_key = routing_key
+
+@pytest.fixture
+def default_rmq_method(routing_key="nlds.test.test"):
+    return MockRabbitMethod(routing_key=routing_key)
+
+@pytest.fixture
+def default_rmq_message(test_uuid):
+    return RabbitMQPublisher.create_message(test_uuid, "data", "user", "group", "target")
+
+@pytest.fixture
+def default_rmq_body(default_rmq_message):
+    return json.dumps(default_rmq_message)
