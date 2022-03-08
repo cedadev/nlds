@@ -22,7 +22,10 @@ from pika.spec import Channel
 from pydantic import BaseModel
 
 from .publisher import RabbitMQPublisher
-from ..server_config import LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_LEVEL, LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, LOGGING_CONFIG_STDOUT_LEVEL, RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES
+from ..server_config import LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FORMAT, \
+                            LOGGING_CONFIG_LEVEL, LOGGING_CONFIG_SECTION, \
+                            LOGGING_CONFIG_STDOUT, LOGGING_CONFIG_STDOUT_LEVEL, \
+                            RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES
 
 logger = logging.getLogger(__name__)
 
@@ -89,19 +92,23 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         else: 
             self.consumer_config = dict()
         
-        if setup_logging_fl:
-            self.setup_logging()
+        self.setup_logging(enable=setup_logging_fl)
     
-    def setup_logging(self, log_level: str = None, log_format: str = None, 
+    def setup_logging(self, enable=False, log_level: str = None, log_format: str = None, 
                       add_stdout_fl: bool = False, stdout_log_level: str = None) -> None:
         """
         Override of the publisher method which allows consumer-specific logging 
         to take precedence over the general logging configuration.
 
         """
+        if not enable:
+            return
+
         # TODO: (2022-03-01) This is quite verbose and annoying to extend. 
         if LOGGING_CONFIG_SECTION in self.consumer_config:
             consumer_logging_conf = self.consumer_config[LOGGING_CONFIG_SECTION]
+            if LOGGING_CONFIG_ENABLE in consumer_logging_conf: 
+                enable = consumer_logging_conf[LOGGING_CONFIG_ENABLE]
             if LOGGING_CONFIG_LEVEL in consumer_logging_conf:
                 log_level = consumer_logging_conf[LOGGING_CONFIG_LEVEL]
             if LOGGING_CONFIG_FORMAT in consumer_logging_conf:
@@ -111,7 +118,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             if LOGGING_CONFIG_STDOUT_LEVEL in consumer_logging_conf:
                 stdout_log_level = consumer_logging_conf[LOGGING_CONFIG_STDOUT_LEVEL]
 
-        return super().setup_logging(log_level, log_format, add_stdout_fl, stdout_log_level)
+        return super().setup_logging(enable, log_level, log_format, 
+                                     add_stdout_fl, stdout_log_level)
 
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, body: bytes, 
