@@ -22,10 +22,11 @@ from pika.spec import Channel
 from pydantic import BaseModel
 
 from .publisher import RabbitMQPublisher
-from ..server_config import LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FORMAT, \
-                            LOGGING_CONFIG_LEVEL, LOGGING_CONFIG_SECTION, \
-                            LOGGING_CONFIG_STDOUT, LOGGING_CONFIG_STDOUT_LEVEL, \
-                            RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES
+from ..server_config import LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, \
+                            LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_LEVEL, \
+                            LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, \
+                            RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, \
+                            RABBIT_CONFIG_QUEUE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +102,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         to take precedence over the general logging configuration.
 
         """
-        if not enable:
-            return
-
         # TODO: (2022-03-01) This is quite verbose and annoying to extend. 
         if LOGGING_CONFIG_SECTION in self.consumer_config:
             consumer_logging_conf = self.consumer_config[LOGGING_CONFIG_SECTION]
@@ -117,9 +115,16 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 add_stdout_fl = consumer_logging_conf[LOGGING_CONFIG_STDOUT]
             if LOGGING_CONFIG_STDOUT_LEVEL in consumer_logging_conf:
                 stdout_log_level = consumer_logging_conf[LOGGING_CONFIG_STDOUT_LEVEL]
+            if LOGGING_CONFIG_FILES in consumer_logging_conf:
+                log_files = consumer_logging_conf[LOGGING_CONFIG_FILES]
 
-        return super().setup_logging(enable, log_level, log_format, 
-                                     add_stdout_fl, stdout_log_level)
+        # Allow the hard-coded default deactivation of logging to be overridden 
+        # by the consumer-specific logging config
+        if not enable:
+            return
+
+        return super().setup_logging(enable, log_level, log_format, add_stdout_fl, 
+                                     stdout_log_level, log_files)
 
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, body: bytes, 

@@ -8,19 +8,20 @@ __copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
-from glob import glob
+from distutils.log import debug
 import sys
 from datetime import datetime
 from uuid import UUID
 import json
 import logging
+from typing import List
 
 import pika
 from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, \
                             AMQPChannelError, AMQPError
 from retry import retry
 
-from ..server_config import LOGGING_CONFIG_STDOUT, load_config, RABBIT_CONFIG_SECTION, \
+from ..server_config import LOGGING_CONFIG_FILES, LOGGING_CONFIG_STDOUT, load_config, RABBIT_CONFIG_SECTION, \
                             LOGGING_CONFIG_SECTION, LOGGING_CONFIG_LEVEL, \
                             LOGGING_CONFIG_STDOUT_LEVEL, LOGGING_CONFIG_FORMAT, \
                             LOGGING_CONFIG_ENABLE
@@ -85,7 +86,8 @@ class RabbitMQPublisher():
         self.connection = None
         self.channel = None
         
-        self.setup_logging(enable=setup_logging_fl)
+        if setup_logging_fl:
+            self.setup_logging()
     
     @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
     def get_connection(self):
@@ -131,7 +133,7 @@ class RabbitMQPublisher():
         under DATA. 
 
         :param transaction_id: ID of transaction as provided by fast-api
-        :param data:    (str)   file or filelist of interest
+        :param data:        (str)   file or filelist of interest
         :param user:        (str)   user who sent request
         :param group:       (str)   group that user belongs to 
         :param target:      (str)   target that files are being moved to (only 
@@ -175,28 +177,32 @@ class RabbitMQPublisher():
         LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_INFO,
     }
     def setup_logging(self, enable=True, log_level: str = None, log_format: str = None,
-                      add_stdout_fl: bool = False, stdout_log_level: str = None) -> None:
+                      add_stdout_fl: bool = False, stdout_log_level: str = None,
+                      log_files: List[str]=None) -> None:
         """
         Sets up logging for a publisher (i.e. the nlds-api server) with each of 
         the configuration options able to be overridden by kwargs.
              
         """
-        # Do not configure logging if not enabled at the internal level
+        # Do not configure logging if not enabled at the internal level (note 
+        # this can be overridden by consumer-specific config)
         if not enable:
             return
-            
-        # Attempt to load config from 'logging' section of .server_config file.
+
         try:
+            # Attempt to load config from 'logging' section of .server_config file.
             global_logging_config = self.whole_config[LOGGING_CONFIG_SECTION]
 
             # Merge with default config dict to ensure all options have a value
-            global_logging_config = dict(**self._default_logging_conf, **global_logging_config)
+            global_logging_config = self._default_logging_conf | global_logging_config
         except KeyError as e:
             logger.info('Failed to find logging configuration in .server_config'
                         ' file, using defaults instead.')
             global_logging_config = self._default_logging_conf
 
-        # Skip rest of config if logging not enabled at the server config level
+        print(global_logging_config)
+
+        # Skip rest of config if logging not enabled at the global level
         if not global_logging_config[LOGGING_CONFIG_ENABLE]:
             return
 
@@ -224,3 +230,31 @@ class RabbitMQPublisher():
             sh.setFormatter(formatter)
 
             logger.addHandler(sh)
+        
+        # If something has been specified in log_files attempt to load it
+        if log_files is not None or LOGGING_CONFIG_FILES in global_logging_config:
+            try: 
+                # Load log_files from server_config if not specified from kwargs
+                if log_files is None:
+                    log_files = global_logging_config[LOGGING_CONFIG_FILES]
+            except KeyError as e:
+                logger.warning(f"Failed to laod log files from config: {str(e)}")
+                return
+            
+            # For each log file specified make and attach a filehandler with 
+            # the same log_level and log_format as specified globally.
+            if isinstance(log_files, list):
+                for log_file in log_files:
+                    try:
+                        # Make log file in current directory
+                        fh = logging.FileHandler(log_file)
+                        fh.setLevel(getattr(logging, log_level.upper()))
+                        fh.setFormatter(formatter)
+                        logger.addHandler(fh)
+                    except Exception as e:
+                        # TODO: Should probably do something more robustly with 
+                        # this error message, but sending a message to the queue 
+                        # at startup seems excessive? 
+                        logger.warning(f"Failed to create log files: {str(e)}")
+
+        print(logger.handlers)

@@ -3,7 +3,6 @@ import logging
 import sys
 
 from nlds.rabbit.consumer import RabbitMQConsumer
-from nlds.utils.constants import RABBIT_CONFIG_EXCHANGES
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +25,8 @@ class LoggingConsumer(RabbitMQConsumer):
         RabbitMQConsumer.RK_LOG_DEBUG: 2,
     }
 
-    def __init__(self, queue=DEFAULT_QUEUE_NAME):
-        super().__init__(queue=queue)
+    def __init__(self, queue=DEFAULT_QUEUE_NAME, setup_logging_fl=True):
+        super().__init__(queue=queue, setup_logging_fl=setup_logging_fl)
 
         if "logging_level" in self.consumer_config:
             self.logging_level = self.consumer_config["logging_level"]

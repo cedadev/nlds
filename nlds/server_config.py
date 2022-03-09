@@ -27,6 +27,7 @@ LOGGING_CONFIG_STDOUT = "add_stdout_fl"
 LOGGING_CONFIG_STDOUT_LEVEL = "stdout_log_level"
 LOGGING_CONFIG_FORMAT = "log_format"
 LOGGING_CONFIG_ENABLE = "enable"
+LOGGING_CONFIG_FILES = "log_files"
 
 # Defines the compulsory server config file sections
 CONFIG_SCHEMA = (
