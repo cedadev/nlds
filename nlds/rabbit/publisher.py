@@ -8,13 +8,14 @@ __copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
-from distutils.log import debug
 import sys
 from datetime import datetime
+from unicodedata import name
 from uuid import UUID
 import json
 import logging
 from typing import List
+import pathlib
 
 import pika
 from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, \
@@ -57,8 +58,8 @@ class RabbitMQPublisher():
     # Exchange routing key parts – monitoring levels
     RK_LOG_NONE = "none"
     RK_LOG_INFO = "info"
-    RK_LOG_WARNING = "warn"
-    RK_LOG_ERROR = "err"
+    RK_LOG_WARNING = "warning"
+    RK_LOG_ERROR = "error"
     RK_LOG_DEBUG = "debug"
     RK_LOG_CRITICAL = "critical"
 
@@ -73,6 +74,8 @@ class RabbitMQPublisher():
     MSG_ERROR = "error"
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
+    MSG_LOG_TARGET = "log_target"
+    MSG_LOG_MESSAGE = "log_message"
 
     def __init__(self, setup_logging_fl=False):
         # Get rabbit-specific section of config file
@@ -176,14 +179,40 @@ class RabbitMQPublisher():
         LOGGING_CONFIG_STDOUT: False,
         LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_INFO,
     }
-    def setup_logging(self, enable=True, log_level: str = None, log_format: str = None,
+    def setup_logging(self, enable: bool = True, log_level: str = None, log_format: str = None,
                       add_stdout_fl: bool = False, stdout_log_level: str = None,
                       log_files: List[str]=None) -> None:
         """
-        Sets up logging for a publisher (i.e. the nlds-api server) with each of 
-        the configuration options able to be overridden by kwargs.
+        Sets up logging for a publisher (i.e. the nlds-api server) using a set 
+        number of configuration options from the logging interface. Each of 
+        the configuration options are able to be overridden by kwargs, allowing
+        for child classes (i.e. consumers) to implement their own settings. 
+        
+        Allows the creation of stderr and stdout handlers under the generic 
+        global logger, and file specific handlers/loggers under the name of each 
+        output file - intended to be used for tracking each consumer's output on 
+        the logging consumer. 
+
+        :param bool enable:             Whether to activate the logging 
+                                        functionality.
+        :param str log_format:          The format string of the logging output, 
+                                        as per instructions in logging docs. 
+                                        Controls all logging outputs (stderr, 
+                                        stdout, files). 
+        :param str log_level:           The logging level of the global logger 
+                                        (applies to only the stderr stream)
+        :param bool add_stdout_fl:      Boolean flag for controlling whether the 
+                                        global logger also prints to stdout.
+        :param str stdout_log_level:    Logging level of the stdout logging 
+                                        stream
+        :param list[str] log_files:     List of files to write logging output 
+                                        to, with each made in its own logger 
+                                        object referencable by the file name. 
              
         """
+        # TODO: (2022-03-14) This has gotten a bit unwieldy, might be best to 
+        # strip back and keep it simpler. 
+
         # Do not configure logging if not enabled at the internal level (note 
         # this can be overridden by consumer-specific config)
         if not enable:
@@ -199,8 +228,6 @@ class RabbitMQPublisher():
             logger.info('Failed to find logging configuration in .server_config'
                         ' file, using defaults instead.')
             global_logging_config = self._default_logging_conf
-
-        print(global_logging_config)
 
         # Skip rest of config if logging not enabled at the global level
         if not global_logging_config[LOGGING_CONFIG_ENABLE]:
@@ -238,7 +265,7 @@ class RabbitMQPublisher():
                 if log_files is None:
                     log_files = global_logging_config[LOGGING_CONFIG_FILES]
             except KeyError as e:
-                logger.warning(f"Failed to laod log files from config: {str(e)}")
+                logger.warning(f"Failed to load log files from config: {str(e)}")
                 return
             
             # For each log file specified make and attach a filehandler with 
@@ -246,15 +273,15 @@ class RabbitMQPublisher():
             if isinstance(log_files, list):
                 for log_file in log_files:
                     try:
-                        # Make log file in current directory
+                        # Make log file in separate logger
                         fh = logging.FileHandler(log_file)
                         fh.setLevel(getattr(logging, log_level.upper()))
                         fh.setFormatter(formatter)
-                        logger.addHandler(fh)
+                        filename = pathlib.Path(log_file).name
+                        fh_logger = logging.getLogger(f"nlds.{filename}")
+                        fh_logger.addHandler(fh)
                     except Exception as e:
                         # TODO: Should probably do something more robustly with 
                         # this error message, but sending a message to the queue 
                         # at startup seems excessive? 
-                        logger.warning(f"Failed to create log files: {str(e)}")
-
-        print(logger.handlers)
+                        logger.warning(f"Failed to create log file for {log_file}: {str(e)}")
