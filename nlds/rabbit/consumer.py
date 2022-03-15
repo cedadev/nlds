@@ -96,7 +96,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         self.setup_logging(enable=setup_logging_fl)
     
     def setup_logging(self, enable=False, log_level: str = None, log_format: str = None, 
-                      add_stdout_fl: bool = False, stdout_log_level: str = None) -> None:
+                      add_stdout_fl: bool = False, stdout_log_level: str = None,
+                      log_files: List[str]=None) -> None:
         """
         Override of the publisher method which allows consumer-specific logging 
         to take precedence over the general logging configuration.
