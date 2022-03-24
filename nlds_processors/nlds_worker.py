@@ -32,62 +32,58 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         # Convert body from bytes to string for ease of manipulation
         body_json = json.loads(body)
 
-        print(f" [x] Received {body} ({method.routing_key})")
-        print(f" [x] Appending rerouting information to message: {self.DEFAULT_REROUTING_INFO} ")
+        self.log(f"Received {body} ({method.routing_key})", self.RK_LOG_INFO)
+        self.log(f"Appending rerouting information to message: {self.DEFAULT_REROUTING_INFO} ", 
+                 self.RK_LOG_DEBUG)
         body_json = self.append_route_info(body_json)
 
-        print(f" [x] Checking routing_key and re-routing")
+        self.log(f"Checking routing_key and re-routing", self.RK_LOG_DEBUG)
+        self.log(method.routing_key, self.RK_LOG_DEBUG)
         try:
             rk_parts = self.split_routing_key(method.routing_key)
         except ValueError:
-            print(' [XXX] Routing key inappropriate length, exiting callback.')
+            self.log('Routing key inappropriate length, exiting callback.', 
+                     self.RK_LOG_ERROR)
             return
         
         # If putting then first scan file/filelist
         if self.RK_PUT in rk_parts[2]:
-            print(f" [x] Sending put command to be indexed")
+            self.log(f"Sending put command to be indexed", self.RK_LOG_INFO)
             
             new_routing_key = ".".join([self.RK_ROOT, self.RK_INDEX, self.RK_INITIATE])
-            self.publish_message(new_routing_key, json.dumps(body_json))
+            self.publish_and_log_message(new_routing_key, json.dumps(body_json))
         
         # If a task has completed, initiate new tasks
         elif rk_parts[2] == f"{self.RK_COMPLETE}":
             # If index completed then pass file list for transfer and cataloging
             if rk_parts[1] == f"{self.RK_INDEX}":
-                print(f" [x] Scan successful, pass message back to transfer and" 
-                      " cataloging queues")
+                self.log(f"Scan successful, pass message back to transfer and " 
+                         "cataloging queues", self.RK_LOG_INFO)
                 for queue in [self.RK_TRANSFER]:
-                    print(f" [x]  Sending to {queue} queue")
+                    self.log(f"Sending  message to {queue} queue", self.RK_LOG_INFO)
                     new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_INITIATE])
-                    self.publish_message(new_routing_key, json.dumps(body_json))
+                    self.publish_and_log_message(new_routing_key, json.dumps(body_json))
 
             # If transfer or catalogue completed then forward confirmation to 
             # monitor
-            # TODO This might not be strictly necessary, could get those 
-            # consumers to do so directly instead of going back via the NLDS 
-            # worker
             elif rk_parts[1] == f"{self.RK_CATALOGUE}" or rk_parts[1] == f"{self.RK_TRANSFER}":
-                print(f" [x]  Sending to {self.RK_MONITOR} queue")
-                new_routing_key = ".".join([self.RK_ROOT, self.RK_LOG, rk_parts[2]])
-                self.publish_message(new_routing_key, json.dumps(body_json), 
-                                     monitor_fl=False)
+                self.log(f"Sending message to {self.RK_MONITOR} queue", self.RK_LOG_INFO)
+                new_routing_key = ".".join([self.RK_ROOT, self.RK_MONITOR, rk_parts[2]])
+                self.publish_and_log_message(new_routing_key, json.dumps(body_json))
                                      
-        print(f" [x] DONE! \n")
+        self.log(f"Worker callback complete!", self.RK_LOG_INFO)
 
-    def publish_message(self, routing_key: str, msg: str, monitor_fl=True) -> None:
+    def publish_and_log_message(self, routing_key: str, msg: str, log_fl=True) -> None:
         """
-        Wrapper around original publish message to additionally send message to monitoring
-        queue. 
+        Wrapper around original publish message to additionally send message to 
+        logging queue. Useful for debugging purposes to be able to see the 
+        content being managed by the worker. 
         """
-        super().publish_message(routing_key, msg)
+        self.publish_message(routing_key, msg)
 
-        if monitor_fl:
-            # Additionally send same message to logging.
-            rk_parts = routing_key.split(".")
-            rk_parts[1] = self.RK_LOG
-            rk_parts[2] = self.RK_LOG_INFO
-            new_routing_key = ".".join(rk_parts)
-            super().publish_message(new_routing_key, msg)
+        if log_fl:  
+            # Additionally send same message to logging with debug priority.
+            self.log(msg, self.RK_LOG_DEBUG)
 
 
 def main():

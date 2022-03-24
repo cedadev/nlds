@@ -1,6 +1,6 @@
 import json
 import logging
-import sys
+import traceback
 
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.server_config import LOGGING_CONFIG_FILES, LOGGING_CONFIG_LEVEL, LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT_LEVEL
@@ -51,6 +51,7 @@ class LoggingConsumer(RabbitMQConsumer):
             rk_parts = self.split_routing_key(method.routing_key)
         except ValueError:
             logger.error("Routing key inappropriate format, exiting callback.")
+            logger.debug(traceback.format_exc())
             return
 
         # Print certain outputs to global logger output depending on the stdout 
@@ -63,26 +64,28 @@ class LoggingConsumer(RabbitMQConsumer):
             logger.debug(json.dumps(body_json, indent=4))
 
         # The log level should be in the routing key, the logger to use should 
-        # be in the message body under MSG_DATA:MSG_LOG_TARGET
+        # be in the message body under MSG_DETAILS:MSG_LOG_TARGET
         if rk_parts[2] not in self._logging_levels:
             logger.error(f"Invalid routing key provided, log_level is set to an invalid value ({rk_parts[2]})\n"
                          f"Should be one of {self._logging_levels}.")
+            logger.debug(traceback.format_exc())
             return
         
         try:
-            consumer = body_json[RabbitMQConsumer.MSG_DATA][RabbitMQConsumer.MSG_LOG_TARGET]
+            consumer = body_json[RabbitMQConsumer.MSG_DETAILS][RabbitMQConsumer.MSG_LOG_TARGET]
         except KeyError as e:
-            logger.error(f"Invalid message contents, log target should be in the data section of the message body.")
+            logger.error(f"Invalid message contents, log target should be in the details section of the message body.")
+            logger.debug(traceback.format_exc())
             return
         
-        # Get full list of loggers to verify the log_target can actually be used.
-        # Note that this opens up to other defualt loggers able to be targeted.
-        loggers = {name: logging.getLogger(name) for name in logging.root.manager.loggerDict if "nlds" in name}
+        # Get curated list of loggers to verify the log_target can actually be used.
+        loggers = {name: logging.getLogger(name) for name in logging.root.manager.loggerDict if "nlds." == name[:5]}
         try:
             consumer_logger = loggers[consumer]
         except KeyError as e:
-            logger.error(f"Invalid log target provided, consumer does not have a valid logger/handler setup ({rk_parts[1]})\n"
-                         f"Should be one of {loggers.keys()}.")
+            logger.error(f"Invalid log target provided, consumer does not have a valid logger/handler setup "
+                         f"({consumer})\nShould be one of {list(loggers.keys())}.")
+            logger.debug(traceback.format_exc())
             return
         logging_func = self.get_logging_func(rk_parts[2], logger_like=consumer_logger)
         
@@ -91,6 +94,7 @@ class LoggingConsumer(RabbitMQConsumer):
             log_message = body_json[RabbitMQConsumer.MSG_DATA][RabbitMQConsumer.MSG_LOG_MESSAGE]
         except KeyError as e:
             logger.error(f"Invalid message contents, log message should be in the data section of the message body.")
+            logger.debug(traceback.format_exc())
             return
 
         # Finally, log the message

@@ -174,6 +174,11 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
         return body
     
+    def log(self, log_message: str, log_level: str, target: str = None) -> None:
+        if not target:
+            target = self.queue
+        super().log(log_message, log_level, target)
+
     def run(self):
         """
         Method to run when thread is started. Creates an AMQP connection

@@ -13,8 +13,8 @@ class CatalogConsumer(RabbitMQConsumer):
         # Convert body from bytes to json for ease of manipulation
         body = json.loads(body)
 
-        print(f" [x] Received {json.dumps(body)} from {self.queues[0].name} " +
-              f"({method.routing_key})")
+        self.log(f"Received {json.dumps(body)} from {self.queues[0].name} "
+                 f"({method.routing_key})", self.RK_LOG_INFO)
         
 
 def main():

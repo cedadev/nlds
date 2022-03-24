@@ -57,11 +57,14 @@ class RabbitMQPublisher():
 
     # Exchange routing key parts – monitoring levels
     RK_LOG_NONE = "none"
+    RK_LOG_DEBUG = "debug"
     RK_LOG_INFO = "info"
     RK_LOG_WARNING = "warning"
     RK_LOG_ERROR = "error"
-    RK_LOG_DEBUG = "debug"
     RK_LOG_CRITICAL = "critical"
+    LOG_RKS = (
+        RK_LOG_NONE, RK_LOG_DEBUG, RK_LOG_INFO, RK_LOG_WARNING, RK_LOG_ERROR, RK_LOG_CRITICAL
+    )
 
     # Message json sections
     MSG_DETAILS = "details"
@@ -76,6 +79,10 @@ class RabbitMQPublisher():
     MSG_FILELIST = "filelist"
     MSG_LOG_TARGET = "log_target"
     MSG_LOG_MESSAGE = "log_message"
+
+    MSG_TYPE = "type"
+    MSG_TYPE_STANDARD = "standard"
+    MSG_TYPE_LOG = "log"
 
     def __init__(self, setup_logging_fl=False):
         # Get rabbit-specific section of config file
@@ -135,11 +142,11 @@ class RabbitMQPublisher():
         metadata described in DETAILS and data, i.e. the filelist of interest,
         under DATA. 
 
-        :param transaction_id: ID of transaction as provided by fast-api
-        :param data:        (str)   file or filelist of interest
-        :param user:        (str)   user who sent request
-        :param group:       (str)   group that user belongs to 
-        :param target:      (str)   target that files are being moved to (only 
+        :param str transaction_id:  ID of transaction as provided by fast-api
+        :param str data:            file or filelist of interest
+        :param str user:            user who sent request
+        :param str group:           group that user belongs to 
+        :param str target:          target that files are being moved to (only 
                                     valid for PUT, PUTLIST commands)
 
         :return:    JSON encoded string in the proper format for message passing
@@ -156,7 +163,8 @@ class RabbitMQPublisher():
             }, 
             cls.MSG_DATA: {
                 cls.MSG_FILELIST: data
-            }
+            },
+            cls.MSG_TYPE: cls.MSG_TYPE_STANDARD
         }
 
         return json.dumps(message_dict)
@@ -211,7 +219,8 @@ class RabbitMQPublisher():
              
         """
         # TODO: (2022-03-14) This has gotten a bit unwieldy, might be best to 
-        # strip back and keep it simpler. 
+        # strip back and keep it simpler.
+        # TODO: (2022-03-21) Or move this all to a mixin? 
 
         # Do not configure logging if not enabled at the internal level (note 
         # this can be overridden by consumer-specific config)
@@ -277,11 +286,81 @@ class RabbitMQPublisher():
                         fh = logging.FileHandler(log_file)
                         fh.setLevel(getattr(logging, log_level.upper()))
                         fh.setFormatter(formatter)
-                        filename = pathlib.Path(log_file).name
-                        fh_logger = logging.getLogger(f"nlds.{filename}")
+                        # Get a name with which to reference the logger by 
+                        # taking the filename and removing any file extension   
+                        filestem = pathlib.Path(log_file).stem
+                        fh_logger = logging.getLogger(f"nlds.{filestem}")
                         fh_logger.addHandler(fh)
                     except Exception as e:
                         # TODO: Should probably do something more robustly with 
                         # this error message, but sending a message to the queue 
                         # at startup seems excessive? 
                         logger.warning(f"Failed to create log file for {log_file}: {str(e)}")
+
+    def log(self, log_message: str, log_level: str, target: str) -> None:
+        """
+        Catch-all function to log a message, both sending it to the local logger
+        and sending a message to the exchange en-route to the logger 
+        microservice.
+
+        :param str log_message:     The message for the log event (i.e. what to 
+                                    feed into logger.info() etc.)
+        :param str log_level:       The log level for the new log event. Must be 
+                                    one of the standard logging levels (see 
+                                    python logging docs).
+        :param str target:          The intended target log on the logging 
+                                    microservice. Must be one of the configured 
+                                    logging handlers  
+        """
+        # Check that given log level is appropriate 
+        if log_level.lower() not in self.LOG_RKS:
+            logger.error(f"Given log level ({log_level}) not in approved list of logging levels. \n"
+                          f"One of {self.LOG_RKS} must be used instead.")
+            return
+
+        # Check format of given target
+        if not (target[:5] == "nlds."):
+            target = f"nlds.{target}"
+
+        # First log message with local logger
+        log_level_int = getattr(logging, log_level.upper())
+        logger.log(log_level_int, log_message)
+
+        # Then assemble a message to send to the logging consumer
+        routing_key = ".".join([self.RK_ROOT, self.RK_LOG, log_level.lower()])
+        message = self.create_log_message(log_message, target)
+        self.publish_message(routing_key, message)
+
+    @classmethod
+    def create_log_message(cls, message: str, target: str, route: str = None) -> bytes:
+        """
+        Create logging message to send to rabbit exchange. Message is, as with 
+        the standard message, in json format with metadata described in DETAILS 
+        and data, i.e. the log message, under DATA. 
+
+        :param str message:     ID of transaction as provided by fast-api
+        :param str target:      The target log file to be written to, must be 
+                                set to the name of a particular microservice, 
+                                usually the one which instigated the log event
+        :param str route:       Route that the message has taken. Optional, will 
+                                be set to target if not specifed.
+
+        :return:    JSON encoded string in the proper format for message passing
+
+        """
+        if route is None:
+            route = target.upper()
+        timestamp = datetime.now().isoformat(sep='-')
+        message_dict = {
+            cls.MSG_DETAILS: {
+                cls.MSG_TIMESTAMP: timestamp,
+                cls.MSG_LOG_TARGET: target,
+                cls.MSG_ROUTE: route,
+            }, 
+            cls.MSG_DATA: {
+                cls.MSG_LOG_MESSAGE: message,
+            },
+            cls.MSG_TYPE: cls.MSG_TYPE_LOG
+        }
+
+        return json.dumps(message_dict)

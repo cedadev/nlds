@@ -89,8 +89,8 @@ class IndexerConsumer(RabbitMQConsumer):
             # Convert body from bytes to string for ease of manipulation
             body_json = json.loads(body)
 
-            print(f" [x] Received {body} from {self.queues[0].name}"
-                  f"({method.routing_key})")
+            self.log(f"Received {body} from {self.queues[0].name}({method.routing_key})",
+                     self.RK_LOG_INFO)
 
             # Verify routing key is appropriate
             try:
@@ -104,8 +104,8 @@ class IndexerConsumer(RabbitMQConsumer):
             try:
                 filelist_len = len(filelist)
             except TypeError as e:
-                print(" [XXX] Filelist cannot be split into sublist, "
-                      "incorrect format given.")
+                self.log("Filelist cannot be split into sublist, incorrect format given.", 
+                         self.RK_LOG_ERROR)
                 raise e
             
             if rk_parts[2] == self.RK_INITIATE:
@@ -130,25 +130,24 @@ class IndexerConsumer(RabbitMQConsumer):
                 # Append routing info and then run the index
                 body_json = self.append_route_info(body_json)
                 new_routing_key = ".".join([rk_parts[0], self.RK_INDEX, self.RK_COMPLETE])
-                print(" [x] Running scan...")
+                self.log("Starting scan", self.RK_LOG_INFO)
 
                 for indexed_filelist in self.index(filelist):
                     # Change message filelist info to new indexed list and send 
                     # that back to the exchange.
-                    print(" [x] Sending indexed list back to exchange")
+                    self.log("Sending indexed list back to exchange", self.RK_LOG_INFO)
                     body_json[self.MSG_DATA][self.MSG_FILELIST] = indexed_filelist
                     self.publish_message(new_routing_key, json.dumps(body_json))
 
-            # TODO: Log this?
-            print(f" [x] DONE! \n")
+            self.log(f"Scan finished.", self.RK_LOG_INFO)
 
         except Exception as e:
             if self.print_tracebacks:
                 tb = traceback.format_exc()
-                print(tb)
-            print(f"Encountered error ({e}), sending to monitor.")
+                self.log(tb, self.RK_LOG_DEBUG)
+            self.log(f"Encountered error ({e}), sending to logger.", self.RK_LOG_ERROR)
             body_json[self.MSG_DATA][self.MSG_ERROR] = str(e)
-            new_routing_key = ".".join([self.RK_ROOT, self.RK_LOG, self.RK_LOG_ERROR])
+            new_routing_key = ".".join([self.RK_ROOT, self.RK_LOG, self.RK_LOG_INFO])
             self.publish_message(new_routing_key, json.dumps(body_json))
 
     def index(self, filelist: List[str], max_depth: int = -1):
@@ -166,7 +165,7 @@ class IndexerConsumer(RabbitMQConsumer):
             # Check if item is (a) fully resolved, and (b) in one of the allowed 
             # root directories - e.g. where the group workspaces are mounted
             root = pth.Path('/')
-            if root in item_p.parents():
+            if root in item_p.parents:
                 # TODO: This may not work as intended, a requirement should be 
                 # that all paths are resolved client-side otherwise unintended 
                 # files could be indexed/transferred
