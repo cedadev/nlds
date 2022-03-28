@@ -28,7 +28,7 @@ from ..server_config import LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, \
                             RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, \
                             RABBIT_CONFIG_QUEUE_NAME
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("nlds.root")
 
 
 class RabbitQEBinding(BaseModel):
@@ -56,7 +56,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     def __init__(self, queue: str = None, setup_logging_fl=False):
         super().__init__(setup_logging_fl=False)
 
-        # TODO: Replace all printing with logging
         # TODO: (2021-12-21) Only one queue can be specified at the moment, 
         # should be able to specify multiple queues to subscribe to but this 
         # isn't a priority.
@@ -196,7 +195,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             try:
                 startup_message = f"{self.DEFAULT_QUEUE_NAME} - READY"
                 logger.info(startup_message)
-                print(startup_message)
                 self.channel.start_consuming()
 
             except KeyboardInterrupt:

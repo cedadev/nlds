@@ -5,7 +5,7 @@ import traceback
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.server_config import LOGGING_CONFIG_FILES, LOGGING_CONFIG_LEVEL, LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT_LEVEL
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("nlds.root")
 
 class LoggingConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "logging_q"
@@ -25,22 +25,9 @@ class LoggingConsumer(RabbitMQConsumer):
         RabbitMQConsumer.RK_LOG_INFO: 1,
         RabbitMQConsumer.RK_LOG_DEBUG: 2,
     }
-    _consumers = {
-        
-    }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME, setup_logging_fl=True):
         super().__init__(queue=queue, setup_logging_fl=setup_logging_fl)
-
-        # The stdout logging confguration controls how much of the output is 
-        # parotted to the terminal. If not set the default is used. 
-        if (LOGGING_CONFIG_SECTION in self.consumer_config 
-           and LOGGING_CONFIG_STDOUT_LEVEL in self.consumer_config[LOGGING_CONFIG_SECTION]):
-            self.logging_config = self.consumer_config[LOGGING_CONFIG_SECTION]
-            self.log_level = self.logging_config[LOGGING_CONFIG_STDOUT_LEVEL]
-        else: 
-            self.log_level = self.DEFAULT_LOGGING_LEVEL
-        self.log_mode = self._logging_modes[self.log_level]
         
     def callback(self, ch, method, properties, body, connection):
         # Convert body from bytes to json for ease of manipulation
@@ -56,12 +43,10 @@ class LoggingConsumer(RabbitMQConsumer):
 
         # Print certain outputs to global logger output depending on the stdout 
         # log level.
-        if self.log_mode >= 1:
-            # Print route information
-            logger.info(f"Received message with route {body_json[self.MSG_DETAILS][self.MSG_ROUTE]}")
-        if self.log_mode >= 2:
-            # Print whole json message
-            logger.debug(json.dumps(body_json, indent=4))
+        logger.info(f"Received message with route {body_json[self.MSG_DETAILS][self.MSG_ROUTE]}")
+        
+        # Print whole json message if in debug
+        logger.debug(json.dumps(body_json, indent=4))
 
         # The log level should be in the routing key, the logger to use should 
         # be in the message body under MSG_DETAILS:MSG_LOG_TARGET
@@ -75,7 +60,7 @@ class LoggingConsumer(RabbitMQConsumer):
             consumer = body_json[RabbitMQConsumer.MSG_DETAILS][RabbitMQConsumer.MSG_LOG_TARGET]
         except KeyError as e:
             logger.error(f"Invalid message contents, log target should be in the details section of the message body.")
-            logger.debug(traceback.format_exc())
+            logger.debug(traceback.format_exc(), exc_info=e)
             return
         
         # Get curated list of loggers to verify the log_target can actually be used.
@@ -84,16 +69,17 @@ class LoggingConsumer(RabbitMQConsumer):
             consumer_logger = loggers[consumer]
         except KeyError as e:
             logger.error(f"Invalid log target provided, consumer does not have a valid logger/handler setup "
-                         f"({consumer})\nShould be one of {list(loggers.keys())}.")
+                         f"({consumer})\nShould be one of {list(loggers.keys())}.", exc_info=e)
             logger.debug(traceback.format_exc())
             return
         logging_func = self.get_logging_func(rk_parts[2], logger_like=consumer_logger)
-        
+
         # Check message body contains log message, under MSG_DATA:MSG_LOG_MESSAGE
         try:
             log_message = body_json[RabbitMQConsumer.MSG_DATA][RabbitMQConsumer.MSG_LOG_MESSAGE]
         except KeyError as e:
-            logger.error(f"Invalid message contents, log message should be in the data section of the message body.")
+            logger.error(f"Invalid message contents, log message should be in the data section of the message body.",
+                         exc_info=e)
             logger.debug(traceback.format_exc())
             return
 

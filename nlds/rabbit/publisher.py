@@ -10,7 +10,6 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 import sys
 from datetime import datetime
-from unicodedata import name
 from uuid import UUID
 import json
 import logging
@@ -28,7 +27,7 @@ from ..server_config import LOGGING_CONFIG_FILES, LOGGING_CONFIG_STDOUT, load_co
                             LOGGING_CONFIG_ENABLE
 from ..errors import RabbitRetryError
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("nlds.root")
 
 class RabbitMQPublisher():
     # Routing key constants
@@ -77,6 +76,7 @@ class RabbitMQPublisher():
     MSG_ERROR = "error"
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
+    MSG_FILELIST_RETRIES = "retries"
     MSG_LOG_TARGET = "log_target"
     MSG_LOG_MESSAGE = "log_message"
 
@@ -153,6 +153,7 @@ class RabbitMQPublisher():
 
         """
         timestamp = datetime.now().isoformat(sep='-')
+        retry_list = []
         message_dict = {
             cls.MSG_DETAILS: {
                 cls.MSG_TRANSACT_ID: str(transaction_id),
@@ -162,7 +163,8 @@ class RabbitMQPublisher():
                 cls.MSG_TARGET: target
             }, 
             cls.MSG_DATA: {
-                cls.MSG_FILELIST: data
+                cls.MSG_FILELIST: data,
+                cls.MSG_FILELIST_RETRIES: retry_list
             },
             cls.MSG_TYPE: cls.MSG_TYPE_STANDARD
         }
@@ -255,6 +257,7 @@ class RabbitMQPublisher():
         formatter = logging.Formatter(log_format)
         sh.setFormatter(formatter)
         logger.addHandler(sh)
+        logger.info(f"Standard-error logger set up at {log_level}")
 
         # Optionally add stdout printing in addition to default stderr
         if add_stdout_fl or (LOGGING_CONFIG_STDOUT in global_logging_config 
@@ -266,6 +269,7 @@ class RabbitMQPublisher():
             sh.setFormatter(formatter)
 
             logger.addHandler(sh)
+            logger.info(f"Standard-out logger set up at {stdout_log_level}")
         
         # If something has been specified in log_files attempt to load it
         if log_files is not None or LOGGING_CONFIG_FILES in global_logging_config:
@@ -284,14 +288,21 @@ class RabbitMQPublisher():
                     try:
                         # Make log file in separate logger
                         fh = logging.FileHandler(log_file)
+                        # Use the same log_level and formatter as the base
                         fh.setLevel(getattr(logging, log_level.upper()))
                         fh.setFormatter(formatter)
+
                         # Get a name with which to reference the logger by 
                         # taking the filename and removing any file extension   
                         filestem = pathlib.Path(log_file).stem
                         fh_logger = logging.getLogger(f"nlds.{filestem}")
                         fh_logger.addHandler(fh)
-                    except Exception as e:
+                        fh_logger.setLevel(getattr(logging, log_level.upper()))
+
+                        # Write out a startup message
+                        fh_logger.info(f"{filestem} file logger set up at {log_level}")
+
+                    except (FileNotFoundError, OSError) as e:
                         # TODO: Should probably do something more robustly with 
                         # this error message, but sending a message to the queue 
                         # at startup seems excessive? 
