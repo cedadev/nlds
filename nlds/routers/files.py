@@ -94,10 +94,11 @@ async def get(transaction_id: UUID,
         msg = (f"GET transaction with id {transaction_id} accepted for "
                 "processing.")
     )
+    contents = [filepath, ]
     rabbit_publish_response(
         f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}."
         f"{RabbitMQPublisher.RK_GET}", 
-        transaction_id, user, group, filepath,
+        transaction_id, user, group, contents,
         tenancy, access_key, secret_key
     )
 

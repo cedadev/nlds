@@ -64,6 +64,7 @@ class RabbitMQPublisher():
     LOG_RKS = (
         RK_LOG_NONE, RK_LOG_DEBUG, RK_LOG_INFO, RK_LOG_WARNING, RK_LOG_ERROR, RK_LOG_CRITICAL
     )
+    LOGGER_PREFIX = "nlds."
 
     # Message json sections
     MSG_DETAILS = "details"
@@ -308,7 +309,7 @@ class RabbitMQPublisher():
                         # at startup seems excessive? 
                         logger.warning(f"Failed to create log file for {log_file}: {str(e)}")
 
-    def log(self, log_message: str, log_level: str, target: str) -> None:
+    def log(self, log_message: str, log_level: str, target: str, **kwargs) -> None:
         """
         Catch-all function to log a message, both sending it to the local logger
         and sending a message to the exchange en-route to the logger 
@@ -321,21 +322,23 @@ class RabbitMQPublisher():
                                     python logging docs).
         :param str target:          The intended target log on the logging 
                                     microservice. Must be one of the configured 
-                                    logging handlers  
+                                    logging handlers 
+        :param kwargs:              Optional. Keyword args to pass into the call 
+                                    to logging.log() 
         """
         # Check that given log level is appropriate 
         if log_level.lower() not in self.LOG_RKS:
             logger.error(f"Given log level ({log_level}) not in approved list of logging levels. \n"
-                          f"One of {self.LOG_RKS} must be used instead.")
+                         f"One of {self.LOG_RKS} must be used instead.")
             return
 
         # Check format of given target
-        if not (target[:5] == "nlds."):
-            target = f"nlds.{target}"
+        if not (target[:5] == self.LOGGER_PREFIX):
+            target = f"{self.LOGGER_PREFIX}{target}"
 
         # First log message with local logger
         log_level_int = getattr(logging, log_level.upper())
-        logger.log(log_level_int, log_message)
+        logger.log(log_level_int, log_message, **kwargs)
 
         # Then assemble a message to send to the logging consumer
         routing_key = ".".join([self.RK_ROOT, self.RK_LOG, log_level.lower()])
