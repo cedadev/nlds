@@ -64,7 +64,8 @@ class LoggingConsumer(RabbitMQConsumer):
             return
         
         # Get curated list of loggers to verify the log_target can actually be used.
-        loggers = {name: logging.getLogger(name) for name in logging.root.manager.loggerDict if "nlds." == name[:5]}
+        loggers = {name: logging.getLogger(name) for name in logging.root.manager.loggerDict 
+                   if self.LOGGER_PREFIX == name[:5]}
         try:
             consumer_logger = loggers[consumer]
         except KeyError as e:
