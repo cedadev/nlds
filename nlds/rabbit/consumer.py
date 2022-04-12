@@ -173,10 +173,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
         return body
     
-    def log(self, log_message: str, log_level: str, target: str = None) -> None:
+    def log(self, log_message: str, log_level: str, target: str = None, **kwargs) -> None:
         if not target:
             target = self.queue
-        super().log(log_message, log_level, target)
+        super().log(log_message, log_level, target, **kwargs)
 
     def run(self):
         """
