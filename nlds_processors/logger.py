@@ -56,6 +56,7 @@ class LoggingConsumer(RabbitMQConsumer):
             logger.debug(traceback.format_exc())
             return
         
+        # Get target log file from message
         try:
             consumer = body_json[RabbitMQConsumer.MSG_DETAILS][RabbitMQConsumer.MSG_LOG_TARGET]
         except KeyError as e:
@@ -83,9 +84,13 @@ class LoggingConsumer(RabbitMQConsumer):
                          exc_info=e)
             logger.debug(traceback.format_exc())
             return
+        
+        exc_info = None
+        if self.MSG_ERROR in body_json[self.MSG_DATA]:
+            exc_info = body_json[self.MSG_DATA][self.MSG_ERROR]
 
         # Finally, log the message
-        logging_func(log_message)
+        logging_func(log_message, exc_info=exc_info)
 
         logger.info(f"Callback finished. \n")
 
