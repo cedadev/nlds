@@ -29,7 +29,7 @@ def assert_last_caplog(caplog, log_level='ERROR', clear_fl=False):
 
 @pytest.mark.parametrize("rk_log_level", LoggingConsumer._logging_levels)
 def test_callback(caplog, default_logger, default_rmq_method, 
-                  routed_rmq_message_dict, rk_log_level):
+                  default_rmq_logmsg_dict, rk_log_level):
     # Let caplog capture all log messages
     caplog.set_level(logging.DEBUG)
 
@@ -37,9 +37,9 @@ def test_callback(caplog, default_logger, default_rmq_method,
 
     # Add necessary logging data to message dict and convert into 
     # callback-friendly bytes. Note we're using general nlds logger here
-    routed_rmq_message_dict[rmqp.MSG_DATA][rmqp.MSG_LOG_TARGET] = 'nlds'
-    routed_rmq_message_dict[rmqp.MSG_DATA][rmqp.MSG_LOG_MESSAGE] = test_message
-    routed_body = json.dumps(routed_rmq_message_dict)
+    default_rmq_logmsg_dict[rmqp.MSG_DATA][rmqp.MSG_LOG_TARGET] = 'nlds'
+    default_rmq_logmsg_dict[rmqp.MSG_DATA][rmqp.MSG_LOG_MESSAGE] = test_message
+    routed_body = json.dumps(default_rmq_logmsg_dict)
 
     # Attempt to run callback with default message, should complete, but raise 
     # an error in the logs due to a faulty routing_key
@@ -64,8 +64,8 @@ def test_callback(caplog, default_logger, default_rmq_method,
 
     # Check it breaks with a non-sensible log target
     custom_method.routing_key = f"nlds.test.info"
-    routed_rmq_message_dict[rmqp.MSG_DATA][rmqp.MSG_LOG_TARGET] = 'test'
-    routed_body = json.dumps(routed_rmq_message_dict)
+    default_rmq_logmsg_dict[rmqp.MSG_DATA][rmqp.MSG_LOG_TARGET] = 'test'
+    routed_body = json.dumps(default_rmq_logmsg_dict)
     default_logger.callback(None, custom_method, None, routed_body, None)
     assert_last_caplog(caplog)
 
