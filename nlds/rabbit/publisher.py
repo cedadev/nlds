@@ -53,6 +53,7 @@ class RabbitMQPublisher():
     # Exchange routing key parts – actions
     RK_INITIATE = "init"
     RK_COMPLETE = "complete"
+    RK_FAILED = "failed"
 
     # Exchange routing key parts – monitoring levels
     RK_LOG_NONE = "none"
@@ -136,7 +137,7 @@ class RabbitMQPublisher():
                                       exchange_type=self.exchange["type"])
 
     @classmethod
-    def create_message(cls, transaction_id: UUID, data: str, user: str = None, 
+    def create_message(cls, transaction_id: UUID, data: List[str], user: str = None, 
                        group: str = None, target: str = None) -> str:
         """
         Create message to add to rabbit queue. Message is in json format with 
@@ -154,7 +155,8 @@ class RabbitMQPublisher():
 
         """
         timestamp = datetime.now().isoformat(sep='-')
-        retry_list = []
+        # Create initial retry list full of zeroes
+        retry_list = [0 for _ in data]
         message_dict = {
             cls.MSG_DETAILS: {
                 cls.MSG_TRANSACT_ID: str(transaction_id),
@@ -188,7 +190,7 @@ class RabbitMQPublisher():
         LOGGING_CONFIG_LEVEL: RK_LOG_INFO,
         LOGGING_CONFIG_FORMAT: '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         LOGGING_CONFIG_STDOUT: False,
-        LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_INFO,
+        LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_WARNING,
     }
     def setup_logging(self, enable: bool = True, log_level: str = None, log_format: str = None,
                       add_stdout_fl: bool = False, stdout_log_level: str = None,
