@@ -12,7 +12,10 @@ from nlds.rabbit.publisher import RabbitMQPublisher
 
 class IndexerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "index_q"
-    DEFAULT_ROUTING_KEY = f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_INDEX}.{RabbitMQPublisher.RK_WILD}"
+    DEFAULT_ROUTING_KEY = (
+        f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_INDEX}."
+        f"{RabbitMQPublisher.RK_WILD}"
+    )
     DEFAULT_REROUTING_INFO = f"->INDEX_Q"
 
     # Possible options to set in config file
@@ -38,15 +41,26 @@ class IndexerConsumer(RabbitMQConsumer):
         super().__init__(queue=queue)
 
         # Load config options or fall back to default values.
-        self.filelist_max_len = self.load_config_value(self._FILELIST_MAX_LENGTH)
-        self.message_max_size = self.load_config_value(self._MESSAGE_MAX_SIZE)
-        self.print_tracebacks = self.load_config_value(self._PRINT_TRACEBACKS)
-        self.scannable_root_dirs = self.load_config_value(self._SCANNABLE_ROOT_DIRS, path_listify_fl=True)
-        self.max_retries = self.load_config_value(self._MAX_RETRIES)
+        self.filelist_max_len = self.load_config_value(
+            self._FILELIST_MAX_LENGTH
+        )
+        self.message_max_size = self.load_config_value(
+            self._MESSAGE_MAX_SIZE
+        )
+        self.print_tracebacks = self.load_config_value(
+            self._PRINT_TRACEBACKS
+        )
+        self.scannable_root_dirs = self.load_config_value(
+            self._SCANNABLE_ROOT_DIRS, path_listify_fl=True
+        )
+        self.max_retries = self.load_config_value(
+            self._MAX_RETRIES
+        )
 
         print(f"@__init__ - uid: {os.getuid()}, gid: {os.getgid()}")
 
-    def load_config_value(self, config_option: str, path_listify_fl: bool = False):
+    def load_config_value(self, config_option: str, 
+                          path_listify_fl: bool = False):
         """
         Function for verification and loading of options from the indexer 
         section of the .server_config file. Attempts to load from the config 
@@ -66,8 +80,10 @@ class IndexerConsumer(RabbitMQConsumer):
         # Check if the given config option is valid (i.e. whether there is an 
         # available default option)
         if config_option not in self.DEFAULT_CONSUMER_CONFIG:
-            raise ValueError(f"Configuration option {config_option} not valid.\n"
-                             f"Must be one of {list(self.DEFAULT_CONSUMER_CONFIG.keys())}")
+            raise ValueError(
+                f"Configuration option {config_option} not valid.\n"
+                f"Must be one of {list(self.DEFAULT_CONSUMER_CONFIG.keys())}"
+            )
         else:
             return_val = self.DEFAULT_CONSUMER_CONFIG[config_option]
 
@@ -99,14 +115,20 @@ class IndexerConsumer(RabbitMQConsumer):
             # Convert body from bytes to string for ease of manipulation
             body_json = json.loads(body)
 
-            self.log(f"Received {body} from {self.queues[0].name}({method.routing_key})",
-                     self.RK_LOG_DEBUG)
+            self.log(
+                f"Received {body} from {self.queues[0].name} "
+                f"({method.routing_key})",
+                self.RK_LOG_DEBUG
+            )
 
             # Verify routing key is appropriate
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
             except ValueError as e:
-                self.log("Routing key inappropriate length, exiting callback.", self.RK_LOG_ERROR)
+                self.log(
+                    "Routing key inappropriate length, exiting callback.", 
+                    self.RK_LOG_ERROR
+                )
                 return
             
             # Verify filelist is, in fact, a list
@@ -114,29 +136,40 @@ class IndexerConsumer(RabbitMQConsumer):
             try:
                 filelist_len = len(filelist)
             except TypeError as e:
-                self.log("Filelist cannot be split into sublist, incorrect format given.", 
-                         self.RK_LOG_ERROR)
+                self.log(
+                    "Filelist cannot be split into sublist, incorrect format "
+                    "given.", 
+                    self.RK_LOG_ERROR
+                )
                 raise e
             
             # Verify retrylist is, in fact, a list
-            retrylist = list(body_json[self.MSG_DATA][self.MSG_FILELIST_RETRIES])
+            retrylist = list(
+                body_json[self.MSG_DATA][self.MSG_FILELIST_RETRIES]
+            )
             try:
                 retrylist_len = len(retrylist)
             except TypeError as e:
-                self.log("Retrylist does not appear to be a list", self.RK_LOG_ERROR)
+                self.log(
+                    "Retrylist does not appear to be a list", 
+                    self.RK_LOG_ERROR
+                )
                 raise e
             
             if retrylist_len != filelist_len:
-                self.log("Lengths of filelist and retrylist do not match, retrylist will be reset", 
-                         self.RK_LOG_WARNING)
+                self.log(
+                    "Lengths of filelist and retrylist do not match, retrylist "
+                    "will be reset", 
+                    self.RK_LOG_WARNING
+                )
 
-            
             # Upon initiation, split the filelist into manageable chunks
             if rk_parts[2] == self.RK_INITIATE:
                 self.split(filelist, retrylist, rk_parts[0], body_json)
             # If for some reason a list which is too long has been submitted for
             # indexing, split it and resubmit it.             
-            elif rk_parts[2] == self.RK_INDEX and filelist_len > self.filelist_max_len:
+            elif (rk_parts[2] == self.RK_INDEX and 
+                  filelist_len > self.filelist_max_len):
                 self.split(filelist, retrylist, rk_parts[0], body_json)    
             # Otherwise index the filelist
             elif rk_parts[2] == self.RK_INDEX:
@@ -159,15 +192,20 @@ class IndexerConsumer(RabbitMQConsumer):
             if self.print_tracebacks:
                 tb = traceback.format_exc()
                 self.log(tb, self.RK_LOG_DEBUG)
-            self.log(f"Encountered error ({e}), sending to logger.", self.RK_LOG_ERROR, exc_info=e)
+            self.log(
+                f"Encountered error ({e}), sending to logger.", 
+                self.RK_LOG_ERROR, exc_info=e
+            )
             body_json[self.MSG_DATA][self.MSG_ERROR] = str(e)
-            new_routing_key = ".".join([self.RK_ROOT, self.RK_LOG, self.RK_LOG_INFO])
+            new_routing_key = ".".join(
+                [self.RK_ROOT, self.RK_LOG, self.RK_LOG_INFO]
+            )
             self.publish_message(new_routing_key, json.dumps(body_json))
 
     def change_user(self, body_json):
         """Changes the real user- and group-ids to that specified in the 
-        incoming message details section so that permissions on each file can be 
-        checked.
+        incoming message details section so that permissions on each file can 
+        be checked.
 
         """
         # Attempt to get group id and user id
@@ -177,8 +215,10 @@ class IndexerConsumer(RabbitMQConsumer):
             req_uid = pwddata.pw_uid
             req_gid = pwddata.pw_gid
         except KeyError as e:
-            self.log(f"Problem fetching user and group id using username {username}", 
-                     self.RK_LOG_ERROR)
+            self.log(
+                f"Problem fetching user and group id using username "
+                 "{username}", self.RK_LOG_ERROR
+            )
             raise e
 
         # Set real user & group ids so os.access can be used
@@ -186,8 +226,10 @@ class IndexerConsumer(RabbitMQConsumer):
             os.setuid(req_uid)
             os.setgid(req_gid)
         except PermissionError as e:
-            self.log(f"Attempted to use uid or gid outside of permission scope "
-                     f"({req_uid}, {req_gid})", self.RK_LOG_ERROR)
+            self.log(
+                f"Attempted to use uid or gid outside of permission scope "
+                f"({req_uid}, {req_gid})", self.RK_LOG_ERROR
+            )
             raise e
         
     def split(self, filelist: List[str], retrylist: List[int], rk_origin: str, 
@@ -200,19 +242,25 @@ class IndexerConsumer(RabbitMQConsumer):
         if retrylist is None:
             retrylist = body_json[self.MSG_DATA][self.MSG_FILELIST_RETRIES]
         
-        # Checking the length shouldn't fail as it's already been tested earlier 
-        # in the callback
+        # Checking the length shouldn't fail as it's already been tested 
+        # earlier in the callback
         filelist_len = len(filelist)
 
         if filelist_len > self.filelist_max_len:
-            self.log(f"Filelist longer than allowed maximum length, splitting into batches of {self.filelist_max_len}",
-                     self.RK_LOG_DEBUG)
+            self.log(
+                f"Filelist longer than allowed maximum length, splitting into "
+                 "batches of {self.filelist_max_len}",
+                self.RK_LOG_DEBUG
+            )
         
         # For each 1000 files in the list resubmit with index as the action 
         # in the routing key
         for i in range(0, filelist_len, self.filelist_max_len):
             slc = slice(i, min(i + self.filelist_max_len, filelist_len))
-            self.send_list(filelist[slc], retrylist[slc], rk_index, body_json, mode="split")
+            self.send_list(
+                filelist[slc], retrylist[slc], rk_index, 
+                body_json, mode="split"
+            )
 
     def index(self, filelist: List[str], retrylist: List[int], rk_origin: str, 
               body_json: dict[str, str]):
@@ -220,7 +268,7 @@ class IndexerConsumer(RabbitMQConsumer):
         Iterates through a filelist, checking if each exists, walking any 
         directories and then checking permissions on each available file. All 
         accessible files are added to an indexed list and sent once that list 
-        has reached a set size (defauly 1000MB) or the end of filelist has been 
+        has reached a set size (default 1000MB) or the end of filelist has been 
         reached, whichever comes first. 
         
         If any item cannot be found, indexed or accessed then it is added to a 
@@ -233,7 +281,7 @@ class IndexerConsumer(RabbitMQConsumer):
                                     directories
         :param List[int] retrylist: List of the number of times each item from 
                                     filelist has been retried. 
-        :param str rk_origin:   The first section of the receieved message's 
+        :param str rk_origin:   The first section of the received message's 
                                 routing key which designates its origin.
         :param dict body_json:  The message body in dict form.
 
@@ -254,7 +302,8 @@ class IndexerConsumer(RabbitMQConsumer):
         
         # If retry list is not set then create one
         if retrylist is None or len(retrylist) != len(filelist):
-            self.log("Passed retrylist is either not set or malformed, reseting...", 
+            self.log("Passed retrylist is either not set or malformed, "
+                     "resetting...", 
                      self.RK_LOG_WARNING)
             self.log(f"retrylist is {retrylist}", self.RK_LOG_DEBUG)
             retrylist = [0 for _ in filelist]
@@ -271,25 +320,35 @@ class IndexerConsumer(RabbitMQConsumer):
                 # If failed list exceeds max list length then we send it to 
                 # the exchange
                 if len(failed_filelist) >= self.filelist_max_len:
-                    self.send_list(failed_filelist, failed_retrylist, rk_failed, body_json, mode="failed")
+                    self.send_list(
+                        failed_filelist, failed_retrylist,
+                        rk_failed, body_json, mode="failed"
+                    )
                     failed_filelist = []
                     failed_retrylist = []
                 continue
 
-            # Check if item is (a) fully resolved, and (b) in one of the allowed 
-            # root directories - e.g. where the group workspaces are mounted
+            # Check if item is (a) fully resolved, and (b) in one of the 
+            # allowed root directories - e.g. where the group workspaces are 
+            # mounted
             root = pth.Path("/")
             if root not in item_p.parents:
                 item_p = item_p.resolve()
-            # If item is not in any of the allowed root dirs, add to problem list
-            if not any([item_p.is_relative_to(root_dir) for root_dir in self.scannable_root_dirs]):
+            # If item is not in any of the allowed root dirs, add to problem 
+            # list
+            if (not any([item_p.is_relative_to(root_dir) 
+                 for root_dir in self.scannable_root_dirs])):
                 # Add to problem lists
                 problem_filelist.append(item)
                 problem_retrylist.append(retrylist[i] + 1)
 
-                # We don't check the size of the problem list as files may not exist
+                # We don't check the size of the problem list as files may not 
+                # exist
                 if len(problem_filelist) >= self.filelist_max_len:
-                    self.send_list(problem_filelist, problem_retrylist, rk_retry, body_json, mode="problem")
+                    self.send_list(
+                        problem_filelist, problem_retrylist, 
+                        rk_retry, body_json, mode="problem"
+                    )
                     problem_filelist = []
                     problem_retrylist = []
                 continue
@@ -298,7 +357,8 @@ class IndexerConsumer(RabbitMQConsumer):
                 # Index directories by walking them
                 for directory, _, subfiles in os.walk(item_p):
                     # Loop through subfiles and append each to output filelist, 
-                    # checking at each appension whether the message list length 
+                    # checking at each appension whether the message list 
+                    # length 
                     # threshold is breached and yielding appropriately
                     for f in subfiles:
                         # TODO: (2022-04-06) Calling both os.stat and os.access 
@@ -306,7 +366,8 @@ class IndexerConsumer(RabbitMQConsumer):
                         # access does checks that stat does not... 
                         # Check if given user has read or write access 
                         if os.access(f, os.R_OK):
-                            # Add the file to the list and then check for message size 
+                            # Add the file to the list and then check for 
+                            # message size 
                             indexed_filelist.append(os.path.join(directory, f))
                             indexed_retrylist.append(retrylist[i])
                             
@@ -314,18 +375,26 @@ class IndexerConsumer(RabbitMQConsumer):
                             indexed_size += f.stat().st_size
                             if indexed_size >= self.message_max_size:
                                 # Send directly to exchange and reset filelist
-                                self.send_list(indexed_filelist, indexed_retrylist, rk_complete, body_json)
+                                self.send_list(
+                                    indexed_filelist, indexed_retrylist, 
+                                    rk_complete, body_json
+                                )
                                 indexed_filelist = []
                                 indexed_retrylist = []
                                 indexed_size = 0
                         else:
-                            # if not accessible with uid and gid then add to problem list
+                            # if not accessible with uid and gid then add to 
+                            # problem list
                             problem_filelist.append(item)
                             problem_retrylist.append(retrylist[i] + 1)
 
-                            # We don't check the size of the problem list as files may not exist
+                            # We don't check the size of the problem list as 
+                            # files may not exist
                             if len(problem_filelist) >= self.filelist_max_len:
-                                self.send_list(problem_filelist, problem_retrylist, rk_retry, body_json, mode="problem")
+                                self.send_list(
+                                    problem_filelist, problem_retrylist, 
+                                    rk_retry, body_json, mode="problem"
+                                )
                                 problem_filelist = []
                                 problem_retrylist = []
             
@@ -341,18 +410,26 @@ class IndexerConsumer(RabbitMQConsumer):
                     indexed_size += f.stat().st_size
                     if indexed_size >= self.message_max_size:
                         # Send directly to exchange and reset filelist
-                        self.send_list(indexed_filelist, indexed_retrylist, rk_complete, body_json)
+                        self.send_list(
+                            indexed_filelist, indexed_retrylist, 
+                            rk_complete, body_json
+                        )
                         indexed_filelist = []
                         indexed_retrylist = []
                         indexed_size = 0
                 else:
-                    # if not accessible with uid and gid then add to problem list
+                    # if not accessible with uid and gid then add to problem 
+                    # list
                     problem_filelist.append(item)
                     problem_retrylist.append(retrylist[i] + 1)
 
-                    # We don't check the size of the problem list as files may not exist
+                    # We don't check the size of the problem list as files may 
+                    # not exist
                     if len(problem_filelist) >= self.filelist_max_len:
-                        self.send_list(problem_filelist, problem_retrylist, rk_retry, body_json, mode="problem")
+                        self.send_list(
+                            problem_filelist, problem_retrylist, rk_retry, 
+                            body_json, mode="problem"
+                        )
                         problem_filelist = []
                         problem_retrylist = []
         
@@ -360,14 +437,23 @@ class IndexerConsumer(RabbitMQConsumer):
         print(f"@index.start - uid: {os.getuid()}, gid: {os.getgid()}")
 
         if len(indexed_filelist) > 0:
-            self.send_list(indexed_filelist, indexed_retrylist, rk_complete, body_json)
+            self.send_list(
+                indexed_filelist, indexed_retrylist, rk_complete, body_json
+            )
         if len(problem_filelist) > 0:
-            self.send_list(problem_filelist, problem_retrylist, rk_retry, body_json, mode="problem")
+            self.send_list(
+                problem_filelist, problem_retrylist, rk_retry, body_json, 
+                mode="problem"
+            )
         if len(failed_filelist) > 0:
-            self.send_list(failed_filelist, failed_retrylist, rk_failed, body_json, mode="failed")
+            self.send_list(
+                failed_filelist, failed_retrylist, rk_failed, body_json, 
+                mode="failed"
+            )
     
-    def send_list(self, filelist: List[str], retrylist: List[str], routing_key: str, 
-                  body_json: dict[str, str], mode: str = "indexed"):
+    def send_list(self, filelist: List[str], retrylist: List[str], 
+                  routing_key: str, body_json: dict[str, str], 
+                  mode: str = "indexed"):
         """ Convenience function which sends the given filelist and retry list 
         to the exchange with the given routing key and message body. Mode simply
         specifies what to put into the log message.
