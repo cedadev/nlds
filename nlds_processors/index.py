@@ -22,18 +22,12 @@ class IndexerConsumer(RabbitMQConsumer):
     _FILELIST_MAX_LENGTH = "filelist_max_length"
     _MESSAGE_MAX_SIZE = "message_threshold"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
-    _SCANNABLE_ROOT_DIRS = "scannable_root_dirs"
     _MAX_RETRIES = "max_retries"
     
-    DEFAULT_ROOT_DIRS = (
-        pth.Path('/gws'),
-        pth.Path('/group_workspaces'),
-    )
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
         _MESSAGE_MAX_SIZE: 1000,
         _PRINT_TRACEBACKS: False,
-        _SCANNABLE_ROOT_DIRS: DEFAULT_ROOT_DIRS,
         _MAX_RETRIES: 5,
     }
 
@@ -49,9 +43,6 @@ class IndexerConsumer(RabbitMQConsumer):
         )
         self.print_tracebacks = self.load_config_value(
             self._PRINT_TRACEBACKS
-        )
-        self.scannable_root_dirs = self.load_config_value(
-            self._SCANNABLE_ROOT_DIRS, path_listify_fl=True
         )
         self.max_retries = self.load_config_value(
             self._MAX_RETRIES
@@ -328,16 +319,12 @@ class IndexerConsumer(RabbitMQConsumer):
                     failed_retrylist = []
                 continue
 
-            # Check if item is (a) fully resolved, and (b) in one of the 
-            # allowed root directories - e.g. where the group workspaces are 
-            # mounted
+            # Check if item is (a) fully resolved, and (b) exists
             root = pth.Path("/")
             if root not in item_p.parents:
                 item_p = item_p.resolve()
-            # If item is not in any of the allowed root dirs, add to problem 
-            # list
-            if (not any([item_p.is_relative_to(root_dir) 
-                 for root_dir in self.scannable_root_dirs])):
+            # If item does not exist, add to problem list
+            if not item_p.exists():
                 # Add to problem lists
                 problem_filelist.append(item)
                 problem_retrylist.append(retrylist[i] + 1)
@@ -399,7 +386,7 @@ class IndexerConsumer(RabbitMQConsumer):
                                 problem_retrylist = []
             
             # Index files directly in exactly the same way as above
-            else: 
+            elif item_p.is_file(): 
                 # Check if given user has read or write access 
                 if os.access(f, os.R_OK):
                     # Add the file to the list and then check for message size 
