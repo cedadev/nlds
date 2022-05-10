@@ -323,8 +323,9 @@ class IndexerConsumer(RabbitMQConsumer):
             root = pth.Path("/")
             if root not in item_p.parents:
                 item_p = item_p.resolve()
-            # If item does not exist, add to problem list
-            if not item_p.exists():
+
+            # If item does not exist, or is not accessible, add to problem list
+            if not os.access(item_p, os.R_OK):
                 # Add to problem lists
                 problem_filelist.append(item)
                 problem_retrylist.append(retrylist[i] + 1)
@@ -338,9 +339,10 @@ class IndexerConsumer(RabbitMQConsumer):
                     )
                     problem_filelist = []
                     problem_retrylist = []
+
                 continue
 
-            if item_p.is_dir():
+            elif item_p.is_dir():
                 # Index directories by walking them
                 for directory, _, subfiles in os.walk(item_p):
                     # Loop through subfiles and append each to output filelist, 
@@ -387,38 +389,21 @@ class IndexerConsumer(RabbitMQConsumer):
             
             # Index files directly in exactly the same way as above
             elif item_p.is_file(): 
-                # Check if given user has read or write access 
-                if os.access(f, os.R_OK):
-                    # Add the file to the list and then check for message size 
-                    indexed_filelist.append(item)
-                    indexed_retrylist.append(retrylist[i])
-                    
-                    # Stat the file to check for size
-                    indexed_size += f.stat().st_size
-                    if indexed_size >= self.message_max_size:
-                        # Send directly to exchange and reset filelist
-                        self.send_list(
-                            indexed_filelist, indexed_retrylist, 
-                            rk_complete, body_json
-                        )
-                        indexed_filelist = []
-                        indexed_retrylist = []
-                        indexed_size = 0
-                else:
-                    # if not accessible with uid and gid then add to problem 
-                    # list
-                    problem_filelist.append(item)
-                    problem_retrylist.append(retrylist[i] + 1)
-
-                    # We don't check the size of the problem list as files may 
-                    # not exist
-                    if len(problem_filelist) >= self.filelist_max_len:
-                        self.send_list(
-                            problem_filelist, problem_retrylist, rk_retry, 
-                            body_json, mode="problem"
-                        )
-                        problem_filelist = []
-                        problem_retrylist = []
+                # Add the file to the list and then check for message size 
+                indexed_filelist.append(item)
+                indexed_retrylist.append(retrylist[i])
+                
+                # Stat the file to check for size
+                indexed_size += f.stat().st_size
+                if indexed_size >= self.message_max_size:
+                    # Send directly to exchange and reset filelist
+                    self.send_list(
+                        indexed_filelist, indexed_retrylist, 
+                        rk_complete, body_json
+                    )
+                    indexed_filelist = []
+                    indexed_retrylist = []
+                    indexed_size = 0
         
         # Send whatever remains after all directories have been walked
         print(f"@index.start - uid: {os.getuid()}, gid: {os.getgid()}")
