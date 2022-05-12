@@ -15,6 +15,7 @@ import json
 import logging
 from typing import List
 import pathlib
+from collections import namedtuple
 
 import pika
 from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, \
@@ -85,6 +86,8 @@ class RabbitMQPublisher():
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
     MSG_TYPE_LOG = "log"
+
+    IndexItem = namedtuple("IndexItem", "item retries")
 
     def __init__(self, setup_logging_fl=False):
         # Get rabbit-specific section of config file
