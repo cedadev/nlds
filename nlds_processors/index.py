@@ -1,10 +1,11 @@
+from collections import namedtuple
 import json
 import os
 import pwd
 import re
 import stat
 import pathlib as pth
-from typing import List, Tuple
+from typing import List, NamedTuple, Tuple, Dict
 import traceback
 
 from nlds.rabbit.consumer import RabbitMQConsumer
@@ -47,6 +48,11 @@ class IndexerConsumer(RabbitMQConsumer):
         self.max_retries = self.load_config_value(
             self._MAX_RETRIES
         )
+
+        self.indexlist = []
+        self.indexlist_size = 0
+        self.retrylist = []
+        self.failedlist = []
 
         print(f"@__init__ - uid: {os.getuid()}, gid: {os.getgid()}")
 
@@ -159,8 +165,8 @@ class IndexerConsumer(RabbitMQConsumer):
                 self.split(filelist, retrylist, rk_parts[0], body_json)
             # If for some reason a list which is too long has been submitted for
             # indexing, split it and resubmit it.             
-            elif (rk_parts[2] == self.RK_INDEX and 
-                  filelist_len > self.filelist_max_len):
+            elif (rk_parts[2] == self.RK_INDEX 
+                  and filelist_len > self.filelist_max_len):
                 self.split(filelist, retrylist, rk_parts[0], body_json)    
             # Otherwise index the filelist
             elif rk_parts[2] == self.RK_INDEX:
@@ -171,10 +177,12 @@ class IndexerConsumer(RabbitMQConsumer):
                 body_json = self.append_route_info(body_json)
                 self.log("Starting index scan", self.RK_LOG_INFO)
 
+                indexlist = [self.IndexItem(filelist[i], retrylist[i]) 
+                             for i in range(len(filelist))]
                 # Index the entirety of the passed filelist and check for 
                 # permissions. The size of the packet will also be evaluated and
                 # used to send lists of roughly equal size.
-                self.index(filelist, retrylist, rk_parts[0], body_json)
+                self.index(indexlist, rk_parts[0], body_json)
 
             self.log(f"Scan finished.", self.RK_LOG_INFO)
             print(f"@callback.end - uid: {os.getuid()}, gid: {os.getgid()}")
@@ -253,8 +261,8 @@ class IndexerConsumer(RabbitMQConsumer):
                 body_json, mode="split"
             )
 
-    def index(self, filelist: List[str], retrylist: List[int], rk_origin: str, 
-              body_json: dict[str, str]):
+    def index(self, raw_indexlist: List[NamedTuple], rk_origin: str, 
+              body_json: Dict[str, str]):
         """
         Iterates through a filelist, checking if each exists, walking any 
         directories and then checking permissions on each available file. All 
@@ -277,13 +285,6 @@ class IndexerConsumer(RabbitMQConsumer):
         :param dict body_json:  The message body in dict form.
 
         """
-        indexed_filelist = []
-        indexed_retrylist = []
-        indexed_size = 0
-        problem_filelist = []
-        problem_retrylist = []
-        failed_filelist = []
-        failed_retrylist = []
         
         print(f"@index.start - uid: {os.getuid()}, gid: {os.getgid()}")
 
@@ -291,139 +292,152 @@ class IndexerConsumer(RabbitMQConsumer):
         rk_retry = ".".join([rk_origin, self.RK_INDEX, self.RK_INDEX])
         rk_failed = ".".join([rk_origin, self.RK_INDEX, self.RK_FAILED])
         
-        # If retry list is not set then create one
-        if retrylist is None or len(retrylist) != len(filelist):
-            self.log("Passed retrylist is either not set or malformed, "
-                     "resetting...", 
-                     self.RK_LOG_WARNING)
-            self.log(f"retrylist is {retrylist}", self.RK_LOG_DEBUG)
-            retrylist = [0 for _ in filelist]
+        # Checking the lengths of file- and reset- lists is no longer necessary
 
-        for i, item in enumerate(filelist):
-            item_p = pth.Path(item)
+        for indexitem in raw_indexlist:
+            item_p = pth.Path(indexitem.item)
 
             # If any items has exceeded the maximum number of retries we add it 
             # to the dead-end failed list
-            if retrylist[i] > self.max_retries:
-                failed_filelist.append(item)
-                failed_retrylist.append(retrylist[i])
-
-                # If failed list exceeds max list length then we send it to 
-                # the exchange
-                if len(failed_filelist) >= self.filelist_max_len:
-                    self.send_list(
-                        failed_filelist, failed_retrylist,
-                        rk_failed, body_json, mode="failed"
-                    )
-                    failed_filelist = []
-                    failed_retrylist = []
+            if indexitem.retries > self.max_retries:
+                # Append to failed list (in self) and send back to exchange if 
+                # the appropriate size. 
+                self.append_and_send(
+                    indexitem, rk_failed, body_json, mode="failed"
+                )
+                
+                # Skip to next item and avoid access logic
                 continue
 
             # Check if item is (a) fully resolved, and (b) exists
+            # TODO: I think this is, at best, redundant and, at worst, 
+            # dangerous. Should be removed in a future commit.
             root = pth.Path("/")
             if root not in item_p.parents:
                 item_p = item_p.resolve()
 
             # If item does not exist, or is not accessible, add to problem list
             if not os.access(item_p, os.R_OK):
-                # Add to problem lists
-                problem_filelist.append(item)
-                problem_retrylist.append(retrylist[i] + 1)
-
-                # We don't check the size of the problem list as files may not 
-                # exist
-                if len(problem_filelist) >= self.filelist_max_len:
-                    self.send_list(
-                        problem_filelist, problem_retrylist, 
-                        rk_retry, body_json, mode="problem"
-                    )
-                    problem_filelist = []
-                    problem_retrylist = []
-
-                continue
+                # Increment retry counter and add to retry list
+                indexitem.retries += 1
+                self.append_and_send(
+                    indexitem, rk_retry, body_json, mode="retry"
+                )
 
             elif item_p.is_dir():
                 # Index directories by walking them
                 for directory, _, subfiles in os.walk(item_p):
                     # Loop through subfiles and append each to output filelist, 
                     # checking at each appension whether the message list 
-                    # length 
-                    # threshold is breached and yielding appropriately
+                    # length threshold is breached and yielding appropriately
                     for f in subfiles:
                         # TODO: (2022-04-06) Calling both os.stat and os.access 
                         # here, probably a more efficient way of doing this but 
                         # access does checks that stat does not... 
+
+                        # We create a new indexitem for each walked file 
+                        # with a zeroed retry counter.
+                        walk_indexitem = self.IndexItem(
+                            os.path.join(directory, f), 0
+                        )
+
                         # Check if given user has read or write access 
                         if os.access(f, os.R_OK):
-                            # Add the file to the list and then check for 
-                            # message size 
-                            indexed_filelist.append(os.path.join(directory, f))
-                            indexed_retrylist.append(retrylist[i])
-                            
+                            # TODO: (2022-05-13) Might make sense to make this
+                            # configurable?
                             # Stat the file to check for size
-                            indexed_size += f.stat().st_size
-                            if indexed_size >= self.message_max_size:
-                                # Send directly to exchange and reset filelist
-                                self.send_list(
-                                    indexed_filelist, indexed_retrylist, 
-                                    rk_complete, body_json
-                                )
-                                indexed_filelist = []
-                                indexed_retrylist = []
-                                indexed_size = 0
+                            filesize = f.stat().st_size
+
+                            # Pass the size through to ensure maximum size is 
+                            # used as the partitioning metric
+                            self.append_and_send(walk_indexitem, rk_complete, 
+                                                 body_json, mode="indexed", 
+                                                 filesize=filesize)
+
                         else:
                             # if not accessible with uid and gid then add to 
-                            # problem list
-                            problem_filelist.append(item)
-                            problem_retrylist.append(retrylist[i] + 1)
-
-                            # We don't check the size of the problem list as 
-                            # files may not exist
-                            if len(problem_filelist) >= self.filelist_max_len:
-                                self.send_list(
-                                    problem_filelist, problem_retrylist, 
-                                    rk_retry, body_json, mode="problem"
-                                )
-                                problem_filelist = []
-                                problem_retrylist = []
+                            # problem list. Note that we don't check the size of 
+                            # the problem list as files may not exist
+                            walk_indexitem.retries += 1
+                            self.append_and_send(walk_indexitem, rk_retry, 
+                                                 body_json, mode="retry")
             
             # Index files directly in exactly the same way as above
             elif item_p.is_file(): 
-                # Add the file to the list and then check for message size 
-                indexed_filelist.append(item)
-                indexed_retrylist.append(retrylist[i])
-                
                 # Stat the file to check for size
-                indexed_size += f.stat().st_size
-                if indexed_size >= self.message_max_size:
-                    # Send directly to exchange and reset filelist
-                    self.send_list(
-                        indexed_filelist, indexed_retrylist, 
-                        rk_complete, body_json
-                    )
-                    indexed_filelist = []
-                    indexed_retrylist = []
-                    indexed_size = 0
+                filesize = f.stat().st_size
+
+                # Pass the size through to ensure maximum size is 
+                # used as the partitioning metric
+                self.append_and_send(indexitem, rk_complete, 
+                                     body_json, mode="indexed", 
+                                     filesize=filesize)
         
         # Send whatever remains after all directories have been walked
         print(f"@index.start - uid: {os.getuid()}, gid: {os.getgid()}")
 
-        if len(indexed_filelist) > 0:
-            self.send_list(
-                indexed_filelist, indexed_retrylist, rk_complete, body_json
+        if len(self.indexlist) > 0:
+            self.send_indexlist(
+                self.indexlist, rk_complete, body_json, mode="indexed"
             )
-        if len(problem_filelist) > 0:
+        if len(self.retrylist) > 0:
             self.send_list(
-                problem_filelist, problem_retrylist, rk_retry, body_json, 
-                mode="problem"
+                self.retrylist, rk_retry, body_json, mode="retry"
             )
-        if len(failed_filelist) > 0:
+        if len(self.failedlist) > 0:
             self.send_list(
-                failed_filelist, failed_retrylist, rk_failed, body_json, 
-                mode="failed"
+                self.failedlist, rk_failed, body_json, mode="failed"
             )
+
+    def append_and_send(self, indexitem: NamedTuple, routing_key: str, 
+                        body_json: Dict[str, str], mode: str = "indexed", 
+                        filesize: int = None) -> None:
+        # choose the correct indexlist for the mode of operation
+        if mode == "indexed":
+            indexlist = self.indexlist
+        elif mode == "retry":
+            indexlist = self.retrylist
+        elif mode == "failed":
+            indexlist = self.failedlist
+        else: 
+            raise ValueError(f"Invalid mode provided {mode}")
+        
+        indexlist.append(indexitem)
+
+        # If filesize has been passed then use total file size as message cap
+        if filesize is not None:
+            self.indexlist_size += filesize
+            
+            # Send directly to exchange and reset filelist
+            if self.indexlist_size >= self.message_max_size:
+                self.send_indexlist(
+                    indexlist, routing_key, body_json, mode=mode
+                )
+                indexlist.clear()
+                self.indexed_size = 0
+
+        # The default message cap is the length of the index list. This applies
+        # to failed or problem lists by default
+        elif len(indexlist) >= self.filelist_max_len:
+            # Send directly to exchange and reset filelist
+            self.send_indexlist(
+                indexlist, routing_key, body_json, mode=mode
+            )
+            indexlist.clear()
+        
+    def send_indexlist(
+            self, indexlist: NamedTuple, routing_key: str, 
+            body_json: dict[str, str], mode: str = "indexed") -> None:
+        """ Convenience function which sends the given indexlist namedtuple
+        to the exchange with the given routing key and message body. Mode simply
+        specifies what to put into the log message.
+
+        """
+        self.log(f"Sending {mode} list back to exchange", self.RK_LOG_INFO)
+        body_json[self.MSG_DATA][self.MSG_FILELIST] = indexlist
+        self.publish_message(routing_key, json.dumps(body_json))
     
-    def send_list(self, filelist: List[str], retrylist: List[str], 
+    def send_list(self, filelist: List[str], retrylist: List[int], 
                   routing_key: str, body_json: dict[str, str], 
                   mode: str = "indexed"):
         """ Convenience function which sends the given filelist and retry list 
