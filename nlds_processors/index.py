@@ -134,40 +134,20 @@ class IndexerConsumer(RabbitMQConsumer):
                 filelist_len = len(filelist)
             except TypeError as e:
                 self.log(
-                    "Filelist cannot be split into sublist, incorrect format "
-                    "given.", 
+                    "Filelist does not appear to be a list as it cannot be "
+                    "split into sublist, incorrect format given.", 
                     self.RK_LOG_ERROR
                 )
                 raise e
-            
-            # Verify retrylist is, in fact, a list
-            retrylist = list(
-                body_json[self.MSG_DATA][self.MSG_FILELIST_RETRIES]
-            )
-            try:
-                retrylist_len = len(retrylist)
-            except TypeError as e:
-                self.log(
-                    "Retrylist does not appear to be a list", 
-                    self.RK_LOG_ERROR
-                )
-                raise e
-            
-            if retrylist_len != filelist_len:
-                self.log(
-                    "Lengths of filelist and retrylist do not match, retrylist "
-                    "will be reset", 
-                    self.RK_LOG_WARNING
-                )
 
             # Upon initiation, split the filelist into manageable chunks
             if rk_parts[2] == self.RK_INITIATE:
-                self.split(filelist, retrylist, rk_parts[0], body_json)
+                self.split(filelist, rk_parts[0], body_json)
             # If for some reason a list which is too long has been submitted for
             # indexing, split it and resubmit it.             
             elif (rk_parts[2] == self.RK_INDEX 
                   and filelist_len > self.filelist_max_len):
-                self.split(filelist, retrylist, rk_parts[0], body_json)    
+                self.split(filelist, rk_parts[0], body_json)    
             # Otherwise index the filelist
             elif rk_parts[2] == self.RK_INDEX:
                 # First change user and group so file permissions can be checked
@@ -177,12 +157,10 @@ class IndexerConsumer(RabbitMQConsumer):
                 body_json = self.append_route_info(body_json)
                 self.log("Starting index scan", self.RK_LOG_INFO)
 
-                indexlist = [self.IndexItem(filelist[i], retrylist[i]) 
-                             for i in range(len(filelist))]
                 # Index the entirety of the passed filelist and check for 
                 # permissions. The size of the packet will also be evaluated and
                 # used to send lists of roughly equal size.
-                self.index(indexlist, rk_parts[0], body_json)
+                self.index(filelist, rk_parts[0], body_json)
 
             self.log(f"Scan finished.", self.RK_LOG_INFO)
             print(f"@callback.end - uid: {os.getuid()}, gid: {os.getgid()}")
@@ -231,15 +209,13 @@ class IndexerConsumer(RabbitMQConsumer):
             )
             raise e
         
-    def split(self, filelist: List[str], retrylist: List[int], rk_origin: str, 
+    def split(self, filelist: List[NamedTuple], rk_origin: str, 
               body_json: dict[str]) -> None:
         """ Split the given filelist into batches of 1000 and resubmit each to 
         exchange for indexing proper.
 
         """
         rk_index = ".".join([rk_origin, self.RK_INDEX, self.RK_INDEX])
-        if retrylist is None:
-            retrylist = body_json[self.MSG_DATA][self.MSG_FILELIST_RETRIES]
         
         # Checking the length shouldn't fail as it's already been tested 
         # earlier in the callback
@@ -256,12 +232,12 @@ class IndexerConsumer(RabbitMQConsumer):
         # in the routing key
         for i in range(0, filelist_len, self.filelist_max_len):
             slc = slice(i, min(i + self.filelist_max_len, filelist_len))
-            self.send_list(
-                filelist[slc], retrylist[slc], rk_index, 
+            self.send_indexlist(
+                filelist[slc], rk_index, 
                 body_json, mode="split"
             )
 
-    def index(self, raw_indexlist: List[NamedTuple], rk_origin: str, 
+    def index(self, raw_filelist: List[NamedTuple], rk_origin: str, 
               body_json: Dict[str, str]):
         """
         Iterates through a filelist, checking if each exists, walking any 
@@ -294,7 +270,7 @@ class IndexerConsumer(RabbitMQConsumer):
         
         # Checking the lengths of file- and reset- lists is no longer necessary
 
-        for indexitem in raw_indexlist:
+        for indexitem in raw_filelist:
             item_p = pth.Path(indexitem.item)
 
             # If any items has exceeded the maximum number of retries we add it 

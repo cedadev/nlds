@@ -80,7 +80,8 @@ class RabbitMQPublisher():
     MSG_ERROR = "error"
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
-    MSG_FILELIST_RETRIES = "retries"
+    MSG_FILELIST_ITEMS = "fl_items"
+    MSG_FILELIST_RETRIES = "fl_retries"
     MSG_LOG_TARGET = "log_target"
     MSG_LOG_MESSAGE = "log_message"
 
@@ -153,18 +154,18 @@ class RabbitMQPublisher():
         under DATA. 
 
         :param str transaction_id:  ID of transaction as provided by fast-api
-        :param str data:            file or filelist of interest
-        :param str user:            user who sent request
-        :param str group:           group that user belongs to 
-        :param str target:          target that files are being moved to (only 
+        :param List[str] data:      File or filelist of interest
+        :param str user:            User who sent request
+        :param str group:           Group that user belongs to 
+        :param str target:          Target that files are being moved to (only 
                                     valid for PUT, PUTLIST commands)
 
         :return:    JSON encoded string in the proper format for message passing
 
         """
         timestamp = datetime.now().isoformat(sep='-')
-        # Create initial retry list full of zeroes
-        retry_list = [0 for _ in data]
+        # Convert to a list of IndexItems and initialise retry list of zeroes
+        indexlist = [cls.IndexItem(item, 0) for item in data]
         message_dict = {
             cls.MSG_DETAILS: {
                 cls.MSG_TRANSACT_ID: str(transaction_id),
@@ -174,8 +175,7 @@ class RabbitMQPublisher():
                 cls.MSG_TARGET: target
             }, 
             cls.MSG_DATA: {
-                cls.MSG_FILELIST: data,
-                cls.MSG_FILELIST_RETRIES: retry_list
+                cls.MSG_FILELIST: indexlist,
             },
             cls.MSG_TYPE: cls.MSG_TYPE_STANDARD
         }
