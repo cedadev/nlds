@@ -19,7 +19,7 @@ from collections import namedtuple
 
 import pika
 from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, \
-                            AMQPChannelError, AMQPError
+                            AMQPChannelError, AMQPError, StreamLostError
 from retry import retry
 
 from ..server_config import LOGGING_CONFIG_FILES, LOGGING_CONFIG_STDOUT, load_config, RABBIT_CONFIG_SECTION, \
@@ -107,7 +107,8 @@ class RabbitMQPublisher():
     @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
     def get_connection(self):
         try:
-            if self.connection is None or not (self.connection.is_open and self.channel.is_open):
+            if (self.connection is None 
+                or not (self.connection.is_open and self.channel.is_open)):
                 # Get the username and password for rabbit
                 rabbit_user = self.config["user"]
                 rabbit_password = self.config["password"]
@@ -116,7 +117,8 @@ class RabbitMQPublisher():
                 connection = pika.BlockingConnection(
                     pika.ConnectionParameters(
                         self.config["server"],
-                        credentials=pika.PlainCredentials(rabbit_user, rabbit_password),
+                        credentials=pika.PlainCredentials(rabbit_user, 
+                                                          rabbit_password),
                         virtual_host=self.config["vhost"],
                         heartbeat=60
                     )
@@ -129,10 +131,11 @@ class RabbitMQPublisher():
                 self.connection = connection
                 self.channel = channel
 
-                # Declare the exchange config. Also provides a hook for other bindings (e.g. queues) 
-                # to be declared in child classes.
+                # Declare the exchange config. Also provides a hook for other 
+                # bindings (e.g. queues) to be declared in child classes.
                 self.declare_bindings()
-        except (AMQPError, AMQPChannelError, AMQPConnectionError, AMQPHeartbeatTimeout) as e:
+        except (AMQPError, AMQPChannelError, AMQPConnectionError, 
+                AMQPHeartbeatTimeout, StreamLostError) as e:
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
@@ -140,8 +143,9 @@ class RabbitMQPublisher():
                                       exchange_type=self.exchange["type"])
 
     @classmethod
-    def create_message(cls, transaction_id: UUID, data: List[str], user: str = None, 
-                       group: str = None, target: str = None) -> str:
+    def create_message(cls, transaction_id: UUID, data: List[str], 
+                       user: str = None, group: str = None, target: str = None
+                       ) -> str:
         """
         Create message to add to rabbit queue. Message is in json format with 
         metadata described in DETAILS and data, i.e. the filelist of interest,
@@ -181,7 +185,9 @@ class RabbitMQPublisher():
         self.channel.basic_publish(
             exchange=self.exchange['name'],
             routing_key=routing_key,
-            properties=pika.BasicProperties(content_encoding='application/json'),
+            properties=pika.BasicProperties(
+                content_encoding='application/json'
+            ),
             body=msg
         )
 
@@ -191,13 +197,15 @@ class RabbitMQPublisher():
     _default_logging_conf = {
         LOGGING_CONFIG_ENABLE: True,
         LOGGING_CONFIG_LEVEL: RK_LOG_INFO,
-        LOGGING_CONFIG_FORMAT: '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        LOGGING_CONFIG_FORMAT: ("%(asctime)s - %(name)s - "
+                                "%(levelname)s - %(message)s"),
         LOGGING_CONFIG_STDOUT: False,
         LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_WARNING,
     }
-    def setup_logging(self, enable: bool = True, log_level: str = None, log_format: str = None,
-                      add_stdout_fl: bool = False, stdout_log_level: str = None,
-                      log_files: List[str]=None) -> None:
+    def setup_logging(self, enable: bool = True, log_level: str = None, 
+                      log_format: str = None, add_stdout_fl: bool = False, 
+                      stdout_log_level: str = None, log_files: List[str]=None
+                      ) -> None:
         """
         Sets up logging for a publisher (i.e. the nlds-api server) using a set 
         number of configuration options from the logging interface. Each of 
@@ -236,11 +244,13 @@ class RabbitMQPublisher():
             return
 
         try:
-            # Attempt to load config from 'logging' section of .server_config file.
+            # Attempt to load config from 'logging' section of .server_config 
+            # file.
             global_logging_config = self.whole_config[LOGGING_CONFIG_SECTION]
 
             # Merge with default config dict to ensure all options have a value
-            global_logging_config = self._default_logging_conf | global_logging_config
+            global_logging_config = (self._default_logging_conf 
+                                     | global_logging_config)
         except KeyError as e:
             logger.info('Failed to find logging configuration in .server_config'
                         ' file, using defaults instead.')
@@ -269,7 +279,9 @@ class RabbitMQPublisher():
         if add_stdout_fl or (LOGGING_CONFIG_STDOUT in global_logging_config 
                              and global_logging_config[LOGGING_CONFIG_STDOUT]):
             if stdout_log_level is None:
-                stdout_log_level = global_logging_config[LOGGING_CONFIG_STDOUT_LEVEL]
+                stdout_log_level = global_logging_config[
+                    LOGGING_CONFIG_STDOUT_LEVEL
+                ]
             sh = logging.StreamHandler(sys.stdout)
             sh.setLevel(getattr(logging, stdout_log_level.upper()))
             sh.setFormatter(formatter)
@@ -278,13 +290,15 @@ class RabbitMQPublisher():
             logger.info(f"Standard-out logger set up at {stdout_log_level}")
         
         # If something has been specified in log_files attempt to load it
-        if log_files is not None or LOGGING_CONFIG_FILES in global_logging_config:
+        if (log_files is not None 
+                or LOGGING_CONFIG_FILES in global_logging_config):
             try: 
                 # Load log_files from server_config if not specified from kwargs
                 if log_files is None:
                     log_files = global_logging_config[LOGGING_CONFIG_FILES]
             except KeyError as e:
-                logger.warning(f"Failed to load log files from config: {str(e)}")
+                logger.warning(f"Failed to load log files from config: "
+                               f"{str(e)}")
                 return
             
             # For each log file specified make and attach a filehandler with 
@@ -306,15 +320,18 @@ class RabbitMQPublisher():
                         fh_logger.setLevel(getattr(logging, log_level.upper()))
 
                         # Write out a startup message
-                        fh_logger.info(f"{filestem} file logger set up at {log_level}")
+                        fh_logger.info(f"{filestem} file logger set up at "
+                                       f"{log_level}")
 
                     except (FileNotFoundError, OSError) as e:
                         # TODO: Should probably do something more robustly with 
                         # this error message, but sending a message to the queue 
                         # at startup seems excessive? 
-                        logger.warning(f"Failed to create log file for {log_file}: {str(e)}")
+                        logger.warning(f"Failed to create log file for "
+                                       f"{log_file}: {str(e)}")
 
-    def log(self, log_message: str, log_level: str, target: str, **kwargs) -> None:
+    def log(self, log_message: str, log_level: str, target: str, 
+            **kwargs) -> None:
         """
         Catch-all function to log a message, both sending it to the local logger
         and sending a message to the exchange en-route to the logger 
@@ -333,7 +350,8 @@ class RabbitMQPublisher():
         """
         # Check that given log level is appropriate 
         if log_level.lower() not in self.LOG_RKS:
-            logger.error(f"Given log level ({log_level}) not in approved list of logging levels. \n"
+            logger.error(f"Given log level ({log_level}) not in approved list "
+                         f"of logging levels. \n"
                          f"One of {self.LOG_RKS} must be used instead.")
             return
 
@@ -351,7 +369,8 @@ class RabbitMQPublisher():
         self.publish_message(routing_key, message)
 
     @classmethod
-    def create_log_message(cls, message: str, target: str, route: str = None) -> bytes:
+    def create_log_message(cls, message: str, target: str, 
+                           route: str = None) -> bytes:
         """
         Create logging message to send to rabbit exchange. Message is, as with 
         the standard message, in json format with metadata described in DETAILS 
