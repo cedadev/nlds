@@ -22,10 +22,11 @@ from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, \
                             AMQPChannelError, AMQPError, StreamLostError
 from retry import retry
 
-from ..server_config import LOGGING_CONFIG_FILES, LOGGING_CONFIG_STDOUT, load_config, RABBIT_CONFIG_SECTION, \
+from ..server_config import load_config, LOGGING_CONFIG_FILES, \
+                            LOGGING_CONFIG_STDOUT, RABBIT_CONFIG_SECTION, \
                             LOGGING_CONFIG_SECTION, LOGGING_CONFIG_LEVEL, \
-                            LOGGING_CONFIG_STDOUT_LEVEL, LOGGING_CONFIG_FORMAT, \
-                            LOGGING_CONFIG_ENABLE
+                            LOGGING_CONFIG_STDOUT_LEVEL, \
+                            LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_ENABLE
 from ..errors import RabbitRetryError
 
 logger = logging.getLogger("nlds.root")
