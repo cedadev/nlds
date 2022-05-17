@@ -128,14 +128,16 @@ class IndexerConsumer(RabbitMQConsumer):
                 )
                 return
             
-            # Verify filelist is, in fact, a list
-            filelist = list(body_json[self.MSG_DATA][self.MSG_FILELIST])
+            # Convert flat list into list of named tuples and the check it is, 
+            # in fact, a list
             try:
+                filelist = [self.IndexItem(i, r) for i, r in 
+                            list(body_json[self.MSG_DATA][self.MSG_FILELIST])]
                 filelist_len = len(filelist)
             except TypeError as e:
                 self.log(
-                    "Filelist does not appear to be a list as it cannot be "
-                    "split into sublist, incorrect format given.", 
+                    "Failed to reformat list into indexitems. Filelist in "
+                    "message does not appear to be in the correct format.", 
                     self.RK_LOG_ERROR
                 )
                 raise e
