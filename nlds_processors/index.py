@@ -304,10 +304,12 @@ class IndexerConsumer(RabbitMQConsumer):
 
             elif item_p.is_dir():
                 # Index directories by walking them
-                for directory, _, subfiles in os.walk(item_p):
-                    # Loop through subfiles and append each to output filelist, 
-                    # checking at each appension whether the message list 
-                    # length threshold is breached and yielding appropriately
+                for directory, dirs, subfiles in os.walk(item_p):
+                    # Loop through dirs and remove from walk if not accessible
+                    dirs[:] = [d for d in dirs if os.access(d, os.R_OK)]
+
+                    # Loop through subfiles and append each to appropriate 
+                    # output filelist
                     for f in subfiles:
                         # TODO: (2022-04-06) Calling both os.stat and os.access 
                         # here, probably a more efficient way of doing this but 
@@ -382,7 +384,7 @@ class IndexerConsumer(RabbitMQConsumer):
         
         indexlist.append(indexitem)
 
-        # If filesize has been passed then use total file size as message cap
+        # If filesize has been passed then use total list size as message cap
         if filesize is not None:
             self.indexlist_size += filesize
             
@@ -417,7 +419,7 @@ class IndexerConsumer(RabbitMQConsumer):
     
     def send_list(self, filelist: List[str], retrylist: List[int], 
                   routing_key: str, body_json: dict[str, str], 
-                  mode: str = "indexed"):
+                  mode: str = "indexed") -> None:
         """ Convenience function which sends the given filelist and retry list 
         to the exchange with the given routing key and message body. Mode simply
         specifies what to put into the log message.
