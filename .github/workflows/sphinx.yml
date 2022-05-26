@@ -12,7 +12,7 @@ jobs:
       uses: ammaraskar/sphinx-action@master
       with: 
         docs-folder: "docs/"
-        build-command: "sphinx-build -b html ."
+        pre-build-command: "touch /tmp/sphinx-log"
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
