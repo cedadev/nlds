@@ -11,7 +11,7 @@ jobs:
     - name: Build HTML
       uses: ammaraskar/sphinx-action@master
       with: 
-        build-command: "sphinx-build -b html . --keep-going --no-color -w /tmp/sphinx-log"
+        build-command: "sphinx-build -b html ."
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
