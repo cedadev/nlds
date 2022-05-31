@@ -11,7 +11,8 @@ class TransferConsumer(RabbitMQConsumer):
         # Convert body from bytes to string for ease of manipulation
         body = body.decode("utf-8")
 
-        print(f" [x] Received {body} from {self.queues[0].name} ({method.routing_key})")
+        self.log(f"Received {body} from {self.queues[0].name} ({method.routing_key})", 
+                 self.RK_LOG_INFO)
 
 
 def main():

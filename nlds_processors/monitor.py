@@ -25,12 +25,10 @@ class MonitorConsumer(RabbitMQConsumer):
         # Convert body from bytes to json for ease of manipulation
         body_json = json.loads(body)
 
-        print(f" [x] Received {body} from {self.queues[0].name} ({method.routing_key})")
-        rk_parts = self.split_routing_key(method.routing_key)
-
-        self._logging_function[rk_parts[2]](json.dumps(body_json))
-
-        print(f" [x] DONE! \n")
+        self.log(f"Received {body} from {self.queues[0].name} ({method.routing_key})", 
+                 self.RK_LOG_INFO)
+        self.log(json.dumps(body_json), self.RK_LOG_DEBUG)
+        self.log(f"Monitor callback finished!", self.RK_LOG_INFO)
 
 
 def main():

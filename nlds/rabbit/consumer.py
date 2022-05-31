@@ -22,9 +22,13 @@ from pika.spec import Channel
 from pydantic import BaseModel
 
 from .publisher import RabbitMQPublisher
-from ..utils.constants import RABBIT_CONFIG_QUEUE_NAME, RABBIT_CONFIG_QUEUES
+from ..server_config import LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, \
+                            LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_LEVEL, \
+                            LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, \
+                            RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, \
+                            RABBIT_CONFIG_QUEUE_NAME
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("nlds.root")
 
 
 class RabbitQEBinding(BaseModel):
@@ -49,9 +53,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_EXCHANGE_NAME = "test_exchange"
     DEFAULT_REROUTING_INFO = "->"
 
-    def __init__(self, queue: str = None):
-        super().__init__()
-        # TODO: Replace all printing with logging
+    def __init__(self, queue: str = None, setup_logging_fl=False):
+        super().__init__(setup_logging_fl=False)
+
         # TODO: (2021-12-21) Only one queue can be specified at the moment, 
         # should be able to specify multiple queues to subscribe to but this 
         # isn't a priority.
@@ -87,7 +91,41 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.consumer_config = self.whole_config[self.queue]
         else: 
             self.consumer_config = dict()
+        
+        self.setup_logging(enable=setup_logging_fl)
     
+    def setup_logging(self, enable=False, log_level: str = None, log_format: str = None, 
+                      add_stdout_fl: bool = False, stdout_log_level: str = None,
+                      log_files: List[str]=None) -> None:
+        """
+        Override of the publisher method which allows consumer-specific logging 
+        to take precedence over the general logging configuration.
+
+        """
+        # TODO: (2022-03-01) This is quite verbose and annoying to extend. 
+        if LOGGING_CONFIG_SECTION in self.consumer_config:
+            consumer_logging_conf = self.consumer_config[LOGGING_CONFIG_SECTION]
+            if LOGGING_CONFIG_ENABLE in consumer_logging_conf: 
+                enable = consumer_logging_conf[LOGGING_CONFIG_ENABLE]
+            if LOGGING_CONFIG_LEVEL in consumer_logging_conf:
+                log_level = consumer_logging_conf[LOGGING_CONFIG_LEVEL]
+            if LOGGING_CONFIG_FORMAT in consumer_logging_conf:
+                log_format = consumer_logging_conf[LOGGING_CONFIG_FORMAT]
+            if LOGGING_CONFIG_STDOUT in consumer_logging_conf:
+                add_stdout_fl = consumer_logging_conf[LOGGING_CONFIG_STDOUT]
+            if LOGGING_CONFIG_STDOUT_LEVEL in consumer_logging_conf:
+                stdout_log_level = consumer_logging_conf[LOGGING_CONFIG_STDOUT_LEVEL]
+            if LOGGING_CONFIG_FILES in consumer_logging_conf:
+                log_files = consumer_logging_conf[LOGGING_CONFIG_FILES]
+
+        # Allow the hard-coded default deactivation of logging to be overridden 
+        # by the consumer-specific logging config
+        if not enable:
+            return
+
+        return super().setup_logging(enable, log_level, log_format, add_stdout_fl, 
+                                     stdout_log_level, log_files)
+
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, body: bytes, 
                  connection: Connection):
@@ -135,6 +173,11 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
         return body
     
+    def log(self, log_message: str, log_level: str, target: str = None, **kwargs) -> None:
+        if not target:
+            target = self.queue
+        super().log(log_message, log_level, target, **kwargs)
+
     def run(self):
         """
         Method to run when thread is started. Creates an AMQP connection
@@ -152,7 +195,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             try:
                 startup_message = f"{self.DEFAULT_QUEUE_NAME} - READY"
                 logger.info(startup_message)
-                print(startup_message)
                 self.channel.start_consuming()
 
             except KeyboardInterrupt:

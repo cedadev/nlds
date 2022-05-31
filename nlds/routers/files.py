@@ -71,7 +71,10 @@ async def get(transaction_id: UUID,
               token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
-              filepath: str = None
+              filepath: str = None,
+              tenancy: Optional[str] = None,
+              access_key: str = "",
+              secret_key: str = ""
               ):
 
     # validate filepath and filelist - one or the other has to exist
@@ -91,9 +94,13 @@ async def get(transaction_id: UUID,
         msg = (f"GET transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response(f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}."
-                            f"{RabbitMQPublisher.RK_GET}", 
-                            transaction_id, user, group, filepath)
+    contents = [filepath, ]
+    rabbit_publish_response(
+        f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}."
+        f"{RabbitMQPublisher.RK_GET}", 
+        transaction_id, user, group, contents,
+        tenancy, access_key, secret_key
+    )
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -114,7 +121,11 @@ async def put(transaction_id: UUID,
               filelist: FileList,
               token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
-              group: str = Depends(authenticate_group)):
+              group: str = Depends(authenticate_group),
+              tenancy: Optional[str]=None,
+              access_key: str="",
+              secret_key: str=""
+              ):
 
     # validate filepath and filelist - one or the other has to exist
     if not filelist:
@@ -133,9 +144,11 @@ async def put(transaction_id: UUID,
         msg = (f"GETLIST transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response(f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}"
-                            f".{RabbitMQPublisher.RK_GETLIST}", 
-                            transaction_id, user, group, filelist.get_cleaned_list())
+    rabbit_publish_response(
+        f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}"
+        f".{RabbitMQPublisher.RK_GETLIST}", 
+        transaction_id, user, group, filelist.get_cleaned_list(),
+        tenancy, access_key, secret_key)
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -153,12 +166,15 @@ async def put(transaction_id: UUID,
             }
         )
 async def put(transaction_id: UUID,
-              token: str = Depends(authenticate_token),
-              user: str = Depends(authenticate_user),
-              group: str = Depends(authenticate_group),
+              token: str=Depends(authenticate_token),
+              user: str=Depends(authenticate_user),
+              group: str=Depends(authenticate_group),
               filepath: Optional[str]=None,
-              filelist: Optional[FileList]=None
-              ):
+              filelist: Optional[FileList]=None,
+              tenancy: Optional[str]=None,
+              access_key: str="",
+              secret_key: str=""
+            ):
 
     # validate filepath and filelist - one or the other has to exist
     if not filepath and not filelist:
@@ -194,9 +210,12 @@ async def put(transaction_id: UUID,
         msg = (f"PUT transaction with id {transaction_id} accepted for "
                 "processing.")
     )
-    rabbit_publish_response(f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}."
-                            f"{RabbitMQPublisher.RK_PUT}", 
-                            transaction_id, user, group, contents)
+    rabbit_publish_response(
+        f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}."
+        f"{RabbitMQPublisher.RK_PUT}", 
+        transaction_id, user, group, contents,
+        tenancy, access_key, secret_key
+    )
     
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())

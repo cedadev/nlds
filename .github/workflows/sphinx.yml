@@ -9,7 +9,10 @@ jobs:
     # Checkout and build the docs with sphinx
     - uses: actions/checkout@v2
     - name: Build HTML
-      uses: ammaraskar/sphinx-action@0.4
+      uses: ammaraskar/sphinx-action@master
+      with: 
+        docs-folder: "docs/"
+        pre-build-command: "touch /tmp/sphinx-log"
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
