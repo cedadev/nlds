@@ -1,11 +1,8 @@
-from collections import namedtuple
 import json
 import os
 import pwd
-import re
-import stat
 import pathlib as pth
-from typing import List, NamedTuple, Tuple, Dict
+from typing import List, NamedTuple, Dict
 import traceback
 
 from nlds.rabbit.consumer import RabbitMQConsumer
@@ -238,15 +235,19 @@ class IndexerConsumer(RabbitMQConsumer):
                 filelist[slc], rk_index, 
                 body_json, mode="split"
             )
-
+        
     def index(self, raw_filelist: List[NamedTuple], rk_origin: str, 
               body_json: Dict[str, str]):
-        """
-        Iterates through a filelist, checking if each exists, walking any 
-        directories and then checking permissions on each available file. All 
-        accessible files are added to an indexed list and sent once that list 
-        has reached a set size (default 1000MB) or the end of filelist has been 
-        reached, whichever comes first. 
+        """Indexes a list of IndexItems. 
+        
+        Each IndexItem is a named tuple consisting of an item (a file or 
+        directory) and an associated number of attempted accesses. This function
+        checks if each item exists, fully walking any directories and 
+        subdirectories in the process, and then checks permissions on each 
+        available file. All accessible files are added to an 'indexed' list and 
+        sent back to the exchange for transfer once that list has reached a 
+        pre-configured size (default 1000MB) or the end of IndexItem list has 
+        been reached, whichever comes first. 
         
         If any item cannot be found, indexed or accessed then it is added to a 
         'problem' list for another attempt at indexing. If a maximum number of 
@@ -254,12 +255,11 @@ class IndexerConsumer(RabbitMQConsumer):
         added to a final 'failed' list which is sent back to the exchange so the
         user can be informed via monitoring.
 
-        :param List[str] filelist:  List of paths to files or indexable 
-                                    directories
-        :param List[int] retrylist: List of the number of times each item from 
-                                    filelist has been retried. 
+        :param List[NamedTuple] raw_filelist:  List of IndexItems containing 
+            paths to files or indexable directories and the number of times each 
+            has been attempted to be indexed. 
         :param str rk_origin:   The first section of the received message's 
-                                routing key which designates its origin.
+            routing key which designates its origin.
         :param dict body_json:  The message body in dict form.
 
         """
