@@ -280,14 +280,35 @@ so different message formats are used:
 
 1.  HTTP API / JSON
 2.  RabbitMQ
-3.  FTS3
-4.  S3
+3.  S3
+
+## Publishers and consumers
+
+RabbitMQ has the concept of *Publishers*, which create messages and send them to 
+the exchange, and *Consumers*, which subscribe to a queue in the exchange, take 
+messages from the queue and processes them.
+
+### Publishers
+The publishing of messages occurs in the NLDS web server, which is implemented
+in FastAPI. The **put**, **get** and **getlist** methods in the 
+*routing_methods.py* file all push messages to the RabbitMQ exchange using the
+**rabbit_publish_response** method.  This uses a static instantiation of the 
+**RabbitMQPublisher** class.
+
+| ![rabbit_publisher](./uml/rabbit_mq_publisher.png) |
+:-:
+| **Figure 3.1** RabbitMQPublisher class|
+
+### Consumers
+
+All of the NLDS processors inherit the RabbitMQConsumer, which in turn inherits
+the RabbitMQPublisher class.
 
 ## Rabbit MQ Exchange Structure
 
 | ![client_server_seq](./uml/queue_structure.png) |
 :-:
-| **Figure 3** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Indexer 1` and `Indexer 2` write `work.index.complete` messages to the `Work Exchange`.|
+| **Figure 3.2** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Indexer 1` and `Indexer 2` write `work.index.complete` messages to the `Work Exchange`.|
 
 ## Message flow
 
@@ -362,8 +383,11 @@ applications.
 
 ### Workers
 
-* `nlds` - the NLDS marshalling application
-* `index` - the indexer, available to the `nlds-api` and `gws-api` applications.
+* `nlds` - the NLDS marshalling application.  Available only to the  `nlds-api` 
+API.
+* `index` - the indexer, available to the `nlds-api` and `gws-api` APIs.
+* `transfer` - the file transfer, from the disk system to object storage. 
+Available only to the  `nlds-api` API.
 
 ### State
 
@@ -573,10 +597,17 @@ matched value.
         }            
     }
 
+### Failure Modes for indexing
+
+* Files not found
+* Disk not available
+* User does not have permissions to access files
+
 ## Transfer processor
 This takes the list of files from the File Indexer and transfers them from 
 one storage medium to another
 At the end it pushes a message to the queue to say it has completed.
+Needs the access key and secret key in the message.
 
 Asynchronicity of the transfers is a desirable byproduct of the indexer splitting 
 the filelist into smaller batches.  It also allows for parallel transfer, with 
@@ -584,8 +615,59 @@ multiple transfer workers.  Finally, if a transfer worker fails, and does not
 return an acknowledgement message to the Exchange, the message will be sent out 
 again, after a suitable timeout period.
 
-## Database processor
-Add files and metadata to a file catalogue database.  Intake database?
+#### ---> Input messages
+
+**Binding** : `nlds-api.transfer-put.start`
+
+**Message** :
+
+    {
+        details {
+            transaction_id : <string>,
+            user           : <string>,
+            group          : <string>,
+            target         : <string> (optional),
+            tenancy        : <string> (optional),
+            access_key     : <string> (optional),
+            secret_key     : <string> (optional)
+        },
+        data {
+            filelist       : <list<string>>
+        }
+    }
+
+#### <--- Output messages
+
+**Binding** : `nlds-api.transfer-put.complete`
+
+**Message** :
+
+    {
+        details {
+            transaction_id : <string>,
+            user           : <string>,
+            group          : <string>,
+            target         : <string> (optional),
+            tenancy        : <string> (optional),
+            access_key     : <string> (optional),
+            secret_key     : <string> (optional)
+        },
+        data {
+            filelist       : <list<string>>
+        }
+    }
+
+
+## Catalogue processor
+Add files and metadata to a file catalogue database.  Relational database.
+
+## Retry mechanism
+At any stage in the transaction, one component of the storage hierarchy may not 
+be available.  This could be during a PUT, where the disk that the user's files
+reside on is not available, or the object storage target may not be available.
+During a GET, the object storage may not be available, or the user's disk may
+be full or not available.  In these cases, a *retry mechanism* is needed.
+
 
 ## Monitoring
 Important!
