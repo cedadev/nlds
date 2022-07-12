@@ -125,7 +125,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 )
                 return
             
-            # Convert flat list into list of named tuples and the check it is, 
+            # Convert flat list into list of named tuples and then check it is, 
             # in fact, a list
             try:
                 filelist = [self.IndexItem(i, r) for i, r in 
@@ -144,24 +144,23 @@ class IndexerConsumer(RabbitMQConsumer):
                 self.split(filelist, rk_parts[0], body_json)
             # If for some reason a list which is too long has been submitted for
             # indexing, split it and resubmit it.             
-            elif (rk_parts[2] == self.RK_INDEX 
-                  and filelist_len > self.filelist_max_len):
-                self.split(filelist, rk_parts[0], body_json)    
-            # Otherwise index the filelist
             elif rk_parts[2] == self.RK_INDEX:
-                # First change user and group so file permissions can be checked
-                # self.change_user(body_json)
+                if filelist_len > self.filelist_max_len:
+                    self.split(filelist, rk_parts[0], body_json)    
+                else:
+                    # First change user and group so file permissions can be checked
+                    # self.change_user(body_json)
                 
-                # Append routing info and then run the index
-                body_json = self.append_route_info(body_json)
-                self.log("Starting index scan", self.RK_LOG_INFO)
+                    # Append routing info and then run the index
+                    body_json = self.append_route_info(body_json)
+                    self.log("Starting index scan", self.RK_LOG_INFO)
 
-                # Index the entirety of the passed filelist and check for 
-                # permissions. The size of the packet will also be evaluated and
-                # used to send lists of roughly equal size.
-                self.index(filelist, rk_parts[0], body_json)
+                    # Index the entirety of the passed filelist and check for 
+                    # permissions. The size of the packet will also be evaluated and
+                    # used to send lists of roughly equal size.
+                    self.index(filelist, rk_parts[0], body_json)
+                    self.log(f"Scan finished.", self.RK_LOG_INFO)
 
-            self.log(f"Scan finished.", self.RK_LOG_INFO)
             print(f"@callback.end - uid: {os.getuid()}, gid: {os.getgid()}")
 
         except (ValueError, TypeError, KeyError, PermissionError) as e:
