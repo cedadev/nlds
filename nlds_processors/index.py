@@ -148,6 +148,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 if filelist_len > self.filelist_max_len:
                     self.split(filelist, rk_parts[0], body_json)    
                 else:
+                    # commented out for testing - comment in during deployment
                     # First change user and group so file permissions can be checked
                     # self.change_user(body_json)
                 

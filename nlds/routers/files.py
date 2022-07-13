@@ -72,6 +72,7 @@ async def get(transaction_id: UUID,
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
               filepath: str = None,
+              target: Optional[str] = None,
               tenancy: Optional[str] = None,
               access_key: str = "",
               secret_key: str = ""

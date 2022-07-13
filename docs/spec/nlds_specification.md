@@ -450,13 +450,13 @@ URL.
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
-            target         : <string>,
-            tenancy        : <string>,
+            target         : <string> (optional),
+            tenancy        : <string> (optional),
             access_key     : <string>,
             secret_key     : <string>
         },
         data {
-            filelist       : <list<string>>
+            filelist       : <list<string,int>>
         }
     }
 
@@ -471,13 +471,13 @@ URL.
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
-            target         : <string>,
-            tenancy        : <string>,
+            target         : <string> (optional),
+            tenancy        : <string> (optional),
             access_key     : <string>,
             secret_key     : <string>
         },
         data {
-            filelist       : <list<string>>
+            filelist       : <list<string,int>>
         }
     }
 
@@ -485,11 +485,6 @@ URL.
 
 This takes the description of work that the Work Processor pushed onto the 
 queue and starts to build a file list.
-
-Questions :
-* Should this work on just POSIX file sets?
-* Should it work with object store?
-* Should it work on tape catalogue?
 
 At the end it can push two different messages to the queue:
 * Index a directory
@@ -530,11 +525,11 @@ matched value.
             group          : <string>,
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
         data {
-            filelist       : <list<string>>
+            filelist       : <list<(string,int)>>
         }
     }
 
@@ -549,11 +544,11 @@ matched value.
             group          : <string>
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
         data {
-            filelist       : <list<string>>
+            filelist       : <list<string,int>>
         }
     }
 
@@ -570,11 +565,11 @@ matched value.
             group          : <string>,
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
         data {
-            filelist       : <list<string>>
+            filelist       : <list<string,int>>
         }
     }
 
@@ -589,11 +584,11 @@ matched value.
             group          : <string>
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
         data {
-            filelist       : <list<string>>
+            filelist       : <list<string,int>>
         }            
     }
 
@@ -602,6 +597,7 @@ matched value.
 * Files not found
 * Disk not available
 * User does not have permissions to access files
+... add to these
 
 ## Transfer processor
 This takes the list of files from the File Indexer and transfers them from 
@@ -628,11 +624,11 @@ again, after a suitable timeout period.
             group          : <string>,
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
         data {
-            filelist       : <list<string>>
+            filelist       : <list<string,int>>
         }
     }
 
@@ -649,17 +645,57 @@ again, after a suitable timeout period.
             group          : <string>,
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
         data {
-            filelist       : <list<string>>
+            filelist       : <list<string,int>>
         }
     }
 
+### Failure Modes for transfer
+
+* Files not found (files have disappeared since indexing)
+* Object store not available
+* User does not have permissions to access files (permissions have changed 
+since indexing)
 
 ## Catalogue processor
-Add files and metadata to a file catalogue database.  Relational database.
+Add or retrieve files and metadata to a file catalogue database.
+
+Operations:
+* `put` - write a file record to the catalogue.  One file record at once.
+* `get` - read (a) file record(s) from the catalogue.  Allow basic matching of
+directories, e.g. `get /gws/nopw/j04/cedaproc/nrmassey/OxPEWWES2/` will get all
+the files under the `OxPEWWES2` record.
+
+This requires a Database schema to store:
+
+* File path
+* Object store path
+* (Size?)
+* User
+* Group
+* Unix permissions
+* Filetype (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
+* Link position
+
+### Database on disk or object store
+We could store the information about the files on disk or on the object store,
+without requiring a database.
+These files could be stored alongside the objects in the bucket named after the 
+transaction id.
+The name of the file would be the hash of the file path and should (probably) be 
+in JSON format. e.g. 
+
+    <tenancy>/<transaction_id>/<file path hash>.json
+
+### Database on PostgreSQL server
+
+The boring / safe option
+
+### SQLlite database on Object Store
+
 
 ## Retry mechanism
 At any stage in the transaction, one component of the storage hierarchy may not 
@@ -668,6 +704,44 @@ reside on is not available, or the object storage target may not be available.
 During a GET, the object storage may not be available, or the user's disk may
 be full or not available.  In these cases, a *retry mechanism* is needed.
 
+In the messages for indexing and transfers above, there is the part that records
+the filenames:
+
+    data {
+        filelist       : <list<string,int>>
+    }
+
+Here, the `<string>` part of the message records the full path of the file, and
+the `<int>` part records the number of times an attempt has been made to index
+or transfer the file.  These are stored internally in NLDS as a `named tuple`:
+
+    IndexItem : (item: str, retries: int)
+
+When a task is performed, such as indexing or transferring a file, which
+subsequently fails, the IndexItem is taken out of the return filelist and put 
+into a failed filelist where the retries count is incremented by 1.  
+A message is formed with this failed filelist as the `data` part of the 
+message, and the `details` part of the message is the same as the originating
+message.  Currently, this message is passed back to the exchange, with the same
+routing key as the originating message.
+
+Once an item in the filelist has exceeded a server-configured number of 
+retries, it will be permanently failed and a message will be passed back to the
+user (how?) telling them of this.
+
+Just passing back the message in this way is not optimum.  The task will have
+failed for a reason which may not have been fixed in the (potentially and 
+probably) short time that it will take for the message to be submitted to the
+exchange and then consumed by the task that had initially failed.  With such a 
+short duration between failing and then trying to complete the task, it is 
+likely that the task will fail again.  To overcome this we are investigating
+using a delayed message queue for the failed task messaged, with an 
+"exponential" backoff.  This could be as simple as:
+
+* First failure, wait a minute
+* Second failure, wait an hour
+* Third failure, wait a day
+* Fourth failure, wait a week
 
 ## Monitoring
 Important!
@@ -717,11 +791,11 @@ nlds_transfer.log, nlds_index.log, nlds_catalog.log, nlds_log.log etc.
 3.  The Logging processor subscribes to the logging topic queue, receives the
 messages and writes the log files.
 4.  Logrotate should be used to manage the logs.
-5.  Separate levels of logging should be permitted, e.g. **DEBUG, INFO, WARNING, 
-ERROR, CRITICAL**
+5.  Separate levels of logging should be permitted, e.g. **DEBUG, INFO, 
+WARNING, ERROR, CRITICAL**
     * **DEBUG** - information provided when debugging / in development.  Very 
-    verbose - e.g. now I'm going to do this particular operation and I'm going to 
-    tell you all about it.
+    verbose - e.g. now I'm going to do this particular operation and I'm going 
+    to tell you all about it.
     * **INFO** - information provided when in production. Changes of state, etc.
     Not as verbose as **DEBUG** but still informative.
     * **WARNING** - something wasn't optimum, but I can recover from it and 
