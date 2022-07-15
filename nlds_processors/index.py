@@ -22,6 +22,7 @@ class IndexerConsumer(RabbitMQConsumer):
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
     _MAX_RETRIES = "max_retries"
     _CHECK_PERMISSIONS = "check_permissions_fl"
+    _CHECK_FILESIZE = "check_filesize_fl"
     
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
@@ -29,6 +30,7 @@ class IndexerConsumer(RabbitMQConsumer):
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         _CHECK_PERMISSIONS: True,
+        _CHECK_FILESIZE: True,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -50,6 +52,7 @@ class IndexerConsumer(RabbitMQConsumer):
         self.check_permissions_fl = self.load_config_value(
             self._CHECK_PERMISSIONS
         )
+        self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
 
         self.indexlist = []
         self.indexlist_size = 0
@@ -259,9 +262,6 @@ class IndexerConsumer(RabbitMQConsumer):
                     # Loop through subfiles and append each to appropriate 
                     # output filelist
                     for f in subfiles:
-                        # TODO: (2022-04-06) Calling both os.stat and os.access 
-                        # here, probably a more efficient way of doing this but 
-                        # access does checks that stat does not... 
                         f_path = directory_path / f
 
                         # We create a new indexitem for each walked file 
@@ -272,13 +272,15 @@ class IndexerConsumer(RabbitMQConsumer):
 
                         # Check if given user has read or write access 
                         if self.check_path_access(f_path):
-                            # TODO: (2022-05-13) Might make sense to make this
-                            # configurable?
                             # Stat the file to check for size
-                            filesize = f_path.stat().st_size
+                            if self.check_filesize_fl:
+                                filesize = f_path.stat().st_size
+                            else:
+                                filesize = None
 
                             # Pass the size through to ensure maximum size is 
-                            # used as the partitioning metric
+                            # used as the partitioning metric (if checking file
+                            # size)
                             self.append_and_send(walk_indexitem, rk_complete, 
                                                  body_json, mode="indexed", 
                                                  filesize=filesize)
@@ -295,8 +297,8 @@ class IndexerConsumer(RabbitMQConsumer):
             
             # Index files directly in exactly the same way as above
             elif item_p.is_file(): 
-                # Stat the file to check for size
-                filesize = f.stat().st_size
+                # Stat the file to check for size (if checking)
+                filesize = f.stat().st_size if self.check_filesize_fl else None
 
                 # Pass the size through to ensure maximum size is 
                 # used as the partitioning metric
