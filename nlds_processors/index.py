@@ -354,6 +354,11 @@ class IndexerConsumer(RabbitMQConsumer):
 
         """
         self.log(f"Sending {mode} list back to exchange", self.RK_LOG_INFO)
+        # TODO: might be worth using an enum here?
+        # Reset the retries upon successful indexing. 
+        if mode == "indexed":
+            indexlist = [self.IndexItem(i, 0) for i, _ in indexlist]
+        
         body_json[self.MSG_DATA][self.MSG_FILELIST] = indexlist
         self.publish_message(routing_key, json.dumps(body_json))
 
