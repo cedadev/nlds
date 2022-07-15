@@ -76,24 +76,8 @@ class IndexerConsumer(RabbitMQConsumer):
                 )
                 return
             
-<<<<<<< HEAD
-            # Convert flat list into list of named tuples and then check it is, 
-            # in fact, a list
-            try:
-                filelist = [self.IndexItem(i, r) for i, r in 
-                            list(body_json[self.MSG_DATA][self.MSG_FILELIST])]
-                filelist_len = len(filelist)
-            except TypeError as e:
-                self.log(
-                    "Failed to reformat list into indexitems. Filelist in "
-                    "message does not appear to be in the correct format.", 
-                    self.RK_LOG_ERROR
-                )
-                raise e
-=======
             filelist = self.parse_filelist(body_json)
             filelist_len = len(filelist)
->>>>>>> 8c3d30d (Switch filelist parsing to refactored base-class method)
 
             # Upon initiation, split the filelist into manageable chunks
             if rk_parts[2] == self.RK_INITIATE:
@@ -317,11 +301,11 @@ class IndexerConsumer(RabbitMQConsumer):
                 self.indexlist, rk_complete, body_json, mode="indexed"
             )
         if len(self.retrylist) > 0:
-            self.send_list(
+            self.send_indexlist(
                 self.retrylist, rk_retry, body_json, mode="retry"
             )
         if len(self.failedlist) > 0:
-            self.send_list(
+            self.send_indexlist(
                 self.failedlist, rk_failed, body_json, mode="failed"
             )
 
@@ -371,19 +355,6 @@ class IndexerConsumer(RabbitMQConsumer):
         """
         self.log(f"Sending {mode} list back to exchange", self.RK_LOG_INFO)
         body_json[self.MSG_DATA][self.MSG_FILELIST] = indexlist
-        self.publish_message(routing_key, json.dumps(body_json))
-    
-    def send_list(self, filelist: List[str], retrylist: List[int], 
-                  routing_key: str, body_json: dict[str, str], 
-                  mode: str = "indexed") -> None:
-        """ Convenience function which sends the given filelist and retry list 
-        to the exchange with the given routing key and message body. Mode simply
-        specifies what to put into the log message.
-
-        """
-        self.log(f"Sending {mode} list back to exchange", self.RK_LOG_INFO)
-        body_json[self.MSG_DATA][self.MSG_FILELIST] = filelist
-        body_json[self.MSG_DATA][self.MSG_FILELIST_RETRIES] = retrylist
         self.publish_message(routing_key, json.dumps(body_json))
 
 def main():
