@@ -1,19 +1,21 @@
 import json
 import traceback
 import os
+from typing import List, NamedTuple
 
 import minio
 from minio.error import S3Error
+from retry import retry
 
 from nlds.rabbit.consumer import RabbitMQConsumer
 
-class PutTransferConsumer(RabbitMQConsumer):
+class BaseTransferConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "transfer_q"
     DEFAULT_ROUTING_KEY = (f"{RabbitMQConsumer.RK_ROOT}."
                            f"{RabbitMQConsumer.RK_TRANSFER}."
                            f"{RabbitMQConsumer.RK_WILD}")
 
-    _TENANCY = "tenancy_url"
+    _TENANCY = "tenancy"
     _REQUIRE_SECURE = "require_secure_fl"
     _CHECK_PERMISSIONS = "check_permissions_fl"
     DEFAULT_CONSUMER_CONFIG = {
@@ -41,6 +43,16 @@ class PutTransferConsumer(RabbitMQConsumer):
                     f"({method.routing_key})", 
                     self.RK_LOG_DEBUG)
 
+            # Verify routing key is appropriate
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log(
+                    "Routing key inappropriate length, exiting callback.", 
+                    self.RK_LOG_ERROR
+                )
+                return
+
             ### 
             # Verify and load message contents 
 
@@ -54,10 +66,6 @@ class PutTransferConsumer(RabbitMQConsumer):
                 return
 
             filelist = self.parse_filelist(body_json)
-
-            # TODO: (2022-07-13) Should we be checking filelist length here and 
-            # reindexing / resizing the list if too long?
-            filelist_len = len(filelist)
 
             try:
                 access_key = body_json[self.MSG_DETAILS][self.MSG_ACCESS_KEY]
@@ -81,33 +89,23 @@ class PutTransferConsumer(RabbitMQConsumer):
                 )
                 return 
 
-            client = minio.Minio(
-                self.tenancy,
-                access_key=access_key,
-                secret_key=secret_key,
-                secure=self.require_secure_fl,
-            )   
+            self.log("Starting transfer to object store", self.RK_LOG_INFO)
 
-            bucket_name = f"{self.RK_ROOT}.{transaction_id}"
+            # Append route info to message and then start the transfer
+            body_json = self.append_route_info(body_json)
+            self.transfer(transaction_id, access_key, secret_key, filelist)
 
-            # Check that bucket exists
-            if not client.bucket_exists(bucket_name):
-                client.make_bucket(bucket_name)
-                self.log(f"Creating bucket ({bucket_name}) for this"
-                         " transaction", self.RK_LOG_INFO)
-            else:
-                self.log(f"Bucket for this transaction ({transaction_id}) "
-                         f"already exists", self.RK_LOG_INFO)
-
-            for indexitem in filelist:
-                if self.check_permissions_fl and not os.access(indexitem.item, os.R_OK):
-                    print("file is inaccessible :(")
-            # Loop through filelist
-                # check file still exists and we still have permissions
-                # check object not already in the bucket
-                # move file to object store
+            self.log("Transfer complete, passing list back for cataloguing.", 
+                     self.RK_LOG_INFO)
+            
+            new_routing_key = ".".join([
+                rk_parts[0], 
+                rk_parts[1], 
+                self.RK_COMPLETE,
+            ])
+            self.publish_message(new_routing_key, json.dumps(body_json))
         
-        except (ValueError, TypeError, KeyError, PermissionError, S3Error) as e:
+        except (ValueError, TypeError, KeyError, PermissionError) as e:
             if self.print_tracebacks:
                 tb = traceback.format_exc()
                 self.log(tb, self.RK_LOG_DEBUG)
@@ -121,9 +119,42 @@ class PutTransferConsumer(RabbitMQConsumer):
             )
             self.publish_message(new_routing_key, json.dumps(body_json))
 
+    @retry(S3Error, tries=5, delay=1, logger=None)
+    def transfer(self, transaction_id: str, access_key: str, secret_key: str, 
+                 filelist: List[NamedTuple]):
+        client = minio.Minio(
+            self.tenancy,
+            access_key=access_key,
+            secret_key=secret_key,
+            secure=self.require_secure_fl,
+        )   
+
+        bucket_name = f"{self.RK_ROOT}.{transaction_id}"
+
+        # Check that bucket exists, and create if not
+        if not client.bucket_exists(bucket_name):
+            client.make_bucket(bucket_name)
+            self.log(f"Creating bucket ({bucket_name}) for this"
+                     " transaction", self.RK_LOG_INFO)
+        else:
+            self.log(f"Bucket for this transaction ({transaction_id}) "
+                     f"already exists", self.RK_LOG_INFO)
+
+        for indexitem in filelist:
+            # If check_permissions active then check again that file exists and 
+            # is accessible. 
+            if self.check_permissions_fl and not os.access(indexitem.item, 
+                                                           os.R_OK):
+                self.log("File is inaccessible :(", self.RK_LOG_WARNING)
+                # Do failed_list, retry_list stuff
+            
+            client.fput_object(
+                bucket_name, indexitem.item, indexitem.item,
+            )
+            
 
 def main():
-    consumer = PutTransferConsumer()
+    consumer = BaseTransferConsumer()
     consumer.run()
 
 if __name__ == "__main__":
