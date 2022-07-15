@@ -52,55 +52,6 @@ class IndexerConsumer(RabbitMQConsumer):
         self.failedlist = []
 
         print(f"@__init__ - uid: {os.getuid()}, gid: {os.getgid()}")
-
-    def load_config_value(self, config_option: str, 
-                          path_listify_fl: bool = False):
-        """
-        Function for verification and loading of options from the indexer 
-        section of the .server_config file. Attempts to load from the config 
-        section and reverts to hardcoded default value if an error is 
-        encountered. Will not attempt to load an option if no default value is 
-        available. 
-
-        :param config_option:   (str) The option in the indexer section of the 
-                                .server_config file to be verified and loaded.
-        :param path_listify:    (boolean) Optional argument to control whether 
-                                value should be treated as a list and each item 
-                                converted to a pathlib.Path() object. 
-        :returns:   The value at config_option, otherwise the default value as 
-                    defined in IndexerConsumer.DEFAULT_CONSUMER_CONFIG
-
-        """
-        # Check if the given config option is valid (i.e. whether there is an 
-        # available default option)
-        if config_option not in self.DEFAULT_CONSUMER_CONFIG:
-            raise ValueError(
-                f"Configuration option {config_option} not valid.\n"
-                f"Must be one of {list(self.DEFAULT_CONSUMER_CONFIG.keys())}"
-            )
-        else:
-            return_val = self.DEFAULT_CONSUMER_CONFIG[config_option]
-
-        if config_option in self.consumer_config:
-            try:
-                return_val = self.consumer_config[config_option]
-                if path_listify_fl:
-                    # TODO: (2022-02-17) This is very specific to the use-case 
-                    # here, could potentially be divided up into listify and 
-                    # convert functions, but that's probably only necessary if 
-                    # we refactor this into Consumer – which is probably a good 
-                    # idea when we start fleshing out other consumers
-                    return_val_list = self.consumer_config[config_option]
-                    # Make sure returned value is a list and not a string
-                    # Note: it can't be any other iterable because it's loaded 
-                    # from a json
-                    assert isinstance(return_val_list, list)
-                    return_val = [pth.Path(item) for item in return_val_list] 
-            except KeyError:
-                self.log(f"Invalid value for {config_option} in config file. "
-                         f"Using default value instead.", self.RK_LOG_WARNING) 
-
-        return return_val
     
     def callback(self, ch, method, properties, body, connection):
         try:
@@ -125,6 +76,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 )
                 return
             
+<<<<<<< HEAD
             # Convert flat list into list of named tuples and then check it is, 
             # in fact, a list
             try:
@@ -138,6 +90,10 @@ class IndexerConsumer(RabbitMQConsumer):
                     self.RK_LOG_ERROR
                 )
                 raise e
+=======
+            filelist = self.parse_filelist(body_json)
+            filelist_len = len(filelist)
+>>>>>>> 8c3d30d (Switch filelist parsing to refactored base-class method)
 
             # Upon initiation, split the filelist into manageable chunks
             if rk_parts[2] == self.RK_INITIATE:
