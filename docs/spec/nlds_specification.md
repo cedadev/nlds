@@ -690,6 +690,27 @@ in JSON format. e.g.
 
     <tenancy>/<transaction_id>/<file path hash>.json
 
+#### Likely user interactions for **putting** a file:
+
+1.  Put a filelist (no tags).  System to generate a sequential batch id.  Store 
+filelist and batch id with transaction id.
+2.  Put a filelist with tags.  System to generate a sequential batch id, and 
+assign the tags.  Store filelist, tags and batch id with transaction id.
+
+#### Likely user interactions for **getting** a file.
+
+1.  Get a filelist by filepaths.  System has to determine which transaction 
+id(s) the files in the filelist belong to.  There may be many transaction ids - 
+as many as files in the filelist.
+2.  Get a filelist by tag.  System has to determine which transaction id(s) the
+tags are referring to.  There may be many transaction ids, as a tag can be 
+applied across transaction ids / batches.
+3.  Get a filelist by sequential batch id.  There is a direct one to one mapping
+between batch ids and transaction ids.  System has to determine which 
+transaction id 
+4.  Get a filelist by transaction id.  This is the easiest, but least likely to
+be used scenario.
+
 ### Database on PostgreSQL server
 
 The boring / safe option
