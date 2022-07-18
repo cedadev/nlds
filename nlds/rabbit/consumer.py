@@ -12,6 +12,7 @@ import functools
 from abc import ABC, abstractmethod
 import logging
 from typing import Dict, List
+import pathlib as pth
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -53,6 +54,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_EXCHANGE_NAME = "test_exchange"
     DEFAULT_REROUTING_INFO = "->"
 
+    DEFAULT_CONSUMER_CONFIG = dict()
+
     def __init__(self, queue: str = None, setup_logging_fl=False):
         super().__init__(setup_logging_fl=False)
 
@@ -90,10 +93,78 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         if self.queue in self.whole_config:
             self.consumer_config = self.whole_config[self.queue]
         else: 
-            self.consumer_config = dict()
+            self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
         
         self.setup_logging(enable=setup_logging_fl)
     
+
+    def load_config_value(self, config_option: str,
+                          path_listify_fl: bool = False):
+        """
+        Function for verification and loading of options from the consumer-
+        specific section of the .server_config file. Attempts to load from the 
+        config section and reverts to hardcoded default value if an error is 
+        encountered. Will not attempt to load an option if no default value is 
+        available. 
+
+        :param config_option:   (str) The option in the indexer section of the 
+                                .server_config file to be verified and loaded.
+        :param path_listify:    (boolean) Optional argument to control whether 
+                                value should be treated as a list and each item 
+                                converted to a pathlib.Path() object. 
+        :returns:   The value at config_option, otherwise the default value as 
+                    defined in Consumer.DEFAULT_CONSUMER_CONFIG. This is 
+                    overloadable by 
+
+        """
+        # Check if the given config option is valid (i.e. whether there is an 
+        # available default option)
+        if config_option not in self.DEFAULT_CONSUMER_CONFIG:
+            raise ValueError(
+                f"Configuration option {config_option} not valid.\n"
+                f"Must be one of {list(self.DEFAULT_CONSUMER_CONFIG.keys())}"
+            )
+        else:
+            return_val = self.DEFAULT_CONSUMER_CONFIG[config_option]
+
+        if config_option in self.consumer_config:
+            try:
+                return_val = self.consumer_config[config_option]
+                if path_listify_fl:
+                    # TODO: (2022-02-17) This is very specific to the use-case 
+                    # of the indexer, could potentially be divided up into 
+                    # listify and convert functions, but that's probably only 
+                    # necessary if we refactor this into Consumer – which is 
+                    # probably a good idea when we start fleshing out other 
+                    # consumers
+                    return_val_list = self.consumer_config[config_option]
+                    # Make sure returned value is a list and not a string
+                    # Note: it can't be any other iterable because it's loaded 
+                    # from a json
+                    assert isinstance(return_val_list, list)
+                    return_val = [pth.Path(item) for item in return_val_list] 
+            except KeyError:
+                self.log(f"Invalid value for {config_option} in config file. "
+                         f"Using default value instead.", self.RK_LOG_WARNING) 
+
+        return return_val
+    
+    def parse_filelist(self, body_json):
+        # Convert flat list into list of named tuples and the check it is, 
+        # in fact, a list
+        try:
+            filelist = [self.IndexItem(i, r) for i, r in 
+                        list(body_json[self.MSG_DATA][self.MSG_FILELIST])]
+        except TypeError as e:
+            self.log(
+                "Failed to reformat list into indexitems. Filelist in "
+                "message does not appear to be in the correct format.", 
+                self.RK_LOG_ERROR
+            )
+            raise e
+
+        return filelist
+
     def setup_logging(self, enable=False, log_level: str = None, log_format: str = None, 
                       add_stdout_fl: bool = False, stdout_log_level: str = None,
                       log_files: List[str]=None) -> None:

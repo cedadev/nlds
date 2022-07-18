@@ -851,3 +851,33 @@ WARNING, ERROR, CRITICAL**
 
 `code_line` and `module_name` can be derived from the exception using the 
 `traceback` module.
+
+
+# Development notes
+
+**Transfer**
+Need separate get and put consumers
+ - Probably good to have a base-transfer processor that does the core work 
+(verification of message, creation of minio client etc.) and then split the 
+transfer work into two child classes.
+
+Check file permissions in the transfer processor too, but add ability to 
+configure both the transfer and indexer to not do this - to reduce iteration 
+time.
+ - Would be worth benchmarking this at some point!
+ - Should we be checking filelist length here and reindexing / resizing the list 
+if too long?
+
+Currently designating the buckets with the transaction ID, probably a better way 
+of doing this - feeds into catalogue design. 
+
+**Indexer**
+Sym-links and directories need to be preserved in the backup, this is still 
+being worked out but will need implementing! Symlinks with common path - i.e. 
+that point to a file/directory within the scope of the original batch - need to 
+be converted to be relative so that restoring the files in a different directory 
+structure works. Similarly, symlinks to locations not on the common path need to 
+be preserved as absolute links. 
+
+Test the permissions properly, with a sudoers file specifying a user which can 
+change to other users (a super user).
