@@ -54,14 +54,18 @@ class IndexerConsumer(RabbitMQConsumer):
         )
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
 
+        self.reset_lists()
+
+        print(f"@__init__ - uid: {os.getuid()}, gid: {os.getgid()}")
+    
+    def reset_lists(self):
         self.indexlist = []
         self.indexlist_size = 0
         self.retrylist = []
         self.failedlist = []
-
-        print(f"@__init__ - uid: {os.getuid()}, gid: {os.getgid()}")
     
     def callback(self, ch, method, properties, body, connection):
+        self.reset_lists()
         try:
             print(f"@callback.start - uid: {os.getuid()}, gid: {os.getgid()}")
 
