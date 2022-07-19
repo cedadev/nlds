@@ -149,19 +149,27 @@ class RabbitMQPublisher():
 
     @classmethod
     def create_message(cls, transaction_id: UUID, data: List[str], 
-                       user: str = None, group: str = None, target: str = None
-                       ) -> str:
+                       access_key: str, secret_key: str, user: str = None, 
+                       group: str = None, target: str = None, 
+                       tenancy: str = None) -> str:
         """
         Create message to add to rabbit queue. Message is in json format with 
         metadata described in DETAILS and data, i.e. the filelist of interest,
         under DATA. 
 
-        :param str transaction_id:  ID of transaction as provided by fast-api
-        :param List[str] data:      File or filelist of interest
-        :param str user:            User who sent request
-        :param str group:           Group that user belongs to 
+        :param str transaction_id:  ID of transaction as provided by fast-api.
+        :param List[str] data:      File or filelist of interest.
+        :param str user:            User who sent request.
+        :param str group:           Group that user belongs to.
+        :param str tenancy:         The object store (probably Caringo) tenancy 
+                                    url to access. This is optional and will 
+                                    have a global default. 
+        :param str access_key:      Access key (aka user ID) of object store 
+                                    account to access.
+        :param str secret_key:      Secret key (aka password) of object store 
+                                    account to access. 
         :param str target:          Target that files are being moved to (only 
-                                    valid for PUT, PUTLIST commands)
+                                    valid for PUT, PUTLIST commands).
 
         :return:    JSON encoded string in the proper format for message passing
 
@@ -175,7 +183,10 @@ class RabbitMQPublisher():
                 cls.MSG_TIMESTAMP: timestamp,
                 cls.MSG_USER: user,
                 cls.MSG_GROUP: group,
-                cls.MSG_TARGET: target
+                cls.MSG_TARGET: target,
+                cls.MSG_TENANCY: tenancy,
+                cls.MSG_ACCESS_KEY: access_key,
+                cls.MSG_SECRET_KEY: secret_key,
             }, 
             cls.MSG_DATA: {
                 cls.MSG_FILELIST: indexlist,
