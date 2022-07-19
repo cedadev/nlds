@@ -71,7 +71,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                     self.queues = [RabbitQueue(**q) for q in self.config[RABBIT_CONFIG_QUEUES] 
                                    if q[RABBIT_CONFIG_QUEUE_NAME] == queue]
                 else: 
-                    raise ValueError("Not rabbit queues found in config.")
+                    raise ValueError("No rabbit queues found in config.")
                 
                 if queue not in [q.name for q in self.queues]:
                     raise ValueError("Requested queue not in configuration.")
