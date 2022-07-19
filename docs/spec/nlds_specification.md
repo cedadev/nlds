@@ -376,6 +376,34 @@ applications.
 
 `application.worker.state`
 
+The `data` field contains the data required as input for the process and, after
+processing, the output data.  For the messages detailed below in the 
+#WorkerProcesses section, this consists of a single key, pair:
+
+    data : {
+        filelist       : <list<(json,int)>>
+    }
+
+The value for the `filelist` key is a `<list>` which can contain details for
+multiple files.  Each `<list>` element is a `NamedTuple`, consisting of a `json`
+document and a retry `int` (see the #retries section below).
+The `json` document can contain a number of key / value pairs, some of which are 
+optional for each processor.  The `json` document looks like this:
+
+    {
+        file_details : {
+            original_path       : <str>,
+            nlds_object         : <str>,
+            size                : <int>, (in kilobytes?)
+            user                : <str>, (get uid from LDAP?)
+            group               : <str>, (get gid from LDAP?)
+            file_permissions    : <int>, (unix file permissions)
+            access_time         : <datetime>, (timestamp of last accessed type)
+            filetype            : <str>, (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
+            link_path           : <str>, (link position,path of link, related to either root or common path)
+        }
+    }
+
 ### Applications
 
 * `nlds-api` - the calling API from the NLDS Fast API server
@@ -446,7 +474,7 @@ URL.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
@@ -455,8 +483,16 @@ URL.
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string,int>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -467,7 +503,7 @@ URL.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
@@ -476,8 +512,16 @@ URL.
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string,int>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -519,7 +563,7 @@ matched value.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
@@ -528,8 +572,16 @@ matched value.
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<(string,int)>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -538,7 +590,7 @@ matched value.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>
@@ -547,8 +599,16 @@ matched value.
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string,int>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -559,7 +619,7 @@ matched value.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
@@ -568,8 +628,16 @@ matched value.
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string,int>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -578,7 +646,7 @@ matched value.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>
             group          : <string>
@@ -587,9 +655,24 @@ matched value.
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string,int>>
+        data : {
+            filelist       : <list<(json,int)>>
         }            
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
+            size                : <int>,
+            user                : <str>,
+            group               : <str>,
+            file_permissions    : <int>,
+            access_time         : <datetime>,
+            filetype            : <str>,
+            link_path           : <str>,
+        }
     }
 
 ### Failure Modes for indexing
@@ -618,7 +701,7 @@ again, after a suitable timeout period.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
@@ -627,8 +710,23 @@ again, after a suitable timeout period.
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string,int>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
+            size                : <int>,
+            user                : <str>,
+            group               : <str>,
+            file_permissions    : <int>,
+            access_time         : <datetime>,
+            filetype            : <str>,
+            link_path           : <str>,
         }
     }
 
@@ -639,7 +737,7 @@ again, after a suitable timeout period.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
@@ -648,8 +746,24 @@ again, after a suitable timeout period.
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string,int>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
+            nlds_object         : <str>,
+            size                : <int>,
+            user                : <str>,
+            group               : <str>,
+            file_permissions    : <int>,
+            access_time         : <datetime>,
+            filetype            : <str>,
+            link_path           : <str>,
         }
     }
 
@@ -669,16 +783,18 @@ Operations:
 directories, e.g. `get /gws/nopw/j04/cedaproc/nrmassey/OxPEWWES2/` will get all
 the files under the `OxPEWWES2` record.
 
-This requires a Database schema to store:
+This requires a Database schema to store, these are contained in the 
+`<file_details>` `json` document:
 
 * File path
 * Object store path
-* (Size?)
+* Size
 * User
 * Group
 * Unix permissions
+* Last accessed timestamp
 * Filetype (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
-* Link position
+* Link position (path of link, related to either root or common path)
 
 ### Database on disk or object store
 We could store the information about the files on disk or on the object store,
@@ -729,14 +845,14 @@ In the messages for indexing and transfers above, there is the part that records
 the filenames:
 
     data {
-        filelist       : <list<string,int>>
+        filelist       : <list<json,int>>
     }
 
-Here, the `<string>` part of the message records the full path of the file, and
+Here, the `<json>` part of the message records the full details of the file, and
 the `<int>` part records the number of times an attempt has been made to index
 or transfer the file.  These are stored internally in NLDS as a `named tuple`:
 
-    IndexItem : (item: str, retries: int)
+    IndexItem : (item: json, retries: int)
 
 When a task is performed, such as indexing or transferring a file, which
 subsequently fails, the IndexItem is taken out of the return filelist and put 
