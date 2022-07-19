@@ -32,7 +32,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         # Convert body from bytes to string for ease of manipulation
         body_json = json.loads(body)
 
-        self.log(f"Received {body} ({method.routing_key})", self.RK_LOG_INFO)
+        self.log(f"Received {json.dumps(body_json, indent=4)} \nwith " 
+                 f"routing_key: {method.routing_key}", self.RK_LOG_INFO)
         self.log(f"Appending rerouting information to message: {self.DEFAULT_REROUTING_INFO} ", 
                  self.RK_LOG_DEBUG)
         body_json = self.append_route_info(body_json)
