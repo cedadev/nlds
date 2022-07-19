@@ -65,7 +65,12 @@ class RabbitMQPublisher():
     RK_LOG_ERROR = "error"
     RK_LOG_CRITICAL = "critical"
     LOG_RKS = (
-        RK_LOG_NONE, RK_LOG_DEBUG, RK_LOG_INFO, RK_LOG_WARNING, RK_LOG_ERROR, RK_LOG_CRITICAL
+        RK_LOG_NONE, 
+        RK_LOG_DEBUG, 
+        RK_LOG_INFO, 
+        RK_LOG_WARNING, 
+        RK_LOG_ERROR, 
+        RK_LOG_CRITICAL
     )
     LOGGER_PREFIX = "nlds."
 
