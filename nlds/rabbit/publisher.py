@@ -48,7 +48,9 @@ class RabbitMQPublisher():
     RK_INDEX = "index"
     RK_CATALOGUE = "cat"
     RK_MONITOR = "mon"
-    RK_TRANSFER = "tran"
+    RK_TRANSFER = "transfer"
+    RK_TRANSFER_PUT = "transfer-put"
+    RK_TRANSFER_GET = "transfer-get"
     RK_ROUTE = "route"
     RK_LOG = "log"
 
@@ -87,6 +89,7 @@ class RabbitMQPublisher():
     MSG_TENANCY = "tenancy"
     MSG_ACCESS_KEY = "access_key"
     MSG_SECRET_KEY = "secret_key"
+    MSG_API_ACTION = "api_action"
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
     MSG_FILELIST_ITEMS = "fl_items"

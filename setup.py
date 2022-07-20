@@ -48,7 +48,8 @@ setup(
             'catalog_q=nlds_processors.catalog:main',
             'index_q=nlds_processors.index:main',
             'monitor_q=nlds_processors.monitor:main',
-            'transfer_q=nlds_processors.transfer:main',
+            'transfer_put_q=nlds_processors.transferers.put_transfer:main',
+            'transfer_get_q=nlds_processors.transferers.get_transfer:main',
             'logging_q=nlds_processors.logger:main'            
         ],
     }
