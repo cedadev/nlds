@@ -26,7 +26,7 @@ class IndexerConsumer(RabbitMQConsumer):
     
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
-        _MESSAGE_MAX_SIZE: 1000,
+        _MESSAGE_MAX_SIZE: 1000,    # in kB
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         _CHECK_PERMISSIONS: True,
@@ -276,11 +276,10 @@ class IndexerConsumer(RabbitMQConsumer):
 
                         # Check if given user has read or write access 
                         if self.check_path_access(f_path):
-                            # Stat the file to check for size
+                            # Stat the file to check for size (in kilobytes)
+                            filesize = None
                             if self.check_filesize_fl:
-                                filesize = f_path.stat().st_size
-                            else:
-                                filesize = None
+                                filesize = f_path.stat().st_size / 1000
 
                             # Pass the size through to ensure maximum size is 
                             # used as the partitioning metric (if checking file
@@ -301,8 +300,10 @@ class IndexerConsumer(RabbitMQConsumer):
             
             # Index files directly in exactly the same way as above
             elif item_p.is_file(): 
-                # Stat the file to check for size (if checking)
-                filesize = f.stat().st_size if self.check_filesize_fl else None
+                # Stat the file to check for size, if checking (in kilobytes)
+                filesize = None
+                if self.check_filesize_fl:
+                    filesize = f_path.stat().st_size / 1000
 
                 # Pass the size through to ensure maximum size is 
                 # used as the partitioning metric
