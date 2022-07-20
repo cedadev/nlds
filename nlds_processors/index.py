@@ -96,7 +96,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 self.split(filelist, rk_parts[0], body_json)
             # If for some reason a list which is too long has been submitted for
             # indexing, split it and resubmit it.             
-            elif rk_parts[2] == self.RK_INDEX:
+            elif rk_parts[2] == self.RK_START:
                 if filelist_len > self.filelist_max_len:
                     self.split(filelist, rk_parts[0], body_json)    
                 else:
@@ -167,7 +167,7 @@ class IndexerConsumer(RabbitMQConsumer):
         exchange for indexing proper.
 
         """
-        rk_index = ".".join([rk_origin, self.RK_INDEX, self.RK_INDEX])
+        rk_index = ".".join([rk_origin, self.RK_INDEX, self.RK_START])
         
         # Checking the length shouldn't fail as it's already been tested 
         # earlier in the callback
@@ -220,7 +220,7 @@ class IndexerConsumer(RabbitMQConsumer):
         print(f"@index.start - uid: {os.getuid()}, gid: {os.getgid()}")
 
         rk_complete = ".".join([rk_origin, self.RK_INDEX, self.RK_COMPLETE])
-        rk_retry = ".".join([rk_origin, self.RK_INDEX, self.RK_INDEX])
+        rk_retry = ".".join([rk_origin, self.RK_INDEX, self.RK_START])
         rk_failed = ".".join([rk_origin, self.RK_INDEX, self.RK_FAILED])
         
         # Checking the lengths of file- and reset- lists is no longer necessary

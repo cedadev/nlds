@@ -18,8 +18,8 @@ import pathlib
 from collections import namedtuple
 
 import pika
-from pika.exceptions import AMQPConnectionError, AMQPHeartbeatTimeout, \
-                            AMQPChannelError, AMQPError, StreamLostError
+from pika.exceptions import (AMQPConnectionError, AMQPHeartbeatTimeout, 
+                             AMQPChannelError, AMQPError, StreamLostError)
 from retry import retry
 
 from ..server_config import load_config, LOGGING_CONFIG_FILES, \
@@ -54,6 +54,7 @@ class RabbitMQPublisher():
 
     # Exchange routing key parts – actions
     RK_INITIATE = "init"
+    RK_START = "start"
     RK_COMPLETE = "complete"
     RK_FAILED = "failed"
 

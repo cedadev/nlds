@@ -61,8 +61,9 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                 self.log(f"Scan successful, pass message back to transfer and " 
                          "cataloging queues", self.RK_LOG_INFO)
                 for queue in [self.RK_TRANSFER]:
-                    self.log(f"Sending  message to {queue} queue", self.RK_LOG_INFO)
-                    new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_INITIATE])
+                    new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_START])
+                    self.log(f"Sending  message to {queue} queue with routing "
+                             f"key {new_routing_key}", self.RK_LOG_INFO)
                     self.publish_and_log_message(new_routing_key, json.dumps(body_json))
 
             # If transfer or catalogue completed then forward confirmation to 
