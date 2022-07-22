@@ -103,8 +103,11 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
             self.log(f"Starting transfer to object store at {tenancy}", 
                      self.RK_LOG_INFO)
 
-            # Append route info to message and then start the transfer
+            # Append route info to message to track the route of the message
             body_json = self.append_route_info(body_json)
+
+            # Start transfer - this is implementation specific and handled by 
+            # child classes 
             self.transfer(transaction_id, tenancy, access_key, secret_key, 
                           filelist)
 
@@ -126,13 +129,10 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
                 f"Encountered error ({e}), sending to logger.", 
                 self.RK_LOG_ERROR, exc_info=e
             )
-            body_json[self.MSG_DATA][self.MSG_ERROR] = str(e)
-            body_json[self.MSG_DETAILS][self.MSG_LOG_TARGET] = \
-                f"{self.LOGGER_PREFIX}{self.queue}"
-            new_routing_key = ".".join(
-                [self.RK_ROOT, self.RK_LOG, self.RK_LOG_INFO]
+            self.log(
+                f"Failed message content: {json.dumps(body_json, index=4)}",
+                self.RK_LOG_DEBUG
             )
-            self.publish_message(new_routing_key, json.dumps(body_json))
 
     @abstractmethod
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 

@@ -125,11 +125,10 @@ class IndexerConsumer(RabbitMQConsumer):
                 f"Encountered error ({e}), sending to logger.", 
                 self.RK_LOG_ERROR, exc_info=e
             )
-            body_json[self.MSG_DATA][self.MSG_ERROR] = str(e)
-            new_routing_key = ".".join(
-                [self.RK_ROOT, self.RK_LOG, self.RK_LOG_INFO]
+            self.log(
+                f"Failed message content: {json.dumps(body_json, index=4)}",
+                self.RK_LOG_DEBUG
             )
-            self.publish_message(new_routing_key, json.dumps(body_json))
 
     def change_user(self, body_json):
         """Changes the real user- and group-ids to that specified in the 
