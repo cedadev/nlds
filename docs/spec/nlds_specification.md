@@ -280,14 +280,35 @@ so different message formats are used:
 
 1.  HTTP API / JSON
 2.  RabbitMQ
-3.  FTS3
-4.  S3
+3.  S3
+
+## Publishers and consumers
+
+RabbitMQ has the concept of *Publishers*, which create messages and send them to 
+the exchange, and *Consumers*, which subscribe to a queue in the exchange, take 
+messages from the queue and processes them.
+
+### Publishers
+The publishing of messages occurs in the NLDS web server, which is implemented
+in FastAPI. The **put**, **get** and **getlist** methods in the 
+*routing_methods.py* file all push messages to the RabbitMQ exchange using the
+**rabbit_publish_response** method.  This uses a static instantiation of the 
+**RabbitMQPublisher** class.
+
+| ![rabbit_publisher](./uml/rabbit_mq_publisher.png) |
+:-:
+| **Figure 3.1** RabbitMQPublisher class|
+
+### Consumers
+
+All of the NLDS processors inherit the RabbitMQConsumer, which in turn inherits
+the RabbitMQPublisher class.
 
 ## Rabbit MQ Exchange Structure
 
 | ![client_server_seq](./uml/queue_structure.png) |
 :-:
-| **Figure 3** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Indexer 1` and `Indexer 2` write `work.index.complete` messages to the `Work Exchange`.|
+| **Figure 3.2** Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both `Indexer 1` and `Indexer 2` write `work.index.complete` messages to the `Work Exchange`.|
 
 ## Message flow
 
@@ -355,6 +376,34 @@ applications.
 
 `application.worker.state`
 
+The `data` field contains the data required as input for the process and, after
+processing, the output data.  For the messages detailed below in the 
+#WorkerProcesses section, this consists of a single key, pair:
+
+    data : {
+        filelist       : <list<(json,int)>>
+    }
+
+The value for the `filelist` key is a `<list>` which can contain details for
+multiple files.  Each `<list>` element is a `NamedTuple`, consisting of a `json`
+document and a retry `int` (see the #retries section below).
+The `json` document can contain a number of key / value pairs, some of which are 
+optional for each processor.  The `json` document looks like this:
+
+    {
+        file_details : {
+            original_path       : <str>,
+            nlds_object         : <str>,
+            size                : <int>, (in kilobytes?)
+            user                : <str>, (get uid from LDAP?)
+            group               : <str>, (get gid from LDAP?)
+            file_permissions    : <int>, (unix file permissions)
+            access_time         : <datetime>, (timestamp of last accessed type)
+            filetype            : <str>, (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
+            link_path           : <str>, (link position,path of link, related to either root or common path)
+        }
+    }
+
 ### Applications
 
 * `nlds-api` - the calling API from the NLDS Fast API server
@@ -362,8 +411,11 @@ applications.
 
 ### Workers
 
-* `nlds` - the NLDS marshalling application
-* `index` - the indexer, available to the `nlds-api` and `gws-api` applications.
+* `nlds` - the NLDS marshalling application.  Available only to the  `nlds-api` 
+API.
+* `index` - the indexer, available to the `nlds-api` and `gws-api` APIs.
+* `transfer` - the file transfer, from the disk system to object storage. 
+Available only to the  `nlds-api` API.
 
 ### State
 
@@ -422,17 +474,25 @@ URL.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
-            target         : <string>,
-            tenancy        : <string>,
+            target         : <string> (optional),
+            tenancy        : <string> (optional),
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -443,17 +503,25 @@ URL.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
-            target         : <string>,
-            tenancy        : <string>,
+            target         : <string> (optional),
+            tenancy        : <string> (optional),
             access_key     : <string>,
             secret_key     : <string>
         },
-        data {
-            filelist       : <list<string>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -461,11 +529,6 @@ URL.
 
 This takes the description of work that the Work Processor pushed onto the 
 queue and starts to build a file list.
-
-Questions :
-* Should this work on just POSIX file sets?
-* Should it work with object store?
-* Should it work on tape catalogue?
 
 At the end it can push two different messages to the queue:
 * Index a directory
@@ -500,17 +563,25 @@ matched value.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
-        data {
-            filelist       : <list<string>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -519,17 +590,25 @@ matched value.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
-        data {
-            filelist       : <list<string>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -540,17 +619,25 @@ matched value.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
-        data {
-            filelist       : <list<string>>
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
         }
     }
 
@@ -559,24 +646,47 @@ matched value.
 **Message** :
 
     {
-        details {
+        details : {
             transaction_id : <string>,
             user           : <string>
             group          : <string>
             target         : <string> (optional),
             tenancy        : <string> (optional),
-            access_key     : <string> (optional),
-            secret_key     : <string> (optional)
+            access_key     : <string>,
+            secret_key     : <string>
         },
-        data {
-            filelist       : <list<string>>
+        data : {
+            filelist       : <list<(json,int)>>
         }            
     }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
+            size                : <int>,
+            user                : <str>,
+            group               : <str>,
+            file_permissions    : <int>,
+            access_time         : <datetime>,
+            filetype            : <str>,
+            link_path           : <str>,
+        }
+    }
+
+### Failure Modes for indexing
+
+* Files not found
+* Disk not available
+* User does not have permissions to access files
+... add to these
 
 ## Transfer processor
 This takes the list of files from the File Indexer and transfers them from 
 one storage medium to another
 At the end it pushes a message to the queue to say it has completed.
+Needs the access key and secret key in the message.
 
 Asynchronicity of the transfers is a desirable byproduct of the indexer splitting 
 the filelist into smaller batches.  It also allows for parallel transfer, with 
@@ -584,8 +694,191 @@ multiple transfer workers.  Finally, if a transfer worker fails, and does not
 return an acknowledgement message to the Exchange, the message will be sent out 
 again, after a suitable timeout period.
 
-## Database processor
-Add files and metadata to a file catalogue database.  Intake database?
+#### ---> Input messages
+
+**Binding** : `nlds-api.transfer-put.start`
+
+**Message** :
+
+    {
+        details : {
+            transaction_id : <string>,
+            user           : <string>,
+            group          : <string>,
+            target         : <string> (optional),
+            tenancy        : <string> (optional),
+            access_key     : <string>,
+            secret_key     : <string>
+        },
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
+            size                : <int>,
+            user                : <str>,
+            group               : <str>,
+            file_permissions    : <int>,
+            access_time         : <datetime>,
+            filetype            : <str>,
+            link_path           : <str>,
+        }
+    }
+
+#### <--- Output messages
+
+**Binding** : `nlds-api.transfer-put.complete`
+
+**Message** :
+
+    {
+        details : {
+            transaction_id : <string>,
+            user           : <string>,
+            group          : <string>,
+            target         : <string> (optional),
+            tenancy        : <string> (optional),
+            access_key     : <string>,
+            secret_key     : <string>
+        },
+        data : {
+            filelist       : <list<(json,int)>>
+        }
+    }
+
+The `data : {filelist : }` `json` documents contain :
+
+    {
+        file_details : {
+            original_path       : <str>,
+            nlds_object         : <str>,
+            size                : <int>,
+            user                : <str>,
+            group               : <str>,
+            file_permissions    : <int>,
+            access_time         : <datetime>,
+            filetype            : <str>,
+            link_path           : <str>,
+        }
+    }
+
+### Failure Modes for transfer
+
+* Files not found (files have disappeared since indexing)
+* Object store not available
+* User does not have permissions to access files (permissions have changed 
+since indexing)
+
+## Catalogue processor
+Add or retrieve files and metadata to a file catalogue database.
+
+Operations:
+* `put` - write a file record to the catalogue.  One file record at once.
+* `get` - read (a) file record(s) from the catalogue.  Allow basic matching of
+directories, e.g. `get /gws/nopw/j04/cedaproc/nrmassey/OxPEWWES2/` will get all
+the files under the `OxPEWWES2` record.
+
+This requires a Database schema to store, these are contained in the 
+`<file_details>` `json` document:
+
+* File path
+* Object store path
+* Size
+* User
+* Group
+* Unix permissions
+* Last accessed timestamp
+* Filetype (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
+* Link position (path of link, related to either root or common path)
+
+### Database on disk or object store
+We could store the information about the files on disk or on the object store,
+without requiring a database.
+These files could be stored alongside the objects in the bucket named after the 
+transaction id.
+The name of the file would be the hash of the file path and should (probably) be 
+in JSON format. e.g. 
+
+    <tenancy>/<transaction_id>/<file path hash>.json
+
+#### Likely user interactions for **putting** a file:
+
+1.  Put a filelist (no tags).  System to generate a sequential batch id.  Store 
+filelist and batch id with transaction id.
+2.  Put a filelist with tags.  System to generate a sequential batch id, and 
+assign the tags.  Store filelist, tags and batch id with transaction id.
+
+#### Likely user interactions for **getting** a file.
+
+1.  Get a filelist by filepaths.  System has to determine which transaction 
+id(s) the files in the filelist belong to.  There may be many transaction ids - 
+as many as files in the filelist.
+2.  Get a filelist by tag.  System has to determine which transaction id(s) the
+tags are referring to.  There may be many transaction ids, as a tag can be 
+applied across transaction ids / batches.
+3.  Get a filelist by sequential batch id.  There is a direct one to one mapping
+between batch ids and transaction ids.  System has to determine which 
+transaction id 
+4.  Get a filelist by transaction id.  This is the easiest, but least likely to
+be used scenario.
+
+### Database on PostgreSQL server
+
+The boring / safe option
+
+### SQLlite database on Object Store
+
+
+## Retry mechanism
+At any stage in the transaction, one component of the storage hierarchy may not 
+be available.  This could be during a PUT, where the disk that the user's files
+reside on is not available, or the object storage target may not be available.
+During a GET, the object storage may not be available, or the user's disk may
+be full or not available.  In these cases, a *retry mechanism* is needed.
+
+In the messages for indexing and transfers above, there is the part that records
+the filenames:
+
+    data {
+        filelist       : <list<json,int>>
+    }
+
+Here, the `<json>` part of the message records the full details of the file, and
+the `<int>` part records the number of times an attempt has been made to index
+or transfer the file.  These are stored internally in NLDS as a `named tuple`:
+
+    IndexItem : (item: json, retries: int)
+
+When a task is performed, such as indexing or transferring a file, which
+subsequently fails, the IndexItem is taken out of the return filelist and put 
+into a failed filelist where the retries count is incremented by 1.  
+A message is formed with this failed filelist as the `data` part of the 
+message, and the `details` part of the message is the same as the originating
+message.  Currently, this message is passed back to the exchange, with the same
+routing key as the originating message.
+
+Once an item in the filelist has exceeded a server-configured number of 
+retries, it will be permanently failed and a message will be passed back to the
+user (how?) telling them of this.
+
+Just passing back the message in this way is not optimum.  The task will have
+failed for a reason which may not have been fixed in the (potentially and 
+probably) short time that it will take for the message to be submitted to the
+exchange and then consumed by the task that had initially failed.  With such a 
+short duration between failing and then trying to complete the task, it is 
+likely that the task will fail again.  To overcome this we are investigating
+using a delayed message queue for the failed task messaged, with an 
+"exponential" backoff.  This could be as simple as:
+
+* First failure, wait a minute
+* Second failure, wait an hour
+* Third failure, wait a day
+* Fourth failure, wait a week
 
 ## Monitoring
 Important!
@@ -635,11 +928,11 @@ nlds_transfer.log, nlds_index.log, nlds_catalog.log, nlds_log.log etc.
 3.  The Logging processor subscribes to the logging topic queue, receives the
 messages and writes the log files.
 4.  Logrotate should be used to manage the logs.
-5.  Separate levels of logging should be permitted, e.g. **DEBUG, INFO, WARNING, 
-ERROR, CRITICAL**
+5.  Separate levels of logging should be permitted, e.g. **DEBUG, INFO, 
+WARNING, ERROR, CRITICAL**
     * **DEBUG** - information provided when debugging / in development.  Very 
-    verbose - e.g. now I'm going to do this particular operation and I'm going to 
-    tell you all about it.
+    verbose - e.g. now I'm going to do this particular operation and I'm going 
+    to tell you all about it.
     * **INFO** - information provided when in production. Changes of state, etc.
     Not as verbose as **DEBUG** but still informative.
     * **WARNING** - something wasn't optimum, but I can recover from it and 
@@ -674,3 +967,33 @@ ERROR, CRITICAL**
 
 `code_line` and `module_name` can be derived from the exception using the 
 `traceback` module.
+
+
+# Development notes
+
+**Transfer**
+Need separate get and put consumers
+ - Probably good to have a base-transfer processor that does the core work 
+(verification of message, creation of minio client etc.) and then split the 
+transfer work into two child classes.
+
+Check file permissions in the transfer processor too, but add ability to 
+configure both the transfer and indexer to not do this - to reduce iteration 
+time.
+ - Would be worth benchmarking this at some point!
+ - Should we be checking filelist length here and reindexing / resizing the list 
+if too long?
+
+Currently designating the buckets with the transaction ID, probably a better way 
+of doing this - feeds into catalogue design. 
+
+**Indexer**
+Sym-links and directories need to be preserved in the backup, this is still 
+being worked out but will need implementing! Symlinks with common path - i.e. 
+that point to a file/directory within the scope of the original batch - need to 
+be converted to be relative so that restoring the files in a different directory 
+structure works. Similarly, symlinks to locations not on the common path need to 
+be preserved as absolute links. 
+
+Test the permissions properly, with a sudoers file specifying a user which can 
+change to other users (a super user).

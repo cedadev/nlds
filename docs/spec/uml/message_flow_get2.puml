@@ -10,38 +10,38 @@ note over qw
 end note
 collections work as "NLDS\nWorker" #lightgrey
 
-queue qt as "Transfer Q" #gold
+queue qt as "Transfer Get Q" #gold
 note over qt
-    topic = #.tran.#
+    topic = #.transfer-get.#
 end note
-collections tran as "Transfers" #gold
+collections transfer_get as "Transfer Get" #gold
 
 participant obj as "Object\nStore" #GhostWhite
 
 activate catalog
-catalog -> wex : key=nlds-api.catalog.get_complete
+catalog -> wex : key=nlds-api.catalog-get.complete
 deactivate catalog
 
 activate wex
-wex -> qw : key=nlds-api.catalog.get_complete
+wex -> qw : key=nlds-api.catalog-get.complete
 deactivate wex
 
 activate qw
-qw -> work : key=nlds-api.catalog.get_complete
+qw -> work : key=nlds-api.catalog-get.complete
 deactivate qw
 
 activate work
-work -> wex : key=nlds-api.tran.start_get
+work -> wex : key=nlds-api.transfer-get.start
 deactivate work
 
 activate wex
-wex -> qt : key=nlds-api.tran.start_get
+wex -> qt : key=nlds-api.transfer-get.start
 deactivate wex
 
 activate qt
-qt -> tran : key=(#)tran.start_get
+qt -> transfer_get : key=(#).transfer-get.start
 deactivate qt
-activate tran
+activate transfer_get
 
 note right of qt
     (#) here will match the calling
@@ -50,9 +50,9 @@ note right of qt
 end note
 
 loop #lightgrey for file in filelist 
-    tran -> obj : copy file to target
+    transfer_get -> obj : copy file to target
 end
-tran -> wex : key=(#).tran.get_complete
-deactivate tran
+transfer_get -> wex : key=(#).transfer-get.complete
+deactivate transfer_get
 
 @enduml

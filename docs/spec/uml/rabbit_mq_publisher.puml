@@ -1,0 +1,21 @@
+@startuml rabbit_mq_publisher
+
+class RabbitMQPublisher #LightSkyBlue {
+    +whole_config
+    +config
+    +exchange
+    +connection
+    +channel
+
+    +void __init__()
+    +void get_connection()
+    +void declare_bindings()
+    +str {static}create_message(UUID transaction_id, List<str>data, str user, str group, str target)
+    +void publish_message(str routing_key, str msg)
+    +void close_connection()
+    +void setup_logging(bool enable, str log_level, str log_format, bool add_stdout_fl, str stdout_log_level, List[str] log_files)
+    +void log(str log_message, str log_level, str target, **kwargs)
+    +bytes {static}create_log_message(str message str target, str route)
+}
+
+@enduml

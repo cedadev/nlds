@@ -12,11 +12,11 @@ collections work as "NLDS\nWorker" #lightgrey
 /'
 database iddb as "Transaction DB" #lightgrey
 '/
-queue qt as "Transfer Q" #gold
+queue qt as "Transfer Put Q" #gold
 note over qt
-    topic = #.tran.#
+    topic = #.transfer-put.#
 end note
-collections tran as "Transfers" #gold
+collections transfer_puts as "Transfer Puts" #gold
 
 participant obj as "Object\nStore" #GhostWhite
 
@@ -36,13 +36,13 @@ activate iddb
 iddb -> work : (target,user,group,id)
 deactivate iddb
 '/
-work -> wex  : key=nlds-api.tran.put_start
+work -> wex  : key=nlds-api.transfer-put.start
 deactivate work
 activate wex
-wex -> qt : key=nlds-api.tran.put_start
+wex -> qt : key=nlds-api.transfer-put.start
 deactivate wex
 activate qt
-qt -> tran : key=(#).tran.put_start
+qt -> transfer_puts : key=(#).transfer-put.start
 deactivate qt
 note right of qt
     (#) here will match the calling
@@ -51,10 +51,10 @@ note right of qt
     `gws-api` for group workspace scanner.
 end note
 
-activate tran
+activate transfer_puts
 loop #lightgrey for file in indexed_list 
-    tran -> obj : move file to storage
+    transfer_puts -> obj : move file to storage
 end
-tran -> wex : key=(#).tran.put_complete
-deactivate tran
+transfer_puts -> wex : key=(#).transfer-put.complete
+deactivate transfer_puts
 @enduml

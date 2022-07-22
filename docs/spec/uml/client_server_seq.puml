@@ -1,4 +1,4 @@
-@startuml client_server_sequence
+@startuml client_server_seq
 
 actor user as "User"
 participant client as "Client API"
