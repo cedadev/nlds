@@ -11,6 +11,11 @@ ACCESSES = (
 
 def check_permissions(uid: int, gid: int, access=os.R_OK, path: str = None,
                       stat_result: NamedTuple = None) -> bool:
+    # TODO: (2022-07-25) Should we be adding an exception for root whereby any 
+    # check returns True? Probably not super necessary as it's very unlikely to 
+    # be actually used by root in our context, but is technically incomplete 
+    # otherwise.
+
     if access not in ACCESSES:
         raise ValueError("Invalid access bit passed, must be one of "
                          f"{ACCESSES}.")
