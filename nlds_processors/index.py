@@ -1,12 +1,14 @@
 import json
 import os
 import pwd
+import grp
 import pathlib as pth
 from typing import List, NamedTuple, Dict
 import traceback
 
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher
+from nlds.utils.permissions import check_permissions
 
 class IndexerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "index_q"
@@ -23,6 +25,7 @@ class IndexerConsumer(RabbitMQConsumer):
     _MAX_RETRIES = "max_retries"
     _CHECK_PERMISSIONS = "check_permissions_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
+    _USE_PWD_GID = "use_pwd_gid_fl"
     
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
@@ -31,6 +34,7 @@ class IndexerConsumer(RabbitMQConsumer):
         _MAX_RETRIES: 5,
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
+        _USE_PWD_GID: False,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -43,7 +47,7 @@ class IndexerConsumer(RabbitMQConsumer):
         self.message_max_size = self.load_config_value(
             self._MESSAGE_MAX_SIZE
         )
-        self.print_tracebacks = self.load_config_value(
+        self.print_tracebacks_fl = self.load_config_value(
             self._PRINT_TRACEBACKS
         )
         self.max_retries = self.load_config_value(
@@ -53,27 +57,27 @@ class IndexerConsumer(RabbitMQConsumer):
             self._CHECK_PERMISSIONS
         )
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
+        self.use_pwd_gid_fl = self.load_config_value(self._USE_PWD_GID)
 
-        self.reset_lists()
-
-        print(f"@__init__ - uid: {os.getuid()}, gid: {os.getgid()}")
+        self.reset()
     
-    def reset_lists(self):
+    def reset(self):
         self.indexlist = []
         self.indexlist_size = 0
         self.retrylist = []
         self.failedlist = []
+
+        self.gid = None
+        self.uid = None
     
     def callback(self, ch, method, properties, body, connection):
-        self.reset_lists()
+        self.reset()
         try:
-            print(f"@callback.start - uid: {os.getuid()}, gid: {os.getgid()}")
-
             # Convert body from bytes to string for ease of manipulation
             body_json = json.loads(body)
 
             self.log(
-                f"Received {body} from {self.queues[0].name} "
+                f"Received {json.dumps(body_json, indent=4)} from {self.queues[0].name} "
                 f"({method.routing_key})",
                 self.RK_LOG_DEBUG
             )
@@ -103,7 +107,7 @@ class IndexerConsumer(RabbitMQConsumer):
                     # First change user and group so file permissions can be 
                     # checked. This should be deactivated when testing locally. 
                     if self.check_permissions_fl:
-                        self.change_user(body_json)
+                        self.set_ids(body_json)
                 
                     # Append routing info and then run the index
                     body_json = self.append_route_info(body_json)
@@ -115,10 +119,8 @@ class IndexerConsumer(RabbitMQConsumer):
                     self.index(filelist, rk_parts[0], body_json)
                     self.log(f"Scan finished.", self.RK_LOG_INFO)
 
-            print(f"@callback.end - uid: {os.getuid()}, gid: {os.getgid()}")
-
         except (ValueError, TypeError, KeyError, PermissionError) as e:
-            if self.print_tracebacks:
+            if self.print_tracebacks_fl:
                 tb = traceback.format_exc()
                 self.log(tb, self.RK_LOG_DEBUG)
             self.log(
@@ -129,41 +131,58 @@ class IndexerConsumer(RabbitMQConsumer):
                 f"Failed message content: {json.dumps(body_json, index=4)}",
                 self.RK_LOG_DEBUG
             )
+        except Exception as e:
+            tb = traceback.format_exc()
+            self.log(tb, self.RK_LOG_CRITICAL)
 
-    def change_user(self, body_json):
-        """Changes the real user- and group-ids to that specified in the 
-        incoming message details section so that permissions on each file can 
-        be checked.
+    def set_ids(self, body_json):
+        """Changes the real user- and group-ids stored in the class to that 
+        specified in the incoming message details section so that permissions 
+        on each file can be checked.
 
         """
-        # Attempt to get group id and user id
+        # Attempt to get uid from, given username, in password db
         try:
             username = body_json[self.MSG_DETAILS][self.MSG_USER]
             pwddata = pwd.getpwnam(username)
-            req_uid = pwddata.pw_uid
-            req_gid = pwddata.pw_gid
+            pwd_uid = pwddata.pw_uid
+            pwd_gid = pwddata.pw_gid
         except KeyError as e:
             self.log(
-                f"Problem fetching user and group id using username "
-                 "{username}", self.RK_LOG_ERROR
+                f"Problem fetching uid using username {username}", 
+                self.RK_LOG_ERROR
             )
             raise e
 
-        # Set real user & group ids so os.access can be used
+        # Attempt to get gid from group name using grp module
         try:
-            os.setuid(req_uid)
-            os.setgid(req_gid)
-        except PermissionError as e:
-            self.log(
-                f"Attempted to use uid or gid outside of permission scope "
-                f"({req_uid}, {req_gid})", self.RK_LOG_ERROR
-            )
-            raise e
+            group_name = body_json[self.MSG_DETAILS][self.MSG_GROUP]
+            grp_data = grp.getgrnam(group_name)
+            grp_gid = grp_data.gr_gid
+        except KeyError as e:         
+            # If consumer setting is configured to allow the use of the gid 
+            # gained from the pwd call, use that instead
+            if self.use_pwd_gid_fl:
+                self.log(
+                    f"Problem fetching gid using grp, group name was "
+                    f"{group_name}. Continuing with pwd_gid ({pwd_gid}).", 
+                    self.RK_LOG_WARNING
+                )
+                grp_gid = pwd_gid
+            else:
+                self.log(
+                    f"Problem fetching gid using grp, group name was {group_name}", 
+                    self.RK_LOG_ERROR
+                )
+                raise e
+
+        self.uid = pwd_uid
+        self.gid = grp_gid
         
     def split(self, filelist: List[NamedTuple], rk_origin: str, 
               body_json: dict[str]) -> None:
-        """ Split the given filelist into batches of 1000 and resubmit each to 
-        exchange for indexing proper.
+        """ Split the given filelist into batches of some configurable max 
+        length and resubmit each to exchange for indexing proper.
 
         """
         rk_index = ".".join([rk_origin, self.RK_INDEX, self.RK_START])
@@ -215,9 +234,6 @@ class IndexerConsumer(RabbitMQConsumer):
         :param dict body_json:  The message body in dict form.
 
         """
-        
-        print(f"@index.start - uid: {os.getuid()}, gid: {os.getgid()}")
-
         rk_complete = ".".join([rk_origin, self.RK_INDEX, self.RK_COMPLETE])
         rk_retry = ".".join([rk_origin, self.RK_INDEX, self.RK_START])
         rk_failed = ".".join([rk_origin, self.RK_INDEX, self.RK_FAILED])
@@ -248,10 +264,12 @@ class IndexerConsumer(RabbitMQConsumer):
 
             # If item does not exist, or is not accessible, add to problem list
             if not self.check_path_access(item_p):
-                # Increment retry counter and add to retry list
-                indexitem.retries += 1
+                # Increment retry counter and add to retry list (make new index
+                # item as it's immutable)
+                new_indexitem = self.IndexItem(indexitem.item, 
+                                               indexitem.retries + 1)
                 self.append_and_send(
-                    indexitem, rk_retry, body_json, mode="retry"
+                    new_indexitem, rk_retry, body_json, mode="retry"
                 )
 
             elif item_p.is_dir():
@@ -273,12 +291,20 @@ class IndexerConsumer(RabbitMQConsumer):
                             str(f_path), 0
                         )
 
+                        # Grab stat early - we need it later if checking file
+                        # sizes
+                        stat_result = None
+                        if self.check_filesize_fl:
+                            stat_result = f_path.stat()
+
                         # Check if given user has read or write access 
-                        if self.check_path_access(f_path):
-                            # Stat the file to check for size (in kilobytes)
+                        if self.check_path_access(f_path, 
+                                                  stat_result=stat_result):
+                            # Use the stat_results to check for filesize size 
+                            # (in kilobytes)
                             filesize = None
                             if self.check_filesize_fl:
-                                filesize = f_path.stat().st_size / 1000
+                                filesize = stat_result.st_size / 1000
 
                             # Pass the size through to ensure maximum size is 
                             # used as the partitioning metric (if checking file
@@ -289,12 +315,15 @@ class IndexerConsumer(RabbitMQConsumer):
 
                         else:
                             # If file is not valid, not accessible with uid and 
-                            # gid if checking permissions, not existing 
+                            # gid if checking permissions, and not existing 
                             # otherwise, then add to problem list. Note that we 
                             # don't check the size of the problem list as files 
                             # may not exist
-                            walk_indexitem.retries += 1
-                            self.append_and_send(walk_indexitem, rk_retry, 
+                            new_indexitem = self.IndexItem(
+                                walk_indexitem.item,
+                                walk_indexitem.retries + 1
+                            )
+                            self.append_and_send(new_indexitem, rk_retry, 
                                                  body_json, mode="retry")
             
             # Index files directly in exactly the same way as above
@@ -311,8 +340,6 @@ class IndexerConsumer(RabbitMQConsumer):
                                      filesize=filesize)
         
         # Send whatever remains after all directories have been walked
-        print(f"@index.start - uid: {os.getuid()}, gid: {os.getgid()}")
-
         if len(self.indexlist) > 0:
             self.send_indexlist(
                 self.indexlist, rk_complete, body_json, mode="indexed"
@@ -326,16 +353,30 @@ class IndexerConsumer(RabbitMQConsumer):
                 self.failedlist, rk_failed, body_json, mode="failed"
             )
 
-    def check_path_access(self, path: pth.Path):
-        if self.check_permissions_fl:
-            return os.access(path, os.R_OK)
+    def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
+                          access=os.R_OK) -> bool:
+        if self.uid is None or self.gid is None:
+            raise ValueError("uid and gid not set properly.")
+        
+        if not isinstance(path, pth.Path):
+            raise ValueError("No valid path object was given.")
+
+        if not path.exists():
+            # Can't access or stat something that doesn't exist
+            return False
+        elif self.check_permissions_fl:
+            # If no stat result is passed through then get our own
+            if stat_result is None:
+                stat_result = path.stat()
+            return check_permissions(self.uid, self.gid, access=access, 
+                                     stat_result=stat_result)
         else:
-            return path.exists()
+            return True
 
     def append_and_send(self, indexitem: NamedTuple, routing_key: str, 
                         body_json: Dict[str, str], mode: str = "indexed", 
                         filesize: int = None) -> None:
-        # choose the correct indexlist for the mode of operation
+        # Choose the correct indexlist for the mode of operation
         if mode == "indexed":
             indexlist = self.indexlist
         elif mode == "retry":
