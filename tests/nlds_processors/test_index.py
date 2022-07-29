@@ -1,7 +1,6 @@
 from collections import namedtuple
 import logging
 import os
-from pathlib import Path
 
 import pytest
 import functools
@@ -16,37 +15,96 @@ def mock_load_config(template_config):
 @pytest.fixture()
 def default_indexer(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
-    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    monkeypatch.setattr(publ, "load_config", functools.partial(
+        mock_load_config, 
+        template_config
+        )
+    )
     return IndexerConsumer()
 
-def test_callback(monkeypatch, default_indexer, default_rmq_method, default_rmq_body):
+def test_callback(monkeypatch, default_indexer, default_rmq_method, 
+                  default_rmq_body):
     monkeypatch.setattr(default_indexer, "publish_message", lambda *_: None)
     
     # Attempt to run callback with default message, should work!
-    default_indexer.callback(None, default_rmq_method, None, default_rmq_body, None)
+    default_indexer.callback(None, default_rmq_method, None, default_rmq_body, 
+                             None)
 
-def test_index(monkeypatch, caplog, default_indexer, default_rmq_message_dict):
+def test_index(monkeypatch, caplog, default_indexer, 
+               default_rmq_message_dict, fs):
+    # Deactivate messaging for test environment and initialise uid and gid
     monkeypatch.setattr(default_indexer, "publish_message", lambda *_: None)
-    # Let caplog capture all log messages
-    caplog.set_level(logging.DEBUG)
+    default_indexer.reset()
+    default_indexer.uid = 100
+    default_indexer.gid = 100
 
-    # Should work with any number of retries
-    for i in range(8):
-        default_indexer.index(['.', ], [i, ], 'test', default_rmq_message_dict)
+    # Should fail upon trying to unpack the namedtuple
+    with pytest.raises(AttributeError):
+        default_indexer.index([("/", 0), ], 'test', default_rmq_message_dict)
+    default_indexer.reset()
+    default_indexer.uid = 100
+    default_indexer.gid = 100
 
-    # Passing in a retrylist which doesn't match the length of filelist should 
-    # produce a warning.
-    default_indexer.index(['.', ], [8, 0, ], 'test', default_rmq_message_dict)
-    # The 3rd oldest log message should be a warning, the penultimate should be 
-    # a additional debug info message, the final should be a confirmation info 
-    # message upon sending a problem list.
-    assert caplog.records[-3].levelname == "WARNING"
-    assert caplog.records[-2].levelname == "DEBUG"
-    assert caplog.records[-1].levelname == "INFO"
-    caplog.clear()
+
+    dirs = [
+        "/test/1-1/2-1/3-1/4-1/5-1",
+        "/test/1-1/2-1/3-2",
+        "/test/1-1/2-1/3-3",
+        "/test/1-2/2-2/3-4",
+        "/test/1-3/2-3",
+        "/test/1-4/2-4/3-3/4-2/5-2/6-1",
+    ]
+    files = [
+        "/test/1-1/2-1/3-1/test-1.txt",
+        "/test/1-1/2-1/3-2/test-2.txt",
+        "/test/1-1/2-2/3-4/test-3.txt",
+        "/test/1-4/2-4/3-3/4-2/5-2/6-1/test-4.txt",
+    ]
+    for d in dirs:
+        fs.create_dir(d)
+    for f in files:
+        fs.create_file(f)
+
+
+    expected_filelist = [
+        default_indexer.IndexItem("/test/1-1/2-1/3-1/test-1.txt", 0),
+        default_indexer.IndexItem("/test/1-1/2-1/3-2/test-2.txt", 0),
+        default_indexer.IndexItem("/test/1-1/2-2/3-3/test-3.txt", 0),
+        default_indexer.IndexItem("/test/1-4/2-4/3-3/4-2/5-2/6-1/test-4.txt", 0),
+    ]
+
+    # Should work with any number of retries under the limit
+    for i in range(default_indexer.max_retries):
+        test_filelist = [default_indexer.IndexItem("/test/", i)]
+        default_indexer.index(test_filelist, 'test', default_rmq_message_dict)
+
+        assert len(default_indexer.indexlist) == len(expected_filelist)
+        assert len(default_indexer.retrylist) == 0
+        assert len(default_indexer.failedlist) == 0
+
+        default_indexer.reset()
+        default_indexer.uid = 100
+        default_indexer.gid = 100
+    
+    # All files should be in failed list with any number of retries over the 
+    # limit
+    for i in range(default_indexer.max_retries + 1, 10):
+        test_filelist = [default_indexer.IndexItem("/test/", i)]
+        default_indexer.index(test_filelist, 'test', default_rmq_message_dict)
+
+        assert len(default_indexer.indexlist) == 0
+        assert len(default_indexer.retrylist) == 0
+        assert len(default_indexer.failedlist) == 1   # length of initial list!
+
+        default_indexer.reset()
+        default_indexer.uid = 100
+        default_indexer.gid = 100
+
 
 
 def test_check_path_access(monkeypatch, default_indexer):
+    from pathlib import Path
+
     # Point to non-existent test file
     p = Path("test.py")
 
