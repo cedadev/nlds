@@ -22,11 +22,11 @@ from pika.exceptions import (AMQPConnectionError, AMQPHeartbeatTimeout,
                              AMQPChannelError, AMQPError, StreamLostError)
 from retry import retry
 
-from ..server_config import load_config, LOGGING_CONFIG_FILES, \
-                            LOGGING_CONFIG_STDOUT, RABBIT_CONFIG_SECTION, \
-                            LOGGING_CONFIG_SECTION, LOGGING_CONFIG_LEVEL, \
-                            LOGGING_CONFIG_STDOUT_LEVEL, \
-                            LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_ENABLE
+from ..server_config import (
+    LOGGING_CONFIG_ROLLOVER, load_config, LOGGING_CONFIG_FILES, LOGGING_CONFIG_STDOUT, 
+    RABBIT_CONFIG_SECTION, LOGGING_CONFIG_SECTION, LOGGING_CONFIG_LEVEL, 
+    LOGGING_CONFIG_STDOUT_LEVEL, LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_ENABLE
+)
 from ..errors import RabbitRetryError
 
 logger = logging.getLogger("nlds.root")
@@ -225,11 +225,12 @@ class RabbitMQPublisher():
                                 "%(levelname)s - %(message)s"),
         LOGGING_CONFIG_STDOUT: False,
         LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_WARNING,
+        LOGGING_CONFIG_ROLLOVER: "W0"
     }
     def setup_logging(self, enable: bool = True, log_level: str = None, 
                       log_format: str = None, add_stdout_fl: bool = False, 
-                      stdout_log_level: str = None, log_files: List[str]=None
-                      ) -> None:
+                      stdout_log_level: str = None, log_files: List[str]=None,
+                      log_rollover: str = None) -> None:
         """
         Sets up logging for a publisher (i.e. the nlds-api server) using a set 
         number of configuration options from the logging interface. Each of 
@@ -324,6 +325,17 @@ class RabbitMQPublisher():
                 logger.warning(f"Failed to load log files from config: "
                                f"{str(e)}")
                 return
+
+            # If log files set then see what the rotation time should be
+            if (log_rollover is not None 
+                or LOGGING_CONFIG_ROLLOVER in global_logging_config):
+                try:
+                    if log_rollover is None: 
+                        log_rollover = global_logging_config[LOGGING_CONFIG_ROLLOVER]
+                except KeyError as e:
+                    logger.warning(f"Failed to load log rollover from config: "
+                                   f"{str(e)}")
+                    return
             
             # For each log file specified make and attach a filehandler with 
             # the same log_level and log_format as specified globally.
@@ -331,7 +343,10 @@ class RabbitMQPublisher():
                 for log_file in log_files:
                     try:
                         # Make log file in separate logger
-                        fh = logging.FileHandler(log_file)
+                        fh = logging.TimedRotatingFileHandler(
+                            log_file,
+                            when=log_rollover,
+                        )
                         # Use the same log_level and formatter as the base
                         fh.setLevel(getattr(logging, log_level.upper()))
                         fh.setFormatter(formatter)

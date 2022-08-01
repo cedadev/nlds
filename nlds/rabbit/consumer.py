@@ -30,7 +30,7 @@ from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES,
                              LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_LEVEL,    
                              LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, 
                              RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
-                             RABBIT_CONFIG_QUEUE_NAME)
+                             RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
 from ..utils.permissions import check_permissions
 
 logger = logging.getLogger("nlds.root")
@@ -253,8 +253,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
     def setup_logging(self, enable=False, log_level: str = None, 
                       log_format: str = None, add_stdout_fl: bool = False, 
-                      stdout_log_level: str = None, log_files: List[str]=None
-                      ) -> None:
+                      stdout_log_level: str = None, log_files: List[str]=None,
+                      log_rollover: str = None) -> None:
         """
         Override of the publisher method which allows consumer-specific logging 
         to take precedence over the general logging configuration.
@@ -275,6 +275,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 stdout_log_level = consumer_logging_conf[LOGGING_CONFIG_STDOUT_LEVEL]
             if LOGGING_CONFIG_FILES in consumer_logging_conf:
                 log_files = consumer_logging_conf[LOGGING_CONFIG_FILES]
+            if LOGGING_CONFIG_ROLLOVER in consumer_logging_conf:
+                log_rollover = consumer_logging_conf[LOGGING_CONFIG_ROLLOVER]
 
         # Allow the hard-coded default deactivation of logging to be overridden 
         # by the consumer-specific logging config
@@ -282,7 +284,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             return
 
         return super().setup_logging(enable, log_level, log_format, 
-                                     add_stdout_fl, stdout_log_level, log_files)
+                                     add_stdout_fl, stdout_log_level, log_files,
+                                     log_rollover)
 
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, 

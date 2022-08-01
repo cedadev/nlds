@@ -28,6 +28,7 @@ LOGGING_CONFIG_STDOUT_LEVEL = "stdout_log_level"
 LOGGING_CONFIG_FORMAT = "log_format"
 LOGGING_CONFIG_ENABLE = "enable"
 LOGGING_CONFIG_FILES = "log_files"
+LOGGING_CONFIG_ROLLOVER = "rollover"
 
 # Defines the compulsory server config file sections
 CONFIG_SCHEMA = (
