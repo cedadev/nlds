@@ -127,7 +127,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 self.RK_LOG_ERROR, exc_info=e
             )
             self.log(
-                f"Failed message content: {json.dumps(body_json, index=4)}",
+                f"Failed message content: {json.dumps(body_json, indent=4)}",
                 self.RK_LOG_DEBUG
             )
         except Exception as e:
