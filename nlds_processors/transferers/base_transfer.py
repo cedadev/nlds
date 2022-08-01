@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 import json
+from multiprocessing.sharedctypes import Value
+import os
 import traceback
 from typing import List, NamedTuple
+import pathlib as pth
 
 from nlds.rabbit.consumer import RabbitMQConsumer
 
@@ -16,28 +19,39 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
     _REQUIRE_SECURE = "require_secure_fl"
     _CHECK_PERMISSIONS = "check_permissions_fl"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
+    _MAX_RETRIES = "max_retries"
     _REMOVE_ROOT_SLASH = "remove_root_slash_fl"
+    _USE_PWD_GID = "use_pwd_gid_fl"
     DEFAULT_CONSUMER_CONFIG = {
         _TENANCY: None,
         _REQUIRE_SECURE: True,
         _CHECK_PERMISSIONS: True,
         _PRINT_TRACEBACKS: False,
         _REMOVE_ROOT_SLASH: True,
+        _USE_PWD_GID: False,
+        _MAX_RETRIES: 5
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-        self.tenancy = self.load_config_value(self._TENANCY)
-        self.require_secure_fl = self.load_config_value(self._REQUIRE_SECURE)
+        self.tenancy = self.load_config_value(
+            self._TENANCY)
+        self.require_secure_fl = self.load_config_value(
+            self._REQUIRE_SECURE)
         self.check_permissions_fl = self.load_config_value(
             self._CHECK_PERMISSIONS)
         self.print_tracebacks_fl = self.load_config_value(
             self._PRINT_TRACEBACKS)
+        self.max_retries = self.load_config_value(
+            self._MAX_RETRIES)
         self.remove_root_slash_fl = self.load_config_value(
             self._REMOVE_ROOT_SLASH)
+        self.user_pwd_gid_fl = self.load_config_value(
+            self._USE_PWD_GID)
         
     def callback(self, ch, method, properties, body, connection):
+        self.reset()
         try:
             # Convert body from bytes to string for ease of manipulation
             body = body.decode("utf-8")
@@ -99,6 +113,11 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
                     self.RK_LOG_ERROR
                 )
                 return 
+            
+            # Set uid and gid from message contents if configured to check 
+            # permissions
+            if self.check_permissions_fl:
+                self.set_ids(body_json, use_pwd_gid_fl=self.user_pwd_gid_fl)
 
             self.log(f"Starting transfer to object store at {tenancy}", 
                      self.RK_LOG_INFO)
@@ -109,17 +128,7 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
             # Start transfer - this is implementation specific and handled by 
             # child classes 
             self.transfer(transaction_id, tenancy, access_key, secret_key, 
-                          filelist)
-
-            self.log("Transfer complete, passing list back to worker for "
-                     f"re-routing and cataloguing.", self.RK_LOG_INFO)
-            
-            new_routing_key = ".".join([
-                rk_parts[0], 
-                rk_parts[1], 
-                self.RK_COMPLETE,
-            ])
-            self.publish_message(new_routing_key, json.dumps(body_json))
+                          filelist, rk_parts[0], body_json)
         
         except (ValueError, TypeError, KeyError, PermissionError) as e:
             if self.print_tracebacks_fl:
@@ -130,11 +139,21 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
                 self.RK_LOG_ERROR, exc_info=e
             )
             self.log(
-                f"Failed message content: {json.dumps(body_json, index=4)}",
+                f"Failed message content: {json.dumps(body_json, indent=4)}",
                 self.RK_LOG_DEBUG
             )
 
+    def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
+                          access: int = os.R_OK) -> bool:
+        return super().check_path_access(
+            path, 
+            stat_result, 
+            access, 
+            self.check_permissions_fl
+        )
+
     @abstractmethod
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
-                 secret_key: str, filelist: List[NamedTuple]):
+                 secret_key: str, filelist: List[NamedTuple], rk_origin: str,
+                 body_json: dict[str, str]):
         pass

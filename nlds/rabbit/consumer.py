@@ -11,8 +11,11 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 import functools
 from abc import ABC, abstractmethod
 import logging
-from typing import Dict, List
+from typing import Dict, List, NamedTuple
 import pathlib as pth
+import grp
+import pwd
+import os
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -23,11 +26,12 @@ from pika.spec import Channel
 from pydantic import BaseModel
 
 from .publisher import RabbitMQPublisher
-from ..server_config import LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, \
-                            LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_LEVEL, \
-                            LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, \
-                            RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, \
-                            RABBIT_CONFIG_QUEUE_NAME
+from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, 
+                             LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_LEVEL,    
+                             LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, 
+                             RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
+                             RABBIT_CONFIG_QUEUE_NAME)
+from ..utils.permissions import check_permissions
 
 logger = logging.getLogger("nlds.root")
 
@@ -44,7 +48,8 @@ class RabbitQueue(BaseModel):
     def from_defaults(cls, queue_name, exchange, routing_key):
         return cls(
             name=queue_name, 
-            bindings=[RabbitQEBinding(exchange=exchange, routing_key=routing_key)]
+            bindings=[RabbitQEBinding(exchange=exchange, 
+                                      routing_key=routing_key)]
         )
 
 
@@ -68,7 +73,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 # If queue specified then select only that configuration
                 if RABBIT_CONFIG_QUEUES in self.config:
                     # Load queue config if it exists in .server_config file.
-                    self.queues = [RabbitQueue(**q) for q in self.config[RABBIT_CONFIG_QUEUES] 
+                    self.queues = [RabbitQueue(**q) 
+                                   for q in self.config[RABBIT_CONFIG_QUEUES] 
                                    if q[RABBIT_CONFIG_QUEUE_NAME] == queue]
                 else: 
                     raise ValueError("No rabbit queues found in config.")
@@ -77,11 +83,12 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                     raise ValueError("Requested queue not in configuration.")
             
             else:
-                raise ValueError("No queue specified, switching to default config.")
+                raise ValueError("No queue specified, switching to default "
+                                 "config.")
                 
-        except Exception as e:
-            print(str(e))
-            print("WARN: Using default queue config - only fit for testing purposes.")
+        except ValueError as e:
+            self.log("Using default queue config - only fit for testing "
+                     "purposes.", self.RK_LOG_WARNING)
             self.queue = self.DEFAULT_QUEUE_NAME
             self.queues = [RabbitQueue.from_defaults(
                 self.DEFAULT_QUEUE_NAME,
@@ -94,10 +101,16 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.consumer_config = self.whole_config[self.queue]
         else: 
             self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
+
+        self.gid = None
+        self.uid = None
         
         self.setup_logging(enable=setup_logging_fl)
-    
 
+    def reset(self):
+        self.gid = None
+        self.uid = None
+    
     def load_config_value(self, config_option: str,
                           path_listify_fl: bool = False):
         """
@@ -165,9 +178,83 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         return filelist
 
-    def setup_logging(self, enable=False, log_level: str = None, log_format: str = None, 
-                      add_stdout_fl: bool = False, stdout_log_level: str = None,
-                      log_files: List[str]=None) -> None:
+    def set_ids(self, body_json: Dict[str, str], use_pwd_gid_fl: bool = True):
+        """Changes the real user- and group-ids stored in the class to that 
+        specified in the incoming message details section so that permissions 
+        on each file in a filelist can be checked.
+
+        """
+        # Attempt to get uid from, given username, in password db
+        try:
+            username = body_json[self.MSG_DETAILS][self.MSG_USER]
+            pwddata = pwd.getpwnam(username)
+            pwd_uid = pwddata.pw_uid
+            pwd_gid = pwddata.pw_gid
+        except KeyError as e:
+            self.log(
+                f"Problem fetching uid using username {username}", 
+                self.RK_LOG_ERROR
+            )
+            raise e
+
+        # Attempt to get gid from group name using grp module
+        try:
+            group_name = body_json[self.MSG_DETAILS][self.MSG_GROUP]
+            grp_data = grp.getgrnam(group_name)
+            grp_gid = grp_data.gr_gid
+        except KeyError as e:         
+            # If consumer setting is configured to allow the use of the gid 
+            # gained from the pwd call, use that instead
+            if use_pwd_gid_fl:
+                self.log(
+                    f"Problem fetching gid using grp, group name was "
+                    f"{group_name}. Continuing with pwd_gid ({pwd_gid}).", 
+                    self.RK_LOG_WARNING
+                )
+                grp_gid = pwd_gid
+            else:
+                self.log(
+                    f"Problem fetching gid using grp, group name was "
+                    f"{group_name}.", self.RK_LOG_ERROR
+                )
+                raise e
+
+        self.uid = pwd_uid
+        self.gid = grp_gid
+
+    def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
+                          access: int = os.R_OK, 
+                          check_permissions_fl: bool = True) -> bool:
+        """Checks that the given path is accessible, either by checking for its 
+        existence or, if the check_permissions_fl is set, by doing a permissions
+        check on the file's bitmask. This requires a stat of the file, so one 
+        must be provided via stat_result else one is performed. The uid and gid 
+        of the user must be set in the object as well, usually by having 
+        performed RabbitMQConsumer.set_ids() beforehand.
+
+        """
+        if self.uid is None or self.gid is None:
+            raise ValueError("uid and gid not set properly.")
+        
+        if not isinstance(path, pth.Path):
+            raise ValueError("No valid path object was given.")
+
+        if not path.exists():
+            # Can't access or stat something that doesn't exist
+            return False
+        elif check_permissions_fl:
+            # If no stat result is passed through then get our own
+            if stat_result is None:
+                stat_result = path.stat()
+            return check_permissions(self.uid, self.gid, access=access, 
+                                     stat_result=stat_result)
+        else:
+            return True
+
+    def setup_logging(self, enable=False, log_level: str = None, 
+                      log_format: str = None, add_stdout_fl: bool = False, 
+                      stdout_log_level: str = None, log_files: List[str]=None
+                      ) -> None:
         """
         Override of the publisher method which allows consumer-specific logging 
         to take precedence over the general logging configuration.
@@ -194,19 +281,19 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         if not enable:
             return
 
-        return super().setup_logging(enable, log_level, log_format, add_stdout_fl, 
-                                     stdout_log_level, log_files)
+        return super().setup_logging(enable, log_level, log_format, 
+                                     add_stdout_fl, stdout_log_level, log_files)
 
     @abstractmethod
-    def callback(self, ch: Channel, method: Method, properties: Header, body: bytes, 
-                 connection: Connection):
+    def callback(self, ch: Channel, method: Method, properties: Header, 
+                 body: bytes, connection: Connection):
         pass
 
     def declare_bindings(self) -> None:
         """
-        Overridden method from Publisher, additionally declares the queues and queue-exchange 
-        bindings outlined in the config file. If no queues were set then the default - generated 
-        within __init__, is used instead. 
+        Overridden method from Publisher, additionally declares the queues and 
+        queue-exchange bindings outlined in the config file. If no queues were 
+        set then the default - generated within __init__ - is used instead. 
 
         """
         super().declare_bindings()
@@ -217,7 +304,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                         queue=queue.name, 
                                         routing_key=binding.routing_key)
             # Apply callback to all queues
-            wrapped_callback = functools.partial(self.callback, connection=self.connection)
+            wrapped_callback = functools.partial(self.callback, 
+                                                 connection=self.connection)
             self.channel.basic_consume(queue=queue.name, 
                                        on_message_callback=wrapped_callback, 
                                        auto_ack=True)
@@ -231,7 +319,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         """
         rk_parts = routing_key.split('.')
         if len(rk_parts) != 3:
-            raise ValueError(f"Routing key ({routing_key}) malformed, should consist of 3 parts.")
+            raise ValueError(f"Routing key ({routing_key}) malformed, should "
+                             "consist of 3 parts.")
         return rk_parts
 
     @classmethod
@@ -244,7 +333,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
         return body
     
-    def log(self, log_message: str, log_level: str, target: str = None, **kwargs) -> None:
+    def log(self, log_message: str, log_level: str, target: str = None, 
+            **kwargs) -> None:
         if not target:
             target = self.queue
         super().log(log_message, log_level, target, **kwargs)

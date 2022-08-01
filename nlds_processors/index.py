@@ -62,13 +62,12 @@ class IndexerConsumer(RabbitMQConsumer):
         self.reset()
     
     def reset(self):
+        super().reset()
+
         self.indexlist = []
         self.indexlist_size = 0
         self.retrylist = []
         self.failedlist = []
-
-        self.gid = None
-        self.uid = None
     
     def callback(self, ch, method, properties, body, connection):
         self.reset()
@@ -107,7 +106,7 @@ class IndexerConsumer(RabbitMQConsumer):
                     # First change user and group so file permissions can be 
                     # checked. This should be deactivated when testing locally. 
                     if self.check_permissions_fl:
-                        self.set_ids(body_json)
+                        self.set_ids(body_json, self.use_pwd_gid_fl)
                 
                     # Append routing info and then run the index
                     body_json = self.append_route_info(body_json)
@@ -134,50 +133,6 @@ class IndexerConsumer(RabbitMQConsumer):
         except Exception as e:
             tb = traceback.format_exc()
             self.log(tb, self.RK_LOG_CRITICAL)
-
-    def set_ids(self, body_json):
-        """Changes the real user- and group-ids stored in the class to that 
-        specified in the incoming message details section so that permissions 
-        on each file can be checked.
-
-        """
-        # Attempt to get uid from, given username, in password db
-        try:
-            username = body_json[self.MSG_DETAILS][self.MSG_USER]
-            pwddata = pwd.getpwnam(username)
-            pwd_uid = pwddata.pw_uid
-            pwd_gid = pwddata.pw_gid
-        except KeyError as e:
-            self.log(
-                f"Problem fetching uid using username {username}", 
-                self.RK_LOG_ERROR
-            )
-            raise e
-
-        # Attempt to get gid from group name using grp module
-        try:
-            group_name = body_json[self.MSG_DETAILS][self.MSG_GROUP]
-            grp_data = grp.getgrnam(group_name)
-            grp_gid = grp_data.gr_gid
-        except KeyError as e:         
-            # If consumer setting is configured to allow the use of the gid 
-            # gained from the pwd call, use that instead
-            if self.use_pwd_gid_fl:
-                self.log(
-                    f"Problem fetching gid using grp, group name was "
-                    f"{group_name}. Continuing with pwd_gid ({pwd_gid}).", 
-                    self.RK_LOG_WARNING
-                )
-                grp_gid = pwd_gid
-            else:
-                self.log(
-                    f"Problem fetching gid using grp, group name was {group_name}", 
-                    self.RK_LOG_ERROR
-                )
-                raise e
-
-        self.uid = pwd_uid
-        self.gid = grp_gid
         
     def split(self, filelist: List[NamedTuple], rk_origin: str, 
               body_json: dict[str]) -> None:
@@ -354,24 +309,13 @@ class IndexerConsumer(RabbitMQConsumer):
             )
 
     def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
-                          access=os.R_OK) -> bool:
-        if self.uid is None or self.gid is None:
-            raise ValueError("uid and gid not set properly.")
-        
-        if not isinstance(path, pth.Path):
-            raise ValueError("No valid path object was given.")
-
-        if not path.exists():
-            # Can't access or stat something that doesn't exist
-            return False
-        elif self.check_permissions_fl:
-            # If no stat result is passed through then get our own
-            if stat_result is None:
-                stat_result = path.stat()
-            return check_permissions(self.uid, self.gid, access=access, 
-                                     stat_result=stat_result)
-        else:
-            return True
+                          access: int = os.R_OK) -> bool:
+        return super().check_path_access(
+            path, 
+            stat_result, 
+            access, 
+            self.check_permissions_fl
+        )
 
     def append_and_send(self, indexitem: NamedTuple, routing_key: str, 
                         body_json: Dict[str, str], mode: str = "indexed", 
