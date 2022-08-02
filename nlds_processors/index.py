@@ -1,14 +1,11 @@
 import json
 import os
-import pwd
-import grp
 import pathlib as pth
 from typing import List, NamedTuple, Dict
 import traceback
 
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher
-from nlds.utils.permissions import check_permissions
 
 class IndexerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "index_q"
