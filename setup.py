@@ -16,7 +16,8 @@ setup(
         'uvicorn',
         'requests',
         'retry',
-        'pika'
+        'pika',
+        'minio',
     ],
     include_package_data=True,
     package_data={
