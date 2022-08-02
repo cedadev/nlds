@@ -87,8 +87,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                  "config.")
                 
         except ValueError as e:
-            self.log("Using default queue config - only fit for testing "
-                     "purposes.", self.RK_LOG_WARNING)
+            print("Using default queue config - only fit for testing purposes.")
             self.queue = self.DEFAULT_QUEUE_NAME
             self.queues = [RabbitQueue.from_defaults(
                 self.DEFAULT_QUEUE_NAME,
