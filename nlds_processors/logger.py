@@ -114,7 +114,7 @@ class LoggingConsumer(RabbitMQConsumer):
 
         :param str log_level:       Logging level requested
         :param Logger logger_like:  Logger object to get function from
-        :return:    The logging function to use
+        :return:                    The logging function to use
         """
         logging_function = {
             RabbitMQConsumer.RK_LOG_DEBUG: logger_like.debug,
