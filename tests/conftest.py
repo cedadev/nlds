@@ -9,7 +9,7 @@ from nlds.rabbit.publisher import RabbitMQPublisher
 
 
 TEMPLATE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 
-                                    '../nlds/templates/server_config.j2')
+                                    'server-config.json')
 
 @pytest.fixture
 def template_config():

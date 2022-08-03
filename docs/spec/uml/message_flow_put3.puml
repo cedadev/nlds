@@ -1,6 +1,6 @@
 @startuml message_flow_put3
 
-collections tran as "Transfers" #gold
+collections transfer_puts as "Transfer Puts" #gold
 
 participant wex as "Exchange"
 
@@ -14,31 +14,31 @@ queue qc as "Catalog Q" #springgreen
 collections catalog as "Cataloguers" #springgreen
 database catalog_db as "Catalog DB" #springgreen
 note over qc
-    topic = #.catalog.#
+    topic = #.catalog-put.#
 end note
 
-activate tran
-tran -> wex : key=nlds-api.tran.put_complete
-deactivate tran
+activate transfer_puts
+transfer_puts -> wex : key=nlds-api.transfer-put.complete
+deactivate transfer_puts
 
 activate wex
-wex -> qw : key=nlds-api.tran.put_complete
+wex -> qw : key=nlds-api.transfer-put.complete
 deactivate wex
 
 activate qw
-qw -> work : key=nlds-api.tran.put_complete
+qw -> work : key=nlds-api.transfer-put.complete
 deactivate qw
 
 activate work
-work -> wex : key=nlds-api.catalog.put_start
+work -> wex : key=nlds-api.catalog-put.start
 deactivate work
 
 activate wex
-wex -> qc : key=nlds-api.catalog.put_start
+wex -> qc : key=nlds-api.catalog-put.start
 deactivate wex
 
 activate qc
-qc -> catalog : key=(#).catalog.put_start
+qc -> catalog : key=(#).catalog-put.start
 deactivate qc
 note right of qc
     (#) here will match the calling

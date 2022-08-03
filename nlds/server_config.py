@@ -28,18 +28,20 @@ LOGGING_CONFIG_STDOUT_LEVEL = "stdout_log_level"
 LOGGING_CONFIG_FORMAT = "log_format"
 LOGGING_CONFIG_ENABLE = "enable"
 LOGGING_CONFIG_FILES = "log_files"
+LOGGING_CONFIG_ROLLOVER = "rollover"
 
 # Defines the compulsory server config file sections
 CONFIG_SCHEMA = (
     (AUTH_CONFIG_SECTION, ("authenticator_backend", )),
-    (RABBIT_CONFIG_SECTION, ("user", "password", "server", "vhost", "exchange", "queues"))
+    (RABBIT_CONFIG_SECTION, ("user", "password", "server", "vhost", "exchange", 
+                             "queues"))
 )
 
 def validate_config_file(json_config: dict) -> None:
     """
-    Validate the JSON config file matches the schema defined in nlds_setup. 
-    Currently only checks that required headings and subheadings exist, i.e. only 
-    scans one layer deep and does no value checking. 
+    Validate the JSON config file matches the schema defined in nlds_setup.     
+    Currently only checks that required headings and subheadings exist, i.e. 
+    only scans one layer deep and does no value checking. 
 
     :param json_config:     Config file loaded using json.load()
     
@@ -53,8 +55,8 @@ def validate_config_file(json_config: dict) -> None:
             section = json_config[section_heading]
         except KeyError:
             raise RuntimeError(
-                f"The config file at {CONFIG_FILE_LOCATION} does not contain a(n) "
-                f"['{section_heading}'] section."
+                f"The config file at {CONFIG_FILE_LOCATION} does not contain "
+                f"a(n) ['{section_heading}'] section."
             )
         for sl in section_labels:
             if sl not in section:
