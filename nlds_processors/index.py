@@ -132,7 +132,7 @@ class IndexerConsumer(RabbitMQConsumer):
             self.log(tb, self.RK_LOG_CRITICAL)
         
     def split(self, filelist: List[NamedTuple], rk_origin: str, 
-              body_json: dict[str]) -> None:
+              body_json: Dict[str, str]) -> None:
         """ Split the given filelist into batches of some configurable max 
         length and resubmit each to exchange for indexing proper.
 
