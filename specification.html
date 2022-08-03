@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Near Line Data Store (NLDS) &mdash; Near-line Data Store 0.1 documentation</title><link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <title>Near Line Data Store (NLDS) &mdash; Near-line Data Store 0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
-  <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
-        <script type="text/javascript" src="_static/jquery.js"></script>
-        <script type="text/javascript" src="_static/underscore.js"></script>
-        <script type="text/javascript" src="_static/doctools.js"></script>
-        <script type="text/javascript" src="_static/language_data.js"></script>
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -36,7 +36,7 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p><span class="caption-text">Contents:</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Specification</a></li>
@@ -68,8 +68,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="near-line-data-store-nlds">
-<h1>Near Line Data Store (NLDS)<a class="headerlink" href="#near-line-data-store-nlds" title="Permalink to this headline">¶</a></h1>
+  <div class="section" id="near-line-data-store-nlds">
+<h1>Near Line Data Store (NLDS)<a class="headerlink" href="#near-line-data-store-nlds" title="Permalink to this headline"></a></h1>
 <p># Software specification
 <strong>Neil Massey 02/11/2021</strong></p>
 <p># Introduction</p>
@@ -331,9 +331,31 @@ so different message formats are used:</p>
 <ol class="arabic simple">
 <li><p>HTTP API / JSON</p></li>
 <li><p>RabbitMQ</p></li>
-<li><p>FTS3</p></li>
 <li><p>S3</p></li>
 </ol>
+<p>## Publishers and consumers</p>
+<p>RabbitMQ has the concept of <em>Publishers</em>, which create messages and send them to
+the exchange, and <em>Consumers</em>, which subscribe to a queue in the exchange, take
+messages from the queue and processes them.</p>
+<p>### Publishers
+The publishing of messages occurs in the NLDS web server, which is implemented
+in FastAPI. The <strong>put</strong>, <strong>get</strong> and <strong>getlist</strong> methods in the
+<em>routing_methods.py</em> file all push messages to the RabbitMQ exchange using the
+<strong>rabbit_publish_response</strong> method.  This uses a static instantiation of the
+<strong>RabbitMQPublisher</strong> class.</p>
+<div class="line-block">
+<div class="line">![rabbit_publisher](./uml/rabbit_mq_publisher.png) |</div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">-</dt>
+<dd class="field-odd"><p></p></dd>
+</dl>
+<div class="line-block">
+<div class="line"><strong>Figure 3.1</strong> RabbitMQPublisher class|</div>
+</div>
+<p>### Consumers</p>
+<p>All of the NLDS processors inherit the RabbitMQConsumer, which in turn inherits
+the RabbitMQPublisher class.</p>
 <p>## Rabbit MQ Exchange Structure</p>
 <div class="line-block">
 <div class="line">![client_server_seq](./uml/queue_structure.png) |</div>
@@ -343,7 +365,7 @@ so different message formats are used:</p>
 <dd class="field-odd"><p></p></dd>
 </dl>
 <div class="line-block">
-<div class="line"><strong>Figure 3</strong> Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both <cite>Indexer 1</cite> and <cite>Indexer 2</cite> write <cite>work.index.complete</cite> messages to the <cite>Work Exchange</cite>.|</div>
+<div class="line"><strong>Figure 3.2</strong> Structure and interaction of Rabbit Queues.  Not all messages are shown.  For example, both <cite>Indexer 1</cite> and <cite>Indexer 2</cite> write <cite>work.index.complete</cite> messages to the <cite>Work Exchange</cite>.|</div>
 </div>
 <p>## Message flow</p>
 <p>### Message flow for a <cite>putlist</cite> command
@@ -424,6 +446,40 @@ the operations lifecycle. This will allow multiple applications to use the
 worker processes without interpreting messages destined for the other
 applications.</p>
 <p><cite>application.worker.state</cite></p>
+<p>The <cite>data</cite> field contains the data required as input for the process and, after
+processing, the output data.  For the messages detailed below in the
+#WorkerProcesses section, this consists of a single key, pair:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>data<span class="classifier">{</span></dt><dd><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>The value for the <cite>filelist</cite> key is a <cite>&lt;list&gt;</cite> which can contain details for
+multiple files.  Each <cite>&lt;list&gt;</cite> element is a <cite>NamedTuple</cite>, consisting of a <cite>json</cite>
+document and a retry <cite>int</cite> (see the #retries section below).
+The <cite>json</cite> document can contain a number of key / value pairs, some of which are
+optional for each processor.  The <cite>json</cite> document looks like this:</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,
+nlds_object         : &lt;str&gt;,
+size                : &lt;int&gt;, (in kilobytes?)
+user                : &lt;str&gt;, (get uid from LDAP?)
+group               : &lt;str&gt;, (get gid from LDAP?)
+file_permissions    : &lt;int&gt;, (unix file permissions)
+access_time         : &lt;datetime&gt;, (timestamp of last accessed type)
+filetype            : &lt;str&gt;, (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
+link_path           : &lt;str&gt;, (link position,path of link, related to either root or common path)</p>
+</dd>
+</dl>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
 <p>### Applications</p>
 <ul class="simple">
 <li><p><cite>nlds-api</cite> - the calling API from the NLDS Fast API server</p></li>
@@ -431,9 +487,12 @@ applications.</p>
 </ul>
 <p>### Workers</p>
 <ul class="simple">
-<li><p><cite>nlds</cite> - the NLDS marshalling application</p></li>
-<li><p><cite>index</cite> - the indexer, available to the <cite>nlds-api</cite> and <cite>gws-api</cite> applications.</p></li>
+<li><p><cite>nlds</cite> - the NLDS marshalling application.  Available only to the  <cite>nlds-api</cite></p></li>
 </ul>
+<p>API.
+* <cite>index</cite> - the indexer, available to the <cite>nlds-api</cite> and <cite>gws-api</cite> APIs.
+* <cite>transfer</cite> - the file transfer, from the disk system to object storage.
+Available only to the  <cite>nlds-api</cite> API.</p>
 <p>### State</p>
 <p>These will vary between workers, but an example subset could be:</p>
 <ul class="simple">
@@ -479,20 +538,32 @@ URL.</p>
 <blockquote>
 <div><dl>
 <dt>{</dt><dd><dl class="simple">
-<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+<dt>details<span class="classifier">{</span></dt><dd><p>transaction_id : &lt;string&gt;,
 user           : &lt;string&gt;,
 group          : &lt;string&gt;,
-target         : &lt;string&gt;,
-tenancy        : &lt;string&gt;,
+target         : &lt;string&gt; (optional),
+tenancy        : &lt;string&gt; (optional),
 access_key     : &lt;string&gt;,
 secret_key     : &lt;string&gt;</p>
 </dd>
 </dl>
 <p>},
-data {</p>
+data : {</p>
 <blockquote>
-<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+<div><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
 </div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>The <cite>data : {filelist : }</cite> <cite>json</cite> documents contain :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,</p>
+</dd>
+</dl>
 <p>}</p>
 </dd>
 </dl>
@@ -504,20 +575,32 @@ data {</p>
 <blockquote>
 <div><dl>
 <dt>{</dt><dd><dl class="simple">
-<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+<dt>details<span class="classifier">{</span></dt><dd><p>transaction_id : &lt;string&gt;,
 user           : &lt;string&gt;,
 group          : &lt;string&gt;,
-target         : &lt;string&gt;,
-tenancy        : &lt;string&gt;,
+target         : &lt;string&gt; (optional),
+tenancy        : &lt;string&gt; (optional),
 access_key     : &lt;string&gt;,
 secret_key     : &lt;string&gt;</p>
 </dd>
 </dl>
 <p>},
-data {</p>
+data : {</p>
 <blockquote>
-<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+<div><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
 </div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>The <cite>data : {filelist : }</cite> <cite>json</cite> documents contain :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,</p>
+</dd>
+</dl>
 <p>}</p>
 </dd>
 </dl>
@@ -526,10 +609,6 @@ data {</p>
 <p>### Indexer</p>
 <p>This takes the description of work that the Work Processor pushed onto the
 queue and starts to build a file list.</p>
-<p>Questions :
-* Should this work on just POSIX file sets?
-* Should it work with object store?
-* Should it work on tape catalogue?</p>
 <p>At the end it can push two different messages to the queue:
 * Index a directory
 * Transfer a list of files from one data storage system to another</p>
@@ -557,20 +636,32 @@ matched value.</p>
 <blockquote>
 <div><dl>
 <dt>{</dt><dd><dl class="simple">
-<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+<dt>details<span class="classifier">{</span></dt><dd><p>transaction_id : &lt;string&gt;,
 user           : &lt;string&gt;,
 group          : &lt;string&gt;,
 target         : &lt;string&gt; (optional),
 tenancy        : &lt;string&gt; (optional),
-access_key     : &lt;string&gt; (optional),
-secret_key     : &lt;string&gt; (optional)</p>
+access_key     : &lt;string&gt;,
+secret_key     : &lt;string&gt;</p>
 </dd>
 </dl>
 <p>},
-data {</p>
+data : {</p>
 <blockquote>
-<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+<div><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
 </div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>The <cite>data : {filelist : }</cite> <cite>json</cite> documents contain :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,</p>
+</dd>
+</dl>
 <p>}</p>
 </dd>
 </dl>
@@ -581,20 +672,32 @@ data {</p>
 <blockquote>
 <div><dl>
 <dt>{</dt><dd><dl class="simple">
-<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+<dt>details<span class="classifier">{</span></dt><dd><p>transaction_id : &lt;string&gt;,
 user           : &lt;string&gt;,
 group          : &lt;string&gt;
 target         : &lt;string&gt; (optional),
 tenancy        : &lt;string&gt; (optional),
-access_key     : &lt;string&gt; (optional),
-secret_key     : &lt;string&gt; (optional)</p>
+access_key     : &lt;string&gt;,
+secret_key     : &lt;string&gt;</p>
 </dd>
 </dl>
 <p>},
-data {</p>
+data : {</p>
 <blockquote>
-<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+<div><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
 </div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>The <cite>data : {filelist : }</cite> <cite>json</cite> documents contain :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,</p>
+</dd>
+</dl>
 <p>}</p>
 </dd>
 </dl>
@@ -606,20 +709,32 @@ data {</p>
 <blockquote>
 <div><dl>
 <dt>{</dt><dd><dl class="simple">
-<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+<dt>details<span class="classifier">{</span></dt><dd><p>transaction_id : &lt;string&gt;,
 user           : &lt;string&gt;,
 group          : &lt;string&gt;,
 target         : &lt;string&gt; (optional),
 tenancy        : &lt;string&gt; (optional),
-access_key     : &lt;string&gt; (optional),
-secret_key     : &lt;string&gt; (optional)</p>
+access_key     : &lt;string&gt;,
+secret_key     : &lt;string&gt;</p>
 </dd>
 </dl>
 <p>},
-data {</p>
+data : {</p>
 <blockquote>
-<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+<div><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
 </div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>The <cite>data : {filelist : }</cite> <cite>json</cite> documents contain :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,</p>
+</dd>
+</dl>
 <p>}</p>
 </dd>
 </dl>
@@ -630,36 +745,252 @@ data {</p>
 <blockquote>
 <div><dl>
 <dt>{</dt><dd><dl class="simple">
-<dt>details {</dt><dd><p>transaction_id : &lt;string&gt;,
+<dt>details<span class="classifier">{</span></dt><dd><p>transaction_id : &lt;string&gt;,
 user           : &lt;string&gt;
 group          : &lt;string&gt;
 target         : &lt;string&gt; (optional),
 tenancy        : &lt;string&gt; (optional),
-access_key     : &lt;string&gt; (optional),
-secret_key     : &lt;string&gt; (optional)</p>
+access_key     : &lt;string&gt;,
+secret_key     : &lt;string&gt;</p>
 </dd>
 </dl>
 <p>},
-data {</p>
+data : {</p>
 <blockquote>
-<div><p>filelist       : &lt;list&lt;string&gt;&gt;</p>
+<div><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
 </div></blockquote>
 <p>}</p>
 </dd>
 </dl>
 <p>}</p>
 </div></blockquote>
+<p>The <cite>data : {filelist : }</cite> <cite>json</cite> documents contain :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,
+size                : &lt;int&gt;,
+user                : &lt;str&gt;,
+group               : &lt;str&gt;,
+file_permissions    : &lt;int&gt;,
+access_time         : &lt;datetime&gt;,
+filetype            : &lt;str&gt;,
+link_path           : &lt;str&gt;,</p>
+</dd>
+</dl>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>### Failure Modes for indexing</p>
+<ul class="simple">
+<li><p>Files not found</p></li>
+<li><p>Disk not available</p></li>
+<li><p>User does not have permissions to access files</p></li>
+</ul>
+<p>… add to these</p>
 <p>## Transfer processor
 This takes the list of files from the File Indexer and transfers them from
 one storage medium to another
-At the end it pushes a message to the queue to say it has completed.</p>
+At the end it pushes a message to the queue to say it has completed.
+Needs the access key and secret key in the message.</p>
 <p>Asynchronicity of the transfers is a desirable byproduct of the indexer splitting
 the filelist into smaller batches.  It also allows for parallel transfer, with
 multiple transfer workers.  Finally, if a transfer worker fails, and does not
 return an acknowledgement message to the Exchange, the message will be sent out
 again, after a suitable timeout period.</p>
-<p>## Database processor
-Add files and metadata to a file catalogue database.  Intake database?</p>
+<p>#### —&gt; Input messages</p>
+<p><strong>Binding</strong> : <cite>nlds-api.transfer-put.start</cite></p>
+<p><strong>Message</strong> :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details<span class="classifier">{</span></dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt;,
+group          : &lt;string&gt;,
+target         : &lt;string&gt; (optional),
+tenancy        : &lt;string&gt; (optional),
+access_key     : &lt;string&gt;,
+secret_key     : &lt;string&gt;</p>
+</dd>
+</dl>
+<p>},
+data : {</p>
+<blockquote>
+<div><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
+</div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>The <cite>data : {filelist : }</cite> <cite>json</cite> documents contain :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,
+size                : &lt;int&gt;,
+user                : &lt;str&gt;,
+group               : &lt;str&gt;,
+file_permissions    : &lt;int&gt;,
+access_time         : &lt;datetime&gt;,
+filetype            : &lt;str&gt;,
+link_path           : &lt;str&gt;,</p>
+</dd>
+</dl>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>#### &lt;— Output messages</p>
+<p><strong>Binding</strong> : <cite>nlds-api.transfer-put.complete</cite></p>
+<p><strong>Message</strong> :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>details<span class="classifier">{</span></dt><dd><p>transaction_id : &lt;string&gt;,
+user           : &lt;string&gt;,
+group          : &lt;string&gt;,
+target         : &lt;string&gt; (optional),
+tenancy        : &lt;string&gt; (optional),
+access_key     : &lt;string&gt;,
+secret_key     : &lt;string&gt;</p>
+</dd>
+</dl>
+<p>},
+data : {</p>
+<blockquote>
+<div><p>filelist       : &lt;list&lt;(json,int)&gt;&gt;</p>
+</div></blockquote>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>The <cite>data : {filelist : }</cite> <cite>json</cite> documents contain :</p>
+<blockquote>
+<div><dl>
+<dt>{</dt><dd><dl class="simple">
+<dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,
+nlds_object         : &lt;str&gt;,
+size                : &lt;int&gt;,
+user                : &lt;str&gt;,
+group               : &lt;str&gt;,
+file_permissions    : &lt;int&gt;,
+access_time         : &lt;datetime&gt;,
+filetype            : &lt;str&gt;,
+link_path           : &lt;str&gt;,</p>
+</dd>
+</dl>
+<p>}</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>### Failure Modes for transfer</p>
+<ul class="simple">
+<li><p>Files not found (files have disappeared since indexing)</p></li>
+<li><p>Object store not available</p></li>
+<li><p>User does not have permissions to access files (permissions have changed</p></li>
+</ul>
+<p>since indexing)</p>
+<p>## Catalogue processor
+Add or retrieve files and metadata to a file catalogue database.</p>
+<p>Operations:
+* <cite>put</cite> - write a file record to the catalogue.  One file record at once.
+* <cite>get</cite> - read (a) file record(s) from the catalogue.  Allow basic matching of
+directories, e.g. <cite>get /gws/nopw/j04/cedaproc/nrmassey/OxPEWWES2/</cite> will get all
+the files under the <cite>OxPEWWES2</cite> record.</p>
+<p>This requires a Database schema to store, these are contained in the
+<cite>&lt;file_details&gt;</cite> <cite>json</cite> document:</p>
+<ul class="simple">
+<li><p>File path</p></li>
+<li><p>Object store path</p></li>
+<li><p>Size</p></li>
+<li><p>User</p></li>
+<li><p>Group</p></li>
+<li><p>Unix permissions</p></li>
+<li><p>Last accessed timestamp</p></li>
+<li><p>Filetype (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)</p></li>
+<li><p>Link position (path of link, related to either root or common path)</p></li>
+</ul>
+<p>### Database on disk or object store
+We could store the information about the files on disk or on the object store,
+without requiring a database.
+These files could be stored alongside the objects in the bucket named after the
+transaction id.
+The name of the file would be the hash of the file path and should (probably) be
+in JSON format. e.g.</p>
+<blockquote>
+<div><p>&lt;tenancy&gt;/&lt;transaction_id&gt;/&lt;file path hash&gt;.json</p>
+</div></blockquote>
+<p>#### Likely user interactions for <strong>putting</strong> a file:</p>
+<p>1.  Put a filelist (no tags).  System to generate a sequential batch id.  Store
+filelist and batch id with transaction id.
+2.  Put a filelist with tags.  System to generate a sequential batch id, and
+assign the tags.  Store filelist, tags and batch id with transaction id.</p>
+<p>#### Likely user interactions for <strong>getting</strong> a file.</p>
+<p>1.  Get a filelist by filepaths.  System has to determine which transaction
+id(s) the files in the filelist belong to.  There may be many transaction ids -
+as many as files in the filelist.
+2.  Get a filelist by tag.  System has to determine which transaction id(s) the
+tags are referring to.  There may be many transaction ids, as a tag can be
+applied across transaction ids / batches.
+3.  Get a filelist by sequential batch id.  There is a direct one to one mapping
+between batch ids and transaction ids.  System has to determine which
+transaction id
+4.  Get a filelist by transaction id.  This is the easiest, but least likely to
+be used scenario.</p>
+<p>### Database on PostgreSQL server</p>
+<p>The boring / safe option</p>
+<p>### SQLlite database on Object Store</p>
+<p>## Retry mechanism
+At any stage in the transaction, one component of the storage hierarchy may not
+be available.  This could be during a PUT, where the disk that the user’s files
+reside on is not available, or the object storage target may not be available.
+During a GET, the object storage may not be available, or the user’s disk may
+be full or not available.  In these cases, a <em>retry mechanism</em> is needed.</p>
+<p>In the messages for indexing and transfers above, there is the part that records
+the filenames:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>data {</dt><dd><p>filelist       : &lt;list&lt;json,int&gt;&gt;</p>
+</dd>
+</dl>
+<p>}</p>
+</div></blockquote>
+<p>Here, the <cite>&lt;json&gt;</cite> part of the message records the full details of the file, and
+the <cite>&lt;int&gt;</cite> part records the number of times an attempt has been made to index
+or transfer the file.  These are stored internally in NLDS as a <cite>named tuple</cite>:</p>
+<blockquote>
+<div><p>IndexItem : (item: json, retries: int)</p>
+</div></blockquote>
+<p>When a task is performed, such as indexing or transferring a file, which
+subsequently fails, the IndexItem is taken out of the return filelist and put
+into a failed filelist where the retries count is incremented by 1.
+A message is formed with this failed filelist as the <cite>data</cite> part of the
+message, and the <cite>details</cite> part of the message is the same as the originating
+message.  Currently, this message is passed back to the exchange, with the same
+routing key as the originating message.</p>
+<p>Once an item in the filelist has exceeded a server-configured number of
+retries, it will be permanently failed and a message will be passed back to the
+user (how?) telling them of this.</p>
+<p>Just passing back the message in this way is not optimum.  The task will have
+failed for a reason which may not have been fixed in the (potentially and
+probably) short time that it will take for the message to be submitted to the
+exchange and then consumed by the task that had initially failed.  With such a
+short duration between failing and then trying to complete the task, it is
+likely that the task will fail again.  To overcome this we are investigating
+using a delayed message queue for the failed task messaged, with an
+“exponential” backoff.  This could be as simple as:</p>
+<ul class="simple">
+<li><p>First failure, wait a minute</p></li>
+<li><p>Second failure, wait an hour</p></li>
+<li><p>Third failure, wait a day</p></li>
+<li><p>Fourth failure, wait a week</p></li>
+</ul>
 <p>## Monitoring
 Important!
 How do we know when a transfer has completed, if it has been split into
@@ -704,14 +1035,14 @@ nlds_transfer.log, nlds_index.log, nlds_catalog.log, nlds_log.log etc.
 3.  The Logging processor subscribes to the logging topic queue, receives the
 messages and writes the log files.
 4.  Logrotate should be used to manage the logs.
-5.  Separate levels of logging should be permitted, e.g. <strong>DEBUG, INFO, WARNING,
-ERROR, CRITICAL</strong></p>
+5.  Separate levels of logging should be permitted, e.g. <strong>DEBUG, INFO,
+WARNING, ERROR, CRITICAL</strong></p>
 <blockquote>
 <div><ul class="simple">
 <li><p><strong>DEBUG</strong> - information provided when debugging / in development.  Very</p></li>
 </ul>
-<p>verbose - e.g. now I’m going to do this particular operation and I’m going to
-tell you all about it.
+<p>verbose - e.g. now I’m going to do this particular operation and I’m going
+to tell you all about it.
 * <strong>INFO</strong> - information provided when in production. Changes of state, etc.
 Not as verbose as <strong>DEBUG</strong> but still informative.
 * <strong>WARNING</strong> - something wasn’t optimum, but I can recover from it and
@@ -752,7 +1083,38 @@ message        : &lt;string&gt;</p>
 </div></blockquote>
 <p><cite>code_line</cite> and <cite>module_name</cite> can be derived from the exception using the
 <cite>traceback</cite> module.</p>
-</section>
+<p># Development notes</p>
+<p><strong>Transfer</strong>
+Need separate get and put consumers</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Probably good to have a base-transfer processor that does the core work</p></li>
+</ul>
+</div></blockquote>
+<p>(verification of message, creation of minio client etc.) and then split the
+transfer work into two child classes.</p>
+<p>Check file permissions in the transfer processor too, but add ability to
+configure both the transfer and indexer to not do this - to reduce iteration
+time.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Would be worth benchmarking this at some point!</p></li>
+<li><p>Should we be checking filelist length here and reindexing / resizing the list</p></li>
+</ul>
+</div></blockquote>
+<p>if too long?</p>
+<p>Currently designating the buckets with the transaction ID, probably a better way
+of doing this - feeds into catalogue design.</p>
+<p><strong>Indexer</strong>
+Sym-links and directories need to be preserved in the backup, this is still
+being worked out but will need implementing! Symlinks with common path - i.e.
+that point to a file/directory within the scope of the original batch - need to
+be converted to be relative so that restoring the files in a different directory
+structure works. Similarly, symlinks to locations not on the common path need to
+be preserved as absolute links.</p>
+<p>Test the permissions properly, with a sudoers file specifying a user which can
+change to other users (a super user).</p>
+</div>
 
 
            </div>

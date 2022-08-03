@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Core content of the nlds-processors &mdash; Near-line Data Store 0.1 documentation</title><link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <title>Core content of the nlds-processors &mdash; Near-line Data Store 0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
-  <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
-        <script type="text/javascript" src="_static/jquery.js"></script>
-        <script type="text/javascript" src="_static/underscore.js"></script>
-        <script type="text/javascript" src="_static/doctools.js"></script>
-        <script type="text/javascript" src="_static/language_data.js"></script>
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -35,7 +35,7 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p><span class="caption-text">Contents:</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
@@ -71,25 +71,86 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="core-content-of-the-nlds-processors">
-<h1>Core content of the nlds-processors<a class="headerlink" href="#core-content-of-the-nlds-processors" title="Permalink to this headline">¶</a></h1>
-<section id="module-nlds.rabbit.consumer">
-<span id="the-consumer-class"></span><h2>The Consumer class<a class="headerlink" href="#module-nlds.rabbit.consumer" title="Permalink to this headline">¶</a></h2>
-<dl class="class">
-<dt id="nlds.rabbit.consumer.RabbitMQConsumer">
-<em class="property">class </em><code class="sig-prename descclassname">nlds.rabbit.consumer.</code><code class="sig-name descname">RabbitMQConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue: str = None</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer" title="Permalink to this definition">¶</a></dt>
+  <div class="section" id="core-content-of-the-nlds-processors">
+<h1>Core content of the nlds-processors<a class="headerlink" href="#core-content-of-the-nlds-processors" title="Permalink to this headline"></a></h1>
+<div class="section" id="module-nlds.rabbit.consumer">
+<span id="the-consumer-class"></span><h2>The Consumer class<a class="headerlink" href="#module-nlds.rabbit.consumer" title="Permalink to this headline"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds.rabbit.consumer.</span></span><span class="sig-name descname"><span class="pre">RabbitMQConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">setup_logging_fl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code>, <a class="reference internal" href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher" title="nlds.rabbit.publisher.RabbitMQPublisher"><code class="xref py py-class docutils literal notranslate"><span class="pre">nlds.rabbit.publisher.RabbitMQPublisher</span></code></a></p>
-<dl class="method">
-<dt id="nlds.rabbit.consumer.RabbitMQConsumer.declare_bindings">
-<code class="sig-name descname">declare_bindings</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.declare_bindings" title="Permalink to this definition">¶</a></dt>
-<dd><p>Overridden method from Publisher, additionally declares the queues and queue-exchange 
-bindings outlined in the config file. If no queues were set then the default - generated 
-within __init__, is used instead.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.check_path_access">
+<span class="sig-name descname"><span class="pre">check_path_access</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stat_result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">NamedTuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">access</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_permissions_fl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.check_path_access" title="Permalink to this definition"></a></dt>
+<dd><p>Checks that the given path is accessible, either by checking for its 
+existence or, if the check_permissions_fl is set, by doing a permissions
+check on the file’s bitmask. This requires a stat of the file, so one 
+must be provided via stat_result else one is performed. The uid and gid 
+of the user must be set in the object as well, usually by having 
+performed RabbitMQConsumer.set_ids() beforehand.</p>
 </dd></dl>
 
-<dl class="method">
-<dt id="nlds.rabbit.consumer.RabbitMQConsumer.run">
-<code class="sig-name descname">run</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.run" title="Permalink to this definition">¶</a></dt>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.declare_bindings">
+<span class="sig-name descname"><span class="pre">declare_bindings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.declare_bindings" title="Permalink to this definition"></a></dt>
+<dd><p>Overridden method from Publisher, additionally declares the queues and 
+queue-exchange bindings outlined in the config file. If no queues were 
+set then the default - generated within __init__ - is used instead.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.load_config_value">
+<span class="sig-name descname"><span class="pre">load_config_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_option</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_listify_fl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.load_config_value" title="Permalink to this definition"></a></dt>
+<dd><p>Function for verification and loading of options from the consumer-
+specific section of the .server_config file. Attempts to load from the 
+config section and reverts to hardcoded default value if an error is 
+encountered. Will not attempt to load an option if no default value is 
+available.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config_option</strong> – (str) The option in the indexer section of the 
+.server_config file to be verified and loaded.</p></li>
+<li><p><strong>path_listify</strong> – (boolean) Optional argument to control whether 
+value should be treated as a list and each item 
+converted to a pathlib.Path() object.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The value at config_option, otherwise the default value as 
+defined in Consumer.DEFAULT_CONSUMER_CONFIG. This is 
+overloadable by</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.log">
+<span class="sig-name descname"><span class="pre">log</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.log" title="Permalink to this definition"></a></dt>
+<dd><p>Catch-all function to log a message, both sending it to the local logger
+and sending a message to the exchange en-route to the logger 
+microservice.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>log_message</strong> (<em>str</em>) – The message for the log event (i.e. what to 
+feed into logger.info() etc.)</p></li>
+<li><p><strong>log_level</strong> (<em>str</em>) – The log level for the new log event. Must be 
+one of the standard logging levels (see 
+python logging docs).</p></li>
+<li><p><strong>target</strong> (<em>str</em>) – The intended target log on the logging 
+microservice. Must be one of the configured 
+logging handlers</p></li>
+<li><p><strong>kwargs</strong> – Optional. Keyword args to pass into the call 
+to logging.log()</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.run" title="Permalink to this definition"></a></dt>
 <dd><p>Method to run when thread is started. Creates an AMQP connection
 and sets some exception handling.</p>
 <p>A common exception which occurs is StreamLostError.
@@ -101,9 +162,24 @@ The connection should get reset if that happens.</p>
 </dl>
 </dd></dl>
 
-<dl class="method">
-<dt id="nlds.rabbit.consumer.RabbitMQConsumer.split_routing_key">
-<em class="property">static </em><code class="sig-name descname">split_routing_key</code><span class="sig-paren">(</span><em class="sig-param">routing_key: str</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.split_routing_key" title="Permalink to this definition">¶</a></dt>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.set_ids">
+<span class="sig-name descname"><span class="pre">set_ids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">body_json</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_pwd_gid_fl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.set_ids" title="Permalink to this definition"></a></dt>
+<dd><p>Changes the real user- and group-ids stored in the class to that 
+specified in the incoming message details section so that permissions 
+on each file in a filelist can be checked.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.setup_logging">
+<span class="sig-name descname"><span class="pre">setup_logging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">add_stdout_fl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stdout_log_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_files</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_rollover</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.setup_logging" title="Permalink to this definition"></a></dt>
+<dd><p>Override of the publisher method which allows consumer-specific logging 
+to take precedence over the general logging configuration.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.split_routing_key">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">split_routing_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">routing_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.split_routing_key" title="Permalink to this definition"></a></dt>
 <dd><p>Method to simply verify and split the routing key into parts.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
@@ -114,58 +190,61 @@ The connection should get reset if that happens.</p>
 
 </dd></dl>
 
-</section>
-<section id="the-processors">
-<h2>The processors<a class="headerlink" href="#the-processors" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="the-processors">
+<h2>The processors<a class="headerlink" href="#the-processors" title="Permalink to this headline"></a></h2>
 <p>Also referred to as ‘microservices’</p>
-<span class="target" id="module-nlds_processors.nlds_worker"></span><dl class="class">
-<dt id="nlds_processors.nlds_worker.NLDSWorkerConsumer">
-<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.nlds_worker.</code><code class="sig-name descname">NLDSWorkerConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='nlds_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.nlds_worker.NLDSWorkerConsumer" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="method">
-<dt id="nlds_processors.nlds_worker.NLDSWorkerConsumer.publish_message">
-<code class="sig-name descname">publish_message</code><span class="sig-paren">(</span><em class="sig-param">routing_key: str</em>, <em class="sig-param">msg: str</em>, <em class="sig-param">monitor_fl=True</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#nlds_processors.nlds_worker.NLDSWorkerConsumer.publish_message" title="Permalink to this definition">¶</a></dt>
-<dd><p>Wrapper around original publish message to additionally send message to monitoring
-queue.</p>
+<span class="target" id="module-nlds_processors.nlds_worker"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.nlds_worker.NLDSWorkerConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.nlds_worker.</span></span><span class="sig-name descname"><span class="pre">NLDSWorkerConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'nlds_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.nlds_worker.NLDSWorkerConsumer" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.nlds_worker.NLDSWorkerConsumer.publish_and_log_message">
+<span class="sig-name descname"><span class="pre">publish_and_log_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">routing_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_fl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds_processors.nlds_worker.NLDSWorkerConsumer.publish_and_log_message" title="Permalink to this definition"></a></dt>
+<dd><p>Wrapper around original publish message to additionally send message to 
+logging queue. Useful for debugging purposes to be able to see the 
+content being managed by the worker.</p>
 </dd></dl>
 
 </dd></dl>
 
-<span class="target" id="module-nlds_processors.index"></span><dl class="class">
-<dt id="nlds_processors.index.IndexerConsumer">
-<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.index.</code><code class="sig-name descname">IndexerConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='index_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.index.IndexerConsumer" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="method">
-<dt id="nlds_processors.index.IndexerConsumer.index">
-<code class="sig-name descname">index</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.index.IndexerConsumer.index" title="Permalink to this definition">¶</a></dt>
-<dd><p>Iterates through a filelist, yielding an ‘indexed’ filelist whereby 
-directories in the passed filelist are walked and properly walked.
-Is a generator, and so yields an indexed_filelist of maximum length 
-self.message_threshold, set through .server_config (defaults to 1000).</p>
+<span class="target" id="module-nlds_processors.catalog"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.CatalogConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.</span></span><span class="sig-name descname"><span class="pre">CatalogConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'catalog_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.CatalogConsumer" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.monitor"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.monitor.MonitorConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.monitor.</span></span><span class="sig-name descname"><span class="pre">MonitorConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'monitor_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.MonitorConsumer" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.logger"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.logger.LoggingConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.logger.</span></span><span class="sig-name descname"><span class="pre">LoggingConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'logging_q'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">setup_logging_fl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.logger.LoggingConsumer" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.logger.LoggingConsumer.get_logging_func">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_logging_func</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_level:</span> <span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger_like:</span> <span class="pre">logging.Logger</span> <span class="pre">=</span> <span class="pre">&lt;Logger</span> <span class="pre">nlds.root</span> <span class="pre">(WARNING)&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.logger.LoggingConsumer.get_logging_func" title="Permalink to this definition"></a></dt>
+<dd><p>Selects the appropriate logging function, given a logging level, from a 
+Logger object or Logger-like object. The global logger is used by 
+default (logging.getLogger(__name__)) but anything which has the 
+standard logging operations (debug, info, warning etc. ) can be used 
+i.e. the logging package</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>log_level</strong> (<em>str</em>) – Logging level requested</p></li>
+<li><p><strong>logger_like</strong> (<em>Logger</em>) – Logger object to get function from</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The logging function to use</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
 
-<span class="target" id="module-nlds_processors.transfer"></span><dl class="class">
-<dt id="nlds_processors.transfer.TransferConsumer">
-<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.transfer.</code><code class="sig-name descname">TransferConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='transfer_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.transfer.TransferConsumer" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<span class="target" id="module-nlds_processors.catalog"></span><dl class="class">
-<dt id="nlds_processors.catalog.CatalogConsumer">
-<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.catalog.</code><code class="sig-name descname">CatalogConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='catalog_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.CatalogConsumer" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<span class="target" id="module-nlds_processors.monitor"></span><dl class="class">
-<dt id="nlds_processors.monitor.MonitorConsumer">
-<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.monitor.</code><code class="sig-name descname">MonitorConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='monitor_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.MonitorConsumer" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<span class="target" id="module-nlds_processors.logger"></span><dl class="class">
-<dt id="nlds_processors.logger.LoggingConsumer">
-<em class="property">class </em><code class="sig-prename descclassname">nlds_processors.logger.</code><code class="sig-name descname">LoggingConsumer</code><span class="sig-paren">(</span><em class="sig-param">queue='logging_q'</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.logger.LoggingConsumer" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</section>
-</section>
+</div>
+</div>
 
 
            </div>

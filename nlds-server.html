@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Core content of the nlds-server &mdash; Near-line Data Store 0.1 documentation</title><link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <title>Core content of the nlds-server &mdash; Near-line Data Store 0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
-  <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
-        <script type="text/javascript" src="_static/jquery.js"></script>
-        <script type="text/javascript" src="_static/underscore.js"></script>
-        <script type="text/javascript" src="_static/doctools.js"></script>
-        <script type="text/javascript" src="_static/language_data.js"></script>
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -36,7 +36,7 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p><span class="caption-text">Contents:</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
@@ -74,29 +74,47 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="core-content-of-the-nlds-server">
-<h1>Core content of the nlds-server<a class="headerlink" href="#core-content-of-the-nlds-server" title="Permalink to this headline">¶</a></h1>
-<section id="module-nlds.rabbit.publisher">
-<span id="the-publisher-class"></span><h2>The Publisher class<a class="headerlink" href="#module-nlds.rabbit.publisher" title="Permalink to this headline">¶</a></h2>
-<dl class="class">
-<dt id="nlds.rabbit.publisher.RabbitMQPublisher">
-<em class="property">class </em><code class="sig-prename descclassname">nlds.rabbit.publisher.</code><code class="sig-name descname">RabbitMQPublisher</code><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher" title="Permalink to this definition">¶</a></dt>
+  <div class="section" id="core-content-of-the-nlds-server">
+<h1>Core content of the nlds-server<a class="headerlink" href="#core-content-of-the-nlds-server" title="Permalink to this headline"></a></h1>
+<div class="section" id="module-nlds.rabbit.publisher">
+<span id="the-publisher-class"></span><h2>The Publisher class<a class="headerlink" href="#module-nlds.rabbit.publisher" title="Permalink to this headline"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds.rabbit.publisher.</span></span><span class="sig-name descname"><span class="pre">RabbitMQPublisher</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">setup_logging_fl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<dl class="method">
-<dt id="nlds.rabbit.publisher.RabbitMQPublisher.create_message">
-<em class="property">classmethod </em><code class="sig-name descname">create_message</code><span class="sig-paren">(</span><em class="sig-param">transaction_id: uuid.UUID</em>, <em class="sig-param">data: str</em>, <em class="sig-param">user: str = None</em>, <em class="sig-param">group: str = None</em>, <em class="sig-param">target: str = None</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.create_message" title="Permalink to this definition">¶</a></dt>
-<dd><p>Create message to add to rabbit queue. Message is in json format with 
-metadata described in DETAILS and data, i.e. the filelist of interest,
-under DATA.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.IndexItem">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">IndexItem</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retries</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.item">
+<span class="sig-name descname"><span class="pre">item</span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.item" title="Permalink to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.retries">
+<span class="sig-name descname"><span class="pre">retries</span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.retries" title="Permalink to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.create_log_message">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">create_log_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">route</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bytes</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.create_log_message" title="Permalink to this definition"></a></dt>
+<dd><p>Create logging message to send to rabbit exchange. Message is, as with 
+the standard message, in json format with metadata described in DETAILS 
+and data, i.e. the log message, under DATA.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>transaction_id</strong> – ID of transaction as provided by fast-api</p></li>
-<li><p><strong>data</strong> – (str)   file or filelist of interest</p></li>
-<li><p><strong>user</strong> – (str)   user who sent request</p></li>
-<li><p><strong>group</strong> – (str)   group that user belongs to</p></li>
-<li><p><strong>target</strong> – (str)   target that files are being moved to (only 
-valid for PUT, PUTLIST commands)</p></li>
+<li><p><strong>message</strong> (<em>str</em>) – ID of transaction as provided by fast-api</p></li>
+<li><p><strong>target</strong> (<em>str</em>) – The target log file to be written to, must be 
+set to the name of a particular microservice, 
+usually the one which instigated the log event</p></li>
+<li><p><strong>route</strong> (<em>str</em>) – Route that the message has taken. Optional, will 
+be set to target if not specifed.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -105,70 +123,158 @@ valid for PUT, PUTLIST commands)</p></li>
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.create_message">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">create_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">uuid.UUID</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">access_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">secret_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tenancy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.create_message" title="Permalink to this definition"></a></dt>
+<dd><p>Create message to add to rabbit queue. Message is in json format with 
+metadata described in DETAILS and data, i.e. the filelist of interest,
+under DATA.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>transaction_id</strong> (<em>str</em>) – ID of transaction as provided by fast-api.</p></li>
+<li><p><strong>data</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – File or filelist of interest.</p></li>
+<li><p><strong>user</strong> (<em>str</em>) – User who sent request.</p></li>
+<li><p><strong>group</strong> (<em>str</em>) – Group that user belongs to.</p></li>
+<li><p><strong>tenancy</strong> (<em>str</em>) – The object store (probably Caringo) tenancy 
+url to access. This is optional and will 
+have a global default.</p></li>
+<li><p><strong>access_key</strong> (<em>str</em>) – Access key (aka user ID) of object store 
+account to access.</p></li>
+<li><p><strong>secret_key</strong> (<em>str</em>) – Secret key (aka password) of object store 
+account to access.</p></li>
+<li><p><strong>target</strong> (<em>str</em>) – Target that files are being moved to (only 
+valid for PUT, PUTLIST commands).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>JSON encoded string in the proper format for message passing</p>
+</dd>
+</dl>
 </dd></dl>
 
-</section>
-<section id="the-routers">
-<h2>The routers<a class="headerlink" href="#the-routers" title="Permalink to this headline">¶</a></h2>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.log">
+<span class="sig-name descname"><span class="pre">log</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.log" title="Permalink to this definition"></a></dt>
+<dd><p>Catch-all function to log a message, both sending it to the local logger
+and sending a message to the exchange en-route to the logger 
+microservice.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>log_message</strong> (<em>str</em>) – The message for the log event (i.e. what to 
+feed into logger.info() etc.)</p></li>
+<li><p><strong>log_level</strong> (<em>str</em>) – The log level for the new log event. Must be 
+one of the standard logging levels (see 
+python logging docs).</p></li>
+<li><p><strong>target</strong> (<em>str</em>) – The intended target log on the logging 
+microservice. Must be one of the configured 
+logging handlers</p></li>
+<li><p><strong>kwargs</strong> – Optional. Keyword args to pass into the call 
+to logging.log()</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.setup_logging">
+<span class="sig-name descname"><span class="pre">setup_logging</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">add_stdout_fl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stdout_log_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_files</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_rollover</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.setup_logging" title="Permalink to this definition"></a></dt>
+<dd><p>Sets up logging for a publisher (i.e. the nlds-api server) using a set 
+number of configuration options from the logging interface. Each of 
+the configuration options are able to be overridden by kwargs, allowing
+for child classes (i.e. consumers) to implement their own settings.</p>
+<p>Allows the creation of stderr and stdout handlers under the generic 
+global logger, and file specific handlers/loggers under the name of each 
+output file - intended to be used for tracking each consumer’s output on 
+the logging consumer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>enable</strong> (<em>bool</em>) – Whether to activate the logging 
+functionality.</p></li>
+<li><p><strong>log_format</strong> (<em>str</em>) – The format string of the logging output, 
+as per instructions in logging docs. 
+Controls all logging outputs (stderr, 
+stdout, files).</p></li>
+<li><p><strong>log_level</strong> (<em>str</em>) – The logging level of the global logger 
+(applies to only the stderr stream)</p></li>
+<li><p><strong>add_stdout_fl</strong> (<em>bool</em>) – Boolean flag for controlling whether the 
+global logger also prints to stdout.</p></li>
+<li><p><strong>stdout_log_level</strong> (<em>str</em>) – Logging level of the stdout logging 
+stream</p></li>
+<li><p><strong>log_files</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – List of files to write logging output 
+to, with each made in its own logger 
+object referencable by the file name.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="the-routers">
+<h2>The routers<a class="headerlink" href="#the-routers" title="Permalink to this headline"></a></h2>
 <p>The routers control the endpoints of the API, and are the backbone of the
 nlds-server API. They are documented automatically (thanks to Swagger UI) and
 instructions on accessing these can be found in <a class="reference internal" href="home.html"><span class="doc">CEDA Near-Line Data Store</span></a>.</p>
-</section>
-<section id="module-nlds.authenticators.base_authenticator">
-<span id="the-authenticators"></span><h2>The authenticators<a class="headerlink" href="#module-nlds.authenticators.base_authenticator" title="Permalink to this headline">¶</a></h2>
-<dl class="class">
-<dt id="nlds.authenticators.base_authenticator.BaseAuthenticator">
-<em class="property">class </em><code class="sig-prename descclassname">nlds.authenticators.base_authenticator.</code><code class="sig-name descname">BaseAuthenticator</code><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="method">
-<dt id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_collection">
-<code class="sig-name descname">authenticate_collection</code><span class="sig-paren">(</span><em class="sig-param">collection: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_collection" title="Permalink to this definition">¶</a></dt>
+</div>
+<div class="section" id="module-nlds.authenticators.base_authenticator">
+<span id="the-authenticators"></span><h2>The authenticators<a class="headerlink" href="#module-nlds.authenticators.base_authenticator" title="Permalink to this headline"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds.authenticators.base_authenticator.BaseAuthenticator">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds.authenticators.base_authenticator.</span></span><span class="sig-name descname"><span class="pre">BaseAuthenticator</span></span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_collection">
+<span class="sig-name descname"><span class="pre">authenticate_collection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">collection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_collection" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
-<dl class="method">
-<dt id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_group">
-<code class="sig-name descname">authenticate_group</code><span class="sig-paren">(</span><em class="sig-param">group: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_group" title="Permalink to this definition">¶</a></dt>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_group">
+<span class="sig-name descname"><span class="pre">authenticate_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_group" title="Permalink to this definition"></a></dt>
 <dd><p>Validate whether the Bearer of the token belongs to the group.</p>
 </dd></dl>
 
-<dl class="method">
-<dt id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_token">
-<code class="sig-name descname">authenticate_token</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_token" title="Permalink to this definition">¶</a></dt>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_token">
+<span class="sig-name descname"><span class="pre">authenticate_token</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_token" title="Permalink to this definition"></a></dt>
 <dd><p>Validate an oauth token.</p>
 </dd></dl>
 
-<dl class="method">
-<dt id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_user">
-<code class="sig-name descname">authenticate_user</code><span class="sig-paren">(</span><em class="sig-param">user: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_user" title="Permalink to this definition">¶</a></dt>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_user">
+<span class="sig-name descname"><span class="pre">authenticate_user</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_user" title="Permalink to this definition"></a></dt>
 <dd><p>Validate whether the Bearer of the token is a valid user.</p>
 </dd></dl>
 
 </dd></dl>
 
-<span class="target" id="module-nlds.authenticators.jasmin_authenticator"></span><dl class="class">
-<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator">
-<em class="property">class </em><code class="sig-prename descclassname">nlds.authenticators.jasmin_authenticator.</code><code class="sig-name descname">JasminAuthenticator</code><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="method">
-<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_collection">
-<code class="sig-name descname">authenticate_collection</code><span class="sig-paren">(</span><em class="sig-param">oauth_token: str</em>, <em class="sig-param">collection: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_collection" title="Permalink to this definition">¶</a></dt>
+<span class="target" id="module-nlds.authenticators.jasmin_authenticator"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds.authenticators.jasmin_authenticator.</span></span><span class="sig-name descname"><span class="pre">JasminAuthenticator</span></span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_collection">
+<span class="sig-name descname"><span class="pre">authenticate_collection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">oauth_token</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_collection" title="Permalink to this definition"></a></dt>
 <dd></dd></dl>
 
-<dl class="method">
-<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_group">
-<code class="sig-name descname">authenticate_group</code><span class="sig-paren">(</span><em class="sig-param">oauth_token: str</em>, <em class="sig-param">group: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_group" title="Permalink to this definition">¶</a></dt>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_group">
+<span class="sig-name descname"><span class="pre">authenticate_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">oauth_token</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_group" title="Permalink to this definition"></a></dt>
 <dd><p>Make a call to the JASMIN services for a user to determine whether
 the user with the token is part of the requested group.</p>
 </dd></dl>
 
-<dl class="method">
-<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_token">
-<code class="sig-name descname">authenticate_token</code><span class="sig-paren">(</span><em class="sig-param">oauth_token: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_token" title="Permalink to this definition">¶</a></dt>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_token">
+<span class="sig-name descname"><span class="pre">authenticate_token</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">oauth_token</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_token" title="Permalink to this definition"></a></dt>
 <dd><p>Make a call to the JASMIN token introspection to determine whether
 the token is a true token and whether it is valid.</p>
 </dd></dl>
 
-<dl class="method">
-<dt id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_user">
-<code class="sig-name descname">authenticate_user</code><span class="sig-paren">(</span><em class="sig-param">oauth_token: str</em>, <em class="sig-param">user: str</em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_user" title="Permalink to this definition">¶</a></dt>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_user">
+<span class="sig-name descname"><span class="pre">authenticate_user</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">oauth_token</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_user" title="Permalink to this definition"></a></dt>
 <dd><p>Make a call to the JASMIN services for a user to determine whether
 the user with the token is a valid user.</p>
 </dd></dl>
@@ -177,12 +283,12 @@ the user with the token is a valid user.</p>
 
 <p>Authenicate methods also contains 3 general methods, used by the above 2
 modules, to validate the given user, group and token.</p>
-</section>
-<section id="module-nlds.server_config">
-<span id="the-server-config-module"></span><h2>The server config module<a class="headerlink" href="#module-nlds.server_config" title="Permalink to this headline">¶</a></h2>
-<dl class="function">
-<dt id="nlds.server_config.load_config">
-<code class="sig-prename descclassname">nlds.server_config.</code><code class="sig-name descname">load_config</code><span class="sig-paren">(</span><em class="sig-param">config_file_path: str = '.server_config'</em><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#nlds.server_config.load_config" title="Permalink to this definition">¶</a></dt>
+</div>
+<div class="section" id="module-nlds.server_config">
+<span id="the-server-config-module"></span><h2>The server config module<a class="headerlink" href="#module-nlds.server_config" title="Permalink to this headline"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="nlds.server_config.load_config">
+<span class="sig-prename descclassname"><span class="pre">nlds.server_config.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_file_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.server_config'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#nlds.server_config.load_config" title="Permalink to this definition"></a></dt>
 <dd><p>Config file for the server contains authentication and rabbitMQ sections,
 the required contents of which are set by the schema in utils.constants. 
 This function opens the config file (at a preset, configurable location) 
@@ -194,12 +300,12 @@ then verifies it.</p>
 </dl>
 </dd></dl>
 
-<dl class="function">
-<dt id="nlds.server_config.validate_config_file">
-<code class="sig-prename descclassname">nlds.server_config.</code><code class="sig-name descname">validate_config_file</code><span class="sig-paren">(</span><em class="sig-param">json_config: dict</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#nlds.server_config.validate_config_file" title="Permalink to this definition">¶</a></dt>
-<dd><p>Validate the JSON config file matches the schema defined in nlds_setup. 
-Currently only checks that required headings and subheadings exist, i.e. only 
-scans one layer deep and does no value checking.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="nlds.server_config.validate_config_file">
+<span class="sig-prename descclassname"><span class="pre">nlds.server_config.</span></span><span class="sig-name descname"><span class="pre">validate_config_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">json_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.server_config.validate_config_file" title="Permalink to this definition"></a></dt>
+<dd><p>Validate the JSON config file matches the schema defined in nlds_setup.     
+Currently only checks that required headings and subheadings exist, i.e. 
+only scans one layer deep and does no value checking.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>json_config</strong> – Config file loaded using json.load()</p>
@@ -207,8 +313,8 @@ scans one layer deep and does no value checking.</p>
 </dl>
 </dd></dl>
 
-</section>
-</section>
+</div>
+</div>
 
 
            </div>
