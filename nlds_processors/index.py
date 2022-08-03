@@ -352,7 +352,7 @@ class IndexerConsumer(RabbitMQConsumer):
         
     def send_indexlist(
             self, indexlist: NamedTuple, routing_key: str, 
-            body_json: dict[str, str], mode: str = "indexed") -> None:
+            body_json: Dict[str, str], mode: str = "indexed") -> None:
         """ Convenience function which sends the given indexlist namedtuple
         to the exchange with the given routing key and message body. Mode simply
         specifies what to put into the log message.
