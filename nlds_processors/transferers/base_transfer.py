@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
 import json
-from multiprocessing.sharedctypes import Value
 import os
 import traceback
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Dict
 import pathlib as pth
 
 from nlds.rabbit.consumer import RabbitMQConsumer
@@ -155,5 +154,5 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
     @abstractmethod
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
                  secret_key: str, filelist: List[NamedTuple], rk_origin: str,
-                 body_json: dict[str, str]):
+                 body_json: Dict[str, str]):
         pass

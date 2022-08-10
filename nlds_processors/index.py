@@ -360,13 +360,19 @@ class IndexerConsumer(RabbitMQConsumer):
         """
         self.log(f"Sending {mode} list back to exchange", self.RK_LOG_INFO)
 
+        delay = 0
         # TODO: might be worth using an enum here?
-        # Reset the retries upon successful indexing. 
         if mode == "indexed":
+            # Reset the retries upon successful indexing. 
             indexlist = [self.IndexItem(i, 0) for i, _ in indexlist]
+        elif mode == "retry":
+            # Delay the retry message depending on how many retries have been 
+            # accumulated. All retries in a retry list _should_ be the same so 
+            # base it off of the first one.
+            delay = self.get_retry_delay[indexlist[0].retries]
         
         body_json[self.MSG_DATA][self.MSG_FILELIST] = indexlist
-        self.publish_message(routing_key, json.dumps(body_json))
+        self.publish_message(routing_key, json.dumps(body_json), delay=delay)
 
 def main():
     consumer = IndexerConsumer()

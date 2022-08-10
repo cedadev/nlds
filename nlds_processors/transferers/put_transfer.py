@@ -137,7 +137,7 @@ class PutTransferConsumer(BaseTransferConsumer):
 
     def send_transferlist(
             self, transferlist: NamedTuple, routing_key: str, 
-            body_json: dict[str, str], mode: str = "transferred"
+            body_json: Dict[str, str], mode: str = "transferred"
         ) -> None:
         """ Convenience function which sends the given list of namedtuples to 
         the exchange with the given routing key and message body. Mode simply
@@ -150,9 +150,14 @@ class PutTransferConsumer(BaseTransferConsumer):
         # Reset the retries upon successful indexing. 
         if mode == "transferred":
             transferlist = [self.IndexItem(i, 0) for i, _ in transferlist]
+        elif mode == "retry":
+            # Delay the retry message depending on how many retries have been 
+            # accumulated. All retries in a retry list _should_ be the same so 
+            # base it off of the first one.
+            delay = self.get_retry_delay[transferlist[0].retries]
         
         body_json[self.MSG_DATA][self.MSG_FILELIST] = transferlist
-        self.publish_message(routing_key, json.dumps(body_json))
+        self.publish_message(routing_key, json.dumps(body_json), delay=delay)
     
 def main():
     consumer = PutTransferConsumer()

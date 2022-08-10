@@ -13,7 +13,7 @@ from datetime import datetime
 from uuid import UUID
 import json
 import logging
-from typing import List
+from typing import Dict, List
 import pathlib
 from collections import namedtuple
 
@@ -103,6 +103,16 @@ class RabbitMQPublisher():
 
     IndexItem = namedtuple("IndexItem", "item retries")
 
+    # In ascending order: 0 seconds, 30 seconds, 1 minute, 1 hour, 1 day, 5 days
+    DEFAULT_RETRY_DELAYS = [
+        0,
+        30,          
+        60, 
+        60 * 60,
+        60 * 60 * 24,
+        60 * 60 * 24 * 5
+    ]
+
     def __init__(self, setup_logging_fl=False):
         # Get rabbit-specific section of config file
         self.whole_config = load_config()
@@ -110,10 +120,19 @@ class RabbitMQPublisher():
         
         # Load exchange section of config as this is the only required part for 
         # sending messages
-        self.exchange = self.config["exchange"]
+        self.exchanges = self.config["exchange"]
+        
+        # If multiple exchanges given then verify each and assign the first as a 
+        # default exchange. 
+        if not isinstance(self.exchanges, list):
+            self.exchanges = [self.exchanges]
+        for exchange in self.exchanges:
+            self.verify_exchange(exchange)
+        self.default_exchange = self.exchanges[0]
       
         self.connection = None
         self.channel = None
+        self.retry_delays = self.DEFAULT_RETRY_DELAYS
         
         if setup_logging_fl:
             self.setup_logging()
@@ -153,8 +172,31 @@ class RabbitMQPublisher():
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
-        self.channel.exchange_declare(exchange=self.exchange["name"], 
-                                      exchange_type=self.exchange["type"])
+        """Go through list of exchanges from config file and declare each. Will 
+        also declare delayed exchanges for use in scheduled messaging if the 
+        delayed flag is present and activated for a given exchange.
+        
+        """
+        for exchange in self.exchanges:
+            if exchange['delayed']:
+                args = {"x-delayed-type": exchange["type"]}
+                self.channel.exchange_declare(exchange=exchange["name"], 
+                                              exchange_type="x-delayed-message",
+                                              arguments=args)
+            else:
+                self.channel.exchange_declare(exchange=exchange["name"], 
+                                              exchange_type=exchange["type"])
+
+    @staticmethod
+    def verify_exchange(exchange):
+        """Verify that an exchange dict defined in the config file is valid. 
+        Throws a ValueError if not. 
+        
+        """
+        if ("name" not in exchange or "type" not in exchange 
+                or "delayed" not in exchange):
+            raise ValueError("Exchange in config file incomplete, cannot "
+                             "be declared.")
 
     @classmethod
     def create_message(cls, transaction_id: UUID, data: List[str], 
@@ -205,15 +247,45 @@ class RabbitMQPublisher():
 
         return json.dumps(message_dict)
 
-    def publish_message(self, routing_key: str, msg: str) -> None:
+    def publish_message(self, routing_key: str, msg: str, exchange: Dict = None,
+                        delay: int = 0) -> None:
+        """Sends a message with the specified routing key to an exchange for 
+        routing. If no exchange is provided it will default to the first 
+        exchange declared in the server_config. 
+        
+        An optional delay can be added which will force the message to sit for 
+        the specified number of seconds at the exchange before being routed. 
+        Note that this only happens if the given (or default if not specified) 
+        exchange is declared as a x-delayed-message exchange at start up with 
+        the 'delayed' flag. 
+        
+        This is in essence a light wrapper around the basic_publish method in 
+        pika. 
+        """
+        if not exchange:
+            exchange = self.default_exchange
         self.channel.basic_publish(
-            exchange=self.exchange['name'],
+            exchange=exchange["name"],
             routing_key=routing_key,
             properties=pika.BasicProperties(
-                content_encoding='application/json'
+                content_encoding='application/json',
+                headers={
+                    "x-delay": delay
+                }
             ),
             body=msg
         )
+
+    def get_retry_delay(self, retries: int):
+        """Simple convenience function for getting the delay (in seconds) for an 
+        indexlist with a given number of retries. Works off of the member 
+        variable self.retry_delays, maxing out at its final value 
+        
+        e.g. if there are 5 elements in self.retry_delays, and 7 retries 
+        requested, then the 5th element is returned. 
+        """
+        retries = min(retries, len(self.retry_delays))
+        return self.retry_delays[retries]
 
     def close_connection(self) -> None:
         self.connection.close()
