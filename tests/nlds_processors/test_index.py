@@ -32,7 +32,8 @@ def test_callback(monkeypatch, default_indexer, default_rmq_method,
 def test_index(monkeypatch, caplog, default_indexer, 
                default_rmq_message_dict, fs):
     # Deactivate messaging for test environment and initialise uid and gid
-    monkeypatch.setattr(default_indexer, "publish_message", lambda *_: None)
+    monkeypatch.setattr(default_indexer, "publish_message", 
+                        lambda *_args, **_kwargs: None)
     default_indexer.reset()
     default_indexer.uid = 100
     default_indexer.gid = 100
