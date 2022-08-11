@@ -369,7 +369,7 @@ class IndexerConsumer(RabbitMQConsumer):
             # Delay the retry message depending on how many retries have been 
             # accumulated. All retries in a retry list _should_ be the same so 
             # base it off of the first one.
-            delay = self.get_retry_delay[indexlist[0].retries]
+            delay = self.get_retry_delay(indexlist[0].retries)
         
         body_json[self.MSG_DATA][self.MSG_FILELIST] = indexlist
         self.publish_message(routing_key, json.dumps(body_json), delay=delay)
