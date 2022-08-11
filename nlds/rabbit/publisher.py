@@ -13,6 +13,7 @@ from datetime import datetime
 from uuid import UUID
 import json
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from typing import Dict, List
 import pathlib
 from collections import namedtuple
@@ -415,7 +416,7 @@ class RabbitMQPublisher():
                 for log_file in log_files:
                     try:
                         # Make log file in separate logger
-                        fh = logging.TimedRotatingFileHandler(
+                        fh = TimedRotatingFileHandler(
                             log_file,
                             when=log_rollover,
                         )
