@@ -29,7 +29,7 @@ class PutTransferConsumer(BaseTransferConsumer):
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
                  secret_key: str, filelist: List[NamedTuple], rk_origin: str,
-                 body_json: dict[str, str]):
+                 body_json: Dict[str, str]):
         client = minio.Minio(
             tenancy,
             access_key=access_key,
