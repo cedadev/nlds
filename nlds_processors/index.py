@@ -2,7 +2,7 @@ import json
 import os
 import pathlib as pth
 from typing import List, NamedTuple, Dict
-import traceback
+from datetime import datetime, timedelta
 
 from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher
@@ -67,70 +67,51 @@ class IndexerConsumer(RabbitMQConsumer):
         self.failedlist = []
     
     def callback(self, ch, method, properties, body, connection):
-        self.reset()
+        self.reset() 
+        # Convert body from bytes to string for ease of manipulation
+        body_json = json.loads(body)
+
+        self.log(
+            f"Received {json.dumps(body_json, indent=4)} from "
+            f"{self.queues[0].name} ({method.routing_key})",
+            self.RK_LOG_DEBUG
+        )
+
+        # Verify routing key is appropriate
         try:
-            # Convert body from bytes to string for ease of manipulation
-            body_json = json.loads(body)
-
-            self.log(
-                f"Received {json.dumps(body_json, indent=4)} from {self.queues[0].name} "
-                f"({method.routing_key})",
-                self.RK_LOG_DEBUG
-            )
-
-            # Verify routing key is appropriate
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", 
-                    self.RK_LOG_ERROR
-                )
-                return
-            
-            filelist = self.parse_filelist(body_json)
-            filelist_len = len(filelist)
-
-            # Upon initiation, split the filelist into manageable chunks
-            if rk_parts[2] == self.RK_INITIATE:
-                self.split(filelist, rk_parts[0], body_json)
-            # If for some reason a list which is too long has been submitted for
-            # indexing, split it and resubmit it.             
-            elif rk_parts[2] == self.RK_START:
-                if filelist_len > self.filelist_max_len:
-                    self.split(filelist, rk_parts[0], body_json)    
-                else:
-                    # First change user and group so file permissions can be 
-                    # checked. This should be deactivated when testing locally. 
-                    if self.check_permissions_fl:
-                        self.set_ids(body_json, self.use_pwd_gid_fl)
-                
-                    # Append routing info and then run the index
-                    body_json = self.append_route_info(body_json)
-                    self.log("Starting index scan", self.RK_LOG_INFO)
-
-                    # Index the entirety of the passed filelist and check for 
-                    # permissions. The size of the packet will also be evaluated
-                    # and used to send lists of roughly equal size.
-                    self.index(filelist, rk_parts[0], body_json)
-                    self.log(f"Scan finished.", self.RK_LOG_INFO)
-
-        except (ValueError, TypeError, KeyError, PermissionError) as e:
-            if self.print_tracebacks_fl:
-                tb = traceback.format_exc()
-                self.log(tb, self.RK_LOG_DEBUG)
-            self.log(
-                f"Encountered error ({e}), sending to logger.", 
-                self.RK_LOG_ERROR, exc_info=e
-            )
-            self.log(
-                f"Failed message content: {json.dumps(body_json, indent=4)}",
-                self.RK_LOG_DEBUG
-            )
-        except Exception as e:
-            tb = traceback.format_exc()
-            self.log(tb, self.RK_LOG_CRITICAL)
+            rk_parts = self.split_routing_key(method.routing_key)
+        except ValueError as e:
+            self.log("Routing key inappropriate length, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
         
+        filelist = self.parse_filelist(body_json)
+        filelist_len = len(filelist)
+
+        # Upon initiation, split the filelist into manageable chunks
+        if rk_parts[2] == self.RK_INITIATE:
+            self.split(filelist, rk_parts[0], body_json)
+        # If for some reason a list which is too long has been submitted for
+        # indexing, split it and resubmit it.             
+        elif rk_parts[2] == self.RK_START:
+            if filelist_len > self.filelist_max_len:
+                self.split(filelist, rk_parts[0], body_json)    
+            else:
+                # First change user and group so file permissions can be 
+                # checked. This should be deactivated when testing locally. 
+                if self.check_permissions_fl:
+                    self.set_ids(body_json, self.use_pwd_gid_fl)
+            
+                # Append routing info and then run the index
+                body_json = self.append_route_info(body_json)
+                self.log("Starting index scan", self.RK_LOG_INFO)
+
+                # Index the entirety of the passed filelist and check for 
+                # permissions. The size of the packet will also be evaluated
+                # and used to send lists of roughly equal size.
+                self.index(filelist, rk_parts[0], body_json)
+                self.log(f"Scan finished.", self.RK_LOG_INFO)
+
     def split(self, filelist: List[NamedTuple], rk_origin: str, 
               body_json: Dict[str, str]) -> None:
         """ Split the given filelist into batches of some configurable max 
@@ -370,6 +351,9 @@ class IndexerConsumer(RabbitMQConsumer):
             # accumulated. All retries in a retry list _should_ be the same so 
             # base it off of the first one.
             delay = self.get_retry_delay(indexlist[0].retries)
+            self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
+                     f"{datetime.now() + timedelta(milliseconds=delay)}", 
+                     self.RK_LOG_DEBUG)
         
         body_json[self.MSG_DATA][self.MSG_FILELIST] = indexlist
         self.publish_message(routing_key, json.dumps(body_json), delay=delay)

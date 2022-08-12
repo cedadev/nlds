@@ -272,7 +272,8 @@ class RabbitMQPublisher():
                 content_encoding='application/json',
                 headers={
                     "x-delay": delay
-                }
+                },
+                delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
             ),
             body=msg
         )

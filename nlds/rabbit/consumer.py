@@ -11,6 +11,7 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 import functools
 from abc import ABC, abstractmethod
 import logging
+import traceback
 from typing import Dict, List, NamedTuple
 import pathlib as pth
 import grp
@@ -101,9 +102,15 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         else: 
             self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
 
+        # Memeber variables to temporarily hold user- and group-id of a message
         self.gid = None
         self.uid = None
         
+        # Controls default behaviour of logging when certain exceptions are 
+        # caught in the callback. 
+        self.print_tracebacks_fl = True
+
+        # Set up the logging and pass through constructor parameter
         self.setup_logging(enable=setup_logging_fl)
 
     def reset(self):
@@ -286,11 +293,79 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                      add_stdout_fl, stdout_log_level, log_files,
                                      log_rollover)
 
+    @staticmethod
+    def _acknowledge_message(channel: Channel, delivery_tag: str):
+        """Acknowledge a message with a basic ack. This is the bare minimum 
+        requirement for an acknowledgement according to rabbit protocols.
+
+        :param channel:         Channel which message came from
+        :param delivery_tag:    Message id
+        """
+
+        logger.debug(f'Acknowledging message: {delivery_tag}')
+        if channel.is_open:
+            channel.basic_ack(delivery_tag)
+
+    def acknowledge_message(self, channel: Channel, delivery_tag: str, 
+                            connection: Connection):
+        """Method for acknowledging a message so the next can be fetched. This 
+        should be called at the end of a consumer callback, and - in order to do 
+        so thread-safely - from within connection object.  All of the required 
+        params come from the standard callback params.
+
+        :param channel:         Callback channel param
+        :param delivery_tag:    From the callback method param. eg. 
+                                method.delivery_tag
+        :param connection:      Connection object from the callback param
+        """
+        cb = functools.partial(self._acknowledge_message, channel, delivery_tag)
+        connection.add_callback_threadsafe(cb)
+
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection):
-        pass
+        """Standard consumer callback function as defined by rabbitMQ, with the 
+        standard callback parameters of Channel, Method, Header, Body (in bytes)
+        and Connection.
 
+        This is the working method of a consumer, i.e. it does the job the 
+        consumer has been designed to do, and so must be implemented and 
+        overridden by any child consumer classes. 
+        """
+        NotImplementedError
+    
+    def _wrapped_callback(self, ch: Channel, method: Method, properties: Header, 
+                          body: bytes, connection: Connection):
+        """Wrapper around standard callback function which adds error handling 
+        and manual message acknowledgement. All arguments are the same as those 
+        in self.callback, i.e. the standard rabbitMQ consumer callback 
+        parameters.
+
+        This should be performed on all consumers and should be left untouched 
+        in child implementations.
+        """
+        # Wrap callback with a try-except catching a selection of common 
+        # errors which can be caught without stopping consumption. 
+        try:
+            self.callback(ch, method, properties, body, connection)
+        except (ValueError, TypeError, KeyError, PermissionError) as e:
+            if self.print_tracebacks_fl:
+                tb = traceback.format_exc()
+                self.log(tb, self.RK_LOG_DEBUG)
+            self.log(
+                f"Encountered error ({e}), sending to logger.", 
+                self.RK_LOG_ERROR, exc_info=e
+            )
+            self.log(
+                f"Failed message content: {body}",
+                self.RK_LOG_DEBUG
+            )
+        else:
+            # Ack message if it has only failed in the limited number of ways 
+            # above
+            self.acknowledge_message(ch, method.delivery_tag, connection)
+
+            
     def declare_bindings(self) -> None:
         """
         Overridden method from Publisher, additionally declares the queues and 
@@ -306,11 +381,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                         queue=queue.name, 
                                         routing_key=binding.routing_key)
             # Apply callback to all queues
-            wrapped_callback = functools.partial(self.callback, 
+            wrapped_callback = functools.partial(self._wrapped_callback, 
                                                  connection=self.connection)
             self.channel.basic_consume(queue=queue.name, 
-                                       on_message_callback=wrapped_callback, 
-                                       auto_ack=True)
+                                       on_message_callback=wrapped_callback)
     
     @staticmethod
     def split_routing_key(routing_key: str) -> None:
@@ -370,7 +444,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 continue
 
             except Exception as e:
-                logger.critical(e)
+                # Catch all other exceptions and log them as critical. 
+                tb = traceback.format_exc()
+                self.log(tb, self.RK_LOG_CRITICAL, exc_info=e)
 
                 self.channel.stop_consuming()
                 break

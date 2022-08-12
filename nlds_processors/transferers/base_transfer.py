@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 import json
 import os
-import traceback
 from typing import List, NamedTuple, Dict
 import pathlib as pth
 
@@ -51,96 +50,83 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
         
     def callback(self, ch, method, properties, body, connection):
         self.reset()
-        try:
-            # Convert body from bytes to string for ease of manipulation
-            body = body.decode("utf-8")
-            body_json = json.loads(body)
-
-            self.log(f"Received {json.dumps(body_json, indent=4)} from "
-                     f"{self.queues[0].name} ({method.routing_key})", 
-                     self.RK_LOG_DEBUG)
-
-            # Verify routing key is appropriate
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", 
-                    self.RK_LOG_ERROR
-                )
-                return
-
-            ### 
-            # Verify and load message contents 
-
-            try: 
-                transaction_id = body_json[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
-            except KeyError:
-                self.log(
-                    "Transaction id unobtainable, exiting callback.", 
-                    self.RK_LOG_ERROR
-                )
-                return
-
-            filelist = self.parse_filelist(body_json)
-
-            try:
-                access_key = body_json[self.MSG_DETAILS][self.MSG_ACCESS_KEY]
-                secret_key = body_json[self.MSG_DETAILS][self.MSG_SECRET_KEY]
-            except KeyError:
-                self.log(
-                    "Secret key or access key unobtainable, exiting callback.", 
-                    self.RK_LOG_ERROR
-                )
-                return
-
-            tenancy = None
-            # If tenancy specified in message details then override the server-
-            # config value
-            if (self.MSG_TENANCY in body_json[self.MSG_DETAILS] 
-                and body_json[self.MSG_DETAILS][self.MSG_TENANCY] is not None):
-                tenancy = body_json[self.MSG_DETAILS][self.MSG_TENANCY]
-            else:
-                tenancy = self.tenancy
-            
-            # Check to see whether tenancy has been specified in either the 
-            # message or the server_config - exit if not. 
-            if tenancy is None:
-                self.log(
-                    "No tenancy specified at server- or request-level, exiting "
-                    "callback.", 
-                    self.RK_LOG_ERROR
-                )
-                return 
-            
-            # Set uid and gid from message contents if configured to check 
-            # permissions
-            if self.check_permissions_fl:
-                self.set_ids(body_json, use_pwd_gid_fl=self.user_pwd_gid_fl)
-
-            self.log(f"Starting transfer to object store at {tenancy}", 
-                     self.RK_LOG_INFO)
-
-            # Append route info to message to track the route of the message
-            body_json = self.append_route_info(body_json)
-
-            # Start transfer - this is implementation specific and handled by 
-            # child classes 
-            self.transfer(transaction_id, tenancy, access_key, secret_key, 
-                          filelist, rk_parts[0], body_json)
         
-        except (ValueError, TypeError, KeyError, PermissionError) as e:
-            if self.print_tracebacks_fl:
-                tb = traceback.format_exc()
-                self.log(tb, self.RK_LOG_DEBUG)
+        # Convert body from bytes to string for ease of manipulation
+        body = body.decode("utf-8")
+        body_json = json.loads(body)
+
+        self.log(f"Received {json.dumps(body_json, indent=4)} from "
+                 f"{self.queues[0].name} ({method.routing_key})", 
+                 self.RK_LOG_DEBUG)
+
+        # Verify routing key is appropriate
+        try:
+            rk_parts = self.split_routing_key(method.routing_key)
+        except ValueError as e:
             self.log(
-                f"Encountered error ({e}), sending to logger.", 
-                self.RK_LOG_ERROR, exc_info=e
+                "Routing key inappropriate length, exiting callback.", 
+                self.RK_LOG_ERROR
             )
+            return
+
+        ### 
+        # Verify and load message contents 
+
+        try: 
+            transaction_id = body_json[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
+        except KeyError:
             self.log(
-                f"Failed message content: {json.dumps(body_json, indent=4)}",
-                self.RK_LOG_DEBUG
+                "Transaction id unobtainable, exiting callback.", 
+                self.RK_LOG_ERROR
             )
+            return
+
+        filelist = self.parse_filelist(body_json)
+
+        try:
+            access_key = body_json[self.MSG_DETAILS][self.MSG_ACCESS_KEY]
+            secret_key = body_json[self.MSG_DETAILS][self.MSG_SECRET_KEY]
+        except KeyError:
+            self.log(
+                "Secret key or access key unobtainable, exiting callback.", 
+                self.RK_LOG_ERROR
+            )
+            return
+
+        tenancy = None
+        # If tenancy specified in message details then override the server-
+        # config value
+        if (self.MSG_TENANCY in body_json[self.MSG_DETAILS] 
+                and body_json[self.MSG_DETAILS][self.MSG_TENANCY] is not None):
+            tenancy = body_json[self.MSG_DETAILS][self.MSG_TENANCY]
+        else:
+            tenancy = self.tenancy
+        
+        # Check to see whether tenancy has been specified in either the message 
+        # or the server_config - exit if not. 
+        if tenancy is None:
+            self.log(
+                "No tenancy specified at server- or request-level, exiting "
+                "callback.", 
+                self.RK_LOG_ERROR
+            )
+            return 
+        
+        # Set uid and gid from message contents if configured to check 
+        # permissions
+        if self.check_permissions_fl:
+            self.set_ids(body_json, use_pwd_gid_fl=self.user_pwd_gid_fl)
+
+        self.log(f"Starting transfer to object store at {tenancy}", 
+                 self.RK_LOG_INFO)
+
+        # Append route info to message to track the route of the message
+        body_json = self.append_route_info(body_json)
+
+        # Start transfer - this is implementation specific and handled by child 
+        # classes 
+        self.transfer(transaction_id, tenancy, access_key, secret_key, 
+                        filelist, rk_parts[0], body_json)
 
     def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
                           access: int = os.R_OK) -> bool:
