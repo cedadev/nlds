@@ -27,7 +27,8 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
         _PRINT_TRACEBACKS: False,
         _REMOVE_ROOT_SLASH: True,
         _USE_PWD_GID: False,
-        _MAX_RETRIES: 5
+        _MAX_RETRIES: 5,
+        RabbitMQConsumer.RETRY_DELAYS: RabbitMQConsumer.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -47,6 +48,8 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
             self._REMOVE_ROOT_SLASH)
         self.user_pwd_gid_fl = self.load_config_value(
             self._USE_PWD_GID)
+        self.retry_delays = self.load_config_value(
+            self.RETRY_DELAYS)
         
     def callback(self, ch, method, properties, body, connection):
         self.reset()

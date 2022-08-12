@@ -32,6 +32,7 @@ class IndexerConsumer(RabbitMQConsumer):
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
         _USE_PWD_GID: False,
+        RabbitMQConsumer.RETRY_DELAYS: RabbitMQConsumer.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -55,6 +56,7 @@ class IndexerConsumer(RabbitMQConsumer):
         )
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
         self.use_pwd_gid_fl = self.load_config_value(self._USE_PWD_GID)
+        self.retry_delays = self.load_config_value(self._RETRY_DELAYS)
 
         self.reset()
     
