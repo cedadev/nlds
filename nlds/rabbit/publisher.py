@@ -9,7 +9,7 @@ __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 import json
 import logging
@@ -105,13 +105,15 @@ class RabbitMQPublisher():
     IndexItem = namedtuple("IndexItem", "item retries")
 
     # In ascending order: 0 seconds, 30 seconds, 1 minute, 1 hour, 1 day, 5 days
+    # All must be in milliseconds.
+    RETRY_DELAYS = "retry_delays"
     DEFAULT_RETRY_DELAYS = [
-        0,
-        30,          
-        60, 
-        60 * 60,
-        60 * 60 * 24,
-        60 * 60 * 24 * 5
+        timedelta(seconds=0).total_seconds * 1000,          
+        timedelta(seconds=30).total_seconds * 1000,          
+        timedelta(minutes=1).total_seconds * 1000, 
+        timedelta(hours=1).total_seconds * 1000, 
+        timedelta(days=1).total_seconds * 1000, 
+        timedelta(days=5).total_seconds * 1000, 
     ]
 
     def __init__(self, setup_logging_fl=False):
