@@ -289,7 +289,7 @@ class RabbitMQPublisher():
         requested, then the 5th element is returned. 
         """
         retries = min(retries, len(self.retry_delays) - 1)
-        return self.retry_delays[retries]
+        return int(self.retry_delays[retries])
 
     def close_connection(self) -> None:
         self.connection.close()

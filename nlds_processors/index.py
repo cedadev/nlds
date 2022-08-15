@@ -354,7 +354,7 @@ class IndexerConsumer(RabbitMQConsumer):
             # base it off of the first one.
             delay = self.get_retry_delay(indexlist[0].retries)
             self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
-                     f"{datetime.now() + timedelta(milliseconds=delay)}", 
+                     f" {datetime.now() + timedelta(milliseconds=delay)}", 
                      self.RK_LOG_DEBUG)
         
         body_json[self.MSG_DATA][self.MSG_FILELIST] = indexlist
