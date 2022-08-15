@@ -108,12 +108,12 @@ class RabbitMQPublisher():
     # All must be in milliseconds.
     RETRY_DELAYS = "retry_delays"
     DEFAULT_RETRY_DELAYS = [
-        timedelta(seconds=0).total_seconds * 1000,          
-        timedelta(seconds=30).total_seconds * 1000,          
-        timedelta(minutes=1).total_seconds * 1000, 
-        timedelta(hours=1).total_seconds * 1000, 
-        timedelta(days=1).total_seconds * 1000, 
-        timedelta(days=5).total_seconds * 1000, 
+        timedelta(seconds=0).total_seconds() * 1000,          
+        timedelta(seconds=30).total_seconds() * 1000,          
+        timedelta(minutes=1).total_seconds() * 1000, 
+        timedelta(hours=1).total_seconds() * 1000, 
+        timedelta(days=1).total_seconds() * 1000, 
+        timedelta(days=5).total_seconds() * 1000, 
     ]
 
     def __init__(self, setup_logging_fl=False):
