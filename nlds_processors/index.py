@@ -56,7 +56,7 @@ class IndexerConsumer(RabbitMQConsumer):
         )
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
         self.use_pwd_gid_fl = self.load_config_value(self._USE_PWD_GID)
-        self.retry_delays = self.load_config_value(self._RETRY_DELAYS)
+        self.retry_delays = self.load_config_value(self.RETRY_DELAYS)
 
         self.reset()
     
