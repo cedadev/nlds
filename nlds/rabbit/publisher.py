@@ -19,7 +19,7 @@ import pathlib
 from collections import namedtuple
 
 import pika
-from pika.exceptions import AMQPConnectionError
+from pika.exceptions import AMQPConnectionError, UnroutableError
 from retry import retry
 
 from ..server_config import (
@@ -164,6 +164,7 @@ class RabbitMQPublisher():
                 # Create a new channel with basic qos
                 channel = connection.channel()
                 channel.basic_qos(prefetch_count=1)
+                channel.confirm_delivery()
 
                 self.connection = connection
                 self.channel = channel
@@ -292,6 +293,12 @@ class RabbitMQPublisher():
             logger.debug(f"{e}")
             self.connection = None
             self.get_connection()
+            raise RabbitRetryError(str(e), ampq_exception=e)
+        except UnroutableError as e:
+            # For any Undelivered messages attempt to send again
+            logger.error("Message delivery was not confirmed, wasn't delivered "
+                         f"properly (rk = {routing_key}). Attempting retry...")
+            logger.debug(f"{e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def get_retry_delay(self, retries: int):
