@@ -12,13 +12,14 @@ from ..rabbit.publisher import RabbitMQPublisher
 from uuid import UUID
 from typing import List
 
+# Create a publisher and start its connection
 rabbit_publisher = RabbitMQPublisher()
+rabbit_publisher.get_connection()
 
 def rabbit_publish_response(routing_key: str, transaction_id: UUID, user: str, 
                             group: str, data: List[str], access_key: str, 
                             secret_key: str, target: str = None, 
                             tenancy: str = None):
-    rabbit_publisher.get_connection()
     msg = rabbit_publisher.create_message(transaction_id, data, access_key, 
                                           secret_key, user=user, group=group, 
                                           target=target, tenancy=tenancy)

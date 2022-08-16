@@ -19,8 +19,7 @@ import pathlib
 from collections import namedtuple
 
 import pika
-from pika.exceptions import (AMQPConnectionError, AMQPHeartbeatTimeout, 
-                             AMQPChannelError, AMQPError, StreamLostError)
+from pika.exceptions import AMQPConnectionError
 from retry import retry
 
 from ..server_config import (
@@ -116,10 +115,13 @@ class RabbitMQPublisher():
         timedelta(days=5).total_seconds() * 1000, 
     ]
 
-    def __init__(self, setup_logging_fl=False):
+    def __init__(self, name="publisher", setup_logging_fl=False):
         # Get rabbit-specific section of config file
         self.whole_config = load_config()
         self.config = self.whole_config[RABBIT_CONFIG_SECTION]
+
+        # Set name for logging purposes
+        self.name = name
         
         # Load exchange section of config as this is the only required part for 
         # sending messages
@@ -143,8 +145,7 @@ class RabbitMQPublisher():
     @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
     def get_connection(self):
         try:
-            if (self.connection is None 
-                or not (self.connection.is_open and self.channel.is_open)):
+            if (not self.channel or not self.channel.is_open):
                 # Get the username and password for rabbit
                 rabbit_user = self.config["user"]
                 rabbit_password = self.config["password"]
@@ -160,7 +161,7 @@ class RabbitMQPublisher():
                     )
                 )
 
-                # Create a new channel
+                # Create a new channel with basic qos
                 channel = connection.channel()
                 channel.basic_qos(prefetch_count=1)
 
@@ -170,8 +171,10 @@ class RabbitMQPublisher():
                 # Declare the exchange config. Also provides a hook for other 
                 # bindings (e.g. queues) to be declared in child classes.
                 self.declare_bindings()
-        except (AMQPError, AMQPChannelError, AMQPConnectionError, 
-                AMQPHeartbeatTimeout, StreamLostError) as e:
+        except AMQPConnectionError as e:
+            logger.error("AMQPConnectionError encountered on attempting to "
+                         "establish a connection. Retrying...")
+            logger.debug(f"{e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
@@ -250,6 +253,7 @@ class RabbitMQPublisher():
 
         return json.dumps(message_dict)
 
+    @retry(RabbitRetryError, tries=2, delay=0, backoff=1, logger=logger)
     def publish_message(self, routing_key: str, msg: str, exchange: Dict = None,
                         delay: int = 0) -> None:
         """Sends a message with the specified routing key to an exchange for 
@@ -267,18 +271,28 @@ class RabbitMQPublisher():
         """
         if not exchange:
             exchange = self.default_exchange
-        self.channel.basic_publish(
-            exchange=exchange["name"],
-            routing_key=routing_key,
-            properties=pika.BasicProperties(
-                content_encoding='application/json',
-                headers={
-                    "x-delay": delay
-                },
-                delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
-            ),
-            body=msg
-        )
+
+        try:
+            self.channel.basic_publish(
+                exchange=exchange["name"],
+                routing_key=routing_key,
+                properties=pika.BasicProperties(
+                    content_encoding='application/json',
+                    headers={
+                        "x-delay": delay
+                    },
+                    delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
+                ),
+                body=msg,
+            )
+        except AMQPConnectionError as e:
+            # For any connection error then reset the connection and try again
+            logger.error("AMQPConnectionError encountered on attempting to "
+                         "publish a message. Manually resetting and retrying.")
+            logger.debug(f"{e}")
+            self.connection = None
+            self.get_connection()
+            raise RabbitRetryError(str(e), ampq_exception=e)
 
     def get_retry_delay(self, retries: int):
         """Simple convenience function for getting the delay (in seconds) for an 
@@ -445,7 +459,7 @@ class RabbitMQPublisher():
                         logger.warning(f"Failed to create log file for "
                                        f"{log_file}: {str(e)}")
 
-    def log(self, log_message: str, log_level: str, target: str, 
+    def _log(self, log_message: str, log_level: str, target: str, 
             **kwargs) -> None:
         """
         Catch-all function to log a message, both sending it to the local logger
@@ -482,6 +496,13 @@ class RabbitMQPublisher():
         routing_key = ".".join([self.RK_ROOT, self.RK_LOG, log_level.lower()])
         message = self.create_log_message(log_message, target)
         self.publish_message(routing_key, message)
+    
+    def log(self, log_message: str, log_level: str, target: str = None, 
+            **kwargs) -> None:
+        # Attempt to log to publisher's name
+        if not target:
+            target = self.name
+        self._log(log_message, log_level, target, **kwargs)
 
     @classmethod
     def create_log_message(cls, message: str, target: str, 

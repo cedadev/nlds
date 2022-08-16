@@ -63,12 +63,12 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_CONSUMER_CONFIG = dict()
 
     def __init__(self, queue: str = None, setup_logging_fl=False):
-        super().__init__(setup_logging_fl=False)
+        super().__init__(name=queue, setup_logging_fl=False)
 
         # TODO: (2021-12-21) Only one queue can be specified at the moment, 
         # should be able to specify multiple queues to subscribe to but this 
         # isn't a priority.
-        self.queue = queue
+        self.name = queue
         try:
             if queue is not None:
                 # If queue specified then select only that configuration
@@ -89,7 +89,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 
         except ValueError as e:
             print("Using default queue config - only fit for testing purposes.")
-            self.queue = self.DEFAULT_QUEUE_NAME
+            self.name = self.DEFAULT_QUEUE_NAME
             self.queues = [RabbitQueue.from_defaults(
                 self.DEFAULT_QUEUE_NAME,
                 self.DEFAULT_EXCHANGE_NAME, 
@@ -97,8 +97,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             )]  
 
         # Load consumer-specific config
-        if self.queue in self.whole_config:
-            self.consumer_config = self.whole_config[self.queue]
+        if self.name in self.whole_config:
+            self.consumer_config = self.whole_config[self.name]
         else: 
             self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
 
@@ -408,12 +408,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         else:
             body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
         return body
-    
-    def log(self, log_message: str, log_level: str, target: str = None, 
-            **kwargs) -> None:
-        if not target:
-            target = self.queue
-        super().log(log_message, log_level, target, **kwargs)
 
     def run(self):
         """
