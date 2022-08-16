@@ -285,6 +285,7 @@ class RabbitMQPublisher():
                     delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
                 ),
                 body=msg,
+                mandatory=True,
             )
         except AMQPConnectionError as e:
             # For any connection error then reset the connection and try again
