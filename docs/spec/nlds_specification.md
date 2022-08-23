@@ -385,15 +385,15 @@ processing, the output data.  For the messages detailed below in the
     }
 
 The value for the `filelist` key is a `<list>` which can contain details for
-multiple files.  Each `<list>` element is a `NamedTuple`, consisting of a `json`
-document and a retry `int` (see the #retries section below).
+multiple files.  Each `<list>` element is a `PathDetails` object, consisting of 
+a `json` document and a retry `int` (see the #retries section below).
 The `json` document can contain a number of key / value pairs, some of which are 
 optional for each processor.  The `json` document looks like this:
 
     {
         file_details : {
             original_path       : <str>,
-            nlds_object         : <str>,
+            object_name         : <str>,
             size                : <int>, (in kilobytes?)
             user                : <str>, (get uid from LDAP?)
             group               : <str>, (get gid from LDAP?)
@@ -403,6 +403,21 @@ optional for each processor.  The `json` document looks like this:
             link_path           : <str>, (link position,path of link, related to either root or common path)
         }
     }
+
+which mostly consists of the result of a stat call on the path/file in question, 
+as well as some useful metadata. The file type is included, which can be one of 
+a few options: FILE, DIRECTORY, LINK_COMMON_PATH, LINK_ABSOLUTE_PATH. The 
+distinction between these latter 2 options is whether the path of a given 
+symlink lies within the 'common path' of the files given in the transaction and 
+can therefore be stored as a relative link_path, or whether it lies outside of 
+the 'common path' and therefore must be stored as an absolute link_path. Note 
+that a symlink given as an absolute path to somewhere within the common path 
+should be stored as a LINK_COMMON_PATH - and therefore as a relative link_path - 
+and conversely a symlink given as a relative path to somewhere outside the 
+'common path' should be stored as an absolute LINK_ABSOLUTE_PATH.
+
+`object_name` in the above json document refers to the name of the object once 
+written to the object store. 
 
 ### Applications
 
@@ -756,7 +771,7 @@ The `data : {filelist : }` `json` documents contain :
     {
         file_details : {
             original_path       : <str>,
-            nlds_object         : <str>,
+            object_name         : <str>,
             size                : <int>,
             user                : <str>,
             group               : <str>,
