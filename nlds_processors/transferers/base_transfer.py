@@ -5,6 +5,7 @@ from typing import List, NamedTuple, Dict
 import pathlib as pth
 
 from nlds.rabbit.consumer import RabbitMQConsumer
+from nlds.details import PathDetails
 
 class BaseTransferConsumer(RabbitMQConsumer, ABC):
     DEFAULT_QUEUE_NAME = "transfer_q"
@@ -129,7 +130,7 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
         # Start transfer - this is implementation specific and handled by child 
         # classes 
         self.transfer(transaction_id, tenancy, access_key, secret_key, 
-                        filelist, rk_parts[0], body_json)
+                      filelist, rk_parts[0], body_json)
 
     def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
                           access: int = os.R_OK) -> bool:
@@ -142,6 +143,6 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
 
     @abstractmethod
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
-                 secret_key: str, filelist: List[NamedTuple], rk_origin: str,
+                 secret_key: str, filelist: List[PathDetails], rk_origin: str,
                  body_json: Dict[str, str]):
         pass

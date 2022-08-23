@@ -1,11 +1,11 @@
-from typing import List, NamedTuple
-import os
+from typing import List
 
 import minio
 from minio.error import S3Error
 from retry import retry
 
 from .base_transfer import BaseTransferConsumer
+from nlds.details import PathDetails
 
 
 class GetTransferConsumer(BaseTransferConsumer):
@@ -19,7 +19,7 @@ class GetTransferConsumer(BaseTransferConsumer):
     
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
-                 secret_key: str, filelist: List[NamedTuple]):
+                 secret_key: str, filelist: List[PathDetails]):
         raise NotImplementedError()
 
 def main():

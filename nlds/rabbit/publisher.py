@@ -28,6 +28,7 @@ from ..server_config import (
     LOGGING_CONFIG_STDOUT_LEVEL, LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_ENABLE
 )
 from ..errors import RabbitRetryError
+from ..details import PathDetails
 
 logger = logging.getLogger("nlds.root")
 
@@ -100,8 +101,6 @@ class RabbitMQPublisher():
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
     MSG_TYPE_LOG = "log"
-
-    IndexItem = namedtuple("IndexItem", "item retries")
 
     # In ascending order: 0 seconds, 30 seconds, 1 minute, 1 hour, 1 day, 5 days
     # All must be in milliseconds.
@@ -234,7 +233,7 @@ class RabbitMQPublisher():
         """
         timestamp = datetime.now().isoformat(sep='-')
         # Convert to a list of IndexItems and initialise retry list of zeroes
-        indexlist = [cls.IndexItem(item, 0) for item in data]
+        filelist = [PathDetails(original_path=item) for item in data]
         message_dict = {
             cls.MSG_DETAILS: {
                 cls.MSG_TRANSACT_ID: str(transaction_id),
@@ -247,7 +246,7 @@ class RabbitMQPublisher():
                 cls.MSG_SECRET_KEY: secret_key,
             }, 
             cls.MSG_DATA: {
-                cls.MSG_FILELIST: indexlist,
+                cls.MSG_FILELIST: filelist,
             },
             cls.MSG_TYPE: cls.MSG_TYPE_STANDARD
         }
@@ -305,10 +304,9 @@ class RabbitMQPublisher():
     def get_retry_delay(self, retries: int):
         """Simple convenience function for getting the delay (in seconds) for an 
         indexlist with a given number of retries. Works off of the member 
-        variable self.retry_delays, maxing out at its final value 
-        
-        e.g. if there are 5 elements in self.retry_delays, and 7 retries 
-        requested, then the 5th element is returned. 
+        variable self.retry_delays, maxing out at its final value i.e. if there 
+        are 5 elements in self.retry_delays, and 7 retries requested, then the 
+        5th element is returned. 
         """
         retries = min(retries, len(self.retry_delays) - 1)
         return int(self.retry_delays[retries])

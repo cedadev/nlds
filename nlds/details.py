@@ -27,6 +27,7 @@ class PathType(Enum):
     LINK_COMMON_PATH = 3
     LINK_ABSOLUTE_PATH = 4
     NOT_RECOGNISED = 5
+    UNINDEXED = 6
 
 class PathDetails(BaseModel):
     original_path: str
@@ -38,7 +39,7 @@ class PathDetails(BaseModel):
     permissions: Optional[int]
     access_time: Optional[float]
     modify_time: Optional[float]
-    path_type: Optional[PathType]
+    path_type: Optional[PathType] = PathType.UNINDEXED
     link_path: Optional[str]
     retries: Optional[int] = 0
     retry_reasons: Optional[List[str]] = []
@@ -130,6 +131,12 @@ class PathDetails(BaseModel):
                                  path=self.original_path, 
                                  stat_result=self.get_stat_result())
 
-    def increment_retry(self):
+    def increment_retry(self, retry_reason: str = None) -> None:
         self.retries += 1 
+        if retry_reason:
+            self.retry_reasons.append(retry_reason)
+
+    def reset_retries(self) -> None:
+        self.retries = 0
+        self.retry_reasons = []
 

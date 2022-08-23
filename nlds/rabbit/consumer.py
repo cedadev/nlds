@@ -8,6 +8,7 @@ __copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
+from enum import Enum
 import functools
 from abc import ABC, abstractmethod
 import logging
@@ -33,6 +34,7 @@ from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES,
                              RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
                              RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
 from ..utils.permissions import check_permissions
+from ..details import PathDetails
 
 logger = logging.getLogger("nlds.root")
 
@@ -53,6 +55,11 @@ class RabbitQueue(BaseModel):
                                       routing_key=routing_key)]
         )
 
+class FilelistType(Enum):
+    raw = 0
+    processed = 1
+    retry = 2
+    failed = 3
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
@@ -113,7 +120,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # Set up the logging and pass through constructor parameter
         self.setup_logging(enable=setup_logging_fl)
 
-    def reset(self):
+    def reset(self) -> None:
         self.gid = None
         self.uid = None
     
@@ -168,15 +175,15 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         return return_val
     
-    def parse_filelist(self, body_json):
-        # Convert flat list into list of named tuples and the check it is, 
-        # in fact, a list
+    def parse_filelist(self, body_json: dict) -> List[PathDetails]:
+        # Convert flat list into list of PathDetails objects and the check it 
+        # is, in fact, a list
         try:
-            filelist = [self.IndexItem(i, r) for i, r in 
+            filelist = [PathDetails.from_dict(pd_dict) for pd_dict in 
                         list(body_json[self.MSG_DATA][self.MSG_FILELIST])]
         except TypeError as e:
             self.log(
-                "Failed to reformat list into indexitems. Filelist in "
+                "Failed to reformat list into PathDetails objects. Filelist in "
                 "message does not appear to be in the correct format.", 
                 self.RK_LOG_ERROR
             )
@@ -184,7 +191,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         return filelist
 
-    def set_ids(self, body_json: Dict[str, str], use_pwd_gid_fl: bool = True):
+    def set_ids(self, 
+            body_json: Dict[str, str], 
+            use_pwd_gid_fl: bool = True
+        ) -> None:
         """Changes the real user- and group-ids stored in the class to that 
         specified in the incoming message details section so that permissions 
         on each file in a filelist can be checked.
@@ -278,7 +288,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             if LOGGING_CONFIG_STDOUT in consumer_logging_conf:
                 add_stdout_fl = consumer_logging_conf[LOGGING_CONFIG_STDOUT]
             if LOGGING_CONFIG_STDOUT_LEVEL in consumer_logging_conf:
-                stdout_log_level = consumer_logging_conf[LOGGING_CONFIG_STDOUT_LEVEL]
+                stdout_log_level = (
+                    consumer_logging_conf[LOGGING_CONFIG_STDOUT_LEVEL]
+                )
             if LOGGING_CONFIG_FILES in consumer_logging_conf:
                 log_files = consumer_logging_conf[LOGGING_CONFIG_FILES]
             if LOGGING_CONFIG_ROLLOVER in consumer_logging_conf:
@@ -294,7 +306,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                      log_rollover)
 
     @staticmethod
-    def _acknowledge_message(channel: Channel, delivery_tag: str):
+    def _acknowledge_message(channel: Channel, delivery_tag: str) -> None:
         """Acknowledge a message with a basic ack. This is the bare minimum 
         requirement for an acknowledgement according to rabbit protocols.
 
@@ -307,7 +319,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             channel.basic_ack(delivery_tag)
 
     def acknowledge_message(self, channel: Channel, delivery_tag: str, 
-                            connection: Connection):
+                            connection: Connection) -> None:
         """Method for acknowledging a message so the next can be fetched. This 
         should be called at the end of a consumer callback, and - in order to do 
         so thread-safely - from within connection object.  All of the required 
@@ -323,7 +335,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, 
-                 body: bytes, connection: Connection):
+                 body: bytes, connection: Connection) -> None:
         """Standard consumer callback function as defined by rabbitMQ, with the 
         standard callback parameters of Channel, Method, Header, Body (in bytes)
         and Connection.
@@ -335,7 +347,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         NotImplementedError
     
     def _wrapped_callback(self, ch: Channel, method: Method, properties: Header, 
-                          body: bytes, connection: Connection):
+                          body: bytes, connection: Connection) -> None:
         """Wrapper around standard callback function which adds error handling 
         and manual message acknowledgement. All arguments are the same as those 
         in self.callback, i.e. the standard rabbitMQ consumer callback 
@@ -361,7 +373,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 self.RK_LOG_DEBUG
             )
         else:
-            # Ack message if it has only failed in the limited number of ways 
+            # Ack message only if it has failed in the limited number of ways 
             # above
             self.acknowledge_message(ch, method.delivery_tag, connection)
 
@@ -400,7 +412,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return rk_parts
 
     @classmethod
-    def append_route_info(cls, body: Dict, route_info: str = None):
+    def append_route_info(cls, body: Dict, route_info: str = None) -> Dict:
         if route_info is None: 
             route_info = cls.DEFAULT_REROUTING_INFO
         if cls.MSG_ROUTE in body[cls.MSG_DETAILS]:
