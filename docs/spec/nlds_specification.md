@@ -895,19 +895,20 @@ Once an item in the filelist has exceeded a server-configured number of
 retries, it will be permanently failed and a message will be passed back to the
 user (how?) telling them of this.
 
-Just passing back the message immediately is not optimum.  The task will have
+Just passing back the message immediately is not optimal.  The task will have
 failed for a reason which may not have been fixed in the (potentially and 
 probably) short time that it will take for the message to be submitted to the
-exchange and then consumed by the task that had initially failed.  With such a 
+exchange and then consumed by the task that had initially failed. With such a 
 short duration between failing and then trying to complete the task, it is 
 likely that the task will fail again. To overcome this we have implemented the 
 option to use the [delayed exchange plugin](https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/) for RabbitMQ which allows messages to 
 request to be delayed before being routed by the exchange, via a variable 
 (`x-delay`) specified in the message header. 
 
-This has default configuration of:
+These delays increase exponentially with increasing retry count, with a default 
+configuration of:
 
-* First failure, send immediately
+* First failure, resend immediately
 * Second failure, wait 30 seconds
 * Third failure, wait 1 minute
 * Fourth failure, wait 1 hour
