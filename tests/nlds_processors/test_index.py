@@ -6,6 +6,7 @@ import functools
 
 from nlds.rabbit import publisher as publ
 import nlds.rabbit.consumer as cons
+from nlds.details import PathDetails
 from nlds_processors.index import IndexerConsumer
 
 def mock_load_config(template_config):
@@ -67,15 +68,15 @@ def test_index(monkeypatch, caplog, default_indexer,
 
 
     expected_filelist = [
-        default_indexer.IndexItem("/test/1-1/2-1/3-1/test-1.txt", 0),
-        default_indexer.IndexItem("/test/1-1/2-1/3-2/test-2.txt", 0),
-        default_indexer.IndexItem("/test/1-1/2-2/3-3/test-3.txt", 0),
-        default_indexer.IndexItem("/test/1-4/2-4/3-3/4-2/5-2/6-1/test-4.txt", 0),
+        PathDetails(original_path="/test/1-1/2-1/3-1/test-1.txt"),
+        PathDetails(original_path="/test/1-1/2-1/3-2/test-2.txt"),
+        PathDetails(original_path="/test/1-1/2-2/3-3/test-3.txt"),
+        PathDetails(original_path="/test/1-4/2-4/3-3/4-2/5-2/6-1/test-4.txt"),
     ]
 
     # Should work with any number of retries under the limit
     for i in range(default_indexer.max_retries):
-        test_filelist = [default_indexer.IndexItem("/test/", i)]
+        test_filelist = [PathDetails(original_path="/test/", retries=i)]
         default_indexer.index(test_filelist, 'test', default_rmq_message_dict)
 
         assert len(default_indexer.indexlist) == len(expected_filelist)
@@ -89,7 +90,7 @@ def test_index(monkeypatch, caplog, default_indexer,
     # All files should be in failed list with any number of retries over the 
     # limit
     for i in range(default_indexer.max_retries + 1, 10):
-        test_filelist = [default_indexer.IndexItem("/test/", i)]
+        test_filelist = [PathDetails(original_path="/test/", retries=i)]
         default_indexer.index(test_filelist, 'test', default_rmq_message_dict)
 
         assert len(default_indexer.indexlist) == 0
