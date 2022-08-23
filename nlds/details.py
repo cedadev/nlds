@@ -1,8 +1,6 @@
 from collections import namedtuple
 from enum import Enum
 from typing import NamedTuple, Optional, List, Dict
-from datetime import datetime
-import json
 from json import JSONEncoder
 from pathlib import Path
 import stat
@@ -31,7 +29,7 @@ class PathType(Enum):
 
 class PathDetails(BaseModel):
     original_path: str
-    nlds_object: Optional[str]
+    object_name: Optional[str]
     size: Optional[float]
     user: Optional[int]
     group: Optional[int]
@@ -52,7 +50,7 @@ class PathDetails(BaseModel):
         return { 
             "file_details": {
                 "original_path": self.original_path,
-                "nlds_object": self.nlds_object,
+                "object_name": self.object_name,
                 "size": self.size,
                 "user": self.user,
                 "group": self.group,
