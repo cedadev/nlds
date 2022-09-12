@@ -13,11 +13,13 @@ import functools
 from abc import ABC, abstractmethod
 import logging
 import traceback
-from typing import Dict, List, NamedTuple
+from typing import Dict, List, NamedTuple, Union
 import pathlib as pth
 import grp
 import pwd
 import os
+import json
+from datetime import datetime, timedelta
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -60,6 +62,8 @@ class FilelistType(Enum):
     processed = 1
     retry = 2
     failed = 3
+    indexed = 1
+    transferred = 1
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
@@ -191,7 +195,114 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         return filelist
 
-    def set_ids(self, 
+    def _choose_list(self, list_type: FilelistType = FilelistType.processed
+                    ) -> List[PathDetails]:
+        """ Choose the correct pathlist for a given mode of operation. This 
+        requires that the appropriate "
+        """
+        if list_type == FilelistType.processed:
+            return self.completelist
+        elif list_type == FilelistType.retry:
+            return self.retrylist
+        elif list_type == FilelistType.failed:
+            return self.failedlist
+        else: 
+            raise ValueError(f"Invalid list type provided ({list_type})")
+
+    def append_and_send(self, 
+            path_details: PathDetails, 
+            routing_key: str, 
+            body_json: Dict[str, str], 
+            filesize: int = None,
+            list_type: Union[FilelistType, str] = FilelistType.processed,
+        ) -> None:
+        """Append a path details item to an existing PathDetails list and then 
+        determine if said list requires sending to the exchange due to size 
+        limits (can be either file size or list length). Which pathlist is to 
+        be used is determined by the list_type passed, which can be either a 
+        FilelistType enum or an appropriate string that can be cast into one. 
+
+        The list will by default be capped by list-length, with the maximum 
+        determined by a filelist_max_length config variable (defaults to 1000). 
+        This behaviour is overriden by specifying the filesize kwarg, which is 
+        in kilobytes and must be an integer, at consumption time.
+
+        The message body and destination should be specified through body_json 
+        and routing_key respectively. 
+
+        NOTE: This was refactored here from the index/transfer processors. 
+        Might make more sense to put it somewhere else given there are specific 
+        config variables required (filelist_max_length, message_max_size) which 
+        could fail with an AttributeError?
+
+        """
+        # If list_type given as a string then attempt to cast it into an 
+        # appropriate enum
+        if not isinstance(list_type, FilelistType):
+            try:
+                list_type = FilelistType[list_type]
+            except KeyError:
+                raise ValueError("list_type value invalid, must be a "
+                                 "FilelistType enum or a string capabale of "
+                                 f"being cast to such (list_type={list_type})")
+
+        pathlist = self.choose_list(list_type)
+        pathlist.append(path_details)
+
+        # If filesize has been passed then use total list size as message cap
+        if filesize:
+            self.indexlist_size += filesize
+            
+            # Send directly to exchange and reset filelist
+            if self.indexlist_size >= self.message_max_size:
+                self.send_indexlist(
+                    pathlist, routing_key, body_json, mode=list_type
+                )
+                pathlist.clear()
+                self.indexlist_size = 0
+
+        # The default message cap is the length of the index list. This applies
+        # to failed or problem lists by default
+        elif len(pathlist) >= self.filelist_max_len:
+            # Send directly to exchange and reset filelist
+            self.send_indexlist(
+                pathlist, routing_key, body_json, mode=list_type
+            )
+            pathlist.clear()
+
+    def send_indexlist(self, pathlist: List[PathDetails], routing_key: str, 
+                       body_json: Dict[str, str], 
+                       mode: FilelistType = FilelistType.processed
+                       ) -> None:
+        """ Convenience function which sends the given list of PathDetails 
+        objects to the exchange with the given routing key and message body. 
+        Mode specifies what to put into the log message, as well as determining 
+        whether the list should be retry-reset and whether the message should be 
+        delayed.
+
+        """
+        self.log(f"Sending list back to exchange (routing_key = {routing_key})",
+                 self.RK_LOG_INFO)
+
+        delay = 0
+        if mode == FilelistType.processed:
+            # Reset the retries upon successful indexing. 
+            for path_details in pathlist:
+                path_details.reset_retries()
+        elif mode == FilelistType.retry:
+            # Delay the retry message depending on how many retries have been 
+            # accumulated. All retries in a retry list _should_ be the same so 
+            # base it off of the first one.
+            delay = self.get_retry_delay(pathlist[0].retries)
+            self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
+                     f" {datetime.now() + timedelta(milliseconds=delay)}", 
+                     self.RK_LOG_DEBUG)
+        
+        body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
+        self.publish_message(routing_key, json.dumps(body_json), delay=delay)
+
+    def set_ids(
+            self, 
             body_json: Dict[str, str], 
             use_pwd_gid_fl: bool = True
         ) -> None:
