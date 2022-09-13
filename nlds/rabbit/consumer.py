@@ -366,7 +366,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         performed RabbitMQConsumer.set_ids() beforehand.
 
         """
-        if self.uid is None or self.gid is None:
+        if check_permissions_fl and (self.uid is None or self.gid is None):
             raise ValueError("uid and gid not set properly.")
         
         if not isinstance(path, pth.Path):
