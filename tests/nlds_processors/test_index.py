@@ -79,7 +79,7 @@ def test_index(monkeypatch, caplog, default_indexer,
         test_filelist = [PathDetails(original_path="/test/", retries=i)]
         default_indexer.index(test_filelist, 'test', default_rmq_message_dict)
 
-        assert len(default_indexer.indexlist) == len(expected_filelist)
+        assert len(default_indexer.completelist) == len(expected_filelist)
         assert len(default_indexer.retrylist) == 0
         assert len(default_indexer.failedlist) == 0
 
@@ -93,7 +93,7 @@ def test_index(monkeypatch, caplog, default_indexer,
         test_filelist = [PathDetails(original_path="/test/", retries=i)]
         default_indexer.index(test_filelist, 'test', default_rmq_message_dict)
 
-        assert len(default_indexer.indexlist) == 0
+        assert len(default_indexer.completelist) == 0
         assert len(default_indexer.retrylist) == 0
         assert len(default_indexer.failedlist) == 1   # length of initial list!
 

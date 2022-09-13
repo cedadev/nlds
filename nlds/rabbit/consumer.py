@@ -198,7 +198,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     def _choose_list(self, list_type: FilelistType = FilelistType.processed
                     ) -> List[PathDetails]:
         """ Choose the correct pathlist for a given mode of operation. This 
-        requires that the appropriate "
+        requires that the appropriate member variable be instantiated in the 
+        consumer class.
         """
         if list_type == FilelistType.processed:
             return self.completelist
@@ -246,31 +247,36 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                  "FilelistType enum or a string capabale of "
                                  f"being cast to such (list_type={list_type})")
 
-        pathlist = self.choose_list(list_type)
+        # Select correct pathlist and append the given PathDetails object
+        pathlist = self._choose_list(list_type)
         pathlist.append(path_details)
 
         # If filesize has been passed then use total list size as message cap
         if filesize:
-            self.indexlist_size += filesize
+            # NOTE: This references a general pathlist but a specific list size, 
+            # perhaps these two should be combined together into a single 
+            # pathlist object? Might not be necessary for just this small code 
+            # snippet. 
+            self.completelist_size += filesize
             
             # Send directly to exchange and reset filelist
-            if self.indexlist_size >= self.message_max_size:
-                self.send_indexlist(
+            if self.completelist_size >= self.message_max_size:
+                self.send_pathlist(
                     pathlist, routing_key, body_json, mode=list_type
                 )
                 pathlist.clear()
-                self.indexlist_size = 0
+                self.completelist_size = 0
 
-        # The default message cap is the length of the index list. This applies
+        # The default message cap is the length of the pathlist. This applies
         # to failed or problem lists by default
         elif len(pathlist) >= self.filelist_max_len:
             # Send directly to exchange and reset filelist
-            self.send_indexlist(
+            self.send_pathlist(
                 pathlist, routing_key, body_json, mode=list_type
             )
             pathlist.clear()
 
-    def send_indexlist(self, pathlist: List[PathDetails], routing_key: str, 
+    def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
                        body_json: Dict[str, str], 
                        mode: FilelistType = FilelistType.processed
                        ) -> None:

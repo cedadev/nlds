@@ -64,8 +64,8 @@ class IndexerConsumer(RabbitMQConsumer):
     def reset(self):
         super().reset()
 
-        self.indexlist = []
-        self.indexlist_size = 0
+        self.completelist = []
+        self.completelist_size = 0
         self.retrylist = []
         self.failedlist = []
     
@@ -138,14 +138,14 @@ class IndexerConsumer(RabbitMQConsumer):
         # in the routing key
         for i in range(0, filelist_len, self.filelist_max_len):
             slc = slice(i, min(i + self.filelist_max_len, filelist_len))
-            self.send_indexlist(
+            self.send_pathlist(
                 filelist[slc], rk_index, 
                 body_json, mode="split"
             )
         
     def index(self, raw_filelist: List[NamedTuple], rk_origin: str, 
               body_json: Dict[str, str]):
-        """Indexes a list of IndexItems. 
+        """Indexes a list of PathDetails. 
         
         Each IndexItem is a named tuple consisting of an item (a file or 
         directory) and an associated number of attempted accesses. This function
@@ -187,7 +187,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 self.log(f"{path_details.path} has exceeded max retry count, "
                          "adding to failed list.", self.RK_LOG_DEBUG)
                 self.append_and_send(
-                    path_details, rk_failed, body_json, mode="failed"
+                    path_details, rk_failed, body_json, list_type="failed"
                 )
                 
                 # Skip to next item and avoid access logic
@@ -209,7 +209,7 @@ class IndexerConsumer(RabbitMQConsumer):
                     retry_reason="inaccessible"
                 )
                 self.append_and_send(
-                    path_details, rk_retry, body_json, mode="retry"
+                    path_details, rk_retry, body_json, list_type="retry"
                 )
 
             elif item_p.is_dir():
@@ -225,7 +225,7 @@ class IndexerConsumer(RabbitMQConsumer):
                     for f in subfiles:
                         f_path = directory_path / f
 
-                        # We create a new indexitem for each walked file 
+                        # We create a new PathDetails for each walked file 
                         # with a zeroed retry counter.
                         walk_path_details = PathDetails(
                             original_path=str(f_path)
@@ -251,7 +251,7 @@ class IndexerConsumer(RabbitMQConsumer):
                             # used as the partitioning metric (if checking file
                             # size)
                             self.append_and_send(walk_path_details, rk_complete, 
-                                                 body_json, mode="indexed", 
+                                                 body_json, list_type="indexed", 
                                                  filesize=filesize)
 
                         else:
@@ -266,7 +266,8 @@ class IndexerConsumer(RabbitMQConsumer):
                                 retry_reason="inaccessible"
                             )
                             self.append_and_send(
-                                path_details, rk_retry, body_json, mode="retry"
+                                path_details, rk_retry, body_json, 
+                                list_type="retry"
                             )
             
             # Index files directly in exactly the same way as above
@@ -280,7 +281,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 # Pass the size through to ensure maximum size is 
                 # used as the partitioning metric
                 self.append_and_send(path_details, rk_complete, 
-                                     body_json, mode="indexed", 
+                                     body_json, list_type="indexed", 
                                      filesize=filesize)
             else:
                 self.log(f"{path_details.path} is of unknown type.", 
@@ -289,20 +290,20 @@ class IndexerConsumer(RabbitMQConsumer):
                     retry_reason="unknown_type"
                 )
                 self.append_and_send(
-                    path_details, rk_retry, body_json, mode="retry"
+                    path_details, rk_retry, body_json, list_type="retry"
                 )
         
         # Send whatever remains after all directories have been walked
-        if len(self.indexlist) > 0:
-            self.send_indexlist(
-                self.indexlist, rk_complete, body_json, mode="indexed"
+        if len(self.completelist) > 0:
+            self.send_pathlist(
+                self.completelist, rk_complete, body_json, mode="indexed"
             )
         if len(self.retrylist) > 0:
-            self.send_indexlist(
+            self.send_pathlist(
                 self.retrylist, rk_retry, body_json, mode="retry"
             )
         if len(self.failedlist) > 0:
-            self.send_indexlist(
+            self.send_pathlist(
                 self.failedlist, rk_failed, body_json, mode="failed"
             )
 
@@ -315,75 +316,6 @@ class IndexerConsumer(RabbitMQConsumer):
             self.check_permissions_fl
         )
 
-    def append_and_send(self, path_details: PathDetails, routing_key: str, 
-                        body_json: Dict[str, str], mode: str = "indexed", 
-                        filesize: int = None) -> None:
-        # Choose the correct indexlist for the mode of operation
-        if mode == "indexed":
-            indexlist = self.indexlist
-        elif mode == "retry":
-            indexlist = self.retrylist
-        elif mode == "failed":
-            indexlist = self.failedlist
-        else: 
-
-            raise ValueError(f"Invalid mode provided {mode}")
-        
-        indexlist.append(path_details)
-
-        # If filesize has been passed then use total list size as message cap
-        if filesize is not None:
-            self.indexlist_size += filesize
-            
-            # Send directly to exchange and reset filelist
-            if self.indexlist_size >= self.message_max_size:
-                self.send_indexlist(
-                    indexlist, routing_key, body_json, mode=mode
-                )
-                indexlist.clear()
-                self.indexlist_size = 0
-
-        # The default message cap is the length of the index list. This applies
-        # to failed or problem lists by default
-        elif len(indexlist) >= self.filelist_max_len:
-            # Send directly to exchange and reset filelist
-            self.send_indexlist(
-                indexlist, routing_key, body_json, mode=mode
-            )
-            indexlist.clear()
-        
-    def send_indexlist(self, indexlist: List[PathDetails], routing_key: str, 
-                       body_json: Dict[str, str], mode: str = "indexed"
-                       ) -> None:
-        """ Convenience function which sends the given list of PathDetails 
-        objects to the exchange with the given routing key and message body. 
-        Mode specifies what to put into the log message, as well as determining 
-        whether the list should be retry-reset and whether the message should be 
-        delayed.
-
-        NOTE: this will be refactored into RabbitMQConsumer as a very similar 
-        function exists on PutTransferConsumer.
-
-        """
-        self.log(f"Sending {mode} list back to exchange", self.RK_LOG_INFO)
-
-        delay = 0
-        # TODO: might be worth using an enum here?
-        if mode == "indexed":
-            # Reset the retries upon successful indexing. 
-            for path_details in indexlist:
-                path_details.reset_retries()
-        elif mode == "retry":
-            # Delay the retry message depending on how many retries have been 
-            # accumulated. All retries in a retry list _should_ be the same so 
-            # base it off of the first one.
-            delay = self.get_retry_delay(indexlist[0].retries)
-            self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
-                     f" {datetime.now() + timedelta(milliseconds=delay)}", 
-                     self.RK_LOG_DEBUG)
-        
-        body_json[self.MSG_DATA][self.MSG_FILELIST] = indexlist
-        self.publish_message(routing_key, json.dumps(body_json), delay=delay)
 
 def main():
     consumer = IndexerConsumer()

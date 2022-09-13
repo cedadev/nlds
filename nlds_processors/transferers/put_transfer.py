@@ -1,6 +1,4 @@
 from typing import List, Dict
-import json
-from datetime import datetime, timedelta
 
 import minio
 from minio.error import S3Error
@@ -23,7 +21,7 @@ class PutTransferConsumer(BaseTransferConsumer):
     def reset(self):
         super().reset()
 
-        self.transferlist = []
+        self.completelist = []
         self.retrylist = []
         self.failedlist = []
 
@@ -59,7 +57,7 @@ class PutTransferConsumer(BaseTransferConsumer):
             # First check whether index item has failed too many times
             if path_details.retries > self.max_retries:
                 self.append_and_send(
-                    path_details, rk_failed, body_json, mode="failed"
+                    path_details, rk_failed, body_json, list_type="failed"
                 )
                 continue
 
@@ -72,7 +70,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                          self.RK_LOG_DEBUG)
                 path_details.increment_retry(retry_reason="inaccessible")
                 self.append_and_send(
-                    path_details, rk_retry, body_json, mode="retry"
+                    path_details, rk_retry, body_json, list_type="retry"
                 )
                 continue
 
@@ -98,75 +96,19 @@ class PutTransferConsumer(BaseTransferConsumer):
                  f"re-routing and cataloguing.", self.RK_LOG_INFO)
         
         # Send whatever remains after all directories have been walked
-        if len(self.transferlist) > 0:
-            self.send_transferlist(
-                self.transferlist, rk_complete, body_json, mode="transferred"
+        if len(self.completelist) > 0:
+            self.send_pathlist(
+                self.completelist, rk_complete, body_json, mode="transferred"
             )
         if len(self.retrylist) > 0:
-            self.send_transferlist(
+            self.send_pathlist(
                 self.retrylist, rk_retry, body_json, mode="retry"
             )
         if len(self.failedlist) > 0:
-            self.send_transferlist(
+            self.send_pathlist(
                 self.failedlist, rk_failed, body_json, mode="failed"
             )
 
-    def append_and_send(self, path_details: PathDetails, routing_key: str, 
-                        body_json: Dict[str, str], mode: str = "transferred"
-                        ) -> None:
-        # Choose the correct indexlist for the mode of operation
-        if mode == "transferred":
-            transferlist = self.transferlist
-        elif mode == "retry":
-            transferlist = self.retrylist
-        elif mode == "failed":
-            transferlist = self.failedlist
-        else: 
-            raise ValueError(f"Invalid mode provided {mode}")
-        
-        transferlist.append(path_details)
-        
-        # The default message cap is the length of the index list. This applies
-        # to failed or problem lists by default
-        if len(transferlist) >= self.filelist_max_len:
-            # Send directly to exchange and reset filelist
-            self.send_transferlist(
-                transferlist, routing_key, body_json, mode=mode
-            )
-            transferlist.clear()
-
-    def send_transferlist(
-            self, transferlist: List[PathDetails], routing_key: str, 
-            body_json: Dict[str, str], mode: str = "transferred"
-        ) -> None:
-        """ Convenience function which sends the given list of PathDetails 
-        objects to the exchange with the given routing key and message body. 
-        Mode specifies what to put into the log message, as well as determining 
-        whether the list should be retry-reset and whether the message should be 
-        delayed.
-
-        NOTE: this will be refactored into RabbitMQConsumer as a very similar 
-        function exists on IndexerConsumer.
-
-        """
-        self.log(f"Sending {mode} list to exchange", self.RK_LOG_INFO)
-
-        # TODO: might be worth using an enum here?
-        # Reset the retries upon successful indexing. 
-        if mode == "transferred":
-            for path_details in transferlist:
-                path_details.reset_retries()
-        elif mode == "retry":
-            # Delay the retry message depending on how many retries have been 
-            # accumulated. All retries in a retry list _should_ be the same so 
-            # base it off of the first one.
-            delay = self.get_retry_delay(transferlist[0].retries)
-            self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
-                     f" {datetime.now() + timedelta(milliseconds=delay)}", 
-                     self.RK_LOG_DEBUG)
-        
-        body_json[self.MSG_DATA][self.MSG_FILELIST] = transferlist
-        self.publish_message(routing_key, json.dumps(body_json), delay=delay)
     
 def main():
     consumer = PutTransferConsumer()
