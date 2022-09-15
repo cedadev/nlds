@@ -489,7 +489,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 f"Failed message content: {body}",
                 self.RK_LOG_DEBUG
             )
-        else:
+        finally:
             # Ack message only if it has failed in the limited number of ways 
             # above
             self.acknowledge_message(ch, method.delivery_tag, connection)
