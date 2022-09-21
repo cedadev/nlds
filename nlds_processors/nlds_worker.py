@@ -20,8 +20,8 @@ from nlds.rabbit.consumer import RabbitMQConsumer
 
 class NLDSWorkerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "nlds_q"
-    DEFAULT_ROUTING_KEY = (f"{RabbitMQConsumer.RK_ROOT}."
-                           f"{RabbitMQConsumer.RK_ROUTE}."
+    DEFAULT_ROUTING_KEY = (f"{RabbitMQConsumer.RK_ROOT}.",
+                           f"{RabbitMQConsumer.RK_ROUTE}.",
                            f"{RabbitMQConsumer.RK_WILD}")
     DEFAULT_REROUTING_INFO = "->NLDS_Q"
 

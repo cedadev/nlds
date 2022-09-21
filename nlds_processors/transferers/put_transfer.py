@@ -4,7 +4,7 @@ import minio
 from minio.error import S3Error
 from retry import retry
 
-from .base_transfer import BaseTransferConsumer
+from nlds_processors.transferers.base_transfer import BaseTransferConsumer
 from nlds.details import PathDetails
 
 
