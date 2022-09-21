@@ -1,0 +1,27 @@
+@startuml catalog_db
+
+object "**Holding**" as holding {
+    id [INT]
+    transaction_id [UUID_64]
+    tags [STRING]
+}
+
+object "**File**" as file {
+    id [INT]
+    transaction_id [UUID_64]
+    original_path [STRING]
+    filetype [STRING]
+    link_path [STRING]
+    size [INT]
+    user [STRING]
+    group [STRING]
+    file_permissions [INT]
+    checksum [STRING]
+    access_time [DATE]
+    bucket_name [STRING]
+    object_name [STRING]
+}
+
+holding "1" *-- "many" file
+
+@enduml
