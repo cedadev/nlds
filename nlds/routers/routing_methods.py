@@ -16,12 +16,18 @@ from typing import List
 rabbit_publisher = RabbitMQPublisher()
 rabbit_publisher.get_connection()
 
+# NOTE: is this even necessary anymore? Has become a big wrapper around
+#   create_message. Could we move this to main.py and import the publisher into 
+#   routers.files and routers.collections as necessary?
+
 def rabbit_publish_response(routing_key: str, transaction_id: UUID, user: str, 
                             group: str, data: List[str], access_key: str, 
-                            secret_key: str, target: str = None, 
+                            secret_key: str, target: str = None,
+                            source_transaction: str = None, 
                             tenancy: str = None):
     msg = rabbit_publisher.create_message(transaction_id, data, access_key, 
                                           secret_key, user=user, group=group, 
-                                          target=target, tenancy=tenancy)
+                                          target=target, tenancy=tenancy, 
+                                          source_transaction=source_transaction)
     rabbit_publisher.publish_message(routing_key, msg)
 

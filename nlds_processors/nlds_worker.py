@@ -58,11 +58,14 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                 self.log(f"Invalid message received - missing {msg_section} "
                          f"section. \nExiting callback", self.RK_LOG_ERROR)
                 return
+        
+        msg_data = body_json[self.MSG_DATA]
+        msg_details = body_json[self.MSG_DETAILS]
 
         # If message coming from api-server then stash the original action in 
         # the message details so as not to lose it post-indexing.
         if self.RK_ROUTE == rk_parts[1]:
-            body_json[self.MSG_DETAILS][self.MSG_API_ACTION] = rk_parts[2]
+            msg_details[self.MSG_API_ACTION] = rk_parts[2]
 
         # If putting then first scan file/filelist
         if self.RK_PUT in rk_parts[2]:
@@ -73,6 +76,44 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                         self.RK_INITIATE])
             self.publish_and_log_message(new_routing_key, json.dumps(body_json))
         
+        elif self.RK_GET in rk_parts[2]:
+            # Will probably need to fetch data from catalogue first, but can 
+            # bypass if a specific transaction is specified
+            # NOTE: in this case we probably still want to the check the 
+            # catalogue for whether the file is stored inside, also need to be 
+            # able to handle multiple transaction_ids.
+            source_transact = None
+            if self.MSG_SOURCE_TRANSACTION in msg_details:
+                source_transact = msg_details[self.MSG_SOURCE_TRANSACTION]
+            else:
+                self.log("No 'source_transaction' in message details, message "
+                         "malformed or sent in error.", self.RK_LOG_WARNING)
+
+            if source_transact:
+                # NOTE: Refactor this (and below) into function?
+                self.log(f"Transaction ID specified, passing message to get "
+                         "transfer queue", self.RK_LOG_INFO)
+                
+                # Dig out saved api-action to determine which transfer queue to 
+                # send to. 
+                try:
+                    api_action = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
+                except KeyError:
+                    self.log("No api-action in message details, cannot "
+                             "determine which transfer queue to send to.", 
+                             self.RK_LOG_ERROR)
+                    return
+                queue = f"{self.RK_TRANSFER}-{api_action}"
+                new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_START])
+                self.log(f"Sending  message to {queue} queue with routing "
+                            f"key {new_routing_key}", self.RK_LOG_INFO)
+                self.publish_and_log_message(new_routing_key, 
+                                             json.dumps(body_json))
+            
+            else:
+                # Otherwise fetch the relevant data from the catalogue 
+                NotImplementedError('Catalogue not implemented yet!')
+
         # If a task has completed, initiate new tasks
         elif rk_parts[2] == f"{self.RK_COMPLETE}":
             # If index completed then pass file list for transfer and cataloging

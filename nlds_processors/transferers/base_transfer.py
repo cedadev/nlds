@@ -1,3 +1,13 @@
+# encoding: utf-8
+"""
+
+"""
+__author__ = 'Jack Leland and Neil Massey'
+__date__ = '30 Nov 2021'
+__copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
+__license__ = 'BSD - see LICENSE file in top-level package directory'
+__contact__ = 'neil.massey@stfc.ac.uk'
+
 from abc import ABC, abstractmethod
 import json
 import os
@@ -19,6 +29,7 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
     _CHECK_PERMISSIONS = "check_permissions_fl"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
     _MAX_RETRIES = "max_retries"
+    _FILELIST_MAX_LENGTH = "filelist_max_length"
     _REMOVE_ROOT_SLASH = "remove_root_slash_fl"
     _USE_PWD_GID = "use_pwd_gid_fl"
     DEFAULT_CONSUMER_CONFIG = {
@@ -29,6 +40,7 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
         _REMOVE_ROOT_SLASH: True,
         _USE_PWD_GID: False,
         _MAX_RETRIES: 5,
+        _FILELIST_MAX_LENGTH: 1000,
         RabbitMQConsumer.RETRY_DELAYS: RabbitMQConsumer.DEFAULT_RETRY_DELAYS,
     }
 
@@ -45,12 +57,24 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
             self._PRINT_TRACEBACKS)
         self.max_retries = self.load_config_value(
             self._MAX_RETRIES)
+        self.filelist_max_len = self.load_config_value(
+            self._FILELIST_MAX_LENGTH)
         self.remove_root_slash_fl = self.load_config_value(
             self._REMOVE_ROOT_SLASH)
         self.user_pwd_gid_fl = self.load_config_value(
             self._USE_PWD_GID)
         self.retry_delays = self.load_config_value(
             self.RETRY_DELAYS)
+
+        self.reset()
+
+    def reset(self):
+        super().reset()
+
+        self.completelist = []
+        self.completelist_size = 0
+        self.retrylist = []
+        self.failedlist = []
         
     def callback(self, ch, method, properties, body, connection):
         self.reset()
@@ -121,7 +145,7 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
         if self.check_permissions_fl:
             self.set_ids(body_json, use_pwd_gid_fl=self.user_pwd_gid_fl)
 
-        self.log(f"Starting transfer to object store at {tenancy}", 
+        self.log(f"Starting object store transfer with {tenancy}", 
                  self.RK_LOG_INFO)
 
         # Append route info to message to track the route of the message

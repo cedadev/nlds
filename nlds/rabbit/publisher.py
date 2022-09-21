@@ -85,6 +85,7 @@ class RabbitMQPublisher():
     MSG_USER = "user"
     MSG_GROUP = "group"
     MSG_TARGET = "target"
+    MSG_SOURCE_TRANSACTION = "source_transaction"
     MSG_ROUTE = "route"
     MSG_ERROR = "error"
     MSG_TENANCY = "tenancy"
@@ -205,10 +206,18 @@ class RabbitMQPublisher():
                              "be declared.")
 
     @classmethod
-    def create_message(cls, transaction_id: UUID, data: List[str], 
-                       access_key: str, secret_key: str, user: str = None, 
-                       group: str = None, target: str = None, 
-                       tenancy: str = None) -> str:
+    def create_message(
+            cls, 
+            transaction_id: UUID, 
+            data: List[str], 
+            access_key: str, 
+            secret_key: str, 
+            user: str = None, 
+            group: str = None, 
+            target: str = None, 
+            tenancy: str = None, 
+            source_transaction: str = None,
+        ) -> str:
         """
         Create message to add to rabbit queue. Message is in json format with 
         metadata described in DETAILS and data, i.e. the filelist of interest,
@@ -241,6 +250,7 @@ class RabbitMQPublisher():
                 cls.MSG_USER: user,
                 cls.MSG_GROUP: group,
                 cls.MSG_TARGET: target,
+                cls.MSG_SOURCE_TRANSACTION: source_transaction,
                 cls.MSG_TENANCY: tenancy,
                 cls.MSG_ACCESS_KEY: access_key,
                 cls.MSG_SECRET_KEY: secret_key,

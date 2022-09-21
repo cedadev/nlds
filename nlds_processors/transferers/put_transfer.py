@@ -5,6 +5,7 @@ from minio.error import S3Error
 from retry import retry
 
 from .base_transfer import BaseTransferConsumer
+from nlds.rabbit.consumer import FilelistType
 from nlds.details import PathDetails
 
 
@@ -16,14 +17,6 @@ class PutTransferConsumer(BaseTransferConsumer):
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
-        self.reset()
-
-    def reset(self):
-        super().reset()
-
-        self.completelist = []
-        self.retrylist = []
-        self.failedlist = []
 
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
@@ -36,9 +29,9 @@ class PutTransferConsumer(BaseTransferConsumer):
             secure=self.require_secure_fl,
         )
 
-        rk_complete = ".".join([rk_origin, self.RK_INDEX, self.RK_COMPLETE])
-        rk_retry = ".".join([rk_origin, self.RK_INDEX, self.RK_START])
-        rk_failed = ".".join([rk_origin, self.RK_INDEX, self.RK_FAILED])
+        rk_complete = ".".join([rk_origin, self.RK_TRANSFER_PUT, self.RK_COMPLETE])
+        rk_retry = ".".join([rk_origin, self.RK_TRANSFER_PUT, self.RK_START])
+        rk_failed = ".".join([rk_origin, self.RK_TRANSFER_PUT, self.RK_FAILED])
 
         bucket_name = f"nlds.{transaction_id}"
 
@@ -74,7 +67,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                 )
                 continue
 
-            self.log(f"Attempting to upload file {path_details.item}", 
+            self.log(f"Attempting to upload file {path_details.original_path}", 
                      self.RK_LOG_DEBUG)
             
             # The minio client doesn't like file paths starting at root (i.e. 
@@ -87,15 +80,17 @@ class PutTransferConsumer(BaseTransferConsumer):
                 object_name = path_details.original_path
             
             result = client.fput_object(
-                bucket_name, object_name, path_details.item,
+                bucket_name, object_name, path_details.original_path,
             )
-            self.log(f"Successfully uploaded {path_details.item}", 
+            self.log(f"Successfully uploaded {path_details.original_path}", 
                      self.RK_LOG_DEBUG)
+            self.append_and_send(path_details, rk_complete, body_json, 
+                                 list_type=FilelistType.transferred)
 
         self.log("Transfer complete, passing lists back to worker for "
-                 f"re-routing and cataloguing.", self.RK_LOG_INFO)
+                 "re-routing and cataloguing.", self.RK_LOG_INFO)
         
-        # Send whatever remains after all directories have been walked
+        # Send whatever remains after all items have been (attempted to be) put
         if len(self.completelist) > 0:
             self.send_pathlist(
                 self.completelist, rk_complete, body_json, mode="transferred"
