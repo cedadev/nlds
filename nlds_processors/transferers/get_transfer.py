@@ -7,12 +7,7 @@ import minio
 from minio.error import S3Error
 from retry import retry
 
-<<<<<<< HEAD
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
-=======
-from .base_transfer import BaseTransferConsumer
-from nlds.rabbit.consumer import FilelistType
->>>>>>> 449eb267a31c8e03784dfedd6afcd4caf7b9e767
 from nlds.details import PathDetails
 
 
