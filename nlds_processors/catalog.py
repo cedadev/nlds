@@ -7,6 +7,21 @@ __copyright__ = 'Copyright 2022 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
+"""
+Requires these settings in the /etc/nlds/server_config file:
+
+    "catalog_q":{
+        "db_engine": "sqlite",
+        "db_options": {
+            "db_name" : "/nlds_catalog.db",
+            "user" : "",
+            "passwd" : ""
+        },
+        "logging":{
+            "enable": true
+        }
+"""
+
 import json
 
 # Typing imports
@@ -16,17 +31,21 @@ from pika.frame import Method
 from pika.frame import Header
 
 # SQLalchemy imports
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select, func
 from sqlalchemy.exc import ArgumentError
+from sqlalchemy.orm import Session
+
+from datetime import datetime, timezone
 
 from nlds.rabbit.consumer import RabbitMQConsumer
-
-from nlds_processors.catalog_models import Base, File, Holding
+from nlds_processors.catalog_models import Base, File, Holding, Location
+from nlds_processors.catalog_models import Storage, Checksum, Tag
+from nlds.details import PathDetails, PathType
 
 class CatalogConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "catalog_q"
     DEFAULT_ROUTING_KEY = (f"{RabbitMQConsumer.RK_ROOT}."
-                           f"{RabbitMQConsumer.RK_CATALOGUE}."
+                           f"{RabbitMQConsumer.RK_CATALOG}."
                            f"{RabbitMQConsumer.RK_WILD}")
 
     # Possible options to set in config file
@@ -103,6 +122,110 @@ class CatalogConsumer(RabbitMQConsumer):
         Base.metadata.create_all(self.db_engine)
 
 
+    def _catalog_get(self, body: dict) -> None:
+        raise NotImplementedError
+
+
+    def _get_holding(self, session, transaction_id) -> None:
+        # create or return an existing Holding
+        # check if transaction id already exists as a holding
+        holding = session.execute(
+            select(Holding.transaction_id).where(
+                Holding.transaction_id == transaction_id
+            )
+        ).all()
+        # if it doesn't then create
+        if holding == []:
+            # create the new Holding with the transaction id
+            holding = Holding(
+                transaction_id = transaction_id,
+                ingest_time = func.now()
+            )
+            session.add(holding)
+        else:
+            # otherwise it does exist so get it (first in list)
+            holding = holding[0]
+
+        # need to flush to update the holding id
+        session.flush()
+        return holding
+
+
+    def _catalog_add(self, session, holding, path_details) -> None:
+        # add to the catalog database
+        # add the file
+        new_file = File(
+            holding_id = holding.id,
+            original_path = path_details.original_path,
+            path_type = path_details.path_type,
+            link_path = path_details.link_path,
+            size = int(path_details.size * 1000),
+            user = path_details.user,
+            group = path_details.group,
+            file_permissions = path_details.permissions
+        )
+        # add the file and flush to get the id
+        session.add(new_file)
+        session.flush()
+
+        # add the storage location for object storage
+        location = Location(
+            storage_type = Storage.OBJECT_STORAGE,
+            # root is bucket for Object Storage and that is the transaction id
+            # which is now stored in the Holding record
+            root = holding.transaction_id,
+            # path is object_name for object storage
+            path = path_details.object_name,
+            # access time is passed in the file details
+            access_time = datetime.fromtimestamp(
+                path_details.access_time, tz=timezone.utc
+            ),
+            # file id from above
+            file_id = new_file.id
+        )
+        session.add(location)
+
+    
+    def _catalog_put(self, body: dict) -> None:
+        # get the filelist from the data section of the message
+        try:
+            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
+        except KeyError as e:
+            self.log(f"Invalid message contents, filelist should be in the data"
+                     f"section of the message body.",
+                     self.RK_LOG_ERROR)
+            return
+
+        try: 
+            transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
+        except KeyError:
+            self.log(
+                "Transaction id unobtainable, exiting callback.", 
+                self.RK_LOG_ERROR
+            )
+            return
+
+        # create a SQL alchemy session
+        session = Session(self.db_engine)
+        # get or create the Holding
+        holding = self._get_holding(session, transaction_id)
+
+        # check filelist is a list
+        try:
+            f = filelist[0]
+        except TypeError as e:
+            self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
+            return
+
+        # loop over the filelist
+        for f in filelist:
+            # convert to PathDetails class
+            pd = PathDetails.from_dict(f)
+            self._catalog_add(session, holding, pd)
+
+        session.commit()
+
+
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
         # Connect to database if not connected yet                
@@ -111,7 +234,20 @@ class CatalogConsumer(RabbitMQConsumer):
 
         self.log(f"Received {json.dumps(body)} from {self.queues[0].name} "
                  f"({method.routing_key})", self.RK_LOG_INFO)
-        
+
+        # Verify routing key is appropriate
+        try:
+            rk_parts = self.split_routing_key(method.routing_key)
+        except ValueError as e:
+            self.log("Routing key inappropriate length, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+
+        # check whether this is a GET or a PUT
+        if (rk_parts[1] == self.RK_CATALOG_GET):
+            self._catalog_get(body)
+        elif (rk_parts[1] == self.RK_CATALOG_PUT):
+            self._catalog_put(body)
 
 def main():
     consumer = CatalogConsumer()
