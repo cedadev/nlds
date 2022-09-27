@@ -31,6 +31,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
         # NRM - more comments for the function methods, please!
+        # NRM - 21/09/2022 - refactor into smaller (private) functions
         # Convert body from bytes to string for ease of manipulation
         body_json = json.loads(body)
 
@@ -61,6 +62,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         
         msg_data = body_json[self.MSG_DATA]
         msg_details = body_json[self.MSG_DETAILS]
+        print(rk_parts)
 
         # If message coming from api-server then stash the original action in 
         # the message details so as not to lose it post-indexing.
@@ -137,10 +139,10 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                 self.publish_and_log_message(new_routing_key, 
                                              json.dumps(body_json))
 
-            # If transfer or catalogue completed then forward confirmation to 
-            # monitor
-            elif (rk_parts[1] == f"{self.RK_CATALOGUE}" 
-                  or rk_parts[1] == f"{self.RK_TRANSFER}"):
+            # If transfer_put completed
+            elif (rk_parts[1] == f"{self.RK_TRANSFER_PUT}"):
+
+                # forward confirmation to monitor
                 self.log(f"Sending message to {self.RK_MONITOR} queue", 
                          self.RK_LOG_INFO)
                 new_routing_key = ".".join([self.RK_ROOT, 
@@ -148,6 +150,27 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                             rk_parts[2]])
                 self.publish_and_log_message(new_routing_key, 
                                              json.dumps(body_json))
+
+                # forward to catalog-put on the catalog_q
+                queue = f"{self.RK_CATALOG}"
+                new_routing_key = ".".join([self.RK_ROOT, self.RK_CATALOG_PUT,
+                                            self.RK_START])
+                self.log(f"Sending  message to {queue} queue with routing "
+                            f"key {new_routing_key}", self.RK_LOG_INFO)
+                self.publish_and_log_message(new_routing_key, 
+                                             json.dumps(body_json))
+
+            # if catalog_put completed
+            elif (rk_parts[1] == f"{self.RK_CATALOG_PUT}"):
+                # forward confirmation to monitor
+                self.log(f"Sending message to {self.RK_MONITOR} queue", 
+                         self.RK_LOG_INFO)
+                new_routing_key = ".".join([self.RK_ROOT, 
+                                            self.RK_MONITOR, 
+                                            rk_parts[2]])
+                self.publish_and_log_message(new_routing_key, 
+                                             json.dumps(body_json))
+
                                      
         self.log(f"Worker callback complete!", self.RK_LOG_INFO)
 
