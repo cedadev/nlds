@@ -2,26 +2,42 @@
 
 object "**Holding**" as holding {
     id [INT]
-    transaction_id [UUID_64]
-    tags [STRING]
+    transaction_id [UUID_64|STRING]
+    ingest_time [DATETIME]
+}
+
+object "**Tag**" as tag {
+    id [INT]
+    tag [STRING]
 }
 
 object "**File**" as file {
     id [INT]
-    transaction_id [UUID_64]
     original_path [STRING]
-    filetype [STRING]
+    path_type [STRING]
     link_path [STRING]
     size [INT]
     user [STRING]
     group [STRING]
     file_permissions [INT]
+}
+
+object "**Location**" as location {
+    id [INT]
+    storage_type [OBJECT_STORAGE|TAPE]
+    root [STRING]
+    path [STRING]
+    access_time [DATETIME]
+}
+
+object "**Checksum**" as checksum {
+    id [INT]
     checksum [STRING]
-    access_time [DATE]
-    bucket_name [STRING]
-    object_name [STRING]
+    algorithm [STRING]
 }
 
 holding "1" *-- "many" file
-
+holding "1" *-- "many" tag
+file "1" *-- "many" location
+file "1" *-- "1" checksum
 @enduml
