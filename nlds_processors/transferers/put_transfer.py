@@ -75,12 +75,14 @@ class PutTransferConsumer(BaseTransferConsumer):
             # using minio, and added back on get.
             # TODO: Add this flag to the file details json metadata 
             if self.remove_root_slash_fl and path_details.original_path[0] == "/":
-                object_name = path_details.original_path[1:]
+                path_details.object_name = path_details.original_path[1:]
             else:
-                object_name = path_details.original_path
+                path_details.object_name = path_details.original_path
             
             result = client.fput_object(
-                bucket_name, object_name, path_details.original_path,
+                bucket_name, 
+                path_details.object_name, 
+                path_details.original_path,
             )
             self.log(f"Successfully uploaded {path_details.original_path}", 
                      self.RK_LOG_DEBUG)
