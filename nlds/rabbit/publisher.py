@@ -47,8 +47,10 @@ class RabbitMQPublisher():
 
     # Exchange routing key parts – queues
     RK_INDEX = "index"
-    RK_CATALOGUE = "cat"
-    RK_MONITOR = "mon"
+    RK_CATALOG = "catalog"
+    RK_CATALOG_PUT = "catalog-put"
+    RK_CATALOG_GET = "catalog-get"
+    RK_MONITOR = "monitor"
     RK_TRANSFER = "transfer"
     RK_TRANSFER_PUT = "transfer-put"
     RK_TRANSFER_GET = "transfer-get"
