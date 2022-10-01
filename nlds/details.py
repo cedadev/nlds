@@ -28,7 +28,7 @@ class PathType(Enum):
     UNINDEXED = 6
 
 class PathDetails(BaseModel):
-    original_path: str
+    original_path: Optional[str]
     object_name: Optional[str]
     size: Optional[float]
     user: Optional[int]

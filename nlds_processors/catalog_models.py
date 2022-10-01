@@ -19,9 +19,9 @@ class Holding(Base):
     # transaction id - this will be the String
     transaction_id = Column(String, nullable=False, index=True)
     # relationship for tags (One to many)
-    tags = relationship("Tag", cascade="delete")
+    tags = relationship("Tag", backref="holding", cascade="delete")
     # relationship for files (One to many)
-    files = relationship("File", cascade="delete")
+    files = relationship("File", backref="holding", cascade="delete")
     # date and time of ingest / adding to catalogue
     ingest_time = Column(DateTime)
 
@@ -61,9 +61,9 @@ class File(Base):
     file_permissions = Column(Integer)
 
     # relationship for location (one to many)
-    location = relationship("Location")
+    location = relationship("Location", backref="file")
     # relationship for checksum (one to one)
-    checksum = relationship("Checksum")
+    checksum = relationship("Checksum", backref="file")
 
 
 class Storage(enum.Enum):
@@ -100,4 +100,3 @@ class Checksum(Base):
     # file id as ForeignKey "Parent" (one to one)
     file_id = Column(Integer, ForeignKey("file.id"), 
                      index=True, nullable=False)
-    file = relationship("File", back_populates="checksum")

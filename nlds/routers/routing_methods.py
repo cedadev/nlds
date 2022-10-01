@@ -23,11 +23,18 @@ rabbit_publisher.get_connection()
 def rabbit_publish_response(routing_key: str, transaction_id: UUID, user: str, 
                             group: str, data: List[str], access_key: str, 
                             secret_key: str, target: str = None,
-                            source_transaction: str = None, 
+                            holding_transaction_id: str = None, 
                             tenancy: str = None):
-    msg = rabbit_publisher.create_message(transaction_id, data, access_key, 
-                                          secret_key, user=user, group=group, 
-                                          target=target, tenancy=tenancy, 
-                                          source_transaction=source_transaction)
+    msg = rabbit_publisher.create_message(
+        transaction_id, 
+        data, 
+        access_key, 
+        secret_key, 
+        user=user, 
+        group=group, 
+        target=target, 
+        tenancy=tenancy, 
+        holding_transaction_id=holding_transaction_id
+    )
     rabbit_publisher.publish_message(routing_key, msg)
 

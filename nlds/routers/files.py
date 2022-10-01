@@ -73,7 +73,7 @@ async def get(transaction_id: UUID,
               group: str = Depends(authenticate_group),
               filepath: str = None,
               target: Optional[str] = None,
-              source_transaction: Optional[str] = None,
+              holding_transaction_id: Optional[str] = None,
               tenancy: Optional[str] = None,
               access_key: str = "",
               secret_key: str = ""
@@ -104,7 +104,7 @@ async def get(transaction_id: UUID,
         access_key, secret_key, 
         tenancy=tenancy, 
         target=target, 
-        source_transaction=source_transaction,
+        holding_transaction_id=holding_transaction_id,
     )
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
@@ -129,7 +129,6 @@ async def put(transaction_id: UUID,
               group: str = Depends(authenticate_group),
               tenancy: Optional[str]=None,
               target: Optional[str]=None,
-              source_transaction: Optional[str] = None,
               access_key: str="",
               secret_key: str=""
               ):
@@ -158,7 +157,6 @@ async def put(transaction_id: UUID,
         access_key, secret_key, 
         tenancy=tenancy, 
         target=target, 
-        source_transaction=source_transaction,
     )
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,

@@ -2,7 +2,7 @@ Near Line Data Store (NLDS)
 ===========================
 
 # Software specification
-**Neil Massey 02/11/2021**
+**Neil Massey 02/11/2021 -> 29/09/2022**
 
 # Introduction
 

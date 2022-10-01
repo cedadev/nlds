@@ -122,11 +122,7 @@ class CatalogConsumer(RabbitMQConsumer):
         Base.metadata.create_all(self.db_engine)
 
 
-    def _catalog_get(self, body: dict) -> None:
-        raise NotImplementedError
-
-
-    def _get_holding(self, session, transaction_id) -> None:
+    def _get_or_create_holding(self, session, transaction_id) -> None:
         # create or return an existing Holding
         # check if transaction id already exists as a holding
         holding = session.execute(
@@ -164,9 +160,6 @@ class CatalogConsumer(RabbitMQConsumer):
             group = path_details.group,
             file_permissions = path_details.permissions
         )
-        # add the file and flush to get the id
-        session.add(new_file)
-        session.flush()
 
         # add the storage location for object storage
         location = Location(
@@ -180,12 +173,146 @@ class CatalogConsumer(RabbitMQConsumer):
             access_time = datetime.fromtimestamp(
                 path_details.access_time, tz=timezone.utc
             ),
-            # file id from above
-            file_id = new_file.id
+            file = new_file
         )
+        session.add(new_file)
         session.add(location)
 
-    
+
+    def _getfilefromdb(self, session, file_details: PathDetails) -> PathDetails:
+        # get a file from the db connected to via session
+        file_Q = session.execute(
+            select(File).where(
+                File.original_path == file_details.original_path
+            )
+        )
+        # can currently have more than one file with the same name so just
+        # get the first
+        file = file_Q.fetchone()
+        # check file exists
+        if file is not None:
+            # get the object storage location for this file
+            location_Q = session.execute(
+                select(Location).where(
+                    Location.file_id == file.File.id,
+                    Location.storage_type == Storage.OBJECT_STORAGE
+                )
+            )
+            # again, can (in theory) have more than one, but just fetch the first
+            location = location_Q.fetchone()
+            # check that the file location exists
+            if location is not None:
+                object_name = ("nlds." +
+                               location.Location.root + ":" + 
+                               location.Location.path)
+                access_time = location.Location.access_time.timestamp()
+                print(access_time)
+                # create a new PathDetails with all the info from the DB
+                new_pd = PathDetails(
+                    original_path = file.File.original_path,
+                    object_name = object_name,
+                    size = file.File.size,
+                    user = file.File.user,
+                    group = file.File.group,
+                    permissions = file.File.file_permissions,                    
+                    access_time = access_time,
+                    path_type = file.File.path_type,
+                    link_path = file.File.link_path
+                )
+                return new_pd
+            else:
+                # otherwise indicate failed files 
+                raise KeyError(f"File record: {file_details.original_path} "
+                                "does not contain a Location")
+        else:
+            # add to failed files
+            raise KeyError(f"File record: {file_details.original_path} "
+                            "not found")
+
+    def _getholding(self, session, holding_transaction_id):
+        # get the Holding from the holding_transaction_id
+        holding = session.execute(
+            select(Holding.transaction_id).where(
+                Holding.transaction_id == holding_transaction_id
+            )
+        ).first()
+
+        # check it's in the DB
+        if holding is None:
+            self.log(
+                "Holding transaction id not in database, exiting callback.", 
+                self.RK_LOG_ERROR
+            )
+            return
+        
+        return holding
+
+    def _catalog_get(self, body: dict) -> None:
+        # get the filelist from the data section of the message
+        try:
+            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
+        except KeyError as e:
+            self.log(f"Invalid message contents, filelist should be in the data"
+                     f"section of the message body.",
+                     self.RK_LOG_ERROR)
+            return
+
+        # create a SQL alchemy session
+        session = Session(self.db_engine)
+
+        # get the holding transaction id from the details section of the message
+        # (could be null)
+        try: 
+            holding_transaction_id = (body[self.MSG_DETAILS]
+                                          [self.MSG_HOLDING_TRANSACTION_ID])
+        except KeyError:
+            self.log(
+                "Holding transaction id not in message, exiting callback.", 
+                self.RK_LOG_ERROR
+            )
+            return
+
+        if holding_transaction_id is not None:
+            holding = self._getholding(holding_transaction_id, session)
+
+        # build the Pathlist from each file
+        # two lists: completed PathDetails, failed PathDetails
+        complete_pathlist = []
+        failed_pathlist = []
+        for f in filelist:
+            file_details = PathDetails.from_dict(f)
+            try:
+                complete_details = self._getfilefromdb(session, file_details)
+                complete_pathlist.append(complete_details)
+            except KeyError:
+                failed_pathlist.append(file_details)
+
+        # send the succeeded and failed messages back to the NLDS worker Q
+        # SUCCESS
+        if len(complete_pathlist) > 0:
+            rk_complete = ".".join([self.RK_ROOT,
+                                    self.RK_CATALOG_GET, 
+                                    self.RK_COMPLETE])
+            self.log(
+                f"Sending completed PathList from CATALOG_GET {complete_pathlist}",
+                self.RK_LOG_DEBUG
+            )
+            body[self.MSG_DATA][self.MSG_FILELIST] = complete_pathlist
+            self.publish_message(rk_complete, json.dumps(body))
+
+        # FAILED
+        if len(failed_pathlist) > 0:
+            rk_failed = ".".join([self.RK_ROOT,
+                                  self.RK_CATALOG_GET, 
+                                  self.RK_FAILED])
+            self.log(
+                f"Sending failed PathList from CATALOG_GET {failed_pathlist}",
+                self.RK_LOG_DEBUG
+            )
+            body[self.MSG_DATA][self.MSG_FILELIST] = failed_pathlist
+            self.publish_message(rk_failed, json.dumps(body))
+
+
     def _catalog_put(self, body: dict) -> None:
         # get the filelist from the data section of the message
         try:
@@ -196,6 +323,7 @@ class CatalogConsumer(RabbitMQConsumer):
                      self.RK_LOG_ERROR)
             return
 
+        # get the transaction id from the details section of the message
         try: 
             transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
         except KeyError:
@@ -208,7 +336,7 @@ class CatalogConsumer(RabbitMQConsumer):
         # create a SQL alchemy session
         session = Session(self.db_engine)
         # get or create the Holding
-        holding = self._get_holding(session, transaction_id)
+        holding = self._get_or_create_holding(session, transaction_id)
 
         # check filelist is a list
         try:

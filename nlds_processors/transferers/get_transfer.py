@@ -41,10 +41,10 @@ class GetTransferConsumer(BaseTransferConsumer):
             return
 
         # Get source transaction id (if available)
-        source_transact = msg_details[self.MSG_SOURCE_TRANSACTION]
-        if source_transact:
+        holding_transaction_id = msg_details[self.MSG_HOLDING_TRANSACTION_ID]
+        if holding_transaction_id:
             # Convert to uuid and back to string to check it is a valid UUID
-            source_transact = str(UUID(source_transact))
+            holding_transaction_id = str(UUID(holding_transaction_id))
 
         # Create client!
         client = minio.Minio(
@@ -66,10 +66,10 @@ class GetTransferConsumer(BaseTransferConsumer):
                 )
                 continue
 
-            # If source_transact given then obtain just that transaction bucket 
+            # If holding_transaction_id given then obtain just that transaction bucket 
             # and files therein. 
-            if source_transact:
-                bucket_name = f"nlds.{source_transact}"
+            if holding_transaction_id:
+                bucket_name = f"nlds.{holding_transaction_id}"
                 object_name = path_details.original_path
             # If bucketname inserted into object path (i.e. from catalogue) then 
             # extract both
@@ -78,7 +78,8 @@ class GetTransferConsumer(BaseTransferConsumer):
             # Otherwise, log error and queue for retry
             else:
                 self.log("Unable to get bucket_name from message info, adding "
-                         f"{object_name} to retry list.", self.RK_LOG_INFO)
+                         f"{path_details.object_name} to retry list.", 
+                         self.RK_LOG_INFO)
                 path_details.increment_retry(retry_reason="non-existent-bucket")
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="retry"
