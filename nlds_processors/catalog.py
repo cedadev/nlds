@@ -126,7 +126,7 @@ class CatalogConsumer(RabbitMQConsumer):
         # create or return an existing Holding
         # check if transaction id already exists as a holding
         holding = session.execute(
-            select(Holding.transaction_id).where(
+            select(Holding).where(
                 Holding.transaction_id == transaction_id
             )
         ).all()
@@ -151,7 +151,7 @@ class CatalogConsumer(RabbitMQConsumer):
         # add to the catalog database
         # add the file
         new_file = File(
-            holding_id = holding.id,
+            holding_id = holding.Holding.id,
             original_path = path_details.original_path,
             path_type = path_details.path_type,
             link_path = path_details.link_path,
@@ -166,7 +166,7 @@ class CatalogConsumer(RabbitMQConsumer):
             storage_type = Storage.OBJECT_STORAGE,
             # root is bucket for Object Storage and that is the transaction id
             # which is now stored in the Holding record
-            root = holding.transaction_id,
+            root = holding.Holding.transaction_id,
             # path is object_name for object storage
             path = path_details.object_name,
             # access time is passed in the file details
