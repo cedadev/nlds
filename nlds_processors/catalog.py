@@ -151,7 +151,7 @@ class CatalogConsumer(RabbitMQConsumer):
         # add to the catalog database
         # add the file
         new_file = File(
-            holding_id = holding.Holding.id,
+            holding_id = holding.id,
             original_path = path_details.original_path,
             path_type = path_details.path_type,
             link_path = path_details.link_path,
@@ -166,7 +166,7 @@ class CatalogConsumer(RabbitMQConsumer):
             storage_type = Storage.OBJECT_STORAGE,
             # root is bucket for Object Storage and that is the transaction id
             # which is now stored in the Holding record
-            root = holding.Holding.transaction_id,
+            root = holding.transaction_id,
             # path is object_name for object storage
             path = path_details.object_name,
             # access time is passed in the file details
