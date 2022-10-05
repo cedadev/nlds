@@ -32,13 +32,14 @@ class GetTransferConsumer(BaseTransferConsumer):
         
         # Get target and verify it can be written to
         target = msg_details[self.MSG_TARGET]
-        target_path = Path(target)
-        if not self.check_path_access(target_path, access=os.W_OK):
-            # NOTE: should we retry here?
-            self.log("Unable to copy, given target path is inaccessible. "
-                     "Exiting callback", 
-                     self.RK_LOG_ERROR)
-            return
+        if target:
+            target_path = Path(target)
+            if not self.check_path_access(target_path, access=os.W_OK):
+                # NOTE: should we retry here?
+                self.log("Unable to copy, given target path is inaccessible. "
+                        "Exiting callback", 
+                        self.RK_LOG_ERROR)
+                return
 
         # Get source transaction id (if available)
         holding_transaction_id = msg_details[self.MSG_HOLDING_TRANSACTION_ID]
@@ -58,7 +59,6 @@ class GetTransferConsumer(BaseTransferConsumer):
         rk_retry = ".".join([rk_origin, self.RK_TRANSFER_GET, self.RK_START])
         rk_failed = ".".join([rk_origin, self.RK_TRANSFER_GET, self.RK_FAILED])
 
-
         for path_details in filelist:
             if path_details.retries > self.max_retries:
                 self.append_and_send(
@@ -68,6 +68,7 @@ class GetTransferConsumer(BaseTransferConsumer):
 
             # If holding_transaction_id given then obtain just that transaction bucket 
             # and files therein. 
+            # NOTE: (2022-10-05) I don't think this works anymore
             if holding_transaction_id:
                 bucket_name = f"nlds.{holding_transaction_id}"
                 object_name = path_details.original_path
@@ -104,12 +105,33 @@ class GetTransferConsumer(BaseTransferConsumer):
                 object_name = object_name[1:]
 
             # Decide whether to prepend target path or download directly to it.
-            if target_path.is_dir():
-                download_path = target_path / path_details.original_path
+            if not target:
+                # In the case of no given target, we just download the files 
+                # back to their original location. 
+                download_path = path_details.original_path
+                # Check we have permission to write to the parent folder of the 
+                # original location. If the parent folder doesn't exist this 
+                # will fail.
+                if not self.check_path_access(path_details.path.parent, 
+                                              access=os.W_OK):
+                    self.log(f"Unable to download {download_path}, given target"
+                             " path is inaccessible. Adding to retry-list.", 
+                             self.RK_LOG_INFO)
+                    path_details.increment_retry(retry_reason="exception")
+                    self.append_and_send(path_details, rk_retry, body_json, 
+                                         list_type=FilelistType.retry)
+                    continue
+            elif target_path.is_dir():
+                # In the case of a given target, we remove the leading slash on 
+                # the original path and prepend the target_path
+                if path_details.original_path[0] == '/':
+                    download_path = target_path / path_details.original_path[1:]
+                else:
+                    download_path = target_path / path_details.original_path
             else:
                 # TODO (2022-09-20): This probably isn't appropriate for getlist
                 self.log("Target path is not a valid directory, renaming files "
-                         "gotten to target path.", self.RK_LOG_INFO)
+                         "gotten to target path.", self.RK_LOG_WARNING)
                 download_path = target_path
 
             # Attempt the download!
