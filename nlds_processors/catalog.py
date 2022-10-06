@@ -359,8 +359,9 @@ class CatalogConsumer(RabbitMQConsumer):
         # Convert body from bytes to json for ease of manipulation
         body = json.loads(body)
 
-        self.log(f"Received {json.dumps(body)} from {self.queues[0].name} "
-                 f"({method.routing_key})", self.RK_LOG_INFO)
+        self.log(f"Received {json.dumps(body, indent=4)} from "
+                 f"{self.queues[0].name} ({method.routing_key})", 
+                 self.RK_LOG_INFO)
 
         # Verify routing key is appropriate
         try:
