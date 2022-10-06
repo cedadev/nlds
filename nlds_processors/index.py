@@ -260,13 +260,13 @@ class IndexerConsumer(RabbitMQConsumer):
                             # otherwise, then add to problem list. Note that we 
                             # don't check the size of the problem list as files 
                             # may not exist
-                            self.log(f"{path_details.path} is inaccessible.", 
+                            self.log(f"{walk_path_details.path} is inaccessible.", 
                                      self.RK_LOG_DEBUG)
-                            path_details.increment_retry(
+                            walk_path_details.increment_retry(
                                 retry_reason="inaccessible"
                             )
                             self.append_and_send(
-                                path_details, rk_retry, body_json, 
+                                walk_path_details, rk_retry, body_json, 
                                 list_type="retry"
                             )
             
