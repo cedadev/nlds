@@ -125,22 +125,20 @@ class CatalogConsumer(RabbitMQConsumer):
     def _get_or_create_holding(self, session, transaction_id) -> None:
         # create or return an existing Holding
         # check if transaction id already exists as a holding
-        holding = session.execute(
+        holding_Q = session.execute(
             select(Holding).where(
                 Holding.transaction_id == transaction_id
             )
-        ).all()
+        )
         # if it doesn't then create
-        if holding == []:
+        holding = holding_Q.fetchone()
+        if holding is None:
             # create the new Holding with the transaction id
             holding = Holding(
                 transaction_id = transaction_id,
                 ingest_time = func.now()
             )
             session.add(holding)
-        else:
-            # otherwise it does exist so get it (first in list)
-            holding = holding[0]
 
         # need to flush to update the holding id
         session.flush()
@@ -206,7 +204,6 @@ class CatalogConsumer(RabbitMQConsumer):
                                location.Location.root + ":" + 
                                location.Location.path)
                 access_time = location.Location.access_time.timestamp()
-                print(access_time)
                 # create a new PathDetails with all the info from the DB
                 new_pd = PathDetails(
                     original_path = file.File.original_path,
@@ -232,7 +229,7 @@ class CatalogConsumer(RabbitMQConsumer):
     def _getholding(self, session, holding_transaction_id):
         # get the Holding from the holding_transaction_id
         holding = session.execute(
-            select(Holding.transaction_id).where(
+            select(Holding).where(
                 Holding.transaction_id == holding_transaction_id
             )
         ).first()
