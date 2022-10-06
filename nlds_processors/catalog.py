@@ -139,6 +139,8 @@ class CatalogConsumer(RabbitMQConsumer):
                 ingest_time = func.now()
             )
             session.add(holding)
+        else:
+            holding = holding.Holding
 
         # need to flush to update the holding id
         session.flush()
