@@ -4,6 +4,8 @@
 .mypy_cache/
 *egg-info
 .venv/
+.env/
+.env
 build/
 dist/
 .DS_Store
@@ -19,3 +21,4 @@ dist/
 **/.server_config
 **/.processor_config
 logs/
+nlds_catalog.db
