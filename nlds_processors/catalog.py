@@ -23,6 +23,7 @@ Requires these settings in the /etc/nlds/server_config file:
 """
 
 import json
+import os
 
 # Typing imports
 from pika.channel import Channel
@@ -101,6 +102,8 @@ class CatalogConsumer(RabbitMQConsumer):
 
         # get the database connection string
         db_connect = self._get_db_string()
+        self.log(f"db_connect string is {db_connect}", self.RK_LOG_DEBUG)
+        print(os.getwd())
 
         # indicate database not connected yet
         self.db_engine = None
