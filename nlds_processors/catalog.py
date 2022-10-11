@@ -50,11 +50,11 @@ class CatalogConsumer(RabbitMQConsumer):
                            f"{RabbitMQConsumer.RK_WILD}")
 
     # Possible options to set in config file
-    _DB_ENGINE = "engine"
-    _DB_OPTIONS = "options"
+    _DB_ENGINE = "db_engine"
+    _DB_OPTIONS = "db_options"
     _DB_OPTIONS_DB_NAME = "db_name"
-    _DB_OPTIONS_USER = "user"
-    _DB_OPTIONS_PASSWD = "passwd"
+    _DB_OPTIONS_USER = "db_user"
+    _DB_OPTIONS_PASSWD = "db_passwd"
     _DB_ECHO = "echo"
 
     DEFAULT_CONSUMER_CONFIG = {
@@ -103,7 +103,7 @@ class CatalogConsumer(RabbitMQConsumer):
         # get the database connection string
         db_connect = self._get_db_string()
         self.log(f"db_connect string is {db_connect}", self.RK_LOG_DEBUG)
-        print(os.getwd())
+        print(os.getcwd())
 
         # indicate database not connected yet
         self.db_engine = None
