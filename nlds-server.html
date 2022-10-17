@@ -80,26 +80,8 @@
 <span id="the-publisher-class"></span><h2>The Publisher class<a class="headerlink" href="#module-nlds.rabbit.publisher" title="Permalink to this headline"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds.rabbit.publisher.</span></span><span class="sig-name descname"><span class="pre">RabbitMQPublisher</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">setup_logging_fl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds.rabbit.publisher.</span></span><span class="sig-name descname"><span class="pre">RabbitMQPublisher</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'publisher'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">setup_logging_fl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<dl class="py class">
-<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.IndexItem">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">IndexItem</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retries</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem" title="Permalink to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.item">
-<span class="sig-name descname"><span class="pre">item</span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.item" title="Permalink to this definition"></a></dt>
-<dd><p>Alias for field number 0</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.retries">
-<span class="sig-name descname"><span class="pre">retries</span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.retries" title="Permalink to this definition"></a></dt>
-<dd><p>Alias for field number 1</p>
-</dd></dl>
-
-</dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.create_log_message">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">create_log_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">route</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bytes</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.create_log_message" title="Permalink to this definition"></a></dt>
@@ -125,7 +107,7 @@ be set to target if not specifed.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.create_message">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">create_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">uuid.UUID</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">access_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">secret_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tenancy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.create_message" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">create_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">uuid.UUID</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">access_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">secret_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tenancy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holding_transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.create_message" title="Permalink to this definition"></a></dt>
 <dd><p>Create message to add to rabbit queue. Message is in json format with 
 metadata described in DETAILS and data, i.e. the filelist of interest,
 under DATA.</p>
@@ -154,27 +136,36 @@ valid for PUT, PUTLIST commands).</p></li>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.log">
-<span class="sig-name descname"><span class="pre">log</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.log" title="Permalink to this definition"></a></dt>
-<dd><p>Catch-all function to log a message, both sending it to the local logger
-and sending a message to the exchange en-route to the logger 
-microservice.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>log_message</strong> (<em>str</em>) – The message for the log event (i.e. what to 
-feed into logger.info() etc.)</p></li>
-<li><p><strong>log_level</strong> (<em>str</em>) – The log level for the new log event. Must be 
-one of the standard logging levels (see 
-python logging docs).</p></li>
-<li><p><strong>target</strong> (<em>str</em>) – The intended target log on the logging 
-microservice. Must be one of the configured 
-logging handlers</p></li>
-<li><p><strong>kwargs</strong> – Optional. Keyword args to pass into the call 
-to logging.log()</p></li>
-</ul>
-</dd>
-</dl>
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.declare_bindings">
+<span class="sig-name descname"><span class="pre">declare_bindings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.declare_bindings" title="Permalink to this definition"></a></dt>
+<dd><p>Go through list of exchanges from config file and declare each. Will 
+also declare delayed exchanges for use in scheduled messaging if the 
+delayed flag is present and activated for a given exchange.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.get_retry_delay">
+<span class="sig-name descname"><span class="pre">get_retry_delay</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">retries</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.get_retry_delay" title="Permalink to this definition"></a></dt>
+<dd><p>Simple convenience function for getting the delay (in seconds) for an 
+indexlist with a given number of retries. Works off of the member 
+variable self.retry_delays, maxing out at its final value i.e. if there 
+are 5 elements in self.retry_delays, and 7 retries requested, then the 
+5th element is returned.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.publish_message">
+<span class="sig-name descname"><span class="pre">publish_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">routing_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">msg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exchange</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delay</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.publish_message" title="Permalink to this definition"></a></dt>
+<dd><p>Sends a message with the specified routing key to an exchange for 
+routing. If no exchange is provided it will default to the first 
+exchange declared in the server_config.</p>
+<p>An optional delay can be added which will force the message to sit for 
+the specified number of seconds at the exchange before being routed. 
+Note that this only happens if the given (or default if not specified) 
+exchange is declared as a x-delayed-message exchange at start up with 
+the ‘delayed’ flag.</p>
+<p>This is in essence a light wrapper around the basic_publish method in 
+pika.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -209,6 +200,13 @@ object referencable by the file name.</p></li>
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds.rabbit.publisher.RabbitMQPublisher.verify_exchange">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">verify_exchange</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exchange</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.publisher.RabbitMQPublisher.verify_exchange" title="Permalink to this definition"></a></dt>
+<dd><p>Verify that an exchange dict defined in the config file is valid. 
+Throws a ValueError if not.</p>
 </dd></dl>
 
 </dd></dl>
@@ -288,7 +286,7 @@ modules, to validate the given user, group and token.</p>
 <span id="the-server-config-module"></span><h2>The server config module<a class="headerlink" href="#module-nlds.server_config" title="Permalink to this headline"></a></h2>
 <dl class="py function">
 <dt class="sig sig-object py" id="nlds.server_config.load_config">
-<span class="sig-prename descclassname"><span class="pre">nlds.server_config.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_file_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.server_config'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#nlds.server_config.load_config" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">nlds.server_config.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_file_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'/etc/nlds/server_config'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#nlds.server_config.load_config" title="Permalink to this definition"></a></dt>
 <dd><p>Config file for the server contains authentication and rabbitMQ sections,
 the required contents of which are set by the schema in utils.constants. 
 This function opens the config file (at a preset, configurable location) 

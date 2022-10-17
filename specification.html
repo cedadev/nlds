@@ -71,7 +71,7 @@
   <div class="section" id="near-line-data-store-nlds">
 <h1>Near Line Data Store (NLDS)<a class="headerlink" href="#near-line-data-store-nlds" title="Permalink to this headline"></a></h1>
 <p># Software specification
-<strong>Neil Massey 02/11/2021</strong></p>
+<strong>Neil Massey 02/11/2021 -&gt; 29/09/2022</strong></p>
 <p># Introduction</p>
 <p>As a successor to the Joint Data Migration Application (JDMA), a new storage
 solution is proposed.  This is based on the idea of hot, warm and cold storage:</p>
@@ -457,15 +457,15 @@ processing, the output data.  For the messages detailed below in the
 <p>}</p>
 </div></blockquote>
 <p>The value for the <cite>filelist</cite> key is a <cite>&lt;list&gt;</cite> which can contain details for
-multiple files.  Each <cite>&lt;list&gt;</cite> element is a <cite>NamedTuple</cite>, consisting of a <cite>json</cite>
-document and a retry <cite>int</cite> (see the #retries section below).
+multiple files.  Each <cite>&lt;list&gt;</cite> element is a <cite>PathDetails</cite> object, consisting of
+a <cite>json</cite> document and a retry <cite>int</cite> (see the #retries section below).
 The <cite>json</cite> document can contain a number of key / value pairs, some of which are
 optional for each processor.  The <cite>json</cite> document looks like this:</p>
 <blockquote>
 <div><dl>
 <dt>{</dt><dd><dl class="simple">
 <dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,
-nlds_object         : &lt;str&gt;,
+object_name         : &lt;str&gt;,
 size                : &lt;int&gt;, (in kilobytes?)
 user                : &lt;str&gt;, (get uid from LDAP?)
 group               : &lt;str&gt;, (get gid from LDAP?)
@@ -475,11 +475,26 @@ filetype            : &lt;str&gt;, (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECT
 link_path           : &lt;str&gt;, (link position,path of link, related to either root or common path)</p>
 </dd>
 </dl>
-<p>}</p>
+<p>}
+retries             : &lt;int&gt;,
+retry_reasons       : &lt;list&lt;str&gt;&gt;</p>
 </dd>
 </dl>
 <p>}</p>
 </div></blockquote>
+<p>which mostly consists of the result of a stat call on the path/file in question,
+as well as some useful metadata. The file type is included, which can be one of
+a few options: FILE, DIRECTORY, LINK_COMMON_PATH, LINK_ABSOLUTE_PATH. The
+distinction between these latter 2 options is whether the path of a given
+symlink lies within the ‘common path’ of the files given in the transaction and
+can therefore be stored as a relative link_path, or whether it lies outside of
+the ‘common path’ and therefore must be stored as an absolute link_path. Note
+that a symlink given as an absolute path to somewhere within the common path
+should be stored as a LINK_COMMON_PATH - and therefore as a relative link_path -
+and conversely a symlink given as a relative path to somewhere outside the
+‘common path’ should be stored as an absolute LINK_ABSOLUTE_PATH.</p>
+<p><cite>object_name</cite> in the above json document refers to the name of the object once
+written to the object store.</p>
 <p>### Applications</p>
 <ul class="simple">
 <li><p><cite>nlds-api</cite> - the calling API from the NLDS Fast API server</p></li>
@@ -778,7 +793,9 @@ filetype            : &lt;str&gt;,
 link_path           : &lt;str&gt;,</p>
 </dd>
 </dl>
-<p>}</p>
+<p>}
+retries         : &lt;int&gt;,
+retry_reasons   : &lt;list&lt;str&gt;&gt;</p>
 </dd>
 </dl>
 <p>}</p>
@@ -839,7 +856,9 @@ filetype            : &lt;str&gt;,
 link_path           : &lt;str&gt;,</p>
 </dd>
 </dl>
-<p>}</p>
+<p>}
+retries             : &lt;int&gt;,
+retry_reasons       : &lt;list&lt;str&gt;&gt;</p>
 </dd>
 </dl>
 <p>}</p>
@@ -874,7 +893,7 @@ data : {</p>
 <div><dl>
 <dt>{</dt><dd><dl class="simple">
 <dt>file_details<span class="classifier">{</span></dt><dd><p>original_path       : &lt;str&gt;,
-nlds_object         : &lt;str&gt;,
+object_name         : &lt;str&gt;,
 size                : &lt;int&gt;,
 user                : &lt;str&gt;,
 group               : &lt;str&gt;,
@@ -884,7 +903,9 @@ filetype            : &lt;str&gt;,
 link_path           : &lt;str&gt;,</p>
 </dd>
 </dl>
-<p>}</p>
+<p>}
+retries         : &lt;int&gt;,
+retry_reasons   : &lt;list&lt;str&gt;&gt;</p>
 </dd>
 </dl>
 <p>}</p>
@@ -963,34 +984,48 @@ the filenames:</p>
 </div></blockquote>
 <p>Here, the <cite>&lt;json&gt;</cite> part of the message records the full details of the file, and
 the <cite>&lt;int&gt;</cite> part records the number of times an attempt has been made to index
-or transfer the file.  These are stored internally in NLDS as a <cite>named tuple</cite>:</p>
+or transfer the file.  These are stored internally in NLDS as part of the
+<cite>PathDetails</cite> object:</p>
 <blockquote>
-<div><p>IndexItem : (item: json, retries: int)</p>
+<div><dl class="simple">
+<dt>PathDetails:</dt><dd><p>file_details:   (described above),
+retries:        &lt;int&gt;,
+retry_reasons:  &lt;list&lt;str&gt;&gt;</p>
+</dd>
+</dl>
 </div></blockquote>
 <p>When a task is performed, such as indexing or transferring a file, which
-subsequently fails, the IndexItem is taken out of the return filelist and put
-into a failed filelist where the retries count is incremented by 1.
-A message is formed with this failed filelist as the <cite>data</cite> part of the
-message, and the <cite>details</cite> part of the message is the same as the originating
-message.  Currently, this message is passed back to the exchange, with the same
-routing key as the originating message.</p>
+subsequently fails, the PathDetails object is taken out of the return filelist
+and put into a failed filelist where the retries count is incremented by 1 and
+the reason for the failure is added to <cite>retry_reasons</cite>.  A message is formed
+with this failed filelist as the <cite>data</cite> part of the message, and the <cite>details</cite>
+part of the message is the same as the originating message.  Currently, this
+message is passed back to the exchange, with the same routing key as the
+originating message.</p>
 <p>Once an item in the filelist has exceeded a server-configured number of
 retries, it will be permanently failed and a message will be passed back to the
 user (how?) telling them of this.</p>
-<p>Just passing back the message in this way is not optimum.  The task will have
+<p>Just passing back the message immediately is not optimal.  The task will have
 failed for a reason which may not have been fixed in the (potentially and
 probably) short time that it will take for the message to be submitted to the
-exchange and then consumed by the task that had initially failed.  With such a
+exchange and then consumed by the task that had initially failed. With such a
 short duration between failing and then trying to complete the task, it is
-likely that the task will fail again.  To overcome this we are investigating
-using a delayed message queue for the failed task messaged, with an
-“exponential” backoff.  This could be as simple as:</p>
+likely that the task will fail again. To overcome this we have implemented the
+option to use the [delayed exchange plugin](<a class="reference external" href="https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/">https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/</a>) for RabbitMQ which allows messages to
+request to be delayed before being routed by the exchange, via a variable
+(<cite>x-delay</cite>) specified in the message header.</p>
+<p>These delays increase exponentially with increasing retry count, with a default
+configuration of:</p>
 <ul class="simple">
-<li><p>First failure, wait a minute</p></li>
-<li><p>Second failure, wait an hour</p></li>
-<li><p>Third failure, wait a day</p></li>
-<li><p>Fourth failure, wait a week</p></li>
+<li><p>First failure, resend immediately</p></li>
+<li><p>Second failure, wait 30 seconds</p></li>
+<li><p>Third failure, wait 1 minute</p></li>
+<li><p>Fourth failure, wait 1 hour</p></li>
+<li><p>Fifth failure, wait 1 day</p></li>
+<li><p>Sixth failure, wait 5 days</p></li>
 </ul>
+<p>Subsequent retries will continue to wait 5 days, until the maximum retry limit
+is reached (default = 5).</p>
 <p>## Monitoring
 Important!
 How do we know when a transfer has completed, if it has been split into

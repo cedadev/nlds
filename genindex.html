@@ -73,6 +73,7 @@
  | <a href="#B"><strong>B</strong></a>
  | <a href="#C"><strong>C</strong></a>
  | <a href="#D"><strong>D</strong></a>
+ | <a href="#F"><strong>F</strong></a>
  | <a href="#G"><strong>G</strong></a>
  | <a href="#I"><strong>I</strong></a>
  | <a href="#J"><strong>J</strong></a>
@@ -88,6 +89,10 @@
 <h2 id="A">A</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.acknowledge_message">acknowledge_message() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+</li>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.append_and_send">append_and_send() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+</li>
       <li><a href="nlds-server.html#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_collection">authenticate_collection() (nlds.authenticators.base_authenticator.BaseAuthenticator method)</a>
 
       <ul>
@@ -128,12 +133,28 @@
 <h2 id="C">C</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.callback">callback() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+
+      <ul>
+        <li><a href="nlds-processors.html#nlds_processors.catalog.CatalogConsumer.callback">(nlds_processors.catalog.CatalogConsumer method)</a>
+</li>
+        <li><a href="nlds-processors.html#nlds_processors.index.IndexerConsumer.callback">(nlds_processors.index.IndexerConsumer method)</a>
+</li>
+        <li><a href="nlds-processors.html#nlds_processors.logger.LoggingConsumer.callback">(nlds_processors.logger.LoggingConsumer method)</a>
+</li>
+        <li><a href="nlds-processors.html#nlds_processors.monitor.MonitorConsumer.callback">(nlds_processors.monitor.MonitorConsumer method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds_processors.catalog.CatalogConsumer">CatalogConsumer (class in nlds_processors.catalog)</a>
 </li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.check_path_access">check_path_access() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+
+      <ul>
+        <li><a href="nlds-processors.html#nlds_processors.index.IndexerConsumer.check_path_access">(nlds_processors.index.IndexerConsumer method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
+      </ul></li>
       <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.create_log_message">create_log_message() (nlds.rabbit.publisher.RabbitMQPublisher class method)</a>
 </li>
       <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.create_message">create_message() (nlds.rabbit.publisher.RabbitMQPublisher class method)</a>
@@ -145,6 +166,18 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.declare_bindings">declare_bindings() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+
+      <ul>
+        <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.declare_bindings">(nlds.rabbit.publisher.RabbitMQPublisher method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.FilelistType">FilelistType (class in nlds.rabbit.consumer)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -155,12 +188,20 @@
       <li><a href="nlds-processors.html#nlds_processors.logger.LoggingConsumer.get_logging_func">get_logging_func() (nlds_processors.logger.LoggingConsumer static method)</a>
 </li>
   </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.get_retry_delay">get_retry_delay() (nlds.rabbit.publisher.RabbitMQPublisher method)</a>
+</li>
+  </ul></td>
 </tr></table>
 
 <h2 id="I">I</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.item">item (nlds.rabbit.publisher.RabbitMQPublisher.IndexItem attribute)</a>
+      <li><a href="nlds-processors.html#nlds_processors.index.IndexerConsumer.index">index() (nlds_processors.index.IndexerConsumer method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds_processors.index.IndexerConsumer">IndexerConsumer (class in nlds_processors.index)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -178,16 +219,10 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-server.html#nlds.server_config.load_config">load_config() (in module nlds.server_config)</a>
 </li>
-      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.load_config_value">load_config_value() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.log">log() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
-
-      <ul>
-        <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.log">(nlds.rabbit.publisher.RabbitMQPublisher method)</a>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.load_config_value">load_config_value() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
 </li>
-      </ul></li>
       <li><a href="nlds-processors.html#nlds_processors.logger.LoggingConsumer">LoggingConsumer (class in nlds_processors.logger)</a>
 </li>
   </ul></td>
@@ -212,11 +247,11 @@
 </li>
         <li><a href="nlds-processors.html#module-nlds_processors.catalog">nlds_processors.catalog</a>
 </li>
+        <li><a href="nlds-processors.html#module-nlds_processors.index">nlds_processors.index</a>
+</li>
         <li><a href="nlds-processors.html#module-nlds_processors.logger">nlds_processors.logger</a>
 </li>
         <li><a href="nlds-processors.html#module-nlds_processors.monitor">nlds_processors.monitor</a>
-</li>
-        <li><a href="nlds-processors.html#module-nlds_processors.nlds_worker">nlds_processors.nlds_worker</a>
 </li>
       </ul></li>
   </ul></td>
@@ -274,6 +309,13 @@
 </li>
       </ul></li>
       <li>
+    nlds_processors.index
+
+      <ul>
+        <li><a href="nlds-processors.html#module-nlds_processors.index">module</a>
+</li>
+      </ul></li>
+      <li>
     nlds_processors.logger
 
       <ul>
@@ -287,22 +329,13 @@
         <li><a href="nlds-processors.html#module-nlds_processors.monitor">module</a>
 </li>
       </ul></li>
-      <li>
-    nlds_processors.nlds_worker
-
-      <ul>
-        <li><a href="nlds-processors.html#module-nlds_processors.nlds_worker">module</a>
-</li>
-      </ul></li>
-      <li><a href="nlds-processors.html#nlds_processors.nlds_worker.NLDSWorkerConsumer">NLDSWorkerConsumer (class in nlds_processors.nlds_worker)</a>
-</li>
   </ul></td>
 </tr></table>
 
 <h2 id="P">P</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="nlds-processors.html#nlds_processors.nlds_worker.NLDSWorkerConsumer.publish_and_log_message">publish_and_log_message() (nlds_processors.nlds_worker.NLDSWorkerConsumer method)</a>
+      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.publish_message">publish_message() (nlds.rabbit.publisher.RabbitMQPublisher method)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -312,13 +345,9 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer">RabbitMQConsumer (class in nlds.rabbit.consumer)</a>
 </li>
-      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher">RabbitMQPublisher (class in nlds.rabbit.publisher)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem">RabbitMQPublisher.IndexItem (class in nlds.rabbit.publisher)</a>
-</li>
-      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.IndexItem.retries">retries (nlds.rabbit.publisher.RabbitMQPublisher.IndexItem attribute)</a>
+      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher">RabbitMQPublisher (class in nlds.rabbit.publisher)</a>
 </li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.run">run() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
 </li>
@@ -328,6 +357,8 @@
 <h2 id="S">S</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.send_pathlist">send_pathlist() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.set_ids">set_ids() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
 </li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.setup_logging">setup_logging() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
@@ -338,6 +369,8 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds_processors.index.IndexerConsumer.split">split() (nlds_processors.index.IndexerConsumer method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.split_routing_key">split_routing_key() (nlds.rabbit.consumer.RabbitMQConsumer static method)</a>
 </li>
   </ul></td>
@@ -347,6 +380,10 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-server.html#nlds.server_config.validate_config_file">validate_config_file() (in module nlds.server_config)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.verify_exchange">verify_exchange() (nlds.rabbit.publisher.RabbitMQPublisher static method)</a>
 </li>
   </ul></td>
 </tr></table>

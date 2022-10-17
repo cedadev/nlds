@@ -2,7 +2,7 @@ Near Line Data Store (NLDS)
 ===========================
 
 # Software specification
-**Neil Massey 02/11/2021**
+**Neil Massey 02/11/2021 -> 29/09/2022**
 
 # Introduction
 
@@ -385,15 +385,15 @@ processing, the output data.  For the messages detailed below in the
     }
 
 The value for the `filelist` key is a `<list>` which can contain details for
-multiple files.  Each `<list>` element is a `NamedTuple`, consisting of a `json`
-document and a retry `int` (see the #retries section below).
+multiple files.  Each `<list>` element is a `PathDetails` object, consisting of 
+a `json` document and a retry `int` (see the #retries section below).
 The `json` document can contain a number of key / value pairs, some of which are 
 optional for each processor.  The `json` document looks like this:
 
     {
-        file_details : {
+        file_details        : {
             original_path       : <str>,
-            nlds_object         : <str>,
+            object_name         : <str>,
             size                : <int>, (in kilobytes?)
             user                : <str>, (get uid from LDAP?)
             group               : <str>, (get gid from LDAP?)
@@ -402,7 +402,24 @@ optional for each processor.  The `json` document looks like this:
             filetype            : <str>, (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
             link_path           : <str>, (link position,path of link, related to either root or common path)
         }
+        retries             : <int>,
+        retry_reasons       : <list<str>>
     }
+
+which mostly consists of the result of a stat call on the path/file in question, 
+as well as some useful metadata. The file type is included, which can be one of 
+a few options: FILE, DIRECTORY, LINK_COMMON_PATH, LINK_ABSOLUTE_PATH. The 
+distinction between these latter 2 options is whether the path of a given 
+symlink lies within the 'common path' of the files given in the transaction and 
+can therefore be stored as a relative link_path, or whether it lies outside of 
+the 'common path' and therefore must be stored as an absolute link_path. Note 
+that a symlink given as an absolute path to somewhere within the common path 
+should be stored as a LINK_COMMON_PATH - and therefore as a relative link_path - 
+and conversely a symlink given as a relative path to somewhere outside the 
+'common path' should be stored as an absolute LINK_ABSOLUTE_PATH.
+
+`object_name` in the above json document refers to the name of the object once 
+written to the object store. 
 
 ### Applications
 
@@ -663,7 +680,7 @@ The `data : {filelist : }` `json` documents contain :
 The `data : {filelist : }` `json` documents contain :
 
     {
-        file_details : {
+        file_details    : {
             original_path       : <str>,
             size                : <int>,
             user                : <str>,
@@ -673,6 +690,8 @@ The `data : {filelist : }` `json` documents contain :
             filetype            : <str>,
             link_path           : <str>,
         }
+        retries         : <int>,
+        retry_reasons   : <list<str>>
     }
 
 ### Failure Modes for indexing
@@ -718,7 +737,7 @@ again, after a suitable timeout period.
 The `data : {filelist : }` `json` documents contain :
 
     {
-        file_details : {
+        file_details        : {
             original_path       : <str>,
             size                : <int>,
             user                : <str>,
@@ -728,6 +747,8 @@ The `data : {filelist : }` `json` documents contain :
             filetype            : <str>,
             link_path           : <str>,
         }
+        retries             : <int>,
+        retry_reasons       : <list<str>>
     }
 
 #### <--- Output messages
@@ -754,9 +775,9 @@ The `data : {filelist : }` `json` documents contain :
 The `data : {filelist : }` `json` documents contain :
 
     {
-        file_details : {
+        file_details    : {
             original_path       : <str>,
-            nlds_object         : <str>,
+            object_name         : <str>,
             size                : <int>,
             user                : <str>,
             group               : <str>,
@@ -765,6 +786,8 @@ The `data : {filelist : }` `json` documents contain :
             filetype            : <str>,
             link_path           : <str>,
         }
+        retries         : <int>,
+        retry_reasons   : <list<str>>
     }
 
 ### Failure Modes for transfer
@@ -850,35 +873,50 @@ the filenames:
 
 Here, the `<json>` part of the message records the full details of the file, and
 the `<int>` part records the number of times an attempt has been made to index
-or transfer the file.  These are stored internally in NLDS as a `named tuple`:
+or transfer the file.  These are stored internally in NLDS as part of the 
+`PathDetails` object:
 
-    IndexItem : (item: json, retries: int)
+    PathDetails:  
+        file_details:   (described above),
+        retries:        <int>,
+        retry_reasons:  <list<str>>
+    
 
 When a task is performed, such as indexing or transferring a file, which
-subsequently fails, the IndexItem is taken out of the return filelist and put 
-into a failed filelist where the retries count is incremented by 1.  
-A message is formed with this failed filelist as the `data` part of the 
-message, and the `details` part of the message is the same as the originating
-message.  Currently, this message is passed back to the exchange, with the same
-routing key as the originating message.
+subsequently fails, the PathDetails object is taken out of the return filelist 
+and put into a failed filelist where the retries count is incremented by 1 and 
+the reason for the failure is added to `retry_reasons`.  A message is formed 
+with this failed filelist as the `data` part of the message, and the `details` 
+part of the message is the same as the originating message.  Currently, this 
+message is passed back to the exchange, with the same routing key as the 
+originating message.
 
 Once an item in the filelist has exceeded a server-configured number of 
 retries, it will be permanently failed and a message will be passed back to the
 user (how?) telling them of this.
 
-Just passing back the message in this way is not optimum.  The task will have
+Just passing back the message immediately is not optimal.  The task will have
 failed for a reason which may not have been fixed in the (potentially and 
 probably) short time that it will take for the message to be submitted to the
-exchange and then consumed by the task that had initially failed.  With such a 
+exchange and then consumed by the task that had initially failed. With such a 
 short duration between failing and then trying to complete the task, it is 
-likely that the task will fail again.  To overcome this we are investigating
-using a delayed message queue for the failed task messaged, with an 
-"exponential" backoff.  This could be as simple as:
+likely that the task will fail again. To overcome this we have implemented the 
+option to use the [delayed exchange plugin](https://github.com/rabbitmq/rabbitmq-delayed-message-exchange/) for RabbitMQ which allows messages to 
+request to be delayed before being routed by the exchange, via a variable 
+(`x-delay`) specified in the message header. 
 
-* First failure, wait a minute
-* Second failure, wait an hour
-* Third failure, wait a day
-* Fourth failure, wait a week
+These delays increase exponentially with increasing retry count, with a default 
+configuration of:
+
+* First failure, resend immediately
+* Second failure, wait 30 seconds
+* Third failure, wait 1 minute
+* Fourth failure, wait 1 hour
+* Fifth failure, wait 1 day
+* Sixth failure, wait 5 days
+
+Subsequent retries will continue to wait 5 days, until the maximum retry limit 
+is reached (default = 5).
 
 ## Monitoring
 Important!
