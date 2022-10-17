@@ -14,7 +14,8 @@
         "vhost": "{{ rabbit_vhost }}",
         "exchange": {
             "name": "{{ rabbit_exchange_name }}",
-            "type": "{{ rabbit_exchange_type }}"
+            "type": "{{ rabbit_exchange_type }}",
+            "delayed": "{{ rabbit_exchange_delayed }}"
         },
         "queues": [
             {

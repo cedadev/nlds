@@ -1,0 +1,43 @@
+@startuml catalog_db
+
+object "**Holding**" as holding {
+    id [INT]
+    transaction_id [UUID_64|STRING]
+    ingest_time [DATETIME]
+}
+
+object "**Tag**" as tag {
+    id [INT]
+    tag [STRING]
+}
+
+object "**File**" as file {
+    id [INT]
+    original_path [STRING]
+    path_type [STRING]
+    link_path [STRING]
+    size [INT]
+    user [STRING]
+    group [STRING]
+    file_permissions [INT]
+}
+
+object "**Location**" as location {
+    id [INT]
+    storage_type [OBJECT_STORAGE|TAPE]
+    root [STRING]
+    path [STRING]
+    access_time [DATETIME]
+}
+
+object "**Checksum**" as checksum {
+    id [INT]
+    checksum [STRING]
+    algorithm [STRING]
+}
+
+holding "1" *-- "many" file
+holding "1" *-- "many" tag
+file "1" *-- "many" location
+file "1" *-- "1" checksum
+@enduml

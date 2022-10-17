@@ -73,6 +73,7 @@ async def get(transaction_id: UUID,
               group: str = Depends(authenticate_group),
               filepath: str = None,
               target: Optional[str] = None,
+              holding_transaction_id: Optional[str] = None,
               tenancy: Optional[str] = None,
               access_key: str = "",
               secret_key: str = ""
@@ -100,7 +101,10 @@ async def get(transaction_id: UUID,
         f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}."
         f"{RabbitMQPublisher.RK_GET}", 
         transaction_id, user, group, contents,
-        access_key, secret_key, tenancy=tenancy, target=target
+        access_key, secret_key, 
+        tenancy=tenancy, 
+        target=target, 
+        holding_transaction_id=holding_transaction_id,
     )
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
@@ -150,7 +154,10 @@ async def put(transaction_id: UUID,
         f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_ROUTE}"
         f".{RabbitMQPublisher.RK_GETLIST}", 
         transaction_id, user, group, filelist.get_cleaned_list(),
-        access_key, secret_key, tenancy=tenancy, target=target)
+        access_key, secret_key, 
+        tenancy=tenancy, 
+        target=target, 
+    )
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())

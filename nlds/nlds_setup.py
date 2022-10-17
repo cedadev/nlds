@@ -10,5 +10,5 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 
 API_VERSION = "0.1"
-CONFIG_FILE_LOCATION = ".server_config"
+CONFIG_FILE_LOCATION = "/etc/nlds/server_config"
 

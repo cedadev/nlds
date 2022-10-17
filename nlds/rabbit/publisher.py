@@ -9,17 +9,17 @@ __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 import json
 import logging
-from typing import List
+from logging.handlers import TimedRotatingFileHandler
+from typing import Dict, List
 import pathlib
 from collections import namedtuple
 
 import pika
-from pika.exceptions import (AMQPConnectionError, AMQPHeartbeatTimeout, 
-                             AMQPChannelError, AMQPError, StreamLostError)
+from pika.exceptions import AMQPConnectionError, UnroutableError
 from retry import retry
 
 from ..server_config import (
@@ -28,6 +28,7 @@ from ..server_config import (
     LOGGING_CONFIG_STDOUT_LEVEL, LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_ENABLE
 )
 from ..errors import RabbitRetryError
+from ..details import PathDetails
 
 logger = logging.getLogger("nlds.root")
 
@@ -46,8 +47,10 @@ class RabbitMQPublisher():
 
     # Exchange routing key parts – queues
     RK_INDEX = "index"
-    RK_CATALOGUE = "cat"
-    RK_MONITOR = "mon"
+    RK_CATALOG = "catalog"
+    RK_CATALOG_PUT = "catalog-put"
+    RK_CATALOG_GET = "catalog-get"
+    RK_MONITOR = "monitor"
     RK_TRANSFER = "transfer"
     RK_TRANSFER_PUT = "transfer-put"
     RK_TRANSFER_GET = "transfer-get"
@@ -84,6 +87,7 @@ class RabbitMQPublisher():
     MSG_USER = "user"
     MSG_GROUP = "group"
     MSG_TARGET = "target"
+    MSG_HOLDING_TRANSACTION_ID = "holding_transaction_id"
     MSG_ROUTE = "route"
     MSG_ERROR = "error"
     MSG_TENANCY = "tenancy"
@@ -101,19 +105,41 @@ class RabbitMQPublisher():
     MSG_TYPE_STANDARD = "standard"
     MSG_TYPE_LOG = "log"
 
-    IndexItem = namedtuple("IndexItem", "item retries")
+    # In ascending order: 0 seconds, 30 seconds, 1 minute, 1 hour, 1 day, 5 days
+    # All must be in milliseconds.
+    RETRY_DELAYS = "retry_delays"
+    DEFAULT_RETRY_DELAYS = [
+        timedelta(seconds=0).total_seconds() * 1000,          
+        timedelta(seconds=30).total_seconds() * 1000,          
+        timedelta(minutes=1).total_seconds() * 1000, 
+        timedelta(hours=1).total_seconds() * 1000, 
+        timedelta(days=1).total_seconds() * 1000, 
+        timedelta(days=5).total_seconds() * 1000, 
+    ]
 
-    def __init__(self, setup_logging_fl=False):
+    def __init__(self, name="publisher", setup_logging_fl=False):
         # Get rabbit-specific section of config file
         self.whole_config = load_config()
         self.config = self.whole_config[RABBIT_CONFIG_SECTION]
+
+        # Set name for logging purposes
+        self.name = name
         
         # Load exchange section of config as this is the only required part for 
         # sending messages
-        self.exchange = self.config["exchange"]
+        self.exchanges = self.config["exchange"]
+        
+        # If multiple exchanges given then verify each and assign the first as a 
+        # default exchange. 
+        if not isinstance(self.exchanges, list):
+            self.exchanges = [self.exchanges]
+        for exchange in self.exchanges:
+            self.verify_exchange(exchange)
+        self.default_exchange = self.exchanges[0]
       
         self.connection = None
         self.channel = None
+        self.retry_delays = self.DEFAULT_RETRY_DELAYS
         
         if setup_logging_fl:
             self.setup_logging()
@@ -121,8 +147,7 @@ class RabbitMQPublisher():
     @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
     def get_connection(self):
         try:
-            if (self.connection is None 
-                or not (self.connection.is_open and self.channel.is_open)):
+            if (not self.channel or not self.channel.is_open):
                 # Get the username and password for rabbit
                 rabbit_user = self.config["user"]
                 rabbit_password = self.config["password"]
@@ -138,9 +163,10 @@ class RabbitMQPublisher():
                     )
                 )
 
-                # Create a new channel
+                # Create a new channel with basic qos
                 channel = connection.channel()
                 channel.basic_qos(prefetch_count=1)
+                channel.confirm_delivery()
 
                 self.connection = connection
                 self.channel = channel
@@ -148,19 +174,52 @@ class RabbitMQPublisher():
                 # Declare the exchange config. Also provides a hook for other 
                 # bindings (e.g. queues) to be declared in child classes.
                 self.declare_bindings()
-        except (AMQPError, AMQPChannelError, AMQPConnectionError, 
-                AMQPHeartbeatTimeout, StreamLostError) as e:
+        except AMQPConnectionError as e:
+            logger.error("AMQPConnectionError encountered on attempting to "
+                         "establish a connection. Retrying...")
+            logger.debug(f"{e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
-        self.channel.exchange_declare(exchange=self.exchange["name"], 
-                                      exchange_type=self.exchange["type"])
+        """Go through list of exchanges from config file and declare each. Will 
+        also declare delayed exchanges for use in scheduled messaging if the 
+        delayed flag is present and activated for a given exchange.
+        
+        """
+        for exchange in self.exchanges:
+            if exchange['delayed']:
+                args = {"x-delayed-type": exchange["type"]}
+                self.channel.exchange_declare(exchange=exchange["name"], 
+                                              exchange_type="x-delayed-message",
+                                              arguments=args)
+            else:
+                self.channel.exchange_declare(exchange=exchange["name"], 
+                                              exchange_type=exchange["type"])
+
+    @staticmethod
+    def verify_exchange(exchange):
+        """Verify that an exchange dict defined in the config file is valid. 
+        Throws a ValueError if not. 
+        
+        """
+        if ("name" not in exchange or "type" not in exchange 
+                or "delayed" not in exchange):
+            raise ValueError("Exchange in config file incomplete, cannot "
+                             "be declared.")
 
     @classmethod
-    def create_message(cls, transaction_id: UUID, data: List[str], 
-                       access_key: str, secret_key: str, user: str = None, 
-                       group: str = None, target: str = None, 
-                       tenancy: str = None) -> str:
+    def create_message(
+            cls, 
+            transaction_id: UUID, 
+            data: List[str], 
+            access_key: str, 
+            secret_key: str, 
+            user: str = None, 
+            group: str = None, 
+            target: str = None, 
+            tenancy: str = None, 
+            holding_transaction_id: str = None,
+        ) -> str:
         """
         Create message to add to rabbit queue. Message is in json format with 
         metadata described in DETAILS and data, i.e. the filelist of interest,
@@ -185,7 +244,7 @@ class RabbitMQPublisher():
         """
         timestamp = datetime.now().isoformat(sep='-')
         # Convert to a list of IndexItems and initialise retry list of zeroes
-        indexlist = [cls.IndexItem(item, 0) for item in data]
+        filelist = [PathDetails(original_path=item) for item in data]
         message_dict = {
             cls.MSG_DETAILS: {
                 cls.MSG_TRANSACT_ID: str(transaction_id),
@@ -193,27 +252,76 @@ class RabbitMQPublisher():
                 cls.MSG_USER: user,
                 cls.MSG_GROUP: group,
                 cls.MSG_TARGET: target,
+                cls.MSG_HOLDING_TRANSACTION_ID: holding_transaction_id,
                 cls.MSG_TENANCY: tenancy,
                 cls.MSG_ACCESS_KEY: access_key,
                 cls.MSG_SECRET_KEY: secret_key,
             }, 
             cls.MSG_DATA: {
-                cls.MSG_FILELIST: indexlist,
+                cls.MSG_FILELIST: filelist,
             },
             cls.MSG_TYPE: cls.MSG_TYPE_STANDARD
         }
 
         return json.dumps(message_dict)
 
-    def publish_message(self, routing_key: str, msg: str) -> None:
-        self.channel.basic_publish(
-            exchange=self.exchange['name'],
-            routing_key=routing_key,
-            properties=pika.BasicProperties(
-                content_encoding='application/json'
-            ),
-            body=msg
-        )
+    @retry(RabbitRetryError, tries=2, delay=0, backoff=1, logger=logger)
+    def publish_message(self, routing_key: str, msg: str, exchange: Dict = None,
+                        delay: int = 0) -> None:
+        """Sends a message with the specified routing key to an exchange for 
+        routing. If no exchange is provided it will default to the first 
+        exchange declared in the server_config. 
+        
+        An optional delay can be added which will force the message to sit for 
+        the specified number of seconds at the exchange before being routed. 
+        Note that this only happens if the given (or default if not specified) 
+        exchange is declared as a x-delayed-message exchange at start up with 
+        the 'delayed' flag. 
+        
+        This is in essence a light wrapper around the basic_publish method in 
+        pika. 
+        """
+        if not exchange:
+            exchange = self.default_exchange
+
+        try:
+            self.channel.basic_publish(
+                exchange=exchange["name"],
+                routing_key=routing_key,
+                properties=pika.BasicProperties(
+                    content_encoding='application/json',
+                    headers={
+                        "x-delay": delay
+                    },
+                    delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
+                ),
+                body=msg,
+                mandatory=True,
+            )
+        except AMQPConnectionError as e:
+            # For any connection error then reset the connection and try again
+            logger.error("AMQPConnectionError encountered on attempting to "
+                         "publish a message. Manually resetting and retrying.")
+            logger.debug(f"{e}")
+            self.connection = None
+            self.get_connection()
+            raise RabbitRetryError(str(e), ampq_exception=e)
+        except UnroutableError as e:
+            # For any Undelivered messages attempt to send again
+            logger.error("Message delivery was not confirmed, wasn't delivered "
+                         f"properly (rk = {routing_key}). Attempting retry...")
+            logger.debug(f"{e}")
+            raise RabbitRetryError(str(e), ampq_exception=e)
+
+    def get_retry_delay(self, retries: int):
+        """Simple convenience function for getting the delay (in seconds) for an 
+        indexlist with a given number of retries. Works off of the member 
+        variable self.retry_delays, maxing out at its final value i.e. if there 
+        are 5 elements in self.retry_delays, and 7 retries requested, then the 
+        5th element is returned. 
+        """
+        retries = min(retries, len(self.retry_delays) - 1)
+        return int(self.retry_delays[retries])
 
     def close_connection(self) -> None:
         self.connection.close()
@@ -343,7 +451,7 @@ class RabbitMQPublisher():
                 for log_file in log_files:
                     try:
                         # Make log file in separate logger
-                        fh = logging.TimedRotatingFileHandler(
+                        fh = TimedRotatingFileHandler(
                             log_file,
                             when=log_rollover,
                         )
@@ -369,7 +477,7 @@ class RabbitMQPublisher():
                         logger.warning(f"Failed to create log file for "
                                        f"{log_file}: {str(e)}")
 
-    def log(self, log_message: str, log_level: str, target: str, 
+    def _log(self, log_message: str, log_level: str, target: str, 
             **kwargs) -> None:
         """
         Catch-all function to log a message, both sending it to the local logger
@@ -406,6 +514,13 @@ class RabbitMQPublisher():
         routing_key = ".".join([self.RK_ROOT, self.RK_LOG, log_level.lower()])
         message = self.create_log_message(log_message, target)
         self.publish_message(routing_key, message)
+    
+    def log(self, log_message: str, log_level: str, target: str = None, 
+            **kwargs) -> None:
+        # Attempt to log to publisher's name
+        if not target:
+            target = self.name
+        self._log(log_message, log_level, target, **kwargs)
 
     @classmethod
     def create_log_message(cls, message: str, target: str, 

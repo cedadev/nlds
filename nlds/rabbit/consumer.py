@@ -8,14 +8,18 @@ __copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
+from enum import Enum
 import functools
 from abc import ABC, abstractmethod
 import logging
-from typing import Dict, List, NamedTuple
+import traceback
+from typing import Dict, List, NamedTuple, Union
 import pathlib as pth
 import grp
 import pwd
 import os
+import json
+from datetime import datetime, timedelta
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -32,6 +36,7 @@ from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES,
                              RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
                              RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
 from ..utils.permissions import check_permissions
+from ..details import PathDetails
 
 logger = logging.getLogger("nlds.root")
 
@@ -52,6 +57,13 @@ class RabbitQueue(BaseModel):
                                       routing_key=routing_key)]
         )
 
+class FilelistType(Enum):
+    raw = 0
+    processed = 1
+    retry = 2
+    failed = 3
+    indexed = 1
+    transferred = 1
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
@@ -62,12 +74,12 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_CONSUMER_CONFIG = dict()
 
     def __init__(self, queue: str = None, setup_logging_fl=False):
-        super().__init__(setup_logging_fl=False)
+        super().__init__(name=queue, setup_logging_fl=False)
 
         # TODO: (2021-12-21) Only one queue can be specified at the moment, 
         # should be able to specify multiple queues to subscribe to but this 
         # isn't a priority.
-        self.queue = queue
+        self.name = queue
         try:
             if queue is not None:
                 # If queue specified then select only that configuration
@@ -88,7 +100,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 
         except ValueError as e:
             print("Using default queue config - only fit for testing purposes.")
-            self.queue = self.DEFAULT_QUEUE_NAME
+            self.name = self.DEFAULT_QUEUE_NAME
             self.queues = [RabbitQueue.from_defaults(
                 self.DEFAULT_QUEUE_NAME,
                 self.DEFAULT_EXCHANGE_NAME, 
@@ -96,17 +108,23 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             )]  
 
         # Load consumer-specific config
-        if self.queue in self.whole_config:
-            self.consumer_config = self.whole_config[self.queue]
+        if self.name in self.whole_config:
+            self.consumer_config = self.whole_config[self.name]
         else: 
             self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
 
+        # Memeber variables to temporarily hold user- and group-id of a message
         self.gid = None
         self.uid = None
         
+        # Controls default behaviour of logging when certain exceptions are 
+        # caught in the callback. 
+        self.print_tracebacks_fl = True
+
+        # Set up the logging and pass through constructor parameter
         self.setup_logging(enable=setup_logging_fl)
 
-    def reset(self):
+    def reset(self) -> None:
         self.gid = None
         self.uid = None
     
@@ -161,15 +179,15 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         return return_val
     
-    def parse_filelist(self, body_json):
-        # Convert flat list into list of named tuples and the check it is, 
-        # in fact, a list
+    def parse_filelist(self, body_json: dict) -> List[PathDetails]:
+        # Convert flat list into list of PathDetails objects and the check it 
+        # is, in fact, a list
         try:
-            filelist = [self.IndexItem(i, r) for i, r in 
+            filelist = [PathDetails.from_dict(pd_dict) for pd_dict in 
                         list(body_json[self.MSG_DATA][self.MSG_FILELIST])]
         except TypeError as e:
             self.log(
-                "Failed to reformat list into indexitems. Filelist in "
+                "Failed to reformat list into PathDetails objects. Filelist in "
                 "message does not appear to be in the correct format.", 
                 self.RK_LOG_ERROR
             )
@@ -177,7 +195,123 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         return filelist
 
-    def set_ids(self, body_json: Dict[str, str], use_pwd_gid_fl: bool = True):
+    def _choose_list(self, list_type: FilelistType = FilelistType.processed
+                    ) -> List[PathDetails]:
+        """ Choose the correct pathlist for a given mode of operation. This 
+        requires that the appropriate member variable be instantiated in the 
+        consumer class.
+        """
+        if list_type == FilelistType.processed:
+            return self.completelist
+        elif list_type == FilelistType.retry:
+            return self.retrylist
+        elif list_type == FilelistType.failed:
+            return self.failedlist
+        else: 
+            raise ValueError(f"Invalid list type provided ({list_type})")
+
+    def append_and_send(self, 
+            path_details: PathDetails, 
+            routing_key: str, 
+            body_json: Dict[str, str], 
+            filesize: int = None,
+            list_type: Union[FilelistType, str] = FilelistType.processed,
+        ) -> None:
+        """Append a path details item to an existing PathDetails list and then 
+        determine if said list requires sending to the exchange due to size 
+        limits (can be either file size or list length). Which pathlist is to 
+        be used is determined by the list_type passed, which can be either a 
+        FilelistType enum or an appropriate string that can be cast into one. 
+
+        The list will by default be capped by list-length, with the maximum 
+        determined by a filelist_max_length config variable (defaults to 1000). 
+        This behaviour is overriden by specifying the filesize kwarg, which is 
+        in kilobytes and must be an integer, at consumption time.
+
+        The message body and destination should be specified through body_json 
+        and routing_key respectively. 
+
+        NOTE: This was refactored here from the index/transfer processors. 
+        Might make more sense to put it somewhere else given there are specific 
+        config variables required (filelist_max_length, message_max_size) which 
+        could fail with an AttributeError?
+
+        """
+        # If list_type given as a string then attempt to cast it into an 
+        # appropriate enum
+        if not isinstance(list_type, FilelistType):
+            try:
+                list_type = FilelistType[list_type]
+            except KeyError:
+                raise ValueError("list_type value invalid, must be a "
+                                 "FilelistType enum or a string capabale of "
+                                 f"being cast to such (list_type={list_type})")
+
+        # Select correct pathlist and append the given PathDetails object
+        pathlist = self._choose_list(list_type)
+        pathlist.append(path_details)
+
+        # If filesize has been passed then use total list size as message cap
+        if filesize:
+            # NOTE: This references a general pathlist but a specific list size, 
+            # perhaps these two should be combined together into a single 
+            # pathlist object? Might not be necessary for just this small code 
+            # snippet. 
+            self.completelist_size += filesize
+            
+            # Send directly to exchange and reset filelist
+            if self.completelist_size >= self.message_max_size:
+                self.send_pathlist(
+                    pathlist, routing_key, body_json, mode=list_type
+                )
+                pathlist.clear()
+                self.completelist_size = 0
+
+        # The default message cap is the length of the pathlist. This applies
+        # to failed or problem lists by default
+        elif len(pathlist) >= self.filelist_max_len:
+            # Send directly to exchange and reset filelist
+            self.send_pathlist(
+                pathlist, routing_key, body_json, mode=list_type
+            )
+            pathlist.clear()
+
+    def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
+                       body_json: Dict[str, str], 
+                       mode: FilelistType = FilelistType.processed
+                       ) -> None:
+        """ Convenience function which sends the given list of PathDetails 
+        objects to the exchange with the given routing key and message body. 
+        Mode specifies what to put into the log message, as well as determining 
+        whether the list should be retry-reset and whether the message should be 
+        delayed.
+
+        """
+        self.log(f"Sending list back to exchange (routing_key = {routing_key})",
+                 self.RK_LOG_INFO)
+
+        delay = 0
+        if mode == FilelistType.processed:
+            # Reset the retries upon successful indexing. 
+            for path_details in pathlist:
+                path_details.reset_retries()
+        elif mode == FilelistType.retry:
+            # Delay the retry message depending on how many retries have been 
+            # accumulated. All retries in a retry list _should_ be the same so 
+            # base it off of the first one.
+            delay = self.get_retry_delay(pathlist[0].retries)
+            self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
+                     f" {datetime.now() + timedelta(milliseconds=delay)}", 
+                     self.RK_LOG_DEBUG)
+        
+        body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
+        self.publish_message(routing_key, json.dumps(body_json), delay=delay)
+
+    def set_ids(
+            self, 
+            body_json: Dict[str, str], 
+            use_pwd_gid_fl: bool = True
+        ) -> None:
         """Changes the real user- and group-ids stored in the class to that 
         specified in the incoming message details section so that permissions 
         on each file in a filelist can be checked.
@@ -232,7 +366,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         performed RabbitMQConsumer.set_ids() beforehand.
 
         """
-        if self.uid is None or self.gid is None:
+        if check_permissions_fl and (self.uid is None or self.gid is None):
             raise ValueError("uid and gid not set properly.")
         
         if not isinstance(path, pth.Path):
@@ -271,7 +405,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             if LOGGING_CONFIG_STDOUT in consumer_logging_conf:
                 add_stdout_fl = consumer_logging_conf[LOGGING_CONFIG_STDOUT]
             if LOGGING_CONFIG_STDOUT_LEVEL in consumer_logging_conf:
-                stdout_log_level = consumer_logging_conf[LOGGING_CONFIG_STDOUT_LEVEL]
+                stdout_log_level = (
+                    consumer_logging_conf[LOGGING_CONFIG_STDOUT_LEVEL]
+                )
             if LOGGING_CONFIG_FILES in consumer_logging_conf:
                 log_files = consumer_logging_conf[LOGGING_CONFIG_FILES]
             if LOGGING_CONFIG_ROLLOVER in consumer_logging_conf:
@@ -286,11 +422,79 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                      add_stdout_fl, stdout_log_level, log_files,
                                      log_rollover)
 
+    @staticmethod
+    def _acknowledge_message(channel: Channel, delivery_tag: str) -> None:
+        """Acknowledge a message with a basic ack. This is the bare minimum 
+        requirement for an acknowledgement according to rabbit protocols.
+
+        :param channel:         Channel which message came from
+        :param delivery_tag:    Message id
+        """
+
+        logger.debug(f'Acknowledging message: {delivery_tag}')
+        if channel.is_open:
+            channel.basic_ack(delivery_tag)
+
+    def acknowledge_message(self, channel: Channel, delivery_tag: str, 
+                            connection: Connection) -> None:
+        """Method for acknowledging a message so the next can be fetched. This 
+        should be called at the end of a consumer callback, and - in order to do 
+        so thread-safely - from within connection object.  All of the required 
+        params come from the standard callback params.
+
+        :param channel:         Callback channel param
+        :param delivery_tag:    From the callback method param. eg. 
+                                method.delivery_tag
+        :param connection:      Connection object from the callback param
+        """
+        cb = functools.partial(self._acknowledge_message, channel, delivery_tag)
+        connection.add_callback_threadsafe(cb)
+
     @abstractmethod
     def callback(self, ch: Channel, method: Method, properties: Header, 
-                 body: bytes, connection: Connection):
-        pass
+                 body: bytes, connection: Connection) -> None:
+        """Standard consumer callback function as defined by rabbitMQ, with the 
+        standard callback parameters of Channel, Method, Header, Body (in bytes)
+        and Connection.
 
+        This is the working method of a consumer, i.e. it does the job the 
+        consumer has been designed to do, and so must be implemented and 
+        overridden by any child consumer classes. 
+        """
+        NotImplementedError
+    
+    def _wrapped_callback(self, ch: Channel, method: Method, properties: Header, 
+                          body: bytes, connection: Connection) -> None:
+        """Wrapper around standard callback function which adds error handling 
+        and manual message acknowledgement. All arguments are the same as those 
+        in self.callback, i.e. the standard rabbitMQ consumer callback 
+        parameters.
+
+        This should be performed on all consumers and should be left untouched 
+        in child implementations.
+        """
+        # Wrap callback with a try-except catching a selection of common 
+        # errors which can be caught without stopping consumption. 
+        try:
+            self.callback(ch, method, properties, body, connection)
+        except (ValueError, TypeError, KeyError, PermissionError) as e:
+            if self.print_tracebacks_fl:
+                tb = traceback.format_exc()
+                self.log(tb, self.RK_LOG_DEBUG)
+            self.log(
+                f"Encountered error ({e}), sending to logger.", 
+                self.RK_LOG_ERROR, exc_info=e
+            )
+            self.log(
+                f"Failed message content: {body}",
+                self.RK_LOG_DEBUG
+            )
+        finally:
+            # Ack message only if it has failed in the limited number of ways 
+            # above
+            self.acknowledge_message(ch, method.delivery_tag, connection)
+
+            
     def declare_bindings(self) -> None:
         """
         Overridden method from Publisher, additionally declares the queues and 
@@ -306,11 +510,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                         queue=queue.name, 
                                         routing_key=binding.routing_key)
             # Apply callback to all queues
-            wrapped_callback = functools.partial(self.callback, 
+            wrapped_callback = functools.partial(self._wrapped_callback, 
                                                  connection=self.connection)
             self.channel.basic_consume(queue=queue.name, 
-                                       on_message_callback=wrapped_callback, 
-                                       auto_ack=True)
+                                       on_message_callback=wrapped_callback)
     
     @staticmethod
     def split_routing_key(routing_key: str) -> None:
@@ -326,7 +529,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return rk_parts
 
     @classmethod
-    def append_route_info(cls, body: Dict, route_info: str = None):
+    def append_route_info(cls, body: Dict, route_info: str = None) -> Dict:
         if route_info is None: 
             route_info = cls.DEFAULT_REROUTING_INFO
         if cls.MSG_ROUTE in body[cls.MSG_DETAILS]:
@@ -334,12 +537,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         else:
             body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
         return body
-    
-    def log(self, log_message: str, log_level: str, target: str = None, 
-            **kwargs) -> None:
-        if not target:
-            target = self.queue
-        super().log(log_message, log_level, target, **kwargs)
 
     def run(self):
         """
@@ -370,7 +567,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 continue
 
             except Exception as e:
-                logger.critical(e)
+                # Catch all other exceptions and log them as critical. 
+                tb = traceback.format_exc()
+                self.log(tb, self.RK_LOG_CRITICAL, exc_info=e)
 
                 self.channel.stop_consuming()
                 break

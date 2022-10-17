@@ -18,6 +18,7 @@ setup(
         'retry',
         'pika',
         'minio',
+        'sqlalchemy'
     ],
     include_package_data=True,
     package_data={
