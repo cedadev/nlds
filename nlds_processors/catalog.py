@@ -381,7 +381,7 @@ def main():
     consumer = CatalogConsumer()
     # connect to message queue early so that we can send logging messages about
     # connecting to the database
-    consumer.get_connection()
+    #consumer.get_connection()
     # connect to the DB
     consumer._connect_to_db()
     # create the database

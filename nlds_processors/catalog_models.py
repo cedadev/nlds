@@ -1,7 +1,7 @@
 """Declare the SQLAlchemy ORM models for the NLDS Catalog database"""
 from __future__ import annotations
 
-from sqlalchemy import Integer, String, Column, DateTime, Enum, BigInteger
+from sqlalchemy import Integer, String, Column, DateTime, Enum, BigInteger, UniqueConstraint
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -16,14 +16,35 @@ class Holding(Base):
     __tablename__ = "holding"
     # primary key / integer id / batch id
     id = Column(Integer, primary_key=True)
-    # transaction id - this will be the String
-    transaction_id = Column(String, nullable=False, index=True)
+    # label - either supplied by user or derived from first transaction_id
+    label = Column(String, nullable=False, index=True)
+    # user who owns this holding
+    user = Column(String, nullable=False)
+    # group who owns this holding
+    group = Column(String, nullable=False)
     # relationship for tags (One to many)
     tags = relationship("Tag", backref="holding", cascade="delete")
-    # relationship for files (One to many)
-    files = relationship("File", backref="holding", cascade="delete")
+    # relationship for transactions (One to many)
+    transactions = relationship("Transaction", backref="holding", cascade="delete")
+    # label must be unique per user
+    __table_args__ = (UniqueConstraint('label', 'user'),)
+
+
+class Transaction(Base):
+    """Class containing details of a transaction.  Note that a holding can consist
+    of many transactions."""
+    __tablename__ = "transaction"
+    # primay key / integer id
+    id = Column(Integer, primary_key=True)
+    # transaction id - this will be the String of the UUID
+    transaction_id = Column(String, nullable=False, index=True)
     # date and time of ingest / adding to catalogue
     ingest_time = Column(DateTime)
+    # relationship for files (One to many)
+    files = relationship("File", backref="holding", cascade="delete")
+    # holding id as ForeignKey "Parent"
+    holding_id = Column(Integer, ForeignKey("holding.id"), 
+                        index=True, nullable=False)
 
 
 class Tag(Base):
@@ -37,14 +58,15 @@ class Tag(Base):
     holding_id = Column(Integer, ForeignKey("holding.id"), 
                         index=True, nullable=False)
 
+
 class File(Base):
     """Class containing the details of a single File"""
     __tablename__ = "file"
     # primary key / integer id
     id = Column(Integer, primary_key=True)
     # holding id as ForeignKey "Parent"
-    holding_id = Column(Integer, ForeignKey("holding.id"), 
-                        index=True, nullable=False)
+    transaction_id = Column(Integer, ForeignKey("transaction.id"), 
+                            index=True, nullable=False)
     # original path on POSIX disk
     original_path = Column(String)
     # PathType, same as the nlds.details.PathType enum
@@ -88,6 +110,7 @@ class Location(Base):
     file_id = Column(Integer, ForeignKey("file.id"), 
                      index=True, nullable=False)
 
+
 class Checksum(Base):
     """Class containing checksum and algorithm used to calculate checksum"""
     __tablename__ = "checksum"
@@ -97,6 +120,16 @@ class Checksum(Base):
     checksum = Column(String, nullable=False)
     # checksum method / algorithm
     algorithm = Column(String, nullable=False)
-    # file id as ForeignKey "Parent" (one to one)
+    # file id as ForeignKey "Parent" (one to many)
     file_id = Column(Integer, ForeignKey("file.id"), 
                      index=True, nullable=False)
+    # checksum must be unique per algorithm
+    __table_args__ = (UniqueConstraint('checksum', 'algorithm'),)
+
+
+if __name__ == "__main__":
+    # render the schema if run from command line
+    # needs fixed version of eralchemy from:
+    # https://github.com/maurerle/eralchemy2.git
+    from eralchemy2 import render_er 
+    render_er(Base, 'catalog_schema.png')
