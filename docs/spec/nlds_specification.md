@@ -1006,6 +1006,77 @@ WARNING, ERROR, CRITICAL**
 `code_line` and `module_name` can be derived from the exception using the 
 `traceback` module.
 
+# User interaction via the NLDS client / client API
+
+User actions:
+
+## Transfer actions
+### PUT a single / list of files 
+  - `put`
+  - `putlist`
+  - Required arguments
+    - `--user`
+    - `--group`
+    - `filepath|filelist`
+  - Optional
+    - `--label=`: if a holding with label exists then add to an existing holding with the label, otherwise create a new holding with the label
+    - `--holding_id=`: adds to an existing holding with the (integer) id
+    - `--tag=key:value`: adds a tag to the holding on PUT
+
+### GET a single / list of files 
+  - `get`
+  - `getlist`
+  - Required arguments 
+    - `--user=`
+    - `--group=`
+    - `--target=` 
+    - `filepath|filelist`
+
+### DELETE a single / list of files 
+  - `del`
+  - `dellist`
+  - Required arguments 
+    - `--user=`
+    - `--group=`
+    - `filepath|filelist`
+
+## Query actions
+
+### List the holdings for a user / group
+  - `list`
+  - Required arguments
+    - `--user=`
+  - Optional arguments
+    - `--group=`
+    - `--holding_id=` (integer)
+    - `--tag=key:value` (filter by tag)
+    - `--label=` (filter by label)
+    - `--time=datetime|(start datetime, end datetime)` (time the files were ingested)
+
+### List the files for a user / group
+  - `find`
+  - Required arguments
+    - `--user=`
+  - Optional arguments
+    - `--group=`
+    - `--holding_id=` (integer)
+    - `--tag=key:value` (filter by tag for the holding containing the files)
+    - `--label=` (filter by the holding label)
+    - `--time=datetime|(start datetime, end datetime)` (time the files were ingested)
+    - `--path=` (filter by original path, can be a substring, regex or wildcard)
+    - `--transaction_id=` (find a holding that contains a transaction id)
+
+### Update the holding metadata
+  - `meta`
+  - Required arguments
+    - `--user=`
+    - One of (must guarantee uniqueness)
+      - `--holding_id=`
+      - `--label=`
+    - Optional
+      - `--group`
+      - `--update_tag=key:value` (create or amend a tag)
+      - `--update_label=` (change the label)
 
 # Development notes
 
