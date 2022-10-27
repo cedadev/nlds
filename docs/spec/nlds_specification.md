@@ -359,13 +359,17 @@ containing the data required to carry out the processes:
             access_key     : <string>,
             secret_key     : <string>
         },
+        meta {
+        },
         data {
         }
     }
 
-All messages retain all parts of the `details` field in the JSON message.  This
-allows the details of the transaction to be passed from process to process, even
-when the process does not require some of the sub-fields in the `details` field.
+All messages retain all parts of the `details` and `meta` fields in the JSON 
+message.  This allows the details of the transaction to be passed from process to 
+process, even when the process does not require some of the sub-fields in the 
+`details` or `meta` fields.  The `data` field can, and will, change between each 
+process.
 
 The routing keys for the RabbitMQ messages have three components: the calling
 application, the worker to act upon and the state or command for the worker.
@@ -495,13 +499,17 @@ URL.
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
-            target         : <string> (optional),
             tenancy        : <string> (optional),
             access_key     : <string>,
             secret_key     : <string>
         },
         data : {
-            filelist       : <list<(json,int)>>
+            filelist       : <list<(json,int)>>,
+        },
+        meta : {
+            label          : <string> (optional),
+            holding_id     : <int> (optional),
+            tag            : <dict> (optional)
         }
     }
 

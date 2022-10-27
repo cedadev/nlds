@@ -41,12 +41,6 @@ class GetTransferConsumer(BaseTransferConsumer):
                         self.RK_LOG_ERROR)
                 return
 
-        # Get source transaction id (if available)
-        holding_transaction_id = msg_details[self.MSG_HOLDING_TRANSACTION_ID]
-        if holding_transaction_id:
-            # Convert to uuid and back to string to check it is a valid UUID
-            holding_transaction_id = str(UUID(holding_transaction_id))
-
         # Create client!
         client = minio.Minio(
             tenancy,
@@ -66,12 +60,6 @@ class GetTransferConsumer(BaseTransferConsumer):
                 )
                 continue
 
-            # If holding_transaction_id given then obtain just that transaction bucket 
-            # and files therein. 
-            # NOTE: (2022-10-05) I don't think this works anymore
-            if holding_transaction_id:
-                bucket_name = f"nlds.{holding_transaction_id}"
-                object_name = path_details.original_path
             # If bucketname inserted into object path (i.e. from catalogue) then 
             # extract both
             elif len(path_details.object_name.split(':')) == 2:

@@ -33,13 +33,13 @@ from pika.frame import Header
 
 # SQLalchemy imports
 from sqlalchemy import create_engine, select, func
-from sqlalchemy.exc import ArgumentError
+from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy.orm import Session
 
 from datetime import datetime, timezone
 
 from nlds.rabbit.consumer import RabbitMQConsumer
-from nlds_processors.catalog_models import Base, File, Holding, Location
+from nlds_processors.catalog_models import Base, File, Holding, Location, Transaction
 from nlds_processors.catalog_models import Storage, Checksum, Tag
 from nlds.details import PathDetails, PathType
 
@@ -125,36 +125,60 @@ class CatalogConsumer(RabbitMQConsumer):
         Base.metadata.create_all(self.db_engine)
 
 
-    def _get_or_create_holding(self, session, transaction_id) -> None:
+    def _get_or_create_holding(self, session, user, group, label, holding_id=None) -> None:
         # create or return an existing Holding
-        # check if transaction id already exists as a holding
-        holding_Q = session.execute(
-            select(Holding).where(
-                Holding.transaction_id == transaction_id
-            )
-        )
-        # if it doesn't then create
-        holding = holding_Q.fetchone()
-        if holding is None:
-            # create the new Holding with the transaction id
-            holding = Holding(
-                transaction_id = transaction_id,
-                ingest_time = func.now()
-            )
-            session.add(holding)
-        else:
-            holding = holding.Holding
+        # check if holding id already exists as a holding
+        # if it doesn't then check for the label, and if that doesn't exist then create
+        # the holding
+        try:
+            if holding_id:
+                holding_Q = session.execute(
+                    select(Holding).where(
+                        Holding.id == holding_id
+                    )
+                )
+            else:
+                holding_Q = session.execute(
+                    select(Holding).where(
+                        Holding.label == label
+                    )
+                )
+            # if it doesn't then create
+            holding = holding_Q.fetchone()
+            if holding is None:
+                # create the new Holding with the transaction id
+                holding = Holding(
+                    label = label,
+                    user = user,
+                    group = group
+                )
+                session.add(holding)
+            else:
+                holding = holding.Holding
 
-        # need to flush to update the holding id
-        session.flush()
+            # need to flush to update the holding id
+            session.flush()
+        except IntegrityError:
+            pass
         return holding
 
+    def _create_transaction(self, session, holding, transaction_id):
+        # create a transaction that belongs to a holding and will contain files
+        transaction = Transaction(
+            holding_id = holding.id,
+            transaction_id = transaction_id,
+            ingest_time = func.now()
+        )
+        session.add(transaction)
+        # flush to generate transaction.id
+        session.flush()
+        return transaction
 
-    def _catalog_add(self, session, holding, path_details) -> None:
+    def _catalog_add(self, session, transaction, path_details) -> None:
         # add to the catalog database
         # add the file
         new_file = File(
-            holding_id = holding.id,
+            transaction_id = transaction.id,
             original_path = path_details.original_path,
             path_type = path_details.path_type,
             link_path = path_details.link_path,
@@ -169,7 +193,7 @@ class CatalogConsumer(RabbitMQConsumer):
             storage_type = Storage.OBJECT_STORAGE,
             # root is bucket for Object Storage and that is the transaction id
             # which is now stored in the Holding record
-            root = holding.transaction_id,
+            root = transaction.transaction_id,
             # path is object_name for object storage
             path = path_details.object_name,
             # access time is passed in the file details
@@ -235,7 +259,7 @@ class CatalogConsumer(RabbitMQConsumer):
         # get the Holding from the holding_transaction_id
         holding = session.execute(
             select(Holding).where(
-                Holding.transaction_id == holding_transaction_id
+                Holding.label == holding_transaction_id
             )
         ).first()
 
@@ -320,25 +344,10 @@ class CatalogConsumer(RabbitMQConsumer):
         try:
             filelist = body[self.MSG_DATA][self.MSG_FILELIST]
         except KeyError as e:
-            self.log(f"Invalid message contents, filelist should be in the data"
+            self.log(f"Invalid message contents, filelist should be in the data "
                      f"section of the message body.",
                      self.RK_LOG_ERROR)
             return
-
-        # get the transaction id from the details section of the message
-        try: 
-            transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
-        except KeyError:
-            self.log(
-                "Transaction id unobtainable, exiting callback.", 
-                self.RK_LOG_ERROR
-            )
-            return
-
-        # create a SQL alchemy session
-        session = Session(self.db_engine)
-        # get or create the Holding
-        holding = self._get_or_create_holding(session, transaction_id)
 
         # check filelist is a list
         try:
@@ -347,11 +356,54 @@ class CatalogConsumer(RabbitMQConsumer):
             self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
             return
 
+        # get the transaction id from the details section of the message
+        try: 
+            transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
+        except KeyError:
+            self.log("Transaction id not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the label from the metadata section of the message
+        try:
+            label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            # generate the label from the UUID - should loop here to make sure we get a
+            # unique label
+            label = transaction_id[0:8]
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
+
+        print(f"holding id: {holding_id}")
+        # create a SQL alchemy session
+        session = Session(self.db_engine)
+        # get or create the Holding
+        holding = self._get_or_create_holding(session, user, group, label, holding_id)
+        # create the transaction
+        transaction = self._create_transaction(session, holding, transaction_id)
+
         # loop over the filelist
         for f in filelist:
             # convert to PathDetails class
             pd = PathDetails.from_dict(f)
-            self._catalog_add(session, holding, pd)
+            self._catalog_add(session, transaction, pd)
 
         session.commit()
 
@@ -384,7 +436,7 @@ def main():
     consumer = CatalogConsumer()
     # connect to message queue early so that we can send logging messages about
     # connecting to the database
-    #consumer.get_connection()
+    consumer.get_connection()
     # connect to the DB
     consumer._connect_to_db()
     # create the database

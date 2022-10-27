@@ -67,7 +67,7 @@ class File(Base):
     # holding id as ForeignKey "Parent"
     transaction_id = Column(Integer, ForeignKey("transaction.id"), 
                             index=True, nullable=False)
-    # original path on POSIX disk
+    # original path on POSIX disk - this should be unique per holding
     original_path = Column(String)
     # PathType, same as the nlds.details.PathType enum
     path_type = Column(Enum(PathType))
