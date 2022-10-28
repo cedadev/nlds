@@ -14,8 +14,9 @@ Requires these settings in the /etc/nlds/server_config file:
         "db_engine": "sqlite",
         "db_options": {
             "db_name" : "/nlds_catalog.db",
-            "user" : "",
-            "passwd" : ""
+            "db_user" : "",
+            "db_passwd" : ""
+            "echo
         },
         "logging":{
             "enable": true
