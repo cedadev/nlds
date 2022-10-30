@@ -32,9 +32,9 @@ router = APIRouter()
 
 class FileModel(BaseModel):
     filelist: List[str]
-    label: str
-    tag: Dict[str, str]
-    holding_id: int
+    label: str = None
+    tag: Dict[str, str] = None
+    holding_id: int = None
 
     class Config:
         schema_extra = {
@@ -164,6 +164,9 @@ async def put(transaction_id: UUID,
                 "processing.")
     )
 
+    # Convert filepath or filelist to lists
+    contents = filemodel.get_cleaned_list()
+
     # create the message dictionary - do this here now as it's more transparent
     msg_dict = {
         RMQP.MSG_DETAILS: {
@@ -177,10 +180,21 @@ async def put(transaction_id: UUID,
         }, 
         RMQP.MSG_DATA: {
             # Convert to PathDetails for JSON serialisation
-            RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in filelist],
+            RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
         },
         RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
     }
+    # add the metadata
+    meta_dict = {}
+    if (filemodel.label):
+        meta_dict[RMQP.MSG_LABEL] = filemodel.label
+    if (filemodel.holding_id):
+        meta_dict[RMQP.MSG_HOLDING_ID] = filemodel.holding_id
+    if (filemodel.tag):
+        meta_dict[RMQP.MSG_TAG] = filemodel.tag
+
+    if (len(meta_dict) > 0):
+        msg_dict[RMQP.MSG_META] = meta_dict
     rabbit_publish_response(f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_GETLIST}",
                             msg_dict)
 

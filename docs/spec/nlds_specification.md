@@ -1039,6 +1039,10 @@ User actions:
     - `--group=`
     - `--target=` 
     - `filepath|filelist`
+  - Optional
+    - `--label=`: get the file from a holding with matching label
+    - `--holding_id=`: get the file from a holding with the (integer) id
+    - `--tag=key:value`: get the file from a holding with the matching tag
 
 ### DELETE a single / list of files 
   - `del`

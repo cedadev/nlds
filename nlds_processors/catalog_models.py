@@ -25,7 +25,8 @@ class Holding(Base):
     # relationship for tags (One to many)
     tags = relationship("Tag", backref="holding", cascade="delete")
     # relationship for transactions (One to many)
-    transactions = relationship("Transaction", backref="holding", cascade="delete")
+    transactions = relationship("Transaction", back_populates="holding", 
+                                cascade="delete")
     # label must be unique per user
     __table_args__ = (UniqueConstraint('label', 'user'),)
 
@@ -41,10 +42,11 @@ class Transaction(Base):
     # date and time of ingest / adding to catalogue
     ingest_time = Column(DateTime)
     # relationship for files (One to many)
-    files = relationship("File", backref="holding", cascade="delete")
+    files = relationship("File", back_populates="transaction", cascade="delete")
     # holding id as ForeignKey "Parent"
     holding_id = Column(Integer, ForeignKey("holding.id"), 
                         index=True, nullable=False)
+    holding = relationship("Holding", back_populates="transactions")
 
 
 class Tag(Base):
@@ -67,6 +69,7 @@ class File(Base):
     # holding id as ForeignKey "Parent"
     transaction_id = Column(Integer, ForeignKey("transaction.id"), 
                             index=True, nullable=False)
+    transaction = relationship("Transaction", back_populates="files")
     # original path on POSIX disk - this should be unique per holding
     original_path = Column(String)
     # PathType, same as the nlds.details.PathType enum

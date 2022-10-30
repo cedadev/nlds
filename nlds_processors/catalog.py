@@ -207,13 +207,23 @@ class CatalogConsumer(RabbitMQConsumer):
         session.add(location)
 
 
-    def _getfilefromdb(self, session, file_details: PathDetails) -> PathDetails:
+    def _getfilefromdb(self, session, file_details: PathDetails,
+                       holding=None) -> PathDetails:
         # get a file from the db connected to via session
-        file_Q = session.execute(
-            select(File).where(
-                File.original_path == file_details.original_path
+        if holding:
+            for transaction in holding.transactions:
+                file_Q = session.execute(
+                    select(File).where(
+                        File.original_path == file_details.original_path,
+                        File.transaction == transaction
+                    )
+                )
+        else:
+            file_Q = session.execute(
+                select(File).where(
+                    File.original_path == file_details.original_path
+                )
             )
-        )
         # can currently have more than one file with the same name so just
         # get the first
         file = file_Q.fetchone()
@@ -256,11 +266,11 @@ class CatalogConsumer(RabbitMQConsumer):
             raise KeyError(f"File record: {file_details.original_path} "
                             "not found")
 
-    def _getholding(self, session, holding_transaction_id):
+    def _getholding(self, session, holding_label):
         # get the Holding from the holding_transaction_id
         holding = session.execute(
             select(Holding).where(
-                Holding.label == holding_transaction_id
+                Holding.label == holding_label
             )
         ).first()
 
@@ -272,7 +282,7 @@ class CatalogConsumer(RabbitMQConsumer):
             )
             return
         
-        return holding
+        return holding.Holding
 
     def _catalog_get(self, body: dict) -> None:
         # get the filelist from the data section of the message
@@ -287,20 +297,17 @@ class CatalogConsumer(RabbitMQConsumer):
         # create a SQL alchemy session
         session = Session(self.db_engine)
 
-        # get the holding transaction id from the details section of the message
-        # (could be null)
+        # get the holding label from the details section of the message
+        # could (legit) be None
         try: 
-            holding_transaction_id = (body[self.MSG_DETAILS]
-                                          [self.MSG_HOLDING_TRANSACTION_ID])
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
         except KeyError:
-            self.log(
-                "Holding transaction id not in message, exiting callback.", 
-                self.RK_LOG_ERROR
-            )
-            return
+            holding_label = None
 
-        if holding_transaction_id is not None:
-            holding = self._getholding(holding_transaction_id, session)
+        if holding_label is not None:
+            holding = self._getholding(session, holding_label)
+        else:
+            holding = None
 
         # build the Pathlist from each file
         # two lists: completed PathDetails, failed PathDetails
@@ -309,7 +316,9 @@ class CatalogConsumer(RabbitMQConsumer):
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
-                complete_details = self._getfilefromdb(session, file_details)
+                complete_details = self._getfilefromdb(
+                    session, file_details, holding
+                )
                 complete_pathlist.append(complete_details)
             except KeyError:
                 failed_pathlist.append(file_details)
@@ -382,8 +391,8 @@ class CatalogConsumer(RabbitMQConsumer):
         try:
             label = body[self.MSG_META][self.MSG_LABEL]
         except KeyError:
-            # generate the label from the UUID - should loop here to make sure we get a
-            # unique label
+            # generate the label from the UUID - should loop here to make sure 
+            # we get a unique label
             label = transaction_id[0:8]
 
         # get the holding_id from the metadata section of the message
@@ -392,11 +401,11 @@ class CatalogConsumer(RabbitMQConsumer):
         except KeyError:
             holding_id = None
 
-        print(f"holding id: {holding_id}")
         # create a SQL alchemy session
         session = Session(self.db_engine)
         # get or create the Holding
-        holding = self._get_or_create_holding(session, user, group, label, holding_id)
+        holding = self._get_or_create_holding(session, user, group, label, 
+                                              holding_id)
         # create the transaction
         transaction = self._create_transaction(session, holding, transaction_id)
 
