@@ -104,7 +104,6 @@ class CatalogConsumer(RabbitMQConsumer):
         # get the database connection string
         db_connect = self._get_db_string()
         self.log(f"db_connect string is {db_connect}", self.RK_LOG_DEBUG)
-        print(os.getcwd())
 
         # indicate database not connected yet
         self.db_engine = None
@@ -188,6 +187,8 @@ class CatalogConsumer(RabbitMQConsumer):
             group = path_details.group,
             file_permissions = path_details.permissions
         )
+        session.add(new_file)
+        session.flush()
 
         # add the storage location for object storage
         location = Location(
@@ -201,23 +202,23 @@ class CatalogConsumer(RabbitMQConsumer):
             access_time = datetime.fromtimestamp(
                 path_details.access_time, tz=timezone.utc
             ),
-            file = new_file
+            file_id = new_file.id
         )
-        session.add(new_file)
         session.add(location)
 
 
     def _getfilefromdb(self, session, file_details: PathDetails,
                        holding=None) -> PathDetails:
         # get a file from the db connected to via session
+        print("!!!!", holding.id, holding.label)
         if holding:
-            for transaction in holding.transactions:
-                file_Q = session.execute(
-                    select(File).where(
-                        File.original_path == file_details.original_path,
-                        File.transaction == transaction
-                    )
+            file_Q = session.execute(
+                select(Transaction, File).where(
+                    Transaction.holding_id == holding.id,
+                    File.transaction_id == Transaction.id,
+                    File.original_path == file_details.original_path,
                 )
+            )
         else:
             file_Q = session.execute(
                 select(File).where(
@@ -277,7 +278,7 @@ class CatalogConsumer(RabbitMQConsumer):
         # check it's in the DB
         if holding is None:
             self.log(
-                "Holding transaction id not in database, exiting callback.", 
+                "Holding label is not in database, exiting callback.", 
                 self.RK_LOG_ERROR
             )
             return
