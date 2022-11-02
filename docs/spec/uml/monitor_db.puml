@@ -3,16 +3,18 @@
 object "**Transaction State**" as transaction_state {
     id [INT](unique)
     transaction_id [UUID_64|STRING](unique)
-    ' label [STRING](unique with user)?
     user [STRING]
     group [STRING]
-    furthest_state [ROUTING | SPLITTING | INDEXING | TRANSFERRING | CATALOGING | COMPLETE | FAILED]
-    split_count [INT] (set at index step)
+    furthest_state [ROUTING | SPLITTING | INDEXING | TRANSFERRING | CATALOGING | COMPLETE]
+    subjob_count [INT]
+    routing_count [INT]
+    splitting_count [INT]
     indexing_count [INT]
     transferring_count [INT]
     cataloguing_count [INT]
     complete_count [INT]
     failed_count [INT]
+    retry_count [INT]
 }
 
 
