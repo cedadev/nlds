@@ -51,6 +51,8 @@ class RabbitMQPublisher():
     RK_CATALOG_PUT = "catalog-put"
     RK_CATALOG_GET = "catalog-get"
     RK_MONITOR = "monitor"
+    RK_MONITOR_PUT = "monitor-put"
+    RK_MONITOR_GET = "monitor-get"
     RK_TRANSFER = "transfer"
     RK_TRANSFER_PUT = "transfer-put"
     RK_TRANSFER_GET = "transfer-get"
@@ -103,6 +105,8 @@ class RabbitMQPublisher():
     MSG_LABEL = "label"
     MSG_TAG = "tag"
     MSG_HOLDING_ID = "holding_id"
+    MSG_STATE = "state"
+    MSG_SPLIT_COUNT = "subjob_delta"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
