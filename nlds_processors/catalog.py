@@ -15,8 +15,8 @@ Requires these settings in the /etc/nlds/server_config file:
         "db_options": {
             "db_name" : "/nlds_catalog.db",
             "db_user" : "",
-            "db_passwd" : ""
-            "echo
+            "db_passwd" : "",
+            "echo" : true
         },
         "logging":{
             "enable": true
@@ -49,6 +49,7 @@ class CatalogConsumer(RabbitMQConsumer):
     DEFAULT_ROUTING_KEY = (f"{RabbitMQConsumer.RK_ROOT}."
                            f"{RabbitMQConsumer.RK_CATALOG}."
                            f"{RabbitMQConsumer.RK_WILD}")
+    DEFAULT_REROUTING_INFO = f"->CATALOG_Q"
 
     # Possible options to set in config file
     _DB_ENGINE = "db_engine"
@@ -159,7 +160,8 @@ class CatalogConsumer(RabbitMQConsumer):
             # need to flush to update the holding id
             session.flush()
         except IntegrityError:
-            pass
+            self.log("IntegrityError raised when attempting to get/create "
+                     "holding", self.RK_LOG_WARNING)
         return holding
 
     def _create_transaction(self, session, holding, transaction_id):
