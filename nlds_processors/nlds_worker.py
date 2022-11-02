@@ -17,6 +17,7 @@ from pika.frame import Header
 
 # NLDS imports
 from nlds.rabbit.consumer import RabbitMQConsumer
+from nlds_processors.monitor_models import State
 
 class NLDSWorkerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "nlds_q"
@@ -77,6 +78,14 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_INDEX, 
                                     self.RK_INITIATE])
+        self.publish_and_log_message(new_routing_key, json.dumps(body_json))
+
+        self.log(f"Updating monitor", self.RK_LOG_INFO)
+        
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
+        body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
         self.publish_and_log_message(new_routing_key, json.dumps(body_json))
 
 
