@@ -13,6 +13,7 @@ import functools
 from abc import ABC, abstractmethod
 import logging
 import traceback
+from turtle import delay
 from typing import Dict, List, NamedTuple, Union
 import pathlib as pth
 import grp
@@ -21,6 +22,7 @@ import os
 import json
 from datetime import datetime, timedelta
 
+from pika import BasicProperties
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
 from pika.connection import Connection
@@ -306,6 +308,24 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         
         body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
         self.publish_message(routing_key, json.dumps(body_json), delay=delay)
+    
+    def publish_rpc_message(self, cb_properties: Header, message: str):
+        """Wrapper around publish message which implements RPC functionality.
+
+        This is required to get FastAPI communicating list/find/stat requests 
+        directly back to users. Basically takes the properties correlation_id 
+        and reply_to passed from an RPCPublisher to reply directly to the 
+        sender's exclusive queue with the appropriate header. 
+        
+        This is as described in:
+        https://www.rabbitmq.com/tutorials/tutorial-six-python.html
+        """
+        message_properties = self._get_default_properties()
+        message_properties.correlation_id = cb_properties.correlation_id
+        routing_key = cb_properties.reply_to
+        
+        self.publish_message(routing_key, message, exchange={'name': ''}, 
+                             properties=message_properties)
 
     def set_ids(
             self, 

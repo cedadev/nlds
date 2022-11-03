@@ -15,8 +15,8 @@ Requires these settings in the /etc/nlds/server_config file:
         "db_options": {
             "db_name" : "/nlds_catalog.db",
             "db_user" : "",
-            "db_passwd" : ""
-            "echo
+            "db_passwd" : "",
+            "echo" : true
         },
         "logging":{
             "enable": true
