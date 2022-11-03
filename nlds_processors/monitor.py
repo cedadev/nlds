@@ -22,10 +22,8 @@ Requires these settings in the /etc/nlds/server_config file:
             "enable": true
         }
 """
-from gettext import Catalog
 import json
 from typing import Dict
-from xmlrpc.client import TRANSPORT_ERROR
 
 from sqlalchemy import create_engine, select, func
 from sqlalchemy.exc import ArgumentError, IntegrityError
