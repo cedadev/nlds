@@ -1,23 +1,26 @@
 @startuml monitor_db
 
-object "**Transaction State**" as transaction_state {
+object "**Transaction Record**" as tran_rec {
     id [INT](unique)
     transaction_id [UUID_64|STRING](unique)
     user [STRING]
     group [STRING]
-    furthest_state [ROUTING | SPLITTING | INDEXING | TRANSFERRING | CATALOGING | COMPLETE]
-    subjob_count [INT]
-    routing_count [INT]
-    splitting_count [INT]
-    indexing_count [INT]
-    transferring_count [INT]
-    cataloguing_count [INT]
-    complete_count [INT]
-    failed_count [INT]
+}
+
+object "**Sub Record**" as sub_rec {
+    id [INT](unique)
+    sub_id [UUID_64|STRING](unique)
+    state [ROUTING | SPLITTING | INDEXING | TRANSFERRING | CATALOGING | COMPLETE | FAILED]
     retry_count [INT]
 }
 
+object "**Failed Files**" as fail_rec {
+    id [INT](unique)
+    filepath [STRING]
+    reason [STRING]
+}
 
-' holding "1" *-- "many" transaction
+tran_rec "1" *-- "many" sub_rec
+sub_rec "0" *-- "many" fail_rec
 
 @enduml
