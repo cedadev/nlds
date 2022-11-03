@@ -214,10 +214,19 @@ class RabbitMQPublisher():
             raise ValueError("Exchange in config file incomplete, cannot "
                              "be declared.")
 
+    def _get_default_properties(self, delay: int = 0) -> pika.BasicProperties:
+        return pika.BasicProperties(
+            content_encoding='application/json',
+            headers={
+                "x-delay": delay
+            },
+            delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
+        )
 
     @retry(RabbitRetryError, tries=2, delay=0, backoff=1, logger=logger)
     def publish_message(self, routing_key: str, msg: str, exchange: Dict = None,
-                        delay: int = 0) -> None:
+                        delay: int = 0, properties: pika.BasicProperties = None, 
+                        mandatory_fl: bool = True) -> None:
         """Sends a message with the specified routing key to an exchange for 
         routing. If no exchange is provided it will default to the first 
         exchange declared in the server_config. 
@@ -233,20 +242,16 @@ class RabbitMQPublisher():
         """
         if not exchange:
             exchange = self.default_exchange
+        if not properties:
+            properties = self._get_default_properties(delay=delay)
 
         try:
             self.channel.basic_publish(
                 exchange=exchange["name"],
                 routing_key=routing_key,
-                properties=pika.BasicProperties(
-                    content_encoding='application/json',
-                    headers={
-                        "x-delay": delay
-                    },
-                    delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
-                ),
+                properties=properties,
                 body=msg,
-                mandatory=True,
+                mandatory=mandatory_fl,
             )
         except AMQPConnectionError as e:
             # For any connection error then reset the connection and try again
