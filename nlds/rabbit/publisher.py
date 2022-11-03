@@ -40,6 +40,7 @@ class RabbitMQPublisher():
     RK_PUTLIST = "putlist"
     RK_GETLIST = "getlist"
     RK_DELLIST = "dellist"
+    RK_LIST = "list"
 
     # Exchange routing key parts – root
     RK_ROOT = "nlds-api"

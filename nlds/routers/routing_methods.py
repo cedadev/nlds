@@ -18,7 +18,7 @@ from datetime import datetime
 rabbit_publisher = RMQP()
 rabbit_publisher.get_connection()
 
-# NRM 26/10/
+# NRM 26/10/2022
 
 def rabbit_publish_response(routing_key: str, msg_dict):
     # add the timestamp

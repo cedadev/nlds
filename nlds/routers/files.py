@@ -15,7 +15,6 @@ from pydantic import BaseModel
 
 from uuid import UUID
 from typing import Optional, List, Dict
-from datetime import datetime
 
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
 from ..errors import ResponseError
