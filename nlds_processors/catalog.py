@@ -34,7 +34,7 @@ from pika.frame import Method
 from pika.frame import Header
 
 # SQLalchemy imports
-from sqlalchemy import create_engine, select, func
+from sqlalchemy import create_engine, select, func, Enum
 from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy.orm import Session
 
@@ -45,15 +45,18 @@ from nlds_processors.catalog_models import Base, File, Holding, Location, Transa
 from nlds_processors.catalog_models import Storage, Checksum, Tag
 from nlds.details import PathDetails, PathType
 
+class CatalogException(Exception):
+    def __init__(self, message, *args):
+        super().__init__(args)
+        self.message = message
+
 class Catalog():
     """Catalog object containing methods to manipulate the Catalog Database"""
 
-    def __init__(self, db_engine: str, db_options: str,
-                 logger: object):
+    def __init__(self, db_engine: str, db_options: str):
         """Create a catalog engine from the config strings passed in"""
         self.db_engine = db_engine
         self.db_options = db_options
-        self.logger = logger
 
 
     def _get_db_string(self):
@@ -69,7 +72,6 @@ class Catalog():
             db_connect += "@"
         # add the database name
         db_connect += self.db_options[CatalogConsumer._DB_OPTIONS_DB_NAME]
-        
         return db_connect
 
 
@@ -77,8 +79,6 @@ class Catalog():
         # connect to the database using the information in the config
         # get the database connection string
         db_connect = self._get_db_string()
-        self.logger(f"db_connect string is {db_connect}", 
-                    RMQC.RK_LOG_DEBUG)
 
         # indicate database not connected yet
         self.db_engine = None
@@ -91,11 +91,15 @@ class Catalog():
                                 future=True
                             )
         except ArgumentError as e:
-            self.log("Could not create database.", RMQC.RK_LOG_CRITICAL)
-            raise e
+            raise CatalogException("Could not create database engine")
 
         # create the db if not already created
-        Base.metadata.create_all(self.db_engine)
+        try:
+            Base.metadata.create_all(self.db_engine)
+        except IntegrityError as e:
+            raise CatalogException("Could not create database tables")
+        # return db_connect string to log
+        return db_connect
 
 
     def start_session(self):
@@ -109,7 +113,7 @@ class Catalog():
         self.session = None
 
 
-    def get_holding(self, label: str, holding_id: int=None) -> object:
+    def get_holding(self, user, group, label: str, holding_id: int=None) -> object:
         """Get a holding from the database"""
         try:
             if holding_id:
@@ -124,18 +128,16 @@ class Catalog():
                         Holding.label == label
                     )
                 )
-            # if it doesn't then create
-            holding = holding_Q.fetchone()            
+            # should we throw an error here if there is more than one holding
+            # returned?
+            holding = holding_Q.fetchone()
         except (IntegrityError, KeyError) as e:
             if holding_id:
-                self.logger(f"Holding with holding_id {holding_id} not found",
-                            RMQC.RK_LOG_ERROR)
+                raise CatalogException(f"Holding with holding_id {holding_id} not found")
             else:
-                self.logger(f"Holding with label {label} not found",
-                            RMQC.RK_LOG_ERROR)
-            return None
+                raise CatalogException(f"Holding with label {label} not found")
 
-        return holding
+        return holding.Holding
 
 
     def create_holding(self, user: str, group: str, label: str) -> object:
@@ -149,11 +151,28 @@ class Catalog():
             self.session.add(holding)
             self.session.flush() # update holding.id
         except (IntegrityError, KeyError) as e:
-            self.logger(f"Holding with label {label} could not be added to the "
-                         "database",
-                        RMQC.RK_LOG_ERROR)
-            return None
+            raise CatalogException(
+                f"Holding with label {label} could not be added to the database"
+            )
         return holding
+
+
+    def get_transaction(self, transaction_id: str) -> object:
+        """Get a transaction from the database"""
+        try:
+            transaction_Q = self.session.execute(
+                select(Transaction).where(
+                    Transaction.transaction_id == label
+                )
+            )
+            # should we throw an error here if there is more than one holding
+            # returned?
+            transaction = transaction_Q.fetchone()            
+        except (IntegrityError, KeyError) as e:
+            raise CatalogException(
+                f"Transaction with transaction_id {transaction_id} not found"
+            )
+        return transaction
 
 
     def create_transaction(self, holding: object, transaction_id: str) -> object:
@@ -168,11 +187,41 @@ class Catalog():
             # flush to generate transaction.id
             self.session.flush()
         except (IntegrityError, KeyError) as e:
-            self.logger(f"Transaction with transaction_id {transaction_id} "
-                         "could not be added to the database",
-                        RMQC.RK_LOG_ERROR)
-            return None
+            raise CatalogException(
+                f"Transaction with transaction_id {transaction_id} could not "
+                "be added to the database"
+            )
         return transaction
+
+
+    def get_file(self, original_path: str, holding = None):
+        """Get file details from the database, given the original path of the file.  
+        An optional holding can be supplied to get the file details from a
+        particular holding - e.g. with a holding label, or tags"""
+        try:
+            if holding:
+                file_Q = self.session.execute(
+                    select(File).where(
+                        Transaction.holding_id == holding.id,
+                        File.transaction_id == Transaction.id,
+                        File.original_path == original_path,
+                    )
+                )
+            else:
+                file_Q = self.session.execute(
+                    select(File).where(
+                        File.original_path == original_path
+                    )
+                )
+            file = file_Q.fetchone()
+        except:
+            if holding:
+                err_msg = (f"File with original path {original_path} not found "
+                           f"in holding {holding.label}")
+            else:
+                err_msg = f"File with original path {original_path} not found"
+            raise CatalogException(err_msg)
+        return file
 
 
     def create_file(self, 
@@ -199,31 +248,51 @@ class Catalog():
             self.session.add(new_file)
             self.session.flush()
         except (IntegrityError, KeyError) as e:
-            self.logger(f"File with original path {original_path} could not be "
-                         "added to the database",
-                        RMQC.RK_LOG_ERROR)
-            return None
+            raise CatalogException(
+                f"File with original path {original_path} could not be added to "
+                 "the database"
+            )
         return new_file
+
+
+    def get_location(self, file: object, storage_type: Enum):
+        """Get a storage location for a file, given the file and the storage
+        type"""
+        try:
+            # get the object storage location for this file
+            location_Q = self.session.execute(
+                select(Location).where(
+                    Location.file_id == file.id,
+                    Location.storage_type == storage_type
+                )
+            )
+            # again, can (in theory) have more than one, but just fetch the first
+            location = location_Q.fetchone()
+        except (IntegrityError, KeyError) as e:
+            raise CatalogException(
+                f"Location of storage type {storage_type} not found for file "
+                f"{file.original_path}"
+            )
+        return location
 
 
     def create_location(self, 
                         file,
+                        storage_type: Enum,
                         root: str,
                         object_name: str, 
-                        access_time: int) -> object:
-        # add the storage location for object storage
+                        access_time: float) -> object:
+        """Add the storage location for object storage"""
         try:
             location = Location(
-                storage_type = Storage.OBJECT_STORAGE,
+                storage_type = storage_type,
                 # root is bucket for Object Storage and that is the transaction id
                 # which is now stored in the Holding record
                 root = root,
                 # path is object_name for object storage
                 path = object_name,
                 # access time is passed in the file details
-                access_time = datetime.fromtimestamp(
-                    access_time, tz=timezone.utc
-                ),
+                access_time = access_time,
                 file_id = file.id
             )
             self.session.add(location)
@@ -264,83 +333,6 @@ class CatalogConsumer(RMQC):
         super().__init__(queue=queue)
 
 
-    def _getfilefromdb(self, session, file_details: PathDetails,
-                       holding=None) -> PathDetails:
-        # get a file from the db connected to via session
-        if holding:
-            file_Q = session.execute(
-                select(Transaction, File).where(
-                    Transaction.holding_id == holding.id,
-                    File.transaction_id == Transaction.id,
-                    File.original_path == file_details.original_path,
-                )
-            )
-        else:
-            file_Q = session.execute(
-                select(File).where(
-                    File.original_path == file_details.original_path
-                )
-            )
-        # can currently have more than one file with the same name so just
-        # get the first
-        file = file_Q.fetchone()
-        # check file exists
-        if file is not None:
-            # get the object storage location for this file
-            location_Q = session.execute(
-                select(Location).where(
-                    Location.file_id == file.File.id,
-                    Location.storage_type == Storage.OBJECT_STORAGE
-                )
-            )
-            # again, can (in theory) have more than one, but just fetch the first
-            location = location_Q.fetchone()
-            # check that the file location exists
-            if location is not None:
-                object_name = ("nlds." +
-                               location.Location.root + ":" + 
-                               location.Location.path)
-                access_time = location.Location.access_time.timestamp()
-                # create a new PathDetails with all the info from the DB
-                new_pd = PathDetails(
-                    original_path = file.File.original_path,
-                    object_name = object_name,
-                    size = file.File.size,
-                    user = file.File.user,
-                    group = file.File.group,
-                    permissions = file.File.file_permissions,                    
-                    access_time = access_time,
-                    path_type = file.File.path_type,
-                    link_path = file.File.link_path
-                )
-                return new_pd
-            else:
-                # otherwise indicate failed files 
-                raise KeyError(f"File record: {file_details.original_path} "
-                                "does not contain a Location")
-        else:
-            # add to failed files
-            raise KeyError(f"File record: {file_details.original_path} "
-                            "not found")
-
-    def _getholding(self, session, holding_label):
-        # get the Holding from the holding_transaction_id
-        holding = session.execute(
-            select(Holding).where(
-                Holding.label == holding_label
-            )
-        ).first()
-
-        # check it's in the DB
-        if holding is None:
-            self.log(
-                "Holding label is not in database, exiting callback.", 
-                self.RK_LOG_ERROR
-            )
-            return
-        
-        return holding.Holding
-
     def _catalog_get(self, body: dict) -> None:
         # get the filelist from the data section of the message
         try:
@@ -351,8 +343,25 @@ class CatalogConsumer(RMQC):
                      self.RK_LOG_ERROR)
             return
 
-        # create a SQL alchemy session
-        session = Session(self.db_engine)
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
 
         # get the holding label from the details section of the message
         # could (legit) be None
@@ -361,10 +370,20 @@ class CatalogConsumer(RMQC):
         except KeyError:
             holding_label = None
 
-        if holding_label is not None:
-            holding = self._getholding(session, holding_label)
-        else:
+        # start the database transactions
+        self.catalog.start_session()
+
+        # get the holding from the database
+        if holding_label is None:
             holding = None
+        else:
+            try:
+                holding = self.catalog.get_holding(
+                    user, group, holding_label, holding_id
+                )
+            except CatalogException as e:
+                self.logger(e.message, RMQC.RK_LOG_ERROR)
+                return
 
         # build the Pathlist from each file
         # two lists: completed PathDetails, failed PathDetails
@@ -373,12 +392,51 @@ class CatalogConsumer(RMQC):
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
-                complete_details = self._getfilefromdb(
-                    session, file_details, holding
+                # get the file first
+                file = self.catalog.get_file(
+                    file_details.original_path, holding
                 )
-                complete_pathlist.append(complete_details)
-            except KeyError:
+                if file is None:
+                    raise CatalogException(
+                        f"Could not find file with original path "
+                        f"{file_details.original_path}"
+                    )
+                # now get the location so we can get where it is stored
+                try:
+                    location = self.catalog.get_location(
+                        file.File, Storage.OBJECT_STORAGE
+                    )
+                    if location is None:
+                        raise CatalogException(
+                            f"Could not find location for file with original path "
+                            f"{file_details.original_path}"
+                        )         
+                    object_name = ("nlds." +
+                                location.Location.root + ":" + 
+                                location.Location.path)
+                    access_time = location.Location.access_time.timestamp()
+                    # create a new PathDetails with all the info from the DB
+                    new_file = PathDetails(
+                        original_path = file.File.original_path,
+                        object_name = object_name,
+                        size = file.File.size,
+                        user = file.File.user,
+                        group = file.File.group,
+                        permissions = file.File.file_permissions,                    
+                        access_time = access_time,
+                        path_type = file.File.path_type,
+                        link_path = file.File.link_path
+                    )
+                except CatalogException as e:
+                    self.log(e.message, self.RK_LOG_ERROR)
+                    failed_pathlist.append(file_details)
+                    continue
+                complete_pathlist.append(new_file)
+
+            except CatalogException as e:
+                self.log(e.message, self.RK_LOG_ERROR)
                 failed_pathlist.append(file_details)
+                continue
 
         # send the succeeded and failed messages back to the NLDS worker Q
         # SUCCESS
@@ -404,6 +462,8 @@ class CatalogConsumer(RMQC):
             )
             body[self.MSG_DATA][self.MSG_FILELIST] = failed_pathlist
             self.publish_message(rk_failed, json.dumps(body))
+        # stop db transistions and commit
+        self.catalog.end_session()
 
 
     def _catalog_list(self, body: dict) -> None:
@@ -462,35 +522,65 @@ class CatalogConsumer(RMQC):
         except KeyError:
             holding_id = None
 
+        # start the database transactions
         self.catalog.start_session()
-        # try to get the Holding
-        holding = self.catalog.get_holding(user, group, label, holding_id)
-        # if it doesn't exist then create it
+
+        # try to get the holding to see if it already exists and can be added to
+        try:
+            holding = self.catalog.get_holding(user, group, label, holding_id)
+        except CatalogException:
+            pass
+
         if holding is None:
-            holding = self.catalog.create_holding(user, group, label)
-        # if holding is none here then an error occurred
-        if holding is None:
-            return
+            try:
+                holding = self.catalog.create_holding(user, group, label)
+            except CatalogException as e:
+                self.logger(e.message, RMQC.RK_LOG_ERROR)
+                return
+
         # create the transaction within the  holding - check for error on return
-        transaction = self.catalog.create_transaction(holding, transaction_id)
-        if transaction is None:
+        try:
+            transaction = self.catalog.create_transaction(
+                holding, 
+                transaction_id
+            )
+        except CatalogException:
+            self.logger(e.message, RMQC.RK_LOG_ERROR)
             return
+
+        complete_pathlist = []
+        failed_pathlist = []
         # loop over the filelist
         for f in filelist:
             # convert to PathDetails class
             pd = PathDetails.from_dict(f)
-            file = self.catalog.create_file(
-                transaction,
-                pd.user, 
-                pd.group, 
-                pd.original_path, 
-                pd.path_type, 
-                pd.link_path,
-                pd.size, 
-                pd.file_permissions
-            )
-            if file is None:
+            try:
+                file = self.catalog.create_file(
+                    transaction,
+                    pd.user, 
+                    pd.group, 
+                    pd.original_path, 
+                    pd.path_type, 
+                    pd.link_path,
+                    pd.size, 
+                    pd.permissions
+                )
+                location = self.catalog.create_location(
+                    file,
+                    Storage.OBJECT_STORAGE,
+                    transaction.transaction_id,
+                    pd.object_name,
+                    # access time is passed in the file details
+                    access_time = datetime.fromtimestamp(
+                        pd.access_time, tz=timezone.utc
+                    )
+                )
+                complete_pathlist.append(pd)
+            except CatalogException as e:
+                failed_pathlist.append(pd)
+                self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
+        # stop db transistions and commit
         self.catalog.end_session()
 
 
@@ -504,8 +594,12 @@ class CatalogConsumer(RMQC):
         db_options = self.load_config_value(
             self._DB_OPTIONS
         )
-        self.catalog = Catalog(db_engine, db_options, self.log)
-        self.catalog.connect()
+        self.catalog = Catalog(db_engine, db_options)
+        try:
+            db_connect = self.catalog.connect()
+            self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
+        except CatalogException as e:
+            self.log(e.message, RMQC.RK_LOG_CRITICAL)
 
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
@@ -528,13 +622,13 @@ class CatalogConsumer(RMQC):
 
         # check whether this is a GET or a PUT
         if (rk_parts[1] == self.RK_CATALOG_GET):
-            if (rk_parts[2] == self.RK_START):
+            if (rk_parts[2] == self.RK_START): # this is part of the GET workflow
                 self._catalog_get(body)
-            elif (rk_parts[2] == self.RK_LIST):
+            elif (rk_parts[2] == self.RK_LIST): # this is part of the query workflow
                 print("LIST")
                 self._catalog_list(body)
         elif (rk_parts[1] == self.RK_CATALOG_PUT):
-            self._catalog_put(body)
+            self._catalog_put(body) # this is the only workflow for this
 
 
 def main():

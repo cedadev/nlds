@@ -23,12 +23,12 @@ from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
 from .routing_methods import rabbit_publish_response
-from ..rabbit.rpc_publisher import RabbitRPCClient
+# from ..rabbit.rpc_publisher import RabbitRPCClient
 
 router = APIRouter()
 
-rpc_client = RabbitRPCClient()
-rpc_client.get_connection()
+# rpc_client = RabbitRPCClient()
+# rpc_client.get_connection()
 
 # uuid (for testing)
 # 3fa85f64-5717-4562-b3fc-2c963f66afa6
@@ -241,16 +241,15 @@ async def put(transaction_id: UUID,
     # Convert filepath or filelist to lists
     contents = filemodel.get_cleaned_list()
 
-    # TEST OF RPC CLIENT
-    test_response = await rpc_client.call(msg="from api-server.put command.",
-                                          queue="test_q")
+    # # TEST OF RPC CLIENT
+    # test_response = await rpc_client.call(msg="from api-server.put command.",
+    #                                       queue="test_q")
 
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
         msg = (f"PUT transaction with id {transaction_id} accepted for "
-                "processing.\n"
-               f"rpc_response = {test_response}")
+                "processing.\n")
     )
     # create the message dictionary - do this here now as it's more transparent
     msg_dict = {

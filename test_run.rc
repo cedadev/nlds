@@ -42,5 +42,5 @@ focus
 
 # run the server via uvicorn
 screen -t "server"
-exec "$PYTHON_DIR/uvicorn" "nlds.main:nlds" "--reload" "--log-level=trace"
+exec "$PYTHON_DIR/uvicorn" "nlds.main:nlds" "--reload" "--log-level=trace" "--port=8000"
 focus
