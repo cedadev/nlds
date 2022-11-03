@@ -162,7 +162,7 @@ class Catalog():
         try:
             transaction_Q = self.session.execute(
                 select(Transaction).where(
-                    Transaction.transaction_id == label
+                    Transaction.transaction_id == transaction_id
                 )
             )
             # should we throw an error here if there is more than one holding
