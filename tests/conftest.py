@@ -2,10 +2,12 @@ import os
 import json
 from uuid import UUID
 import logging
+from datetime import datetime
 
 import pytest
 
-from nlds.rabbit.publisher import RabbitMQPublisher
+from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
+from nlds.details import PathDetails
 
 
 TEMPLATE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 
@@ -35,11 +37,28 @@ def default_rmq_method(routing_key="nlds.test.test"):
 
 @pytest.fixture
 def default_rmq_body(test_uuid):
-    return RabbitMQPublisher.create_message(test_uuid, "data", "user", "group", "target")
+    msg_dict = {
+        RMQP.MSG_DETAILS: {
+            RMQP.MSG_TRANSACT_ID: str(test_uuid),
+            RMQP.MSG_SUB_ID: str(test_uuid),
+            RMQP.MSG_TIMESTAMP: datetime.now().isoformat(sep='-'),
+            RMQP.MSG_USER: "user",
+            RMQP.MSG_GROUP: "group",
+            RMQP.MSG_TENANCY: "tenancy",
+            RMQP.MSG_ACCESS_KEY: "access_key",
+            RMQP.MSG_SECRET_KEY: "secret_key",
+        }, 
+        RMQP.MSG_DATA: {
+            # Convert to PathDetails for JSON serialisation
+            RMQP.MSG_FILELIST: [PathDetails(original_path="item_path"),],
+        },
+        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
+    }
+    return json.dumps(msg_dict)
 
 @pytest.fixture
 def default_rmq_log_body():
-    return RabbitMQPublisher.create_log_message("message", "target")
+    return RMQP.create_log_message("message", "target")
 
 @pytest.fixture
 def default_rmq_message_dict(default_rmq_body):
@@ -51,7 +70,7 @@ def default_rmq_logmsg_dict(default_rmq_log_body):
 
 @pytest.fixture
 def routed_rmq_message_dict(default_rmq_message_dict):
-    default_rmq_message_dict[RabbitMQPublisher.MSG_DETAILS][RabbitMQPublisher.MSG_ROUTE] = "place->place"
+    default_rmq_message_dict[RMQP.MSG_DETAILS][RMQP.MSG_ROUTE] = "place->place"
     return default_rmq_message_dict
 
 @pytest.fixture(autouse=False)

@@ -50,13 +50,16 @@ def test_split_routing_key(edge_values):
 
 @pytest.mark.parametrize("preroute", ["exchange", " ", ""])
 @pytest.mark.parametrize("broken_preroute", [None, 0])
-def test_append_route_info(test_uuid, edge_values, preroute, broken_preroute):
+def test_append_route_info(default_rmq_body, edge_values, preroute, 
+                           broken_preroute):
     # Requires a dictionary with details (i.e. of the appropriate format)
     with pytest.raises(KeyError):
         RabbitMQConsumer.append_route_info({}, "test_route")
 
-    # create dummy message and convert to dict
-    message = RabbitMQConsumer.create_message(test_uuid, "data", "user", "group", "target")
+    # create dummy message. Should fail in bytes form, needs to be a dict
+    message = default_rmq_body
+    with pytest.raises(TypeError):
+        RabbitMQConsumer.append_route_info(message, "test_route")
     message = json.loads(message)
 
     # This should be able to be routed and rerouted
