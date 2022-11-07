@@ -293,9 +293,9 @@ class Catalog():
             self.session.flush()            # flush to generate location.id
             self.commit_required = True     # indicate a commit at end of session
         except (IntegrityError, KeyError) as e:
-            self.logger(f"Location with root {root}, path {original_path} and "
-                        f"storage type {Storage.OBJECT_STORAGE} could not be "
-                         "added to the database",
+            self.logger(f"Location with root {root}, path {file.original_path} "
+                        f"and storage type {Storage.OBJECT_STORAGE} could not "
+                         "be added to the database",
                         RMQC.RK_LOG_ERROR)
             return None
         return location
