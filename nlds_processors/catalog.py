@@ -539,7 +539,7 @@ class CatalogConsumer(RMQC):
                 holding, 
                 transaction_id
             )
-        except CatalogException:
+        except CatalogException as e:
             self.logger(e.message, RMQC.RK_LOG_ERROR)
             return
 
