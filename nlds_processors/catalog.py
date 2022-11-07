@@ -14,8 +14,9 @@ Requires these settings in the /etc/nlds/server_config file:
         "db_engine": "sqlite",
         "db_options": {
             "db_name" : "/nlds_catalog.db",
-            "user" : "",
-            "passwd" : ""
+            "db_user" : "",
+            "db_passwd" : "",
+            "echo" : true
         },
         "logging":{
             "enable": true
@@ -24,6 +25,7 @@ Requires these settings in the /etc/nlds/server_config file:
 
 import json
 import os
+import uuid
 
 # Typing imports
 from pika.channel import Channel
@@ -32,22 +34,276 @@ from pika.frame import Method
 from pika.frame import Header
 
 # SQLalchemy imports
-from sqlalchemy import create_engine, select, func
-from sqlalchemy.exc import ArgumentError
+from sqlalchemy import create_engine, select, func, Enum
+from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy.orm import Session
 
 from datetime import datetime, timezone
 
-from nlds.rabbit.consumer import RabbitMQConsumer
-from nlds_processors.catalog_models import Base, File, Holding, Location
+from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
+from nlds_processors.catalog_models import Base, File, Holding, Location, Transaction
 from nlds_processors.catalog_models import Storage, Checksum, Tag
 from nlds.details import PathDetails, PathType
 
-class CatalogConsumer(RabbitMQConsumer):
+class CatalogException(Exception):
+    def __init__(self, message, *args):
+        super().__init__(args)
+        self.message = message
+
+class Catalog():
+    """Catalog object containing methods to manipulate the Catalog Database"""
+
+    def __init__(self, db_engine: str, db_options: str):
+        """Create a catalog engine from the config strings passed in"""
+        self.db_engine = db_engine
+        self.db_options = db_options
+
+
+    def _get_db_string(self):
+        # create the connection string with the engine
+        db_connect = self.db_engine + "://"
+        # add user if defined
+        if len(self.db_options[CatalogConsumer._DB_OPTIONS_USER]) > 0:
+            db_connect += self.db_options[CatalogConsumer._DB_OPTIONS_USER]
+            # add password if defined
+            if len(self.db_options[CatalogConsumer._DB_OPTIONS_PASSWD]) > 0:
+                db_connect += ":" + self.db_options[CatalogConsumer._DB_OPTIONS_PASSWD]
+            # add @ symbol
+            db_connect += "@"
+        # add the database name
+        db_connect += self.db_options[CatalogConsumer._DB_OPTIONS_DB_NAME]
+        return db_connect
+
+
+    def connect(self):
+        # connect to the database using the information in the config
+        # get the database connection string
+        db_connect = self._get_db_string()
+
+        # indicate database not connected yet
+        self.db_engine = None
+
+        # connect to the database
+        try:
+            self.db_engine  = create_engine(
+                                db_connect, 
+                                echo=self.db_options[CatalogConsumer._DB_ECHO],
+                                future=True
+                            )
+        except ArgumentError as e:
+            raise CatalogException("Could not create database engine")
+
+        # create the db if not already created
+        try:
+            Base.metadata.create_all(self.db_engine)
+        except IntegrityError as e:
+            raise CatalogException("Could not create database tables")
+        # return db_connect string to log
+        return db_connect
+
+
+    def start_session(self):
+        """Create a SQL alchemy session"""
+        self.session = Session(self.db_engine)
+        self.commit_required = False
+
+
+    def end_session(self):
+        """Finish and commit a SQL alchemy session"""
+        if self.commit_required:
+            self.session.commit()
+        self.commit_required = False
+        self.session = None
+
+
+    def get_holding(self, user, group, label: str, holding_id: int=None) -> object:
+        """Get a holding from the database"""
+        try:
+            if holding_id:
+                holding = self.session.query(Holding).filter(
+                    Holding.id == holding_id
+                ).one_or_none()
+            else:
+                holding = self.session.query(Holding).filter(
+                    Holding.label == label
+                ).one_or_none()
+            # should we throw an error here if there is more than one holding
+            # returned?
+        except (IntegrityError, KeyError) as e:
+            if holding_id:
+                raise CatalogException(f"Holding with holding_id {holding_id} not found")
+            else:
+                raise CatalogException(f"Holding with label {label} not found")
+
+        return holding
+
+
+    def create_holding(self, user: str, group: str, label: str) -> object:
+        """Create the new Holding with the label, user, group"""
+        try:
+            holding = Holding(
+                label = label, 
+                user = user, 
+                group = group
+            )
+            self.session.add(holding)
+            self.session.flush()            # update holding.id
+            self.commit_required = True     # indicate a commit at end of session
+        except (IntegrityError, KeyError) as e:
+            raise CatalogException(
+                f"Holding with label {label} could not be added to the database"
+            )
+        return holding
+
+
+    def get_transaction(self, transaction_id: str) -> object:
+        """Get a transaction from the database"""
+        try:
+            transaction = self.session.query(Transaction).filter(
+                Transaction.transaction_id == transaction_id
+            ).one_or_none()
+        except (IntegrityError, KeyError) as e:
+            raise CatalogException(
+                f"Transaction with transaction_id {transaction_id} not found"
+            )
+        return transaction
+
+
+    def create_transaction(self, holding: object, transaction_id: str) -> object:
+        """Create a transaction that belongs to a holding and will contain files"""
+        try:
+            transaction = Transaction(
+                holding_id = holding.id,
+                transaction_id = transaction_id,
+                ingest_time = func.now()
+            )
+            self.session.add(transaction)
+            self.session.flush()            # flush to generate transaction.id
+            self.commit_required = True     # indicate a commit at end of session
+        except (IntegrityError, KeyError) as e:
+            raise CatalogException(
+                f"Transaction with transaction_id {transaction_id} could not "
+                "be added to the database"
+            )
+        return transaction
+
+
+    def get_file(self, original_path: str, holding = None):
+        """Get file details from the database, given the original path of the file.  
+        An optional holding can be supplied to get the file details from a
+        particular holding - e.g. with a holding label, or tags"""
+        try:
+            if holding:
+                file = self.session.query(File).filter(
+                    Transaction.holding_id == holding.id,
+                    File.transaction_id == Transaction.id,
+                    File.original_path == original_path,
+                ).one_or_none()
+            else:
+                file = self.session.query(File).filter(
+                    File.original_path == original_path
+                ).one_or_none()
+        except:
+            if holding:
+                err_msg = (f"File with original path {original_path} not found "
+                           f"in holding {holding.label}")
+            else:
+                err_msg = f"File with original path {original_path} not found"
+            raise CatalogException(err_msg)
+        return file
+
+
+    def create_file(self, 
+                    transaction: object, 
+                    user: str = None,
+                    group: str = None,
+                    original_path: str = None,
+                    path_type: str = None,
+                    link_path: str = None,
+                    size: str = None,
+                    file_permissions: str = None) -> object:
+        """Create a file that belongs to a transaction and will contain locations"""
+        try:
+            new_file = File(
+                transaction_id = transaction.id,
+                original_path = original_path,
+                path_type = path_type,
+                link_path = link_path,
+                size = int(size * 1000),
+                user = user,
+                group = group,
+                file_permissions = file_permissions
+            )
+            self.session.add(new_file)
+            self.session.flush()            # flush to generate file.id
+            self.commit_required = True     # indicate a commit at end of session            
+        except (IntegrityError, KeyError) as e:
+            raise CatalogException(
+                f"File with original path {original_path} could not be added to "
+                 "the database"
+            )
+        return new_file
+
+
+    def get_location(self, file: object, storage_type: Enum):
+        """Get a storage location for a file, given the file and the storage
+        type"""
+        try:
+            # # get the object storage location for this file
+            # location_Q = self.session.execute(
+            #     select(Location).where(
+            #         Location.file_id == file.id,
+            #         Location.storage_type == storage_type
+            #     )
+            # )
+            # # again, can (in theory) have more than one, but just fetch the first
+            # location = location_Q.fetchone()
+            location = self.session.query(Location).filter(
+                Location.file_id == file.id,
+                Location.storage_type == storage_type
+            ).one_or_none()
+        except (IntegrityError, KeyError) as e:
+            raise CatalogException(
+                f"Location of storage type {storage_type} not found for file "
+                f"{file.original_path}"
+            )
+        return location
+
+
+    def create_location(self, 
+                        file,
+                        storage_type: Enum,
+                        root: str,
+                        object_name: str, 
+                        access_time: float) -> object:
+        """Add the storage location for object storage"""
+        try:
+            location = Location(
+                storage_type = storage_type,
+                # root is bucket for Object Storage and that is the transaction id
+                # which is now stored in the Holding record
+                root = root,
+                # path is object_name for object storage
+                path = object_name,
+                # access time is passed in the file details
+                access_time = access_time,
+                file_id = file.id
+            )
+            self.session.add(location)
+            self.session.flush()            # flush to generate location.id
+            self.commit_required = True     # indicate a commit at end of session
+        except (IntegrityError, KeyError) as e:
+            self.logger(f"Location with root {root}, path {original_path} and "
+                        f"storage type {Storage.OBJECT_STORAGE} could not be "
+                         "added to the database",
+                        RMQC.RK_LOG_ERROR)
+            return None
+        return location
+
+
+class CatalogConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "catalog_q"
-    DEFAULT_ROUTING_KEY = (f"{RabbitMQConsumer.RK_ROOT}."
-                           f"{RabbitMQConsumer.RK_CATALOG}."
-                           f"{RabbitMQConsumer.RK_WILD}")
+    DEFAULT_ROUTING_KEY = (f"{RMQC.RK_ROOT}.{RMQC.RK_CATALOG}.{RMQC.RK_WILD}")
 
     # Possible options to set in config file
     _DB_ENGINE = "db_engine"
@@ -72,183 +328,6 @@ class CatalogConsumer(RabbitMQConsumer):
         super().__init__(queue=queue)
 
 
-    def _get_db_string(self):
-        # create the connection string with the engine
-        db_connect = self.db_engine + "://"
-        # add user if defined
-        if len(self.db_options[self._DB_OPTIONS_USER]) > 0:
-            db_connect += self.db_options[self._DB_OPTIONS_USER]
-            # add password if defined
-            if len(self.db_options[self._DB_OPTIONS_PASSWD]) > 0:
-                db_connect += ":" + self.db_options[self._DB_OPTIONS_PASSWD]
-            # add @ symbol
-            db_connect += "@"
-        # add the database name
-        db_connect += self.db_options[self._DB_OPTIONS_DB_NAME]
-        
-        return db_connect
-
-
-    def _connect_to_db(self):
-        # connect to the database using the information in the config
-        # Load config options or fall back to default values.
-        self.db_engine = self.load_config_value(
-            self._DB_ENGINE
-        )
-
-        self.db_options = self.load_config_value(
-            self._DB_OPTIONS
-        )
-
-        # get the database connection string
-        db_connect = self._get_db_string()
-        self.log(f"db_connect string is {db_connect}", self.RK_LOG_DEBUG)
-        print(os.getcwd())
-
-        # indicate database not connected yet
-        self.db_engine = None
-
-        # connect to the database
-        try:
-            self.db_engine  = create_engine(
-                                db_connect, 
-                                echo=self.db_options[self._DB_ECHO],
-                                future=True
-                            )
-        except ArgumentError as e:
-            self.log("Could not create database.", self.RK_LOG_CRITICAL)
-            raise e
-
-    
-    def _create_db(self):
-        """Create the database"""
-        Base.metadata.create_all(self.db_engine)
-
-
-    def _get_or_create_holding(self, session, transaction_id) -> None:
-        # create or return an existing Holding
-        # check if transaction id already exists as a holding
-        holding_Q = session.execute(
-            select(Holding).where(
-                Holding.transaction_id == transaction_id
-            )
-        )
-        # if it doesn't then create
-        holding = holding_Q.fetchone()
-        if holding is None:
-            # create the new Holding with the transaction id
-            holding = Holding(
-                transaction_id = transaction_id,
-                ingest_time = func.now()
-            )
-            session.add(holding)
-        else:
-            holding = holding.Holding
-
-        # need to flush to update the holding id
-        session.flush()
-        return holding
-
-
-    def _catalog_add(self, session, holding, path_details) -> None:
-        # add to the catalog database
-        # add the file
-        new_file = File(
-            holding_id = holding.id,
-            original_path = path_details.original_path,
-            path_type = path_details.path_type,
-            link_path = path_details.link_path,
-            size = int(path_details.size * 1000),
-            user = path_details.user,
-            group = path_details.group,
-            file_permissions = path_details.permissions
-        )
-
-        # add the storage location for object storage
-        location = Location(
-            storage_type = Storage.OBJECT_STORAGE,
-            # root is bucket for Object Storage and that is the transaction id
-            # which is now stored in the Holding record
-            root = holding.transaction_id,
-            # path is object_name for object storage
-            path = path_details.object_name,
-            # access time is passed in the file details
-            access_time = datetime.fromtimestamp(
-                path_details.access_time, tz=timezone.utc
-            ),
-            file = new_file
-        )
-        session.add(new_file)
-        session.add(location)
-
-
-    def _getfilefromdb(self, session, file_details: PathDetails) -> PathDetails:
-        # get a file from the db connected to via session
-        file_Q = session.execute(
-            select(File).where(
-                File.original_path == file_details.original_path
-            )
-        )
-        # can currently have more than one file with the same name so just
-        # get the first
-        file = file_Q.fetchone()
-        # check file exists
-        if file is not None:
-            # get the object storage location for this file
-            location_Q = session.execute(
-                select(Location).where(
-                    Location.file_id == file.File.id,
-                    Location.storage_type == Storage.OBJECT_STORAGE
-                )
-            )
-            # again, can (in theory) have more than one, but just fetch the first
-            location = location_Q.fetchone()
-            # check that the file location exists
-            if location is not None:
-                object_name = ("nlds." +
-                               location.Location.root + ":" + 
-                               location.Location.path)
-                access_time = location.Location.access_time.timestamp()
-                # create a new PathDetails with all the info from the DB
-                new_pd = PathDetails(
-                    original_path = file.File.original_path,
-                    object_name = object_name,
-                    size = file.File.size,
-                    user = file.File.user,
-                    group = file.File.group,
-                    permissions = file.File.file_permissions,                    
-                    access_time = access_time,
-                    path_type = file.File.path_type,
-                    link_path = file.File.link_path
-                )
-                return new_pd
-            else:
-                # otherwise indicate failed files 
-                raise KeyError(f"File record: {file_details.original_path} "
-                                "does not contain a Location")
-        else:
-            # add to failed files
-            raise KeyError(f"File record: {file_details.original_path} "
-                            "not found")
-
-    def _getholding(self, session, holding_transaction_id):
-        # get the Holding from the holding_transaction_id
-        holding = session.execute(
-            select(Holding).where(
-                Holding.transaction_id == holding_transaction_id
-            )
-        ).first()
-
-        # check it's in the DB
-        if holding is None:
-            self.log(
-                "Holding transaction id not in database, exiting callback.", 
-                self.RK_LOG_ERROR
-            )
-            return
-        
-        return holding
-
     def _catalog_get(self, body: dict) -> None:
         # get the filelist from the data section of the message
         try:
@@ -259,23 +338,47 @@ class CatalogConsumer(RabbitMQConsumer):
                      self.RK_LOG_ERROR)
             return
 
-        # create a SQL alchemy session
-        session = Session(self.db_engine)
-
-        # get the holding transaction id from the details section of the message
-        # (could be null)
-        try: 
-            holding_transaction_id = (body[self.MSG_DETAILS]
-                                          [self.MSG_HOLDING_TRANSACTION_ID])
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
         except KeyError:
-            self.log(
-                "Holding transaction id not in message, exiting callback.", 
-                self.RK_LOG_ERROR
-            )
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
             return
 
-        if holding_transaction_id is not None:
-            holding = self._getholding(holding_transaction_id, session)
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
+
+        # get the holding label from the details section of the message
+        # could (legit) be None
+        try: 
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            holding_label = None
+
+        # start the database transactions
+        self.catalog.start_session()
+
+        # get the holding from the database
+        if holding_label is None:
+            holding = None
+        else:
+            try:
+                holding = self.catalog.get_holding(
+                    user, group, holding_label, holding_id
+                )
+            except CatalogException as e:
+                self.logger(e.message, RMQC.RK_LOG_ERROR)
+                return
 
         # build the Pathlist from each file
         # two lists: completed PathDetails, failed PathDetails
@@ -284,10 +387,51 @@ class CatalogConsumer(RabbitMQConsumer):
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
-                complete_details = self._getfilefromdb(session, file_details)
-                complete_pathlist.append(complete_details)
-            except KeyError:
+                # get the file first
+                file = self.catalog.get_file(
+                    file_details.original_path, holding
+                )
+                if file is None:
+                    raise CatalogException(
+                        f"Could not find file with original path "
+                        f"{file_details.original_path}"
+                    )
+                # now get the location so we can get where it is stored
+                try:
+                    location = self.catalog.get_location(
+                        file, Storage.OBJECT_STORAGE
+                    )
+                    if location is None:
+                        raise CatalogException(
+                            f"Could not find location for file with original path "
+                            f"{file_details.original_path}"
+                        )         
+                    object_name = ("nlds." +
+                                location.root + ":" + 
+                                location.path)
+                    access_time = location.access_time.timestamp()
+                    # create a new PathDetails with all the info from the DB
+                    new_file = PathDetails(
+                        original_path = file.original_path,
+                        object_name = object_name,
+                        size = file.size,
+                        user = file.user,
+                        group = file.group,
+                        permissions = file.file_permissions,                    
+                        access_time = access_time,
+                        path_type = file.path_type,
+                        link_path = file.link_path
+                    )
+                except CatalogException as e:
+                    self.log(e.message, self.RK_LOG_ERROR)
+                    failed_pathlist.append(file_details)
+                    continue
+                complete_pathlist.append(new_file)
+
+            except CatalogException as e:
+                self.log(e.message, self.RK_LOG_ERROR)
                 failed_pathlist.append(file_details)
+                continue
 
         # send the succeeded and failed messages back to the NLDS worker Q
         # SUCCESS
@@ -313,6 +457,12 @@ class CatalogConsumer(RabbitMQConsumer):
             )
             body[self.MSG_DATA][self.MSG_FILELIST] = failed_pathlist
             self.publish_message(rk_failed, json.dumps(body))
+        # stop db transistions and commit
+        self.catalog.end_session()
+
+
+    def _catalog_list(self, body: dict) -> None:
+        pass
 
 
     def _catalog_put(self, body: dict) -> None:
@@ -320,25 +470,10 @@ class CatalogConsumer(RabbitMQConsumer):
         try:
             filelist = body[self.MSG_DATA][self.MSG_FILELIST]
         except KeyError as e:
-            self.log(f"Invalid message contents, filelist should be in the data"
+            self.log(f"Invalid message contents, filelist should be in the data "
                      f"section of the message body.",
                      self.RK_LOG_ERROR)
             return
-
-        # get the transaction id from the details section of the message
-        try: 
-            transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
-        except KeyError:
-            self.log(
-                "Transaction id unobtainable, exiting callback.", 
-                self.RK_LOG_ERROR
-            )
-            return
-
-        # create a SQL alchemy session
-        session = Session(self.db_engine)
-        # get or create the Holding
-        holding = self._get_or_create_holding(session, transaction_id)
 
         # check filelist is a list
         try:
@@ -347,13 +482,119 @@ class CatalogConsumer(RabbitMQConsumer):
             self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
             return
 
+        # get the transaction id from the details section of the message
+        try: 
+            transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
+        except KeyError:
+            self.log("Transaction id not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the label from the metadata section of the message
+        try:
+            label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            # generate the label from the UUID - should loop here to make sure 
+            # we get a unique label
+            label = transaction_id[0:8]
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
+
+        # start the database transactions
+        self.catalog.start_session()
+
+        # try to get the holding to see if it already exists and can be added to
+        try:
+            holding = self.catalog.get_holding(user, group, label, holding_id)
+        except CatalogException:
+            pass
+
+        if holding is None:
+            try:
+                holding = self.catalog.create_holding(user, group, label)
+            except CatalogException as e:
+                self.logger(e.message, RMQC.RK_LOG_ERROR)
+                return
+
+        # create the transaction within the  holding - check for error on return
+        try:
+            transaction = self.catalog.create_transaction(
+                holding, 
+                transaction_id
+            )
+        except CatalogException:
+            self.logger(e.message, RMQC.RK_LOG_ERROR)
+            return
+
+        complete_pathlist = []
+        failed_pathlist = []
         # loop over the filelist
         for f in filelist:
             # convert to PathDetails class
             pd = PathDetails.from_dict(f)
-            self._catalog_add(session, holding, pd)
+            try:
+                file = self.catalog.create_file(
+                    transaction,
+                    pd.user, 
+                    pd.group, 
+                    pd.original_path, 
+                    pd.path_type, 
+                    pd.link_path,
+                    pd.size, 
+                    pd.permissions
+                )
+                location = self.catalog.create_location(
+                    file,
+                    Storage.OBJECT_STORAGE,
+                    transaction.transaction_id,
+                    pd.object_name, 
+                    # access time is passed in the file details
+                    access_time = datetime.fromtimestamp(
+                        pd.access_time, tz=timezone.utc
+                    )
+                )
+                complete_pathlist.append(pd)
+            except CatalogException as e:
+                failed_pathlist.append(pd)
+                self.log(e.message, RMQC.RK_LOG_ERROR)
+                continue
+        # stop db transistions and commit
+        self.catalog.end_session()
 
-        session.commit()
+
+    def attach_catalog(self):
+        """Attach the Catalog to the consumer"""
+        # Load config options or fall back to default values.
+        db_engine = self.load_config_value(
+            self._DB_ENGINE
+        )
+
+        db_options = self.load_config_value(
+            self._DB_OPTIONS
+        )
+        self.catalog = Catalog(db_engine, db_options)
+        try:
+            db_connect = self.catalog.connect()
+            self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
+        except CatalogException as e:
+            self.log(e.message, RMQC.RK_LOG_CRITICAL)
 
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
@@ -376,21 +617,24 @@ class CatalogConsumer(RabbitMQConsumer):
 
         # check whether this is a GET or a PUT
         if (rk_parts[1] == self.RK_CATALOG_GET):
-            self._catalog_get(body)
+            if (rk_parts[2] == self.RK_START): # this is part of the GET workflow
+                self._catalog_get(body)
+            elif (rk_parts[2] == self.RK_LIST): # this is part of the query workflow
+                print("LIST")
+                self._catalog_list(body)
         elif (rk_parts[1] == self.RK_CATALOG_PUT):
-            self._catalog_put(body)
+            self._catalog_put(body) # this is the only workflow for this
+
 
 def main():
     consumer = CatalogConsumer()
     # connect to message queue early so that we can send logging messages about
     # connecting to the database
-    #consumer.get_connection()
-    # connect to the DB
-    consumer._connect_to_db()
-    # create the database
-    consumer._create_db()
+    consumer.get_connection()
+    consumer.attach_catalog()
     # run the loop
     consumer.run()
+
 
 if __name__ == "__main__":
     main()

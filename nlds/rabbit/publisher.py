@@ -40,6 +40,7 @@ class RabbitMQPublisher():
     RK_PUTLIST = "putlist"
     RK_GETLIST = "getlist"
     RK_DELLIST = "dellist"
+    RK_LIST = "list"
 
     # Exchange routing key parts – root
     RK_ROOT = "nlds-api"
@@ -51,6 +52,8 @@ class RabbitMQPublisher():
     RK_CATALOG_PUT = "catalog-put"
     RK_CATALOG_GET = "catalog-get"
     RK_MONITOR = "monitor"
+    RK_MONITOR_PUT = "monitor-put"
+    RK_MONITOR_GET = "monitor-get"
     RK_TRANSFER = "transfer"
     RK_TRANSFER_PUT = "transfer-put"
     RK_TRANSFER_GET = "transfer-get"
@@ -87,7 +90,6 @@ class RabbitMQPublisher():
     MSG_USER = "user"
     MSG_GROUP = "group"
     MSG_TARGET = "target"
-    MSG_HOLDING_TRANSACTION_ID = "holding_transaction_id"
     MSG_ROUTE = "route"
     MSG_ERROR = "error"
     MSG_TENANCY = "tenancy"
@@ -100,6 +102,12 @@ class RabbitMQPublisher():
     MSG_FILELIST_RETRIES = "fl_retries"
     MSG_LOG_TARGET = "log_target"
     MSG_LOG_MESSAGE = "log_message"
+    MSG_META = "meta"
+    MSG_LABEL = "label"
+    MSG_TAG = "tag"
+    MSG_HOLDING_ID = "holding_id"
+    MSG_STATE = "state"
+    MSG_SPLIT_COUNT = "subjob_delta"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
@@ -207,67 +215,19 @@ class RabbitMQPublisher():
             raise ValueError("Exchange in config file incomplete, cannot "
                              "be declared.")
 
-    @classmethod
-    def create_message(
-            cls, 
-            transaction_id: UUID, 
-            data: List[str], 
-            access_key: str, 
-            secret_key: str, 
-            user: str = None, 
-            group: str = None, 
-            target: str = None, 
-            tenancy: str = None, 
-            holding_transaction_id: str = None,
-        ) -> str:
-        """
-        Create message to add to rabbit queue. Message is in json format with 
-        metadata described in DETAILS and data, i.e. the filelist of interest,
-        under DATA. 
-
-        :param str transaction_id:  ID of transaction as provided by fast-api.
-        :param List[str] data:      File or filelist of interest.
-        :param str user:            User who sent request.
-        :param str group:           Group that user belongs to.
-        :param str tenancy:         The object store (probably Caringo) tenancy 
-                                    url to access. This is optional and will 
-                                    have a global default. 
-        :param str access_key:      Access key (aka user ID) of object store 
-                                    account to access.
-        :param str secret_key:      Secret key (aka password) of object store 
-                                    account to access. 
-        :param str target:          Target that files are being moved to (only 
-                                    valid for PUT, PUTLIST commands).
-
-        :return:    JSON encoded string in the proper format for message passing
-
-        """
-        timestamp = datetime.now().isoformat(sep='-')
-        # Convert to a list of IndexItems and initialise retry list of zeroes
-        filelist = [PathDetails(original_path=item) for item in data]
-        message_dict = {
-            cls.MSG_DETAILS: {
-                cls.MSG_TRANSACT_ID: str(transaction_id),
-                cls.MSG_TIMESTAMP: timestamp,
-                cls.MSG_USER: user,
-                cls.MSG_GROUP: group,
-                cls.MSG_TARGET: target,
-                cls.MSG_HOLDING_TRANSACTION_ID: holding_transaction_id,
-                cls.MSG_TENANCY: tenancy,
-                cls.MSG_ACCESS_KEY: access_key,
-                cls.MSG_SECRET_KEY: secret_key,
-            }, 
-            cls.MSG_DATA: {
-                cls.MSG_FILELIST: filelist,
+    def _get_default_properties(self, delay: int = 0) -> pika.BasicProperties:
+        return pika.BasicProperties(
+            content_encoding='application/json',
+            headers={
+                "x-delay": delay
             },
-            cls.MSG_TYPE: cls.MSG_TYPE_STANDARD
-        }
-
-        return json.dumps(message_dict)
+            delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
+        )
 
     @retry(RabbitRetryError, tries=2, delay=0, backoff=1, logger=logger)
     def publish_message(self, routing_key: str, msg: str, exchange: Dict = None,
-                        delay: int = 0) -> None:
+                        delay: int = 0, properties: pika.BasicProperties = None, 
+                        mandatory_fl: bool = True) -> None:
         """Sends a message with the specified routing key to an exchange for 
         routing. If no exchange is provided it will default to the first 
         exchange declared in the server_config. 
@@ -283,20 +243,16 @@ class RabbitMQPublisher():
         """
         if not exchange:
             exchange = self.default_exchange
+        if not properties:
+            properties = self._get_default_properties(delay=delay)
 
         try:
             self.channel.basic_publish(
                 exchange=exchange["name"],
                 routing_key=routing_key,
-                properties=pika.BasicProperties(
-                    content_encoding='application/json',
-                    headers={
-                        "x-delay": delay
-                    },
-                    delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
-                ),
+                properties=properties,
                 body=msg,
-                mandatory=True,
+                mandatory=mandatory_fl,
             )
         except AMQPConnectionError as e:
             # For any connection error then reset the connection and try again

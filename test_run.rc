@@ -1,6 +1,6 @@
 # screen RC config file
 # create the nlds worker
-setenv PYTHON_DIR "$HOME/nlds-venv/bin"
+setenv PYTHON_DIR "$HOME/python-venvs/nlds-venv/bin"
 setenv NLDS "$HOME/Coding/nlds"
 setenv NLDS_PROC "$NLDS/nlds_processors"
 
@@ -42,5 +42,5 @@ focus
 
 # run the server via uvicorn
 screen -t "server"
-exec "$PYTHON_DIR/uvicorn" "nlds.main:nlds" "--reload"
+exec "$PYTHON_DIR/uvicorn" "nlds.main:nlds" "--reload" "--log-level=trace" "--port=8000"
 focus

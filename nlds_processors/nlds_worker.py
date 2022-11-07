@@ -17,6 +17,7 @@ from pika.frame import Header
 
 # NLDS imports
 from nlds.rabbit.consumer import RabbitMQConsumer
+from nlds_processors.monitor_models import State
 
 class NLDSWorkerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "nlds_q"
@@ -79,6 +80,14 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     self.RK_INITIATE])
         self.publish_and_log_message(new_routing_key, json.dumps(body_json))
 
+        self.log(f"Updating monitor", self.RK_LOG_INFO)
+        
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
+        body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
+        self.publish_and_log_message(new_routing_key, json.dumps(body_json))
+
 
     def _process_rk_get(self, body_json: dict) -> None:
         # forward to catalog_get
@@ -91,7 +100,17 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.publish_and_log_message(new_routing_key, 
                                      json.dumps(body_json))
 
-    
+
+    def _process_rk_list(self, body_json: dict) -> None:
+        # forward to catalog_get
+        queue = f"{self.RK_CATALOG_GET}"
+        new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_LIST])        
+        self.log(f"Sending  message to {queue} queue with routing "
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, 
+                                     json.dumps(body_json))
+                                     
+
     def _process_rk_index_complete(self, body_json: dict) -> None:
         self.log(f"Scan successful, passing message to transfer queue", 
                     self.RK_LOG_INFO)
@@ -173,6 +192,9 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         
         elif self.RK_GET in rk_parts[2]:
             self._process_rk_get(body_json)
+
+        elif self.RK_LIST in rk_parts[2]:
+            self._process_rk_list(body_json)
 
         # If a task has completed, initiate new tasks
         elif rk_parts[2] == f"{self.RK_COMPLETE}":
