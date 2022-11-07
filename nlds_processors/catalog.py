@@ -105,11 +105,14 @@ class Catalog():
     def start_session(self):
         """Create a SQL alchemy session"""
         self.session = Session(self.db_engine)
+        self.commit_required = False
 
 
     def end_session(self):
         """Finish and commit a SQL alchemy session"""
-        self.session.commit()
+        if self.commit_required:
+            self.session.commit()
+        self.commit_required = False
         self.session = None
 
 
@@ -117,27 +120,22 @@ class Catalog():
         """Get a holding from the database"""
         try:
             if holding_id:
-                holding_Q = self.session.execute(
-                    select(Holding).where(
-                        Holding.id == holding_id
-                    )
-                )
+                holding = self.session.query(Holding).filter(
+                    Holding.id == holding_id
+                ).one_or_none()
             else:
-                holding_Q = self.session.execute(
-                    select(Holding).where(
-                        Holding.label == label
-                    )
-                )
+                holding = self.session.query(Holding).filter(
+                    Holding.label == label
+                ).one_or_none()
             # should we throw an error here if there is more than one holding
             # returned?
-            holding = holding_Q.fetchone()
         except (IntegrityError, KeyError) as e:
             if holding_id:
                 raise CatalogException(f"Holding with holding_id {holding_id} not found")
             else:
                 raise CatalogException(f"Holding with label {label} not found")
 
-        return holding.Holding
+        return holding
 
 
     def create_holding(self, user: str, group: str, label: str) -> object:
@@ -149,7 +147,8 @@ class Catalog():
                 group = group
             )
             self.session.add(holding)
-            self.session.flush() # update holding.id
+            self.session.flush()            # update holding.id
+            self.commit_required = True     # indicate a commit at end of session
         except (IntegrityError, KeyError) as e:
             raise CatalogException(
                 f"Holding with label {label} could not be added to the database"
@@ -160,14 +159,9 @@ class Catalog():
     def get_transaction(self, transaction_id: str) -> object:
         """Get a transaction from the database"""
         try:
-            transaction_Q = self.session.execute(
-                select(Transaction).where(
-                    Transaction.transaction_id == transaction_id
-                )
-            )
-            # should we throw an error here if there is more than one holding
-            # returned?
-            transaction = transaction_Q.fetchone()            
+            transaction = self.session.query(Transaction).filter(
+                Transaction.transaction_id == transaction_id
+            ).one_or_none()
         except (IntegrityError, KeyError) as e:
             raise CatalogException(
                 f"Transaction with transaction_id {transaction_id} not found"
@@ -184,8 +178,8 @@ class Catalog():
                 ingest_time = func.now()
             )
             self.session.add(transaction)
-            # flush to generate transaction.id
-            self.session.flush()
+            self.session.flush()            # flush to generate transaction.id
+            self.commit_required = True     # indicate a commit at end of session
         except (IntegrityError, KeyError) as e:
             raise CatalogException(
                 f"Transaction with transaction_id {transaction_id} could not "
@@ -200,20 +194,15 @@ class Catalog():
         particular holding - e.g. with a holding label, or tags"""
         try:
             if holding:
-                file_Q = self.session.execute(
-                    select(File).where(
-                        Transaction.holding_id == holding.id,
-                        File.transaction_id == Transaction.id,
-                        File.original_path == original_path,
-                    )
-                )
+                file = self.session.query(File).filter(
+                    Transaction.holding_id == holding.id,
+                    File.transaction_id == Transaction.id,
+                    File.original_path == original_path,
+                ).one_or_none()
             else:
-                file_Q = self.session.execute(
-                    select(File).where(
-                        File.original_path == original_path
-                    )
-                )
-            file = file_Q.fetchone()
+                file = self.session.query(File).filter(
+                    File.original_path == original_path
+                ).one_or_none()
         except:
             if holding:
                 err_msg = (f"File with original path {original_path} not found "
@@ -246,7 +235,8 @@ class Catalog():
                 file_permissions = file_permissions
             )
             self.session.add(new_file)
-            self.session.flush()
+            self.session.flush()            # flush to generate file.id
+            self.commit_required = True     # indicate a commit at end of session            
         except (IntegrityError, KeyError) as e:
             raise CatalogException(
                 f"File with original path {original_path} could not be added to "
@@ -259,15 +249,19 @@ class Catalog():
         """Get a storage location for a file, given the file and the storage
         type"""
         try:
-            # get the object storage location for this file
-            location_Q = self.session.execute(
-                select(Location).where(
-                    Location.file_id == file.id,
-                    Location.storage_type == storage_type
-                )
-            )
-            # again, can (in theory) have more than one, but just fetch the first
-            location = location_Q.fetchone()
+            # # get the object storage location for this file
+            # location_Q = self.session.execute(
+            #     select(Location).where(
+            #         Location.file_id == file.id,
+            #         Location.storage_type == storage_type
+            #     )
+            # )
+            # # again, can (in theory) have more than one, but just fetch the first
+            # location = location_Q.fetchone()
+            location = self.session.query(Location).filter(
+                Location.file_id == file.id,
+                Location.storage_type == storage_type
+            ).one_or_none()
         except (IntegrityError, KeyError) as e:
             raise CatalogException(
                 f"Location of storage type {storage_type} not found for file "
@@ -296,7 +290,8 @@ class Catalog():
                 file_id = file.id
             )
             self.session.add(location)
-            self.session.flush()
+            self.session.flush()            # flush to generate location.id
+            self.commit_required = True     # indicate a commit at end of session
         except (IntegrityError, KeyError) as e:
             self.logger(f"Location with root {root}, path {original_path} and "
                         f"storage type {Storage.OBJECT_STORAGE} could not be "
@@ -404,7 +399,7 @@ class CatalogConsumer(RMQC):
                 # now get the location so we can get where it is stored
                 try:
                     location = self.catalog.get_location(
-                        file.File, Storage.OBJECT_STORAGE
+                        file, Storage.OBJECT_STORAGE
                     )
                     if location is None:
                         raise CatalogException(
@@ -412,20 +407,20 @@ class CatalogConsumer(RMQC):
                             f"{file_details.original_path}"
                         )         
                     object_name = ("nlds." +
-                                location.Location.root + ":" + 
-                                location.Location.path)
-                    access_time = location.Location.access_time.timestamp()
+                                location.root + ":" + 
+                                location.path)
+                    access_time = location.access_time.timestamp()
                     # create a new PathDetails with all the info from the DB
                     new_file = PathDetails(
-                        original_path = file.File.original_path,
+                        original_path = file.original_path,
                         object_name = object_name,
-                        size = file.File.size,
-                        user = file.File.user,
-                        group = file.File.group,
-                        permissions = file.File.file_permissions,                    
+                        size = file.size,
+                        user = file.user,
+                        group = file.group,
+                        permissions = file.file_permissions,                    
                         access_time = access_time,
-                        path_type = file.File.path_type,
-                        link_path = file.File.link_path
+                        path_type = file.path_type,
+                        link_path = file.link_path
                     )
                 except CatalogException as e:
                     self.log(e.message, self.RK_LOG_ERROR)
@@ -569,7 +564,7 @@ class CatalogConsumer(RMQC):
                     file,
                     Storage.OBJECT_STORAGE,
                     transaction.transaction_id,
-                    pd.object_name,
+                    pd.object_name, 
                     # access time is passed in the file details
                     access_time = datetime.fromtimestamp(
                         pd.access_time, tz=timezone.utc
