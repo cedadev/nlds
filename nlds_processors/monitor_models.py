@@ -2,8 +2,8 @@
 from __future__ import annotations
 import enum
 
-from sqlalchemy import Integer, String, Column, Enum
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import Integer, String, Column, Enum, ForeignKey
+from sqlalchemy.orm import declarative_base, relationship
 
 
 """Declarative base class, containing the Metadata object"""
@@ -17,9 +17,9 @@ class State(enum.Enum):
     CATALOG_PUTTING = 4
     CATALOG_GETTING = 5
     TRANSFER_GETTING = 6
-    COMPLETE = 7
-    FAILED = 8
-    RETRYING = -1
+    RETRYING = 7
+    COMPLETE = 8
+    FAILED = 9
 
     @classmethod
     def has_value(cls, value):
@@ -30,9 +30,9 @@ class State(enum.Enum):
         return name in cls._member_names_
     
 
-class TransactionState(Base):
+class TransactionRecord(Base):
     """Class containing the details of the state of a transaction"""
-    __tablename__ = "transaction_state"
+    __tablename__ = "transaction_record"
     # primary key / integer id / batch id
     id = Column(Integer, primary_key=True)
     # transaction id - this will be the String of the UUID
@@ -41,24 +41,37 @@ class TransactionState(Base):
     user = Column(String, nullable=False)
     # group who owns this holding
     group = Column(String, nullable=False)
+    # relationship for SubRecords (One to many)
+    sub_records = relationship("SubRecord")
+
+
+class SubRecord(Base):
+    __tablename__ = "sub_record"
+    # primary key / integer id / batch id
+    id = Column(Integer, primary_key=True)
+    # subrecord id - this will be the String of the UUID of the sub record
+    sub_id = Column(String, nullable=False, index=True)
     # the furthest state reached by any subjobs, can be any of the State enums
-    furthest_state = Column(Enum(State), nullable=False)
-    # count of how many subjobs were created at the splitting/indexing steps 
-    subjob_count = Column(Integer, nullable=False)
-    # count of how many subjobs have reached each transaction state of a put 
-    # workflow. Routing and splitting are not included as there will be no 
-    # subjobs at that point.
-    routing_count = Column(Integer)
-    indexing_count = Column(Integer)
-    transfer_putting_count = Column(Integer)
-    catalog_putting_count = Column(Integer)
-    complete_count = Column(Integer)
-    failed_count = Column(Integer)
-    # similarly for a get workflow - splitting doesn't yet happen in a GET but 
-    # it may in the future so keeping these here for ease of migration
-    catalog_getting_count = Column(Integer)
-    transfer_getting_count = Column(Integer)
-    retry_count = Column(Integer)
+    state = Column(Enum(State), nullable=False)
+    # count of how many times the subrecord has been retried
+    retry_count = Column(Integer, nullable=False)
+    # relationship for failed files (zero to many)
+    failed_files = relationship("FailedFile")
+
+    # transaction_record_id as ForeignKey
+    transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
+                                   index=True, nullable=False)
 
 
+class FailedFile(Base):
+    __tablename__ = "failed_file"
 
+    # primary key / integer id / batch id
+    id = Column(Integer, primary_key=True)
+    # filepath of failed item
+    filepath = Column(String)
+    # final reason for failure
+    reason = Column(String)
+    # sub_record_id as ForeignKey
+    sub_record_id = Column(Integer, ForeignKey("sub_record.id"), 
+                           index=True, nullable=False)

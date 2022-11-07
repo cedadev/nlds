@@ -81,7 +81,6 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.publish_and_log_message(new_routing_key, json.dumps(body_json))
 
         self.log(f"Updating monitor", self.RK_LOG_INFO)
-        
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_MONITOR_PUT, 
                                     self.RK_START])

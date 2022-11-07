@@ -1,4 +1,5 @@
 import json
+import time
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -16,9 +17,12 @@ class TestConsumer(RabbitMQConsumer):
 
     def callback(self,ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
-
         print("Callback being executed!")
-        self.publish_rpc_message(properties, "Test-y test-y test test")
+        time.sleep(60)
+
+        print("Finished napping")
+        self.publish_rpc_message(properties, f"Test-y test-y test test. "
+                                 f"{method.routing_key}")
 
 def main():
     consumer = TestConsumer()

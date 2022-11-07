@@ -13,7 +13,7 @@ from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from uuid import UUID
+from uuid import UUID, uuid4
 from typing import Optional, List, Dict
 
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
@@ -108,6 +108,7 @@ async def get(transaction_id: UUID,
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_TRANSACT_ID: str(transaction_id),
+            RMQP.MSG_SUB_ID: str(uuid4()),
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,
             RMQP.MSG_TENANCY: tenancy,
@@ -174,6 +175,7 @@ async def put(transaction_id: UUID,
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_TRANSACT_ID: str(transaction_id),
+            RMQP.MSG_SUB_ID: str(uuid4()),
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,
             RMQP.MSG_TENANCY: tenancy,
@@ -255,6 +257,7 @@ async def put(transaction_id: UUID,
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_TRANSACT_ID: str(transaction_id),
+            RMQP.MSG_SUB_ID: str(uuid4()),
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,
             RMQP.MSG_TENANCY: tenancy,
