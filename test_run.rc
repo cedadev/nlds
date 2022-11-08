@@ -36,7 +36,7 @@ focus
 
 # create the catalog
 screen -t "catalog"
-exec "$PYTHON_DIR/python" "$NLDS_PROC/catalog.py"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/catalog/catalog_worker.py"
 split
 focus
 
