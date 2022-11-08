@@ -20,6 +20,7 @@ import pwd
 import os
 import json
 from datetime import datetime, timedelta
+import uuid
 
 from pika import BasicProperties
 from pika.exceptions import StreamLostError, AMQPConnectionError
@@ -114,9 +115,13 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         else: 
             self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
 
-        # Memeber variables to temporarily hold user- and group-id of a message
+        # Member variables to temporarily hold user- and group-id of a message
         self.gid = None
         self.uid = None
+
+        # Member variable to keep track of the number of messages spawned during 
+        # a callback, for monitoring sub_record creation
+        self.sent_message_count = 0
         
         # Controls default behaviour of logging when certain exceptions are 
         # caught in the callback. 
@@ -128,6 +133,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     def reset(self) -> None:
         self.gid = None
         self.uid = None
+        self.sent_message_count = 0
     
     def load_config_value(self, config_option: str,
                           path_listify_fl: bool = False):
@@ -304,9 +310,21 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
                      f" {datetime.now() + timedelta(milliseconds=delay)}", 
                      self.RK_LOG_DEBUG)
+
+        # Create new sub_id for each extra subrecord created.
+        if self.sent_message_count > 1:
+            body_json[self.MSG_DETAILS][self.MSG_SUB_ID] = uuid.uuid4()
         
+        # Send message to next part of workflow
         body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
         self.publish_message(routing_key, json.dumps(body_json), delay=delay)
+
+        # Send message to monitoring to keep track of state
+        monitoring_rk = ".".join([routing_key[0], 
+                                  self.RK_MONITOR_PUT, 
+                                  self.RK_START])
+        self.publish_message(monitoring_rk, json.dumps(body_json))
+        self.sent_message_count += 1
     
     def publish_rpc_message(self, cb_properties: Header, message: str):
         """Wrapper around publish message which implements RPC functionality.
