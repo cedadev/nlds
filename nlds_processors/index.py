@@ -4,15 +4,14 @@ import pathlib as pth
 from typing import List, NamedTuple, Dict
 from datetime import datetime, timedelta
 
-from nlds.rabbit.consumer import RabbitMQConsumer
-from nlds.rabbit.publisher import RabbitMQPublisher
+from nlds.rabbit.statting_consumer import StattingConsumer
+from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
 
-class IndexerConsumer(RabbitMQConsumer):
+class IndexerConsumer(StattingConsumer):
     DEFAULT_QUEUE_NAME = "index_q"
     DEFAULT_ROUTING_KEY = (
-        f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_INDEX}."
-        f"{RabbitMQPublisher.RK_WILD}"
+        f"{RMQP.RK_ROOT}.{RMQP.RK_INDEX}.{RMQP.RK_WILD}"
     )
     DEFAULT_REROUTING_INFO = f"->INDEX_Q"
 
@@ -33,7 +32,7 @@ class IndexerConsumer(RabbitMQConsumer):
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
         _USE_PWD_GID: False,
-        RabbitMQConsumer.RETRY_DELAYS: RabbitMQConsumer.DEFAULT_RETRY_DELAYS,
+        RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -60,14 +59,6 @@ class IndexerConsumer(RabbitMQConsumer):
         self.retry_delays = self.load_config_value(self.RETRY_DELAYS)
 
         self.reset()
-    
-    def reset(self):
-        super().reset()
-
-        self.completelist = []
-        self.completelist_size = 0
-        self.retrylist = []
-        self.failedlist = []
     
     def callback(self, ch, method, properties, body, connection):
         self.reset() 
