@@ -256,6 +256,10 @@ class RabbitMQPublisher():
             exchange = self.default_exchange
         if not properties:
             properties = self._get_default_properties(delay=delay)
+        if delay > 0: 
+            # Delayed messages and mandatory acknowledgements are unfortunately 
+            # incompatible. For now prioritising delay over the mandatory flag.
+            mandatory_fl = False
 
         if correlation_id:
             properties.correlation_id = correlation_id
