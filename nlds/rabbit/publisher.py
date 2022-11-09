@@ -231,7 +231,8 @@ class RabbitMQPublisher():
                         exchange: Dict = None,
                         delay: int = 0, 
                         properties: pika.BasicProperties = None, 
-                        mandatory_fl: bool = True) -> None:
+                        mandatory_fl: bool = True,
+                        correlation_id: str = None) -> None:
         """Sends a message with the specified routing key to an exchange for 
         routing. If no exchange is provided it will default to the first 
         exchange declared in the server_config. 
@@ -254,6 +255,9 @@ class RabbitMQPublisher():
             exchange = self.default_exchange
         if not properties:
             properties = self._get_default_properties(delay=delay)
+
+        if correlation_id:
+            properties.correlation_id = correlation_id
 
         try:
             self.channel.basic_publish(

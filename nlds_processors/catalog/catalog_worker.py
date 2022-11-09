@@ -210,7 +210,6 @@ class CatalogConsumer(RMQC):
     def _catalog_list(self, body: dict, 
                       method: Method, properties: Header) -> None:
         """List the users holdings"""
-        print("LIST")
         # get the user id from the details section of the message
         try:
             user = body[self.MSG_DETAILS][self.MSG_USER]
@@ -274,9 +273,16 @@ class CatalogConsumer(RMQC):
             }
             ret_list.append(ret_dict)
         self.catalog.end_session()
+
+        # send the rpc return message
         ret_dict = {"holdings": ret_list}
         msg_dict = {"message":f"{method.routing_key}"}
-        self.publish_rpc_message(properties, msg_dict=msg_dict)
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=msg_dict,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )
 
 
     def _catalog_put(self, body: dict, rk_origin: str) -> None:
@@ -416,7 +422,7 @@ class CatalogConsumer(RMQC):
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
-        # Reseet member variables
+        # Reset member variables
         self.reset()
 
         # Connect to database if not connected yet                
@@ -427,24 +433,29 @@ class CatalogConsumer(RMQC):
                  f"{self.queues[0].name} ({method.routing_key})", 
                  self.RK_LOG_INFO)
 
-        # Verify routing key is appropriate
-        if method.routing_key == self.name:
-            self._catalog_list(
-                body, method=method, properties=properties
-            )
-        else:
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log("Routing key inappropriate length, exiting callback.", 
-                        self.RK_LOG_ERROR)
-                return
-            # check whether this is a GET or a PUT
-            if (rk_parts[1] == self.RK_CATALOG_GET):
-                if (rk_parts[2] == self.RK_START): # this is part of the GET workflow
-                    self._catalog_get(body, rk_parts[0])
-            elif (rk_parts[1] == self.RK_CATALOG_PUT):
-                self._catalog_put(body, rk_parts[0]) # this is the only workflow for this
+        # Get the API method and decide what to do on it
+        try:
+            api_method = body[RMQC.MSG_DETAILS][RMQC.MSG_API_ACTION]
+        except KeyError:
+            self.log(f"Message did not contain appropriate API method", 
+                    self.RK_LOG_ERROR)
+            return
+
+        # split the API method
+        try:
+            api_parts = self.split_routing_key(api_method)
+        except ValueError as e:
+            self.log("API method inappropriate length, exiting callback.", 
+                    self.RK_LOG_ERROR)
+            return            
+
+        # check whether this is a GET or a PUT
+        if (api_parts[2] == self.RK_GETLIST) or (api_parts[2] == self.RK_GET):
+            self._catalog_get(body, api_parts[0])
+        elif (api_parts[2] == self.RK_PUTLIST) or (api_parts[2] == self.RK_PUT):
+            self._catalog_put(body, api_parts[0]) # this is the only workflow for this
+        elif (api_parts[2] == self.RK_LIST):
+            self._catalog_list(body, method, properties)
 
 
 def main():

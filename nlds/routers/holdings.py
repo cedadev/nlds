@@ -48,10 +48,13 @@ async def get(token: str = Depends(authenticate_token),
               tag: Optional[str] = None
               ):
     # create the message dictionary
+    
+    api_action = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_LIST}"
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,        
+            RMQP.MSG_API_ACTION: api_action
         },
         RMQP.MSG_DATA: {},
         RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
@@ -88,8 +91,9 @@ async def get(token: str = Depends(authenticate_token),
         msg_dict[RMQP.MSG_META] = meta_dict
 
     routing_key = "catalog_q"
-    await rpc_publisher.call(msg_dict=msg_dict,routing_key=routing_key)
-    response = "Happy times!"
+    response = await rpc_publisher.call(
+        msg_dict=msg_dict,routing_key=routing_key
+    )
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response)

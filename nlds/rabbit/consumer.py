@@ -280,24 +280,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                   self.RK_START])
         self.publish_message(monitoring_rk, body_json)
         self.sent_message_count += 1
-    
-    def publish_rpc_message(self, cb_properties: Header, msg_dict: Dict):
-        """Wrapper around publish message which implements RPC functionality.
-
-        This is required to get FastAPI communicating list/find/stat requests 
-        directly back to users. Basically takes the properties correlation_id 
-        and reply_to passed from an RPCPublisher to reply directly to the 
-        sender's exclusive queue with the appropriate header. 
         
-        This is as described in:
-        https://www.rabbitmq.com/tutorials/tutorial-six-python.html
-        """
-        message_properties = self._get_default_properties()
-        message_properties.correlation_id = cb_properties.correlation_id
-        routing_key = cb_properties.reply_to
-        
-        self.publish_message(routing_key, msg_dict, exchange={'name': ''}, 
-                             properties=message_properties)
 
     def setup_logging(self, enable=False, log_level: str = None, 
                       log_format: str = None, add_stdout_fl: bool = False, 

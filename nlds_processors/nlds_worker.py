@@ -63,12 +63,6 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         
         msg_data = body_json[self.MSG_DATA]
         msg_details = body_json[self.MSG_DETAILS]
-
-        # If message coming from api-server then stash the original action in 
-        # the message details so as not to lose it post-indexing.
-        if self.RK_ROUTE == rk_parts[1]:
-            msg_details[self.MSG_API_ACTION] = rk_parts[2]
-
         return rk_parts, body_json
 
 
