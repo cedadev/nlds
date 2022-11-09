@@ -184,7 +184,7 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             body[self.MSG_DATA][self.MSG_FILELIST] = complete_pathlist
-            self.publish_message(rk_complete, json.dumps(body))
+            self.publish_message(rk_complete, body)
 
         # FAILED
         if len(failed_pathlist) > 0:
@@ -196,7 +196,7 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             body[self.MSG_DATA][self.MSG_FILELIST] = failed_pathlist
-            self.publish_message(rk_failed, json.dumps(body))
+            self.publish_message(rk_failed, body)
         # stop db transistions and commit
         self.catalog.end_session()
 
@@ -204,6 +204,7 @@ class CatalogConsumer(RMQC):
     def _catalog_list(self, body: dict, 
                       method: Method, properties: Header) -> None:
         """List the users holdings"""
+        print("LIST")
         # get the user id from the details section of the message
         try:
             user = body[self.MSG_DETAILS][self.MSG_USER]
@@ -268,8 +269,9 @@ class CatalogConsumer(RMQC):
             ret_list.append(ret_dict)
         self.catalog.end_session()
         ret_dict = {"holdings": ret_list}
-        print(ret_dict)
-        
+        msg_dict = {"message":f"{method.routing_key}"}
+        self.publish_rpc_message(properties, msg_dict=msg_dict)
+
 
     def _catalog_put(self, body: dict) -> None:
         """Put a file record into the catalog - end of a put transaction"""
@@ -417,21 +419,23 @@ class CatalogConsumer(RMQC):
                  self.RK_LOG_INFO)
 
         # Verify routing key is appropriate
-        try:
-            rk_parts = self.split_routing_key(method.routing_key)
-        except ValueError as e:
-            self.log("Routing key inappropriate length, exiting callback.", 
-                     self.RK_LOG_ERROR)
-            return
-
-        # check whether this is a GET or a PUT
-        if (rk_parts[1] == self.RK_CATALOG_GET):
-            if (rk_parts[2] == self.RK_START): # this is part of the GET workflow
-                self._catalog_get(body)
-            elif (rk_parts[2] == self.RK_LIST): # this is part of the query workflow
-                self._catalog_list(body, method=method, properties=properties)
-        elif (rk_parts[1] == self.RK_CATALOG_PUT):
-            self._catalog_put(body) # this is the only workflow for this
+        if method.routing_key == self.name:
+            self._catalog_list(
+                body, method=method, properties=properties
+            )
+        else:
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log("Routing key inappropriate length, exiting callback.", 
+                        self.RK_LOG_ERROR)
+                return
+            # check whether this is a GET or a PUT
+            if (rk_parts[1] == self.RK_CATALOG_GET):
+                if (rk_parts[2] == self.RK_START): # this is part of the GET workflow
+                    self._catalog_get(body)
+            elif (rk_parts[1] == self.RK_CATALOG_PUT):
+                self._catalog_put(body) # this is the only workflow for this
 
 
 def main():
