@@ -101,6 +101,7 @@ async def get(transaction_id: UUID,
     contents = [filepath, ]
     # create the message dictionary - do this here now as it's more transparent
     routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_GETLIST}"
+    api_method = f"{RMQP.RK_GETLIST}"
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_TRANSACT_ID: str(transaction_id),
@@ -111,7 +112,7 @@ async def get(transaction_id: UUID,
             RMQP.MSG_TARGET: target,
             RMQP.MSG_ACCESS_KEY: access_key,
             RMQP.MSG_SECRET_KEY: secret_key,
-            RMQP.MSG_API_ACTION: routing_key
+            RMQP.MSG_API_ACTION: api_method
         }, 
         RMQP.MSG_DATA: {
             # Convert to PathDetails for JSON serialisation
@@ -169,6 +170,7 @@ async def put(transaction_id: UUID,
 
     # create the message dictionary - do this here now as it's more transparent
     routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_GETLIST}"
+    api_method = f"{RMQP.RK_GETLIST}"
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_TRANSACT_ID: str(transaction_id),
@@ -179,7 +181,7 @@ async def put(transaction_id: UUID,
             RMQP.MSG_TARGET: target,
             RMQP.MSG_ACCESS_KEY: access_key,
             RMQP.MSG_SECRET_KEY: secret_key,
-            RMQP.MSG_API_ACTION: routing_key
+            RMQP.MSG_API_ACTION: api_method
         }, 
         RMQP.MSG_DATA: {
             # Convert to PathDetails for JSON serialisation
@@ -253,6 +255,7 @@ async def put(transaction_id: UUID,
     )
     # create the message dictionary - do this here now as it's more transparent
     routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_PUT}"
+    api_method = f"{RMQP.RK_PUT}"
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_TRANSACT_ID: str(transaction_id),
@@ -262,7 +265,7 @@ async def put(transaction_id: UUID,
             RMQP.MSG_TENANCY: tenancy,
             RMQP.MSG_ACCESS_KEY: access_key,
             RMQP.MSG_SECRET_KEY: secret_key,
-            RMQP.MSG_API_ACTION: routing_key
+            RMQP.MSG_API_ACTION: api_method
         }, 
         RMQP.MSG_DATA: {
             # Convert to PathDetails for JSON serialisation

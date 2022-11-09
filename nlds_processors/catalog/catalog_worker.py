@@ -441,20 +441,31 @@ class CatalogConsumer(RMQC):
                     self.RK_LOG_ERROR)
             return
 
-        # split the API method
-        try:
-            api_parts = self.split_routing_key(api_method)
-        except ValueError as e:
-            self.log("API method inappropriate length, exiting callback.", 
-                    self.RK_LOG_ERROR)
-            return            
-
         # check whether this is a GET or a PUT
-        if (api_parts[2] == self.RK_GETLIST) or (api_parts[2] == self.RK_GET):
-            self._catalog_get(body, api_parts[0])
-        elif (api_parts[2] == self.RK_PUTLIST) or (api_parts[2] == self.RK_PUT):
-            self._catalog_put(body, api_parts[0]) # this is the only workflow for this
-        elif (api_parts[2] == self.RK_LIST):
+        if (api_method == self.RK_GETLIST) or (api_method == self.RK_GET):
+            # split the routing key
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log("Routing key inappropriate length, exiting callback.",
+                        self.RK_LOG_ERROR)
+                return 
+            if (rk_parts[2] == self.RK_START):
+                self._catalog_get(body, rk_parts[0])
+
+        elif (api_method == self.RK_PUTLIST) or (api_method == self.RK_PUT):
+            # split the routing key
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log("Routing key inappropriate length, exiting callback.",
+                        self.RK_LOG_ERROR)
+                return             
+            if (rk_parts[2] == self.RK_START):
+                self._catalog_put(body, rk_parts[0]) # this is the only workflow for this
+
+        elif (api_method == self.RK_LIST):
+            # don't need to split any routing key for an RPC method
             self._catalog_list(body, method, properties)
 
 

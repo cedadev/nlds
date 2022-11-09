@@ -49,7 +49,8 @@ async def get(token: str = Depends(authenticate_token),
               ):
     # create the message dictionary
     
-    api_action = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_LIST}"
+    routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_LIST}"
+    api_action = f"{RMQP.RK_LIST}"
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_USER: user,
