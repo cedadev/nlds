@@ -16,19 +16,14 @@ from pydantic import BaseModel
 from uuid import UUID, uuid4
 from typing import Optional, List, Dict
 
+from ..routers import rabbit_publisher
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
 from ..errors import ResponseError
 from ..details import PathDetails
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
-from .routing_methods import rabbit_publish_response
-# from ..rabbit.rpc_publisher import RabbitRPCClient
-
 router = APIRouter()
-
-# rpc_client = RabbitRPCClient()
-# rpc_client.get_connection()
 
 # uuid (for testing)
 # 3fa85f64-5717-4562-b3fc-2c963f66afa6
@@ -122,8 +117,9 @@ async def get(transaction_id: UUID,
         },
         RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
     }
-    rabbit_publish_response(f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_GETLIST}",
-                            msg_dict)
+    rabbit_publisher.publish_message(
+        f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_GETLIST}", msg_dict
+    )
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
 
@@ -200,8 +196,9 @@ async def put(transaction_id: UUID,
 
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
-    rabbit_publish_response(f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_GETLIST}",
-                            msg_dict)
+    rabbit_publisher.publish_message(
+        f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_GETLIST}", msg_dict
+    )
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -281,8 +278,10 @@ async def put(transaction_id: UUID,
 
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
-    rabbit_publish_response(f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_PUT}", 
-                            msg_dict)
+
+    rabbit_publisher.publish_message(
+        f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_PUT}", msg_dict
+    )
     
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())

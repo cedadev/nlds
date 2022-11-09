@@ -17,16 +17,15 @@ import json
 from typing import Optional
 
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
-from .routing_methods import rabbit_publish_response
 from ..errors import ResponseError
-from ..rabbit.rpc_publisher import RabbitRPCClient
+from ..rabbit.rpc_publisher import RabbitMQRPCPublisher
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
 
 router = APIRouter()
 
-rpc_client = RabbitRPCClient()
+rpc_client = RabbitMQRPCPublisher()
 rpc_client.get_connection()
 
 class HoldingResponse(BaseModel):
@@ -90,15 +89,14 @@ async def get(token: str = Depends(authenticate_token),
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
 
-    response = HoldingResponse(msg="Holding:get accepted")
-    # response = await rpc_client.call(msg=json.dumps(msg_dict),
-    #                                  queue="catalog_rpc_q")
-
-    rabbit_publish_response(f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_LIST}",
-                            msg_dict)
+    routing_key=f"{RMQP.RK_ROOT}.{RMQP.RK_CATALOG_GET}.{RMQP.RK_LIST}"
+    routing_key = "catalog_q"
+    print(routing_key)
+    await rpc_client.call(msg_dict=msg_dict,routing_key=routing_key)
+    response = "Happy times!"
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
-                        content = response.json())
+                        content = response)
 
 @router.put("/")
 async def put():
