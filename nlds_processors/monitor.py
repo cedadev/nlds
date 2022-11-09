@@ -152,8 +152,8 @@ class MonitorConsumer(RabbitMQConsumer):
         to a session and flushes to get the id field populated. 
         """
         if state is None:
-            # Set to first/default value
-            state = State.ROUTING
+            # Set to initial/default value
+            state = State.INITIALISING
         sub_record = SubRecord(
             sub_id = sub_id, 
             state = state,
@@ -201,6 +201,9 @@ class MonitorConsumer(RabbitMQConsumer):
 
             # if nothing in the database then create a new row
             if transaction_record is None and create_fl:
+                self.log("No transaction_record found with corresponding "
+                         "transaction_id not found, creating new "
+                         "transaction_record", self.RK_LOG_INFO)
                 # create a new, minimum TransactionRecord with the transaction_id 
                 # and user info passed through arguments
                 transaction_record = self._create_transaction_record(
@@ -249,7 +252,8 @@ class MonitorConsumer(RabbitMQConsumer):
         return sub_record
 
     def _update_sub_record(
-            self, session: Session, sub_record: SubRecord, new_state: State
+            self, session: Session, sub_record: SubRecord, new_state: State, 
+            retry_fl: bool,
         ) -> None:
         """Update a retrieved SubRecord to reflect the new monitoring info. 
         Furthest state is updated, if required, and the retry count is 
@@ -257,27 +261,26 @@ class MonitorConsumer(RabbitMQConsumer):
         TODO: Should retrying be a flag instead of a separate state? Probably, 
         yes
         """
-        # Upgrade furthest_state to new_state, throw exception if regressing 
-        # state (unless changing from a retry)
-        if (new_state.value <= sub_record.state.value 
-                and sub_record.state != State.RETRYING):
-            raise ValueError(f"Monitoring state cannot go backwards. "
-                             f"Attempted {sub_record.state}->{new_state}")
-        sub_record.state = new_state
-        # Increment retry counter if appropriate
-        if new_state == State.RETRYING:
+        # Increment retry counter if appropriate. 
+        # NOTE: Do we want to just specify the retry_count in the message?
+        if retry_fl:
+            self.log(f"Incrementing retry count for {sub_record.sub_id}.", 
+                     self.RK_LOG_INFO)
             sub_record.retry_count = (
                 SubRecord.retry_count + 1
             )
-        elif new_state in State:
-            self.log(f"Monitoring response not defined for state {new_state}.",
-                     self.RK_LOG_DEBUG)
-        else:
-            # If state not in recognised list then something has gone wrong.
-            # NOTE: This is probably caught earlier than this?
-            session.close()
-            raise ValueError(f"Invalid state {new_state} passed to monitor, "
-                             "exiting callback.")
+        # Reset retry count if retry was successful, keep it if the job failed 
+        elif sub_record.retry_count > 0 and new_state != State.FAILED:
+            self.log(f"Resetting retry count for {sub_record.sub_id}.", 
+                     self.RK_LOG_INFO)
+            sub_record.retry_count = 0
+        # Upgrade state to new_state, but throw exception if regressing state 
+        # (staying the same is fine)
+        if (new_state.value < sub_record.state.value):
+            raise ValueError(f"Monitoring state cannot go backwards or skip "
+                             f"steps. Attempted {sub_record.state}->{new_state}"
+                             )
+        sub_record.state = new_state
         session.add(sub_record)
 
     def _monitor_put(self, body: Dict[str, str]) -> None:
@@ -292,20 +295,7 @@ class MonitorConsumer(RabbitMQConsumer):
                      self.RK_LOG_ERROR)
             return
 
-        # get the filelist from the data section of the message
-        try:
-            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
-        except KeyError as e:
-            self.log(f"Invalid message contents, filelist should be in the data"
-                     f"section of the message body.",
-                     self.RK_LOG_ERROR)
-            return
-        # check filelist is a list
-        try:
-            f = filelist[0]
-        except TypeError as e:
-            self.log(f"Filelist field must contain a list", self.RK_LOG_ERROR)
-            return
+        filelist = self.parse_filelist(body)
 
         # get the user id from the details section of the message
         try:
@@ -342,13 +332,21 @@ class MonitorConsumer(RabbitMQConsumer):
                      self.RK_LOG_ERROR)
             return
         
-        # get the transaction id from the details section of the message
+        # get the sub_record id from the details section of the message
         try: 
             sub_id = body[self.MSG_DETAILS][self.MSG_SUB_ID]
         except KeyError:
             self.log("Transaction sub-id not in message, exiting callback.", 
                      self.RK_LOG_ERROR)
             return
+
+        # get the retry_fl from the details section of the message
+        retry_fl = False
+        try: 
+            retry_fl = body[self.MSG_DETAILS][self.MSG_RETRY]
+        except KeyError:
+            self.log("No retry_fl found in message, assuming false.", 
+                     self.RK_LOG_DEBUG)
 
         # create a SQL alchemy session
         session = Session(self.db_engine)
@@ -361,6 +359,7 @@ class MonitorConsumer(RabbitMQConsumer):
         #       - update it if it does
         #           - change state
         #           - update retry count if retrying
+        #           - reset retry count if now continuing
         #           - add failed files if failed
         #       - create a new one if it doesn't
         #   - open question whether we delete the older subrecords (i.e. before
@@ -370,16 +369,29 @@ class MonitorConsumer(RabbitMQConsumer):
         )
         sub_record = self._get_sub_record(session, sub_id, transaction_record)
         if sub_record.transaction_record_id != transaction_record.id:
-            self.log("Something has gone terribly wrong.", self.RK_LOG_ERROR)
+            self.log("Transaction id does not match sub_record's transaction "
+                     "id. Something has gone amiss, rolling back and exiting"
+                     "callback.", self.RK_LOG_ERROR)
+            session.rollback()
             return
+        
         # Update subrecord to match new monitoring data
-        self._update_sub_record(session, sub_record, state)
+        try: 
+            self._update_sub_record(session, sub_record, state, retry_fl)
+        except ValueError as e:
+            # If the state update is invalid then rollback session and exit 
+            # callback
+            self.log(e, self.RK_LOG_ERROR)
+            session.rollback()
+            return
+
         # Create failed_files if necessary
         if state == State.FAILED:
             for f in filelist:
                 path_details = PathDetails.from_dict(f)
                 self._create_failed_file(sub_record, path_details, 
                                          session=session)
+
         # Commit all transactions when we're sure everything is as it should be. 
         session.commit()
         self.log(f"Successfully commited monitoring update for transaction "

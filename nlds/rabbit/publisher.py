@@ -108,6 +108,7 @@ class RabbitMQPublisher():
     MSG_HOLDING_ID = "holding_id"
     MSG_STATE = "state"
     MSG_SUB_ID = "sub_id"
+    MSG_RETRY = "retry"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"

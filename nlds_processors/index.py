@@ -5,7 +5,7 @@ from typing import List, NamedTuple, Dict
 
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
-from nlds.rabbit.consumer import State
+from nlds.rabbit.consumer import State, FilelistType
 from nlds.details import PathDetails
 
 class IndexerConsumer(StattingConsumer):
@@ -131,8 +131,7 @@ class IndexerConsumer(StattingConsumer):
         for i in range(0, filelist_len, self.filelist_max_len):
             slc = slice(i, min(i + self.filelist_max_len, filelist_len))
             self.send_pathlist(
-                filelist[slc], rk_index, 
-                body_json, mode="split",
+                filelist[slc], rk_index, body_json, mode=FilelistType.processed,
                 state=State.SPLITTING
             )
         

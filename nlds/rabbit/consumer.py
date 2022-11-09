@@ -60,8 +60,10 @@ class FilelistType(Enum):
     failed = 3
     indexed = 1
     transferred = 1
+    catalogued = 1
 
 class State(Enum):
+    INITIALISING = -1
     ROUTING = 0
     SPLITTING = 1
     INDEXING = 2
@@ -69,7 +71,6 @@ class State(Enum):
     CATALOG_PUTTING = 4
     CATALOG_GETTING = 5
     TRANSFER_GETTING = 6
-    RETRYING = 7
     COMPLETE = 8
     FAILED = 9
 
@@ -226,7 +227,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
                        body_json: Dict[str, str], state: State = None,
-                       mode: FilelistType = FilelistType.processed
+                       mode: FilelistType = FilelistType.processed, 
                        ) -> None:
         """Convenience function which sends the given list of PathDetails 
         objects to the exchange with the given routing key and message body. 
@@ -240,10 +241,21 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         transaction's state more easily. 
 
         """
+        # If list_type given as a string then attempt to cast it into an 
+        # appropriate enum
+        if not isinstance(mode, FilelistType):
+            try:
+                mode = FilelistType[mode]
+            except KeyError:
+                raise ValueError("mode value invalid, must be a FilelistType "
+                                 "enum or a string capabale of being cast to "
+                                 f"such (mode={mode})")
+
         self.log(f"Sending list back to exchange (routing_key = {routing_key})",
                  self.RK_LOG_INFO)
 
         delay = 0
+        body_json[self.MSG_DETAILS][self.MSG_RETRY] = False
         if mode == FilelistType.processed:
             # Reset the retries upon successful indexing. 
             for path_details in pathlist:
@@ -256,7 +268,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
                      f" {datetime.now() + timedelta(milliseconds=delay)}", 
                      self.RK_LOG_DEBUG)
-            state = State.RETRYING
+            body_json[self.MSG_DETAILS][self.MSG_RETRY] = True
         elif mode == FilelistType.failed:
             state = State.FAILED
         
@@ -266,12 +278,13 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             state = self.DEFAULT_STATE
 
         # Create new sub_id for each extra subrecord created.
-        if self.sent_message_count > 1:
+        if self.sent_message_count >= 1:
             body_json[self.MSG_DETAILS][self.MSG_SUB_ID] = uuid.uuid4()
         
         # Send message to next part of workflow
         body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
         body_json[self.MSG_DETAILS][self.MSG_STATE] = state.value
+        
         self.publish_message(routing_key, body_json, delay=delay)
 
         # Send message to monitoring to keep track of state
