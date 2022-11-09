@@ -78,14 +78,14 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_INDEX, 
                                     self.RK_INITIATE])
-        self.publish_and_log_message(new_routing_key, json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
         self.log(f"Updating monitor", self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_MONITOR_PUT, 
                                     self.RK_START])
         body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
-        self.publish_and_log_message(new_routing_key, json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def _process_rk_get(self, body_json: dict) -> None:
@@ -96,8 +96,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
                  f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def _process_rk_list(self, body_json: dict) -> None:
@@ -106,8 +105,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_LIST])        
         self.log(f"Sending  message to {queue} queue with routing "
                  f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
                                      
 
     def _process_rk_index_complete(self, body_json: dict) -> None:
@@ -120,8 +118,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
                     f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def _process_rk_transfer_put_complete(self, rk_parts: list, 
@@ -132,8 +129,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_MONITOR, 
                                     rk_parts[2]])
-        self.publish_and_log_message(new_routing_key, 
-                                        json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
         # forward to catalog-put on the catalog_q
         queue = f"{self.RK_CATALOG_PUT}"
@@ -141,8 +137,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
                     f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def _process_rk_catalog_put_complete(self, rk_parts: list,
@@ -153,8 +148,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_MONITOR, 
                                     rk_parts[2]])
-        self.publish_and_log_message(new_routing_key, 
-                                        json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def _process_rk_catalog_get_complete(self, rk_parts: list, 
@@ -165,8 +159,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_MONITOR, 
                                     rk_parts[2]])
-        self.publish_and_log_message(new_routing_key, 
-                                        json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
         # forward to transfer_get
         queue = f"{self.RK_TRANSFER_GET}"
@@ -175,8 +168,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
                     f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
@@ -215,7 +207,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
         self.log(f"Worker callback complete!", self.RK_LOG_INFO)
 
-    def publish_and_log_message(self, routing_key: str, msg: str, 
+    def publish_and_log_message(self, routing_key: str, msg: dict, 
                                 log_fl=True) -> None:
         """
         Wrapper around original publish message to additionally send message to 
