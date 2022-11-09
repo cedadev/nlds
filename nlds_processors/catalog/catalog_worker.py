@@ -279,7 +279,7 @@ class CatalogConsumer(RMQC):
         self.publish_rpc_message(properties, msg_dict=msg_dict)
 
 
-    def _catalog_put(self, body: dict) -> None:
+    def _catalog_put(self, body: dict, rk_origin: str) -> None:
         """Put a file record into the catalog - end of a put transaction"""
         # get the filelist from the data section of the message
         try:
@@ -428,21 +428,23 @@ class CatalogConsumer(RMQC):
                  self.RK_LOG_INFO)
 
         # Verify routing key is appropriate
-        try:
-            rk_parts = self.split_routing_key(method.routing_key)
-        except ValueError as e:
-            self.log("Routing key inappropriate length, exiting callback.", 
-                     self.RK_LOG_ERROR)
-            return
-
-        # check whether this is a GET or a PUT
-        if (rk_parts[1] == self.RK_CATALOG_GET):
-            if (rk_parts[2] == self.RK_START): # this is part of the GET workflow
-                self._catalog_get(body, rk_parts[0])
-            elif (rk_parts[2] == self.RK_LIST): # this is part of the query workflow
-                self._catalog_list(body, method=method, properties=properties)
-        elif (rk_parts[1] == self.RK_CATALOG_PUT):
-            self._catalog_put(body) # this is the only workflow for this
+        if method.routing_key == self.name:
+            self._catalog_list(
+                body, method=method, properties=properties
+            )
+        else:
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log("Routing key inappropriate length, exiting callback.", 
+                        self.RK_LOG_ERROR)
+                return
+            # check whether this is a GET or a PUT
+            if (rk_parts[1] == self.RK_CATALOG_GET):
+                if (rk_parts[2] == self.RK_START): # this is part of the GET workflow
+                    self._catalog_get(body, rk_parts[0])
+            elif (rk_parts[1] == self.RK_CATALOG_PUT):
+                self._catalog_put(body, rk_parts[0]) # this is the only workflow for this
 
 
 def main():
