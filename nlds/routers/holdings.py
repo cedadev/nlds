@@ -17,16 +17,14 @@ import json
 from typing import Optional
 
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
-from ..errors import ResponseError
 from ..rabbit.rpc_publisher import RabbitMQRPCPublisher
+from ..routers import rpc_publisher
+from ..errors import ResponseError
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
 
 router = APIRouter()
-
-rpc_client = RabbitMQRPCPublisher()
-rpc_client.get_connection()
 
 class HoldingResponse(BaseModel):
     msg: str
@@ -89,10 +87,8 @@ async def get(token: str = Depends(authenticate_token),
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
 
-    routing_key=f"{RMQP.RK_ROOT}.{RMQP.RK_CATALOG_GET}.{RMQP.RK_LIST}"
     routing_key = "catalog_q"
-    print(routing_key)
-    await rpc_client.call(msg_dict=msg_dict,routing_key=routing_key)
+    await rpc_publisher.call(msg_dict=msg_dict,routing_key=routing_key)
     response = "Happy times!"
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
