@@ -2,10 +2,10 @@ import json
 import os
 import pathlib as pth
 from typing import List, NamedTuple, Dict
-from datetime import datetime, timedelta
 
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
+from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 
 class IndexerConsumer(StattingConsumer):
@@ -14,6 +14,7 @@ class IndexerConsumer(StattingConsumer):
         f"{RMQP.RK_ROOT}.{RMQP.RK_INDEX}.{RMQP.RK_WILD}"
     )
     DEFAULT_REROUTING_INFO = f"->INDEX_Q"
+    DEFAULT_STATE = State.INDEXING
 
     # Possible options to set in config file
     _FILELIST_MAX_LENGTH = "filelist_max_length"
@@ -131,7 +132,8 @@ class IndexerConsumer(StattingConsumer):
             slc = slice(i, min(i + self.filelist_max_len, filelist_len))
             self.send_pathlist(
                 filelist[slc], rk_index, 
-                body_json, mode="split"
+                body_json, mode="split",
+                state=State.SPLITTING
             )
         
     def index(self, raw_filelist: List[NamedTuple], rk_origin: str, 

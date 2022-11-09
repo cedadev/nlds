@@ -5,7 +5,7 @@ from minio.error import S3Error
 from retry import retry
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
-from nlds.rabbit.consumer import FilelistType
+from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
 
 
@@ -14,6 +14,7 @@ class PutTransferConsumer(BaseTransferConsumer):
     DEFAULT_ROUTING_KEY = (f"{BaseTransferConsumer.RK_ROOT}."
                            f"{BaseTransferConsumer.RK_TRANSFER_PUT}."
                            f"{BaseTransferConsumer.RK_WILD}")
+    DEFAULT_STATE = State.TRANSFER_PUTTING
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)

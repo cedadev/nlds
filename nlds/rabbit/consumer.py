@@ -61,6 +61,26 @@ class FilelistType(Enum):
     indexed = 1
     transferred = 1
 
+class State(Enum):
+    ROUTING = 0
+    SPLITTING = 1
+    INDEXING = 2
+    TRANSFER_PUTTING = 3
+    CATALOG_PUTTING = 4
+    CATALOG_GETTING = 5
+    TRANSFER_GETTING = 6
+    RETRYING = 7
+    COMPLETE = 8
+    FAILED = 9
+
+    @classmethod
+    def has_value(cls, value):
+        return value in cls._value2member_map_
+    
+    @classmethod
+    def has_name(cls, name):
+        return name in cls._member_names_
+
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
     DEFAULT_ROUTING_KEY = "test"
@@ -68,6 +88,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_REROUTING_INFO = "->"
 
     DEFAULT_CONSUMER_CONFIG = dict()
+
+    # The state associated with finishing the consumer, must be set but can be 
+    # overridden
+    DEFAULT_STATE = State.ROUTING
 
     def __init__(self, queue: str = None, setup_logging_fl=False):
         super().__init__(name=queue, setup_logging_fl=False)
@@ -184,8 +208,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return return_val
     
     def parse_filelist(self, body_json: dict) -> List[PathDetails]:
-        # Convert flat list into list of PathDetails objects and the check it 
-        # is, in fact, a list
+        """Convert flat list from message json into list of PathDetails objects 
+        and the check it is, in fact, a list
+        """
         try:
             filelist = [PathDetails.from_dict(pd_dict) for pd_dict in 
                         list(body_json[self.MSG_DATA][self.MSG_FILELIST])]
@@ -200,7 +225,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return filelist
 
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
-                       body_json: Dict[str, str], 
+                       body_json: Dict[str, str], state: State = None,
                        mode: FilelistType = FilelistType.processed
                        ) -> None:
         """Convenience function which sends the given list of PathDetails 
@@ -231,6 +256,14 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
                      f" {datetime.now() + timedelta(milliseconds=delay)}", 
                      self.RK_LOG_DEBUG)
+            state = State.RETRYING
+        elif mode == FilelistType.failed:
+            state = State.FAILED
+        
+        # If state not set at this point then revert to the default value for 
+        # the consumer.
+        if state is None:
+            state = self.DEFAULT_STATE
 
         # Create new sub_id for each extra subrecord created.
         if self.sent_message_count > 1:
@@ -238,6 +271,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         
         # Send message to next part of workflow
         body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
+        body_json[self.MSG_DETAILS][self.MSG_STATE] = state.value
         self.publish_message(routing_key, body_json, delay=delay)
 
         # Send message to monitoring to keep track of state

@@ -16,8 +16,7 @@ from pika.frame import Method
 from pika.frame import Header
 
 # NLDS imports
-from nlds.rabbit.consumer import RabbitMQConsumer
-from nlds_processors.monitor_models import State
+from nlds.rabbit.consumer import RabbitMQConsumer, State
 
 class NLDSWorkerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "nlds_q"
@@ -25,6 +24,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                            f"{RabbitMQConsumer.RK_ROUTE}.",
                            f"{RabbitMQConsumer.RK_WILD}")
     DEFAULT_REROUTING_INFO = "->NLDS_Q"
+    DEFAULT_STATE = State.ROUTING
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)

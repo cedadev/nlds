@@ -1,34 +1,12 @@
 """Declare the SQLAlchemy ORM models for the NLDS Monitoring database"""
-from __future__ import annotations
-import enum
-
 from sqlalchemy import Integer, String, Column, Enum, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
+
+from nlds.rabbit.consumer import State
 
 
 """Declarative base class, containing the Metadata object"""
 Base = declarative_base()
-
-class State(enum.Enum):
-    ROUTING = 0
-    SPLITTING = 1
-    INDEXING = 2
-    TRANSFER_PUTTING = 3
-    CATALOG_PUTTING = 4
-    CATALOG_GETTING = 5
-    TRANSFER_GETTING = 6
-    RETRYING = 7
-    COMPLETE = 8
-    FAILED = 9
-
-    @classmethod
-    def has_value(cls, value):
-        return value in cls._value2member_map_
-    
-    @classmethod
-    def has_name(cls, name):
-        return name in cls._member_names_
-    
 
 class TransactionRecord(Base):
     """Class containing the details of the state of a transaction"""

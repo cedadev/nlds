@@ -33,9 +33,9 @@ from pika.connection import Connection
 from pika.frame import Method
 from pika.frame import Header
 
-from nlds.rabbit.consumer import RabbitMQConsumer
+from nlds.rabbit.consumer import RabbitMQConsumer, State
 from nlds.details import PathDetails
-from nlds_processors.monitor_models import Base, State, TransactionRecord
+from nlds_processors.monitor_models import Base, TransactionRecord
 from nlds_processors.monitor_models import SubRecord, FailedFile
 
 class MonitorError(Exception):
@@ -49,6 +49,7 @@ class MonitorConsumer(RabbitMQConsumer):
                            f"{RabbitMQConsumer.RK_MONITOR}."
                            f"{RabbitMQConsumer.RK_WILD}")
     DEFAULT_REROUTING_INFO = f"->MONITOR_Q"
+    
 
     # Possible options to set in config file
     _DB_ENGINE = "db_engine"
@@ -260,8 +261,8 @@ class MonitorConsumer(RabbitMQConsumer):
         # state (unless changing from a retry)
         if (new_state.value <= sub_record.state.value 
                 and sub_record.state != State.RETRYING):
-            raise MonitorError(f"Monitoring state cannot go backwards. "
-                               f"Attempted {sub_record.state}->{new_state}")
+            raise ValueError(f"Monitoring state cannot go backwards. "
+                             f"Attempted {sub_record.state}->{new_state}")
         sub_record.state = new_state
         # Increment retry counter if appropriate
         if new_state == State.RETRYING:
