@@ -15,7 +15,6 @@ import logging
 import traceback
 from typing import Dict, List
 import pathlib as pth
-import json
 from datetime import datetime, timedelta
 import uuid
 
@@ -239,16 +238,16 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         
         # Send message to next part of workflow
         body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
-        self.publish_message(routing_key, json.dumps(body_json), delay=delay)
+        self.publish_message(routing_key, body_json, delay=delay)
 
         # Send message to monitoring to keep track of state
         monitoring_rk = ".".join([routing_key[0], 
                                   self.RK_MONITOR_PUT, 
                                   self.RK_START])
-        self.publish_message(monitoring_rk, json.dumps(body_json))
+        self.publish_message(monitoring_rk, body_json)
         self.sent_message_count += 1
     
-    def publish_rpc_message(self, cb_properties: Header, message: str):
+    def publish_rpc_message(self, cb_properties: Header, msg_dict: Dict):
         """Wrapper around publish message which implements RPC functionality.
 
         This is required to get FastAPI communicating list/find/stat requests 
@@ -263,7 +262,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         message_properties.correlation_id = cb_properties.correlation_id
         routing_key = cb_properties.reply_to
         
-        self.publish_message(routing_key, message, exchange={'name': ''}, 
+        self.publish_message(routing_key, msg_dict, exchange={'name': ''}, 
                              properties=message_properties)
 
     def setup_logging(self, enable=False, log_level: str = None, 

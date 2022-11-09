@@ -225,8 +225,12 @@ class RabbitMQPublisher():
         )
 
     @retry(RabbitRetryError, tries=2, delay=0, backoff=1, logger=logger)
-    def publish_message(self, routing_key: str, msg: str, exchange: Dict = None,
-                        delay: int = 0, properties: pika.BasicProperties = None, 
+    def publish_message(self, 
+                        routing_key: str, 
+                        msg_dict: Dict, 
+                        exchange: Dict = None,
+                        delay: int = 0, 
+                        properties: pika.BasicProperties = None, 
                         mandatory_fl: bool = True) -> None:
         """Sends a message with the specified routing key to an exchange for 
         routing. If no exchange is provided it will default to the first 
@@ -241,6 +245,11 @@ class RabbitMQPublisher():
         This is in essence a light wrapper around the basic_publish method in 
         pika. 
         """
+        # add the time stamp to the message here
+        msg_dict[self.MSG_TIMESTAMP] = datetime.now().isoformat(sep='-')
+        # JSON the message
+        msg = json.dumps(msg_dict)
+
         if not exchange:
             exchange = self.default_exchange
         if not properties:
@@ -511,4 +520,4 @@ class RabbitMQPublisher():
             cls.MSG_TYPE: cls.MSG_TYPE_LOG
         }
 
-        return json.dumps(message_dict)
+        return message_dict

@@ -5,9 +5,10 @@ from pika.frame import Method, Header
 from pika.channel import Channel
 from pika.connection import Connection
 
+import json
 from .publisher import RabbitMQPublisher
 
-class RabbitRPCClient(RabbitMQPublisher):
+class RabbitMQRPCPublisher(RabbitMQPublisher):
 
     def __init__(self):
         super().__init__()
@@ -24,7 +25,8 @@ class RabbitRPCClient(RabbitMQPublisher):
         self.channel.basic_consume(
             queue=self.callback_queue,
             on_message_callback=self.callback,
-            auto_ack=True)
+            auto_ack=True
+        )
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes):
@@ -33,18 +35,20 @@ class RabbitRPCClient(RabbitMQPublisher):
         if self.corr_id == properties.correlation_id:
             self.response = body
 
-    async def call(self, msg: str, queue: str = 'rpc_queue'):
+    async def call(self, msg_dict: dict, routing_key: str = 'rpc_queue'):
         self.response = None
         # Create a unique correlation_id to recognise the correct message when 
         # it comes back
         self.corr_id = str(uuid.uuid4())
+        msg = json.dumps(msg_dict)
         self.channel.basic_publish(
             exchange='',
-            routing_key=queue,
+            routing_key=routing_key,
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
             ),
-            body=msg)
+            body=msg
+        )
         self.connection.process_data_events(time_limit=None)
         return self.response
