@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import json
 
-from typing import Optional
+from typing import Optional, List, Dict
 
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
 from ..rabbit.rpc_publisher import RabbitMQRPCPublisher
@@ -27,7 +27,7 @@ from ..authenticators.authenticate_methods import authenticate_token, \
 router = APIRouter()
 
 class HoldingResponse(BaseModel):
-    msg: str
+    holdings: List[Dict]
 
 ############################ GET METHOD ############################
 @router.get("/",
@@ -91,10 +91,13 @@ async def get(token: str = Depends(authenticate_token),
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
 
+    # call RPC function
     routing_key = "catalog_q"
     response = await rpc_publisher.call(
-        msg_dict=msg_dict,routing_key=routing_key
+        msg_dict=msg_dict, routing_key=routing_key
     )
+    # convert byte response to str
+    response = response.decode()
 
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response)

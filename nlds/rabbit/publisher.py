@@ -106,6 +106,7 @@ class RabbitMQPublisher():
     MSG_LABEL = "label"
     MSG_TAG = "tag"
     MSG_HOLDING_ID = "holding_id"
+    MSG_HOLDING_LIST = "holdings"
     MSG_STATE = "state"
     MSG_SUB_ID = "sub_id"
     MSG_RETRY = "retry"

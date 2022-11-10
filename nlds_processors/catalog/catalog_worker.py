@@ -275,11 +275,10 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session()
 
         # send the rpc return message
-        ret_dict = {"holdings": ret_list}
-        msg_dict = {"message":f"{method.routing_key}"}
+        body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
         self.publish_message(
             properties.reply_to,
-            msg_dict=msg_dict,
+            msg_dict=body,
             exchange={'name': ''},
             correlation_id=properties.correlation_id
         )
@@ -401,6 +400,31 @@ class CatalogConsumer(RMQC):
         # stop db transistions and commit
         self.catalog.end_session()
 
+        # log the successful and non-successful catalog puts
+        # SUCCESS
+        if len(complete_pathlist) > 0:
+            rk_complete = ".".join([rk_origin,
+                                    self.RK_CATALOG_PUT, 
+                                    self.RK_COMPLETE])
+            self.log(
+                f"Sending completed PathList from CATALOG_PUT {complete_pathlist}",
+                self.RK_LOG_DEBUG
+            )
+            body[self.MSG_DATA][self.MSG_FILELIST] = complete_pathlist
+            self.publish_message(rk_complete, body)
+
+        # FAILED
+        if len(failed_pathlist) > 0:
+            rk_failed = ".".join([rk_origin,
+                                  self.RK_CATALOG_PUT, 
+                                  self.RK_FAILED])
+            self.log(
+                f"Sending failed PathList from CATALOG_PUT {failed_pathlist}",
+                self.RK_LOG_DEBUG
+            )
+            body[self.MSG_DATA][self.MSG_FILELIST] = failed_pathlist
+            self.publish_message(rk_failed, body)
+
 
     def attach_catalog(self):
         """Attach the Catalog to the consumer"""
@@ -433,7 +457,7 @@ class CatalogConsumer(RMQC):
                  f"{self.queues[0].name} ({method.routing_key})", 
                  self.RK_LOG_INFO)
 
-        # Get the API method and decide what to do on it
+        # Get the API method and decide what to do with it
         try:
             api_method = body[RMQC.MSG_DETAILS][RMQC.MSG_API_ACTION]
         except KeyError:
@@ -462,7 +486,7 @@ class CatalogConsumer(RMQC):
                         self.RK_LOG_ERROR)
                 return             
             if (rk_parts[2] == self.RK_START):
-                self._catalog_put(body, rk_parts[0]) # this is the only workflow for this
+                self._catalog_put(body, rk_parts[0])
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method
