@@ -19,7 +19,7 @@ import pathlib
 from collections import namedtuple
 
 import pika
-from pika.exceptions import AMQPConnectionError, UnroutableError
+from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
 from retry import retry
 
 from ..server_config import (
@@ -184,7 +184,7 @@ class RabbitMQPublisher():
                 # Declare the exchange config. Also provides a hook for other 
                 # bindings (e.g. queues) to be declared in child classes.
                 self.declare_bindings()
-        except AMQPConnectionError as e:
+        except (AMQPConnectionError, ChannelWrongStateError) as e:
             logger.error("AMQPConnectionError encountered on attempting to "
                          "establish a connection. Retrying...")
             logger.debug(f"{e}")
@@ -273,7 +273,7 @@ class RabbitMQPublisher():
                 body=msg,
                 mandatory=mandatory_fl,
             )
-        except AMQPConnectionError as e:
+        except (AMQPConnectionError, ChannelWrongStateError) as e:
             # For any connection error then reset the connection and try again
             logger.error("AMQPConnectionError encountered on attempting to "
                          "publish a message. Manually resetting and retrying.")

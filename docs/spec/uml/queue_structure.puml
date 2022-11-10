@@ -1,15 +1,17 @@
 @startuml queue_structure
 
 left to right direction
-agent api_server as "API server" 
+together {
+    person user as "User"
+    agent api_server as "API server" 
+}
+user -> api_server
+api_server -> user
 
 together {
     queue wq as "NLDS Q" #lightgrey
     component work as "NLDS" #lightgrey
     /'database iddb as "TransactionDB" #lightgrey'/
-}
-
-together {
     agent pex as "Exchange"
     ' note top of pex: type=topic
 }
@@ -22,6 +24,9 @@ wq -> work : prefetch=1
 together {
     queue sq as "Index Q" #lightblue
     queue tq as "Transfer Q" #gold
+}
+together {
+    queue mq as "Monitor Q" #tomato
     queue cq as "Catalog Q" #springgreen
 }
 
@@ -35,10 +40,7 @@ work --> pex : key=nlds-api.tran.*
 work --> pex : key=nlds-api.mon.*
 work --> pex : key=nlds-api.cat.*
 
-together {
-    queue mq as "Monitor Q" #tomato
-    queue lq as "Logging Q" #hotpink
-}
+queue lq as "Logging Q" #hotpink
 
 pex --> mq : key=#.mon.*
 pex --> lq : key=#.log.*
@@ -49,11 +51,26 @@ together {
 }
 
 component tran1 as "Transfer" #gold
-component cat1 as "Catalog" #springgreen
+
+together {
+    component cat1 as "Catalog" #springgreen
+    database cat_db as "Catalog DB" #springgreen
+}
+cat1 -> cat_db
+cat_db -> cat1
+' cat1 -> pex
+
 together {
     component mon1 as "Monitor" #tomato
-    person user as "User"
+    database mon_db as "Monitor DB" #tomato
 }
+
+mon1 -> mon_db
+mon_db -> mon1
+' mon1 -> pex
+
+api_server <-> mon1
+api_server <-> cat1
 
 together {
     component log1 as "Logging" #hotpink
@@ -70,7 +87,7 @@ cq --> cat1 : prefetch=1
 mq --> mon1
 lq --> log1
 
-mon1 -> user
+' mon1 -> user
 sysadmin <- log1
 
 scan1 --> pex : key=#.index.complete
