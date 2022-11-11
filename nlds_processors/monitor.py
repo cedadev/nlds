@@ -283,6 +283,53 @@ class MonitorConsumer(RabbitMQConsumer):
         sub_record.state = new_state
         session.add(sub_record)
 
+    def _check_completion(self, session: Session, 
+                          transaction_record: TransactionRecord) -> None:
+        """Get the complete list of sub records from a transaction record and 
+        check whether they are all in a final state, and update them to COMPLETE
+        if so.
+        """
+        try:
+            # Get all sub_records by transaction_record.id
+            sub_records = session.query(SubRecord).filter(
+                SubRecord.transaction_record_id == transaction_record.id
+            ).all()
+            
+            # Check for an empty query as this doesn't get caught by the below 
+            # all() check.
+            if len(sub_records) == 0:
+                self.log(f"transaction_record {transaction_record.id} has no "
+                         f"associated sub_records, something has gone wrong.",
+                         self.RK_LOG_ERROR)
+                return
+
+            # Check whether all jobs haven't reached their final, non-complete 
+            # state or are retrying
+            all_jobs_finished_fl = not any(
+                (
+                    sr.state not in State.get_final_states()
+                    or 
+                    sr.retry_count != 0
+                ) 
+                for sr in sub_records
+            )
+            if all_jobs_finished_fl:
+                # If all have, then set all non-failed jobs to complete
+                self.log("All sub_records now in their final state, bumping "
+                         "everything to COMPLETE if not already FAILED", 
+                         self.RK_LOG_INFO)
+                for sr in sub_records:
+                    if sr.state == State.FAILED:
+                        continue
+                    self._update_sub_record(session, sr, State.COMPLETE, False)
+            else:
+                self.log("Some states have not yet reached an end point.", 
+                         self.RK_LOG_INFO)
+
+        except IntegrityError:
+            self.log("IntegrityError raised when attempting to get/create "
+                     "sub_record", self.RK_LOG_WARNING) 
+
     def _monitor_put(self, body: Dict[str, str]) -> None:
         """
         Create or update a monitoring record for an in-progress transaction. 
@@ -391,6 +438,13 @@ class MonitorConsumer(RabbitMQConsumer):
                 path_details = PathDetails.from_dict(f)
                 self._create_failed_file(sub_record, path_details, 
                                          session=session)
+        
+        # If reached the end of a workflow then check for completeness                                          
+        if state in State.get_final_states():
+            self.log("This sub_record is now in its final state for this "
+                     "workflow, now checking if all others have reached a "
+                     "final state.", self.RK_LOG_INFO)
+            self._check_completion(session, transaction_record)
 
         # Commit all transactions when we're sure everything is as it should be. 
         session.commit()

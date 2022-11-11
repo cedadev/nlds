@@ -82,6 +82,10 @@ class State(Enum):
     def has_name(cls, name):
         return name in cls._member_names_
 
+    @classmethod
+    def get_final_states(cls):
+        return cls.TRANSFER_GETTING, cls.CATALOG_PUTTING, cls.FAILED
+
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
     DEFAULT_ROUTING_KEY = "test"
