@@ -35,8 +35,9 @@ from pika.frame import Header
 
 from nlds.rabbit.consumer import RabbitMQConsumer, State
 from nlds.details import PathDetails
-from nlds_processors.monitor_models import Base, TransactionRecord
-from nlds_processors.monitor_models import SubRecord, FailedFile
+from nlds_processors.monitor.monitor_models import Base, TransactionRecord
+from nlds_processors.monitor.monitor_models import SubRecord, FailedFile
+from nlds_processors.monitor.monitor_models import orm_to_dict
 
 class MonitorError(Exception):
     def __init__(self, message, *args):
@@ -220,8 +221,7 @@ class MonitorConsumer(RabbitMQConsumer):
         return transaction_record
     
     def _get_sub_record(self, session: Session, sub_id: str, 
-                        transaction_record: TransactionRecord, 
-                        create_fl: bool = True):
+                        transaction_record: TransactionRecord = None):
         try:
             # Get subrecord by sub_id
             # TODO (2022-11-03) is it worth also filtering by transaction_id at 
@@ -232,8 +232,9 @@ class MonitorConsumer(RabbitMQConsumer):
             # Should only be one item in the query as sub_id should be unique
             sub_record = sr_query.fetchone()
 
-            # if nothing in the database then create a new row
-            if sub_record is None and create_fl:
+            # if nothing in the database then create a new row (if 
+            # transaction_record passed)
+            if sub_record is None and transaction_record is not None:
                 # create a new, minimum SubRecord with the sub_id, transaction_id 
                 # and state (if passed?)
                 sub_record = self._create_sub_record(
@@ -451,16 +452,150 @@ class MonitorConsumer(RabbitMQConsumer):
         self.log(f"Successfully commited monitoring update for transaction "
                  f"{transaction_id}, sub_record {sub_id}.", self.RK_LOG_INFO)
 
-    def _monitor_get(body: Dict[str, str]) -> None:
+    def _monitor_get(self, body: Dict[str, str], properties: Header) -> None:
         """
-        Create or update a monitoring record for an in-progress transaction.
+        Get a list of monitoring records for in-progress or finished 
+        transactions, filtered by flags passed by the user.
         NOTE: This might be sensible to move into a separate consumer so we can 
         scale out database reads separately from database writes - which at the 
         moment need to be done one at a time to avoid 
         """
-        pass
+        # TODO: what do we want to do with files? A list command?
+        # filelist = self.parse_filelist(body)
 
-    def callback(self,ch: Channel, method: Method, properties: Header, 
+        # NOTE: might not need to check/have these passed?
+
+        # get the desired user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+
+        # get the desired group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+
+        # get the desired user id from the details section of the message
+        try:
+            query_user = body[self.MSG_DETAILS][self.MSG_USER_QUERY]
+        except KeyError:
+            self.log("Query user not in message, continuing without.", 
+                     self.RK_LOG_INFO)
+            query_user = None
+
+        # get the desired group from the details section of the message
+        try:
+            query_group = body[self.MSG_DETAILS][self.MSG_GROUP_QUERY]
+        except KeyError:
+            self.log("Query group not in message, continuing without.", 
+                     self.RK_LOG_INFO)
+            query_group = None
+        
+        # get the desired transaction id from the details section of the message
+        try: 
+            transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
+        except KeyError:
+            self.log("Transaction id not in message, continuing without.", 
+                     self.RK_LOG_INFO)
+            transaction_id = None
+        
+        # get the desired state from the details section of the message
+        try:
+            state = body[self.MSG_DETAILS][self.MSG_STATE]
+            # Convert state to an actual ENUM value for ease of comparison, can 
+            # either be passed as the enum.value (default) or as the state 
+            # string
+            if State.has_value(state):
+                state = State(state)
+            elif State.has_name(state):
+                state = State[state]
+            else:
+                self.log("State found in message invalid, continuing without.", 
+                        self.RK_LOG_ERROR)
+                state = None
+        except KeyError:
+            self.log("Required state not in message, continuing without.", 
+                     self.RK_LOG_ERROR)
+            state = None
+        
+        # get the desired sub_record id from the details section of the message
+        try: 
+            sub_id = body[self.MSG_DETAILS][self.MSG_SUB_ID]
+        except KeyError:
+            self.log("Transaction sub-id not in message, continuing without.", 
+                     self.RK_LOG_ERROR)
+            sub_id = None
+
+        # get the desired retry_count from the DETAILS section of the message
+        try: 
+            retry_count = int(body[self.MSG_DETAILS][self.MSG_RETRY_COUNT])
+        except KeyError:
+            self.log("Transaction sub-id not in message, continuing without.", 
+                     self.RK_LOG_ERROR)
+            retry_count = None
+
+        # create a SQL alchemy session
+        session = Session(self.db_engine)
+
+        # generate a query of both tables to apply filters to
+        query = session.query(TransactionRecord, SubRecord).join(SubRecord)
+        
+        # apply filters one at a time if present. Results in a big 'and' query 
+        # of the passed flags
+        # TODO: (2022-11-13) Will need to adapt this to do mulitple of each
+        if sub_id is not None:
+            # sub_record = self._get_sub_record(session, sub_id)
+            query = query.filter(SubRecord.sub_id == sub_id)
+        if state is not None:
+            query = query.filter(SubRecord.state == state)
+        if retry_count is not None:
+            query = query.filter(SubRecord.retry_count == retry_count)
+        if transaction_id is not None:
+            query = query.filter(TransactionRecord.transaction_id == transaction_id)
+        if query_user is not None: 
+            query = query.filter(TransactionRecord.user == query_user) 
+        if query_group is not None:
+            query = query.filter(TransactionRecord.group == query_group)
+        query_result = query.all()
+        
+        # Convert list of objects to json-friendly dict
+        return_list = []
+        for transaction_record, sub_record in query_result:
+            row_dict = {
+                "transaction_record": {
+                    "id": transaction_record.id,
+                    "transaction_id": transaction_record.transaction_id,
+                    "user": transaction_record.user,
+                    "group": transaction_record.group,
+                },
+                "sub_record": {
+                    "id": sub_record.id,
+                    "sub_id": sub_record.sub_id,
+                    "state": sub_record.state.value,
+                    "retry_count": sub_record.retry_count,
+                },
+                "failed_files": [orm_to_dict(ff) for ff in sub_record.failed_files]
+            }
+            return_list.append(row_dict)
+
+        # Send the recovered sub_record as an RPC response.
+        body[self.MSG_DATA][self.MSG_RECORD_LIST] = return_list
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )
+        self.log(f"Successfully returned query via RPC message to api-server", 
+                 self.RK_LOG_INFO)
+
+    def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
         # Connect to database if not connected yet                
         # Convert body from bytes to json for ease of manipulation
@@ -470,24 +605,34 @@ class MonitorConsumer(RabbitMQConsumer):
                  f"{self.queues[0].name} ({method.routing_key})", 
                  self.RK_LOG_INFO)
 
-        # Verify routing key is appropriate
+        # Get the API method and decide what to do with it
         try:
-            rk_parts = self.split_routing_key(method.routing_key)
-        except ValueError as e:
-            self.log("Routing key inappropriate length, exiting callback.", 
+            api_method = body[self.MSG_DETAILS][self.MSG_API_ACTION]
+        except KeyError:
+            self.log(f"Message did not contain an API method, exiting callback", 
                      self.RK_LOG_ERROR)
             return
 
         # check whether this is a GET or a PUT
-        if (rk_parts[1] == self.RK_MONITOR_GET):
-            self.log("Starting get from monitoring db.", self.RK_LOG_INFO)
-            self._monitor_get(body)
-        elif (rk_parts[1] == self.RK_MONITOR_PUT):
+        if (api_method == self.RK_STAT):
+            self.log("Starting put into monitoring db.", self.RK_LOG_INFO)
+            self._monitor_get(body, properties)
+        if api_method in (self.RK_PUT, self.RK_PUTLIST, self.RK_GET, self.RK_GETLIST):
+            # Verify routing key is appropriate
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log("Routing key inappropriate length, exiting callback.", 
+                        self.RK_LOG_ERROR)
+                return
+            # NOTE: Could check that rk_parts[2] is start here? No particular 
+            # need as the exchange does that for us and merely having three 
+            # parts is enough to tell that it didn't come from the api-server
             self.log("Starting put into monitoring db.", self.RK_LOG_INFO)
             self._monitor_put(body)
         else:
-            self.log("Routing key did not specify a monitoring task.", 
-                     self.RK_LOG_INFO)
+            self.log("API method key did not specify a valid task.", 
+                     self.RK_LOG_ERROR)
         
         self.log("Callback complete!", self.RK_LOG_INFO)
 

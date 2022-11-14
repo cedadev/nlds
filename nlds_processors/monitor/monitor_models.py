@@ -53,3 +53,9 @@ class FailedFile(Base):
     # sub_record_id as ForeignKey
     sub_record_id = Column(Integer, ForeignKey("sub_record.id"), 
                            index=True, nullable=False)
+
+
+def orm_to_dict(obj):
+    retdict = obj.__dict__
+    retdict.pop("_sa_instance_state", None)
+    return retdict

@@ -41,6 +41,7 @@ class RabbitMQPublisher():
     RK_GETLIST = "getlist"
     RK_DELLIST = "dellist"
     RK_LIST = "list"
+    RK_STAT = "stat"
 
     # Exchange routing key parts – root
     RK_ROOT = "nlds-api"
@@ -110,6 +111,10 @@ class RabbitMQPublisher():
     MSG_STATE = "state"
     MSG_SUB_ID = "sub_id"
     MSG_RETRY = "retry"
+    MSG_USER_QUERY = "user_query"
+    MSG_GROUP_QUERY = "group_query"
+    MSG_RETRY_COUNT = "retry_count"
+    MSG_RECORD_LIST = "records"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
