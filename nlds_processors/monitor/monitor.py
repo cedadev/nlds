@@ -435,8 +435,7 @@ class MonitorConsumer(RabbitMQConsumer):
 
         # Create failed_files if necessary
         if state == State.FAILED:
-            for f in filelist:
-                path_details = PathDetails.from_dict(f)
+            for path_details in filelist:
                 self._create_failed_file(sub_record, path_details, 
                                          session=session)
         
