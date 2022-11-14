@@ -495,6 +495,14 @@ class MonitorConsumer(RabbitMQConsumer):
             self.log("Query group not in message, continuing without.", 
                      self.RK_LOG_INFO)
             query_group = None
+
+        # For now we're not allowing users to query other users, but will in the 
+        # future with the inclusion of ROLES. Leave this here for completeness 
+        # and ease of insertion of the appropriate logic in the future.
+        if query_user is not None and user != query_user:
+            self.log("Attempting to query a user that does not match current "
+                     "user, exiting callback", self.RK_LOG_ERROR)
+            return
         
         # get the desired transaction id from the details section of the message
         try: 
