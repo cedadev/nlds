@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from .nlds_setup import API_VERSION
 
-from .routers import holdings, files, probe
+from .routers import holdings, files, probe, status
 
 nlds = FastAPI()
 
@@ -22,6 +22,11 @@ nlds.include_router(
     holdings.router,
     tags = ["holdings",],
     prefix = PREFIX + "/holdings"
+)
+nlds.include_router(
+    status.router,
+    tags = ["status",],
+    prefix = PREFIX + "/status"
 )
 nlds.include_router(
     files.router,
