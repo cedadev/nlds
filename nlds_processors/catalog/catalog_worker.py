@@ -34,6 +34,7 @@ from pika.frame import Header
 from datetime import datetime, timezone
 
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
+from nlds.rabbit.consumer import State
 
 from nlds_processors.catalog.catalog import Catalog, CatalogException
 from nlds_processors.catalog.catalog_models import Storage
@@ -42,6 +43,7 @@ from nlds.details import PathDetails
 class CatalogConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "catalog_q"
     DEFAULT_ROUTING_KEY = (f"{RMQC.RK_ROOT}.{RMQC.RK_CATALOG}.{RMQC.RK_WILD}")
+    DEFAULT_STATE = State.CATALOG_PUTTING
 
     # Possible options to set in config file
     _DB_ENGINE = "db_engine"
@@ -50,6 +52,7 @@ class CatalogConsumer(RMQC):
     _DB_OPTIONS_USER = "db_user"
     _DB_OPTIONS_PASSWD = "db_passwd"
     _DB_ECHO = "echo"
+    _MAX_RETRIES = "max_retries"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -59,11 +62,20 @@ class CatalogConsumer(RMQC):
             _DB_OPTIONS_PASSWD: "",
             _DB_ECHO: True,
         },
+        _MAX_RETRIES: 5,
+        RMQC.RETRY_DELAYS: RMQC.DEFAULT_RETRY_DELAYS
     }
 
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
+
+        self.max_retries = self.load_config_value(
+            self._MAX_RETRIES
+        )
+        self.retry_delays = self.load_config_value(
+            self.RETRY_DELAYS
+        )
 
     def reset(self):
         super().reset()
@@ -392,9 +404,12 @@ class CatalogConsumer(RMQC):
                         pd.access_time, tz=timezone.utc
                     )
                 )
-                complete_pathlist.append(pd)
+                self.completelist.append(pd)
             except CatalogException as e:
-                failed_pathlist.append(pd)
+                if pd.retries > self.max_retries:
+                    self.failedlist.append(pd)
+                else:
+                    self.retrylist.append(pd)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
         # stop db transistions and commit
@@ -402,28 +417,38 @@ class CatalogConsumer(RMQC):
 
         # log the successful and non-successful catalog puts
         # SUCCESS
-        if len(complete_pathlist) > 0:
+        if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin,
                                     self.RK_CATALOG_PUT, 
                                     self.RK_COMPLETE])
             self.log(
-                f"Sending completed PathList from CATALOG_PUT {complete_pathlist}",
+                f"Sending completed PathList from CATALOG_PUT {self.completelist}",
                 self.RK_LOG_DEBUG
             )
-            body[self.MSG_DATA][self.MSG_FILELIST] = complete_pathlist
-            self.publish_message(rk_complete, body)
-
+            self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_PUTTING)
+        # RETRY
+        if len(self.retrylist) > 0:
+            rk_retry = ".".join([rk_origin,
+                                 self.RK_CATALOG_PUT, 
+                                 self.RK_START])
+            self.log(
+                f"Sending retry PathList from CATALOG_PUT {self.retrylist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
+                               state=State.CATALOG_PUTTING)
         # FAILED
-        if len(failed_pathlist) > 0:
+        if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin,
                                   self.RK_CATALOG_PUT, 
                                   self.RK_FAILED])
             self.log(
-                f"Sending failed PathList from CATALOG_PUT {failed_pathlist}",
+                f"Sending failed PathList from CATALOG_PUT {self.failedlist}",
                 self.RK_LOG_DEBUG
             )
-            body[self.MSG_DATA][self.MSG_FILELIST] = failed_pathlist
-            self.publish_message(rk_failed, body)
+            self.send_pathlist(self.failedlist, rk_failed, body, 
+                               mode="failed")
 
 
     def attach_catalog(self):
