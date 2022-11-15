@@ -40,15 +40,15 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
         # Create a unique correlation_id to recognise the correct message when 
         # it comes back
         self.corr_id = str(uuid.uuid4())
-        msg = json.dumps(msg_dict)
-        self.channel.basic_publish(
-            exchange='',
+
+        self.publish_message(
             routing_key=routing_key,
+            msg_dict=msg_dict,
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
             ),
-            body=msg
+            exchange={'name':''}
         )
         self.connection.process_data_events(time_limit=None)
         return self.response
