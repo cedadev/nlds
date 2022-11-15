@@ -584,7 +584,7 @@ class MonitorConsumer(RabbitMQConsumer):
                 "sub_record": {
                     "id": sub_record.id,
                     "sub_id": sub_record.sub_id,
-                    "state": sub_record.state.value,
+                    "state": sub_record.state.name,
                     "retry_count": sub_record.retry_count,
                 },
                 "failed_files": [orm_to_dict(ff) for ff in sub_record.failed_files]
