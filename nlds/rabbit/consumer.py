@@ -33,6 +33,7 @@ from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES,
                              RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
                              RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
 from ..details import PathDetails
+from ..errors import RabbitRetryError
 
 logger = logging.getLogger("nlds.root")
 
@@ -392,7 +393,13 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # errors which can be caught without stopping consumption. 
         try:
             self.callback(ch, method, properties, body, connection)
-        except (ValueError, TypeError, KeyError, PermissionError) as e:
+        except (
+                ValueError, 
+                TypeError, 
+                KeyError, 
+                PermissionError,
+                RabbitRetryError,
+            ) as e:
             if self.print_tracebacks_fl:
                 tb = traceback.format_exc()
                 self.log(tb, self.RK_LOG_DEBUG)
