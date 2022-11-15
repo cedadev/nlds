@@ -100,7 +100,7 @@ class CatalogConsumer(RMQC):
 
         # get the holding_id from the metadata section of the message
         try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+            holding_id = int(body[self.MSG_META][self.MSG_HOLDING_ID])
         except KeyError:
             holding_id = None
 
@@ -115,7 +115,7 @@ class CatalogConsumer(RMQC):
         self.catalog.start_session()
 
         # get the holding from the database
-        if holding_label is None:
+        if holding_label is None and holding_id is None:
             holding = None
         else:
             try:
