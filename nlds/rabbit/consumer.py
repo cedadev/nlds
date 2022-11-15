@@ -283,7 +283,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         # Create new sub_id for each extra subrecord created.
         if self.sent_message_count >= 1:
-            body_json[self.MSG_DETAILS][self.MSG_SUB_ID] = uuid.uuid4()
+            body_json[self.MSG_DETAILS][self.MSG_SUB_ID] = str(uuid.uuid4())
         
         # Send message to next part of workflow
         body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
