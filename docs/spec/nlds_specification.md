@@ -1076,7 +1076,6 @@ User actions:
     - `--label=` (filter by the holding label)
     - `--time=datetime|(start datetime, end datetime)` (time the files were ingested)
     - `--path=` (filter by original path, can be a substring, regex or wildcard)
-    - `--transaction_id=` (find a holding that contains a transaction id)
 
 ### Update the holding metadata
   - `meta`
