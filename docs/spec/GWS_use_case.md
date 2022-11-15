@@ -14,6 +14,10 @@ JASMIN user can add or amend metadata to a holding on the NLDS. e.g. tags, label
 
 JASMIN user can verify their data (checksum).
 
+JASMIN user can specify which quota to use when copying to NLDS.
+
+JASMIN user can check the value of the remaining quota and the usage against the quota.
+
 Storing data on the tape requires quota remaining, allocated to GWS.  Quota is from the project portal.
 
 ? Other types of quota as well as GWS quota, for example a personal quota ?
