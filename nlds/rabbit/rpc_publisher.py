@@ -1,11 +1,11 @@
 import uuid
+import socket
 
 import pika
 from pika.frame import Method, Header
 from pika.channel import Channel
 from pika.connection import Connection
 
-import json
 from .publisher import RabbitMQPublisher
 
 class RabbitMQRPCPublisher(RabbitMQPublisher):
@@ -17,8 +17,14 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
         self.corr_id = None
 
     def declare_bindings(self) -> None:
-        # Declare an anonymous, exclusive queue to receive our reply back on
-        result = self.channel.queue_declare(queue='', exclusive=True)
+        # Declare an exclusive queue to receive our reply back on. Here we use
+        # the hostname of the machine running the Publisher so it is 
+        # (a) consistent upon redeclaring bindings, and (b) unique for multiple 
+        # instances of the server being run concurrently.
+        result = self.channel.queue_declare(
+            queue=socket.gethostname(), 
+            exclusive=True
+        )
         self.callback_queue = result.method.queue
 
         # Define a basic consumer with auto-acknowledgement of messages
