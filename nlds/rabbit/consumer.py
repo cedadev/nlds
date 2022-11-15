@@ -413,7 +413,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             )
         finally:
             # Ack message only if it has failed in the limited number of ways 
-            # above
+            # above, otherwise the exception is reraised and breaks the 
+            # consumption
             self.acknowledge_message(ch, method.delivery_tag, connection)
 
             
