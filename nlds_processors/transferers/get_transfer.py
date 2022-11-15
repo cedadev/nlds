@@ -106,7 +106,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                     self.log(f"Unable to download {download_path}, given target"
                              " path is inaccessible. Adding to retry-list.", 
                              self.RK_LOG_INFO)
-                    path_details.increment_retry(retry_reason="exception")
+                    path_details.increment_retry(retry_reason="inaccessible")
                     self.append_and_send(path_details, rk_retry, body_json, 
                                          list_type=FilelistType.retry)
                     continue
@@ -129,10 +129,12 @@ class GetTransferConsumer(BaseTransferConsumer):
                     bucket_name, object_name, str(download_path),
                 )
             except Exception as e:
-                self.log(f"Exception occurred: {e}", self.RK_LOG_DEBUG)
+                self.log(f"Download-time exception occurred: {e}", 
+                         self.RK_LOG_DEBUG)
                 self.log(f"Exception encountered during download, adding "
                          f"{object_name} to retry-list.", self.RK_LOG_INFO)
-                path_details.increment_retry(retry_reason="exception")
+                path_details.increment_retry(retry_reason="exception at download "
+                                                          "time")
                 self.append_and_send(path_details, rk_retry, body_json, 
                                      list_type=FilelistType.retry)
                 continue
