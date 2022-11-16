@@ -58,7 +58,7 @@ def default_rmq_body(test_uuid):
 
 @pytest.fixture
 def default_rmq_log_body():
-    return RMQP.create_log_message("message", "target")
+    return json.dumps(RMQP.create_log_message("message", "target"))
 
 @pytest.fixture
 def default_rmq_message_dict(default_rmq_body):
