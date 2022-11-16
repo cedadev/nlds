@@ -37,7 +37,8 @@ class StatusResponse(BaseModel):
                 status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
                 status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
                 status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
-                status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
+                status.HTTP_404_NOT_FOUND: {"model" : ResponseError},
+                status.HTTP_504_GATEWAY_TIMEOUT: {"model": ResponseError},
             }
         )
 async def get(token: str = Depends(authenticate_token),
@@ -125,11 +126,23 @@ async def get(token: str = Depends(authenticate_token),
     response = await rpc_publisher.call(
         msg_dict=msg_dict, routing_key=routing_key
     )
-    # convert byte response to str
-    response = response.decode()
+    # Check if response is valid or whether the request timed out
+    if response is not None:
+        # convert byte response to str
+        response = response.decode()
 
-    return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
-                        content = response)
+        return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
+                            content = response)
+    else:
+        response_error = ResponseError(
+            loc = ["status", "get"],
+            msg = "Monitoring service could not be reached in time.",
+            type = "Incomplete request."
+        )
+        raise HTTPException(
+            status_code = status.HTTP_504_GATEWAY_TIMEOUT,
+            detail = response_error.json()
+        )
 
 @router.put("/")
 async def put():

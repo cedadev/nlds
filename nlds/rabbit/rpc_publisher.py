@@ -9,12 +9,29 @@ from pika.connection import Connection
 from .publisher import RabbitMQPublisher
 
 class RabbitMQRPCPublisher(RabbitMQPublisher):
+    RPC_CONFIG_SECTION = "rpc_publisher"
+    RPC_TIME_LIMIT = "time_limit"
+    DEFAULT_CONFIG = {
+        RPC_TIME_LIMIT: 30, #seconds
+    }
 
     def __init__(self):
         super().__init__()
 
         self.response = None
         self.corr_id = None
+
+        rpc_config = self.DEFAULT_CONFIG
+
+        # Merge rpc config section into default (overriding defaults) if present
+        if self.RPC_CONFIG_SECTION in self.whole_config:
+            rpc_config = rpc_config | self.whole_config[self.RPC_CONFIG_SECTION]
+        
+        # Cast to int and error/exit if not 
+        try:
+            self.time_limit = int(rpc_config[self.RPC_TIME_LIMIT])
+        except ValueError:
+            raise ValueError(f"time_limit config option must be an integer.")
 
     def declare_bindings(self) -> None:
         # Declare an exclusive queue to receive our reply back on. Here we use
@@ -53,8 +70,9 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
+                expiration=f'{self.time_limit*1000}'
             ),
             exchange={'name':''}
         )
-        self.connection.process_data_events(time_limit=None)
+        self.connection.process_data_events(time_limit=self.time_limit)
         return self.response
