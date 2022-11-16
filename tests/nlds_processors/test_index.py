@@ -5,7 +5,7 @@ import pytest
 import functools
 
 from nlds.rabbit import publisher as publ
-import nlds.rabbit.consumer as cons
+import nlds.rabbit.statting_consumer as scons
 from nlds.details import PathDetails
 from nlds_processors.index import IndexerConsumer
 
@@ -142,7 +142,7 @@ def test_check_path_access(monkeypatch, default_indexer):
     sr = StatResult(int(0o100400), 0, 0)
 
     # If exists and has permissions, should be true
-    monkeypatch.setattr(cons, "check_permissions", 
+    monkeypatch.setattr(scons, "check_permissions", 
                         lambda uid, gid, access=None, stat_result=None: True)
     monkeypatch.setattr(Path, "exists", lambda *_: True)
     mp_exists = Path("test.py")
@@ -150,7 +150,7 @@ def test_check_path_access(monkeypatch, default_indexer):
 
     # If exists and doesn't have permissions, should be false as we're checking 
     # permissions!
-    monkeypatch.setattr(cons, "check_permissions", 
+    monkeypatch.setattr(scons, "check_permissions", 
                         lambda uid, gid, access=None, stat_result=None: False)
     monkeypatch.setattr(Path, "exists", lambda _: True)
     mp_no_exists = Path("test.py")
