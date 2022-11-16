@@ -59,15 +59,23 @@ async def get(token: str = Depends(authenticate_token),
     # prevent the querying of users other than themselves?
 
     # Validate state at this point.
+
     if state is not None:
-        if State.has_value(state):
-            state = State(state).value
-        elif State.has_name(state):
+        # Attempt to convert to int, if can't then put in upper case for name 
+        # comparison
+        try: 
+            state = int(state)
+        except (ValueError, TypeError):
+            state = state.upper()
+
+        if State.has_name(state):
             state = State[state].value
+        elif State.has_value(state):
+            state = State(state).value
         else:
             response_error = ResponseError(
                     loc = ["status", "get"],
-                    msg = "given State not valid.",
+                    msg = "Given State not valid.",
                     type = "Incomplete request."
                 )
             raise HTTPException(
@@ -82,7 +90,7 @@ async def get(token: str = Depends(authenticate_token),
         except ValueError:
             response_error = ResponseError(
                 loc = ["status", "get"],
-                msg = "given transaction_id not a valid uuid-4.",
+                msg = "Given transaction_id not a valid uuid-4.",
                 type = "Incomplete request."
             )
             raise HTTPException(
@@ -96,7 +104,7 @@ async def get(token: str = Depends(authenticate_token),
         except ValueError:
             response_error = ResponseError(
                 loc = ["status", "get"],
-                msg = "given sub_id not a valid uuid-4.",
+                msg = "Given sub_id not a valid uuid-4.",
                 type = "Incomplete request."
             )
             raise HTTPException(
@@ -113,7 +121,7 @@ async def get(token: str = Depends(authenticate_token),
             RMQP.MSG_TRANSACT_ID: transaction_id,
             RMQP.MSG_STATE: state,
             RMQP.MSG_SUB_ID: sub_id,
-            RMQP.MSG_RETRY: retry_count,
+            RMQP.MSG_RETRY_COUNT: retry_count,
             RMQP.MSG_USER_QUERY: user,
             RMQP.MSG_GROUP_QUERY: group,
         },

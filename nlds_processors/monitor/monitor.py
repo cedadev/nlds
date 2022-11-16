@@ -542,7 +542,7 @@ class MonitorConsumer(RabbitMQConsumer):
         # get the desired retry_count from the DETAILS section of the message
         try: 
             retry_count = int(body[self.MSG_DETAILS][self.MSG_RETRY_COUNT])
-        except KeyError:
+        except (KeyError, TypeError):
             self.log("Transaction sub-id not in message, continuing without.", 
                      self.RK_LOG_ERROR)
             retry_count = None
