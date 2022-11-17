@@ -1,6 +1,6 @@
 # SQLalchemy imports
 from sqlalchemy import create_engine, func, Enum
-from sqlalchemy.exc import ArgumentError, IntegrityError
+from sqlalchemy.exc import ArgumentError, IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from nlds_processors.catalog.catalog_models import Base, File, Holding,\
@@ -78,7 +78,8 @@ class Catalog():
 
 
     def get_holding(self, user: str, group: str, 
-                    label: str, holding_id: int=None) -> object:
+                    label: str, holding_id: int=None,
+                    tag: dict=None) -> object:
         """Get a holding from the database"""
         try:
             if holding_id:
@@ -86,13 +87,13 @@ class Catalog():
                     Holding.user == user,
                     Holding.group == group,
                     Holding.id == holding_id
-                ).one_or_none()
+                ).all()
             else:
                 holding = self.session.query(Holding).filter(
                     Holding.user == user,
                     Holding.group == group,
-                    Holding.label.like(label)
-                ).one_or_none()
+                    Holding.label.regexp_match(label)
+                ).all()
             # should we throw an error here if there is more than one holding
             # returned?
         except (IntegrityError, KeyError) as e:
@@ -106,25 +107,31 @@ class Catalog():
                     f"Holding with label:{label} not found for "
                     f"user:{user} and group:{group}."
                 )
+        except (OperationalError):
+            raise CatalogException(
+                f"Invalid regular expression:{label} when listing holding for "
+                f"user:{user} and group:{group}."
+            )
 
         return holding
 
 
-    def get_holdings(self, user: str, group: str,
-                     tags: dict=None) -> object:
-        """Plural version of get holding, where a specific label or id is NOT
-        given"""
-        try:
-            if tags:
-                holdings = {}
-            else:
-                holdings = self.session.query(Holding).filter(
-                    Holding.user == user,
-                    Holding.group == group                    
-                ).all()
-        except (IntegrityError, KeyError) as e:
-            pass
-        return holdings
+    # def get_holdings(self, user: str, group: str,
+    #                  tags: dict=None) -> object:
+    #     """Plural version of get holding, where a specific label or id is NOT
+    #     given"""
+    #     try:
+    #         if tags:
+    #             holdings = {}
+    #         else:
+    #             holdings = self.session.query(Holding).filter(
+    #                 Holding.user == user,
+    #                 Holding.group == group                    
+    #             ).all()
+    #     except (IntegrityError, KeyError) as e:
+    #         pass
+    #     return holdings
+
 
     def create_holding(self, user: str, group: str, label: str) -> object:
         """Create the new Holding with the label, user, group"""
@@ -177,8 +184,8 @@ class Catalog():
 
 
     def get_file(self, original_path: str, holding = None):
-        """Get file details from the database, given the original path of the 
-        file.  
+        """Get a single file details from the database, given the original path 
+        of the file.  
         An optional holding can be supplied to get the file details from a
         particular holding - e.g. with a holding label, or tags"""
         try:

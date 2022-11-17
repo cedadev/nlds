@@ -280,36 +280,44 @@ class CatalogConsumer(RMQC):
         self.catalog.start_session()
         # holding_label and holding_id is None means that more than one
         # holding wil be returned
-        if holding_label is None and holding_id is None:
-            holdings = self.catalog.get_holdings(
-                user, group, tag
-            )
-        # holding_label or holding_id not None means one holding will be
-        # returned, so use the (singular get_holding
-        else:
-            holding = self.catalog.get_holding(
-                user, group, holding_label, holding_id
-            )
-            if holding is None:
-                holdings = []
+        try:
+            if holding_label is None and holding_id is None:
+                holdings = self.catalog.get_holding(
+                    user, group, ".*", None, tag
+                )
+            # holding_label or holding_id not None means one holding will be
+            # returned, so use the (singular get_holding
             else:
-                holdings = [holding]
+                holdings = self.catalog.get_holding(
+                    user, group, holding_label, holding_id
+                )
+        except CatalogException as e:
+            # failed to get the holdings - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = []
+        else:
+            # fill the dictionary to generate JSON for the response
+            ret_list = []
+            for h in holdings:
+                ret_dict = {
+                    "id": h.id,
+                    "label": h.label,
+                    "user": h.user,
+                    "group": h.group,
+                    "tags": h.tags
+                }
+                ret_list.append(ret_dict)
+            # add the return list to successfully completed holding listings
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
+            # add a reason for the ret_list being empty
+            if len(ret_list) == 0:
+                body[self.MSG_DETAILS][self.MSG_FAILURE] = (
+                    f"label:{holding_label} not found."
+                )
 
-        # fill the dictionary to generate JSON for the response
-        ret_list = []
-        for h in holdings:
-            ret_dict = {
-                "id": h.id,
-                "label": h.label,
-                "user": h.user,
-                "group": h.group,
-                "tags": h.tags
-            }
-            ret_list.append(ret_dict)
         self.catalog.end_session()
-
-        # send the rpc return message
-        body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
+        # send the rpc return message for failed or success
         self.publish_message(
             properties.reply_to,
             msg_dict=body,

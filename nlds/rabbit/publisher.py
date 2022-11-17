@@ -114,6 +114,7 @@ class RabbitMQPublisher():
     MSG_STATE = "state"
     MSG_SUB_ID = "sub_id"
     MSG_RETRY = "retry"
+    MSG_FAILURE = "failure"
     MSG_USER_QUERY = "user_query"
     MSG_GROUP_QUERY = "group_query"
     MSG_RETRY_COUNT = "retry_count"
