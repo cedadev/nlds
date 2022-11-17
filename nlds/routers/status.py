@@ -144,14 +144,14 @@ async def get(token: str = Depends(authenticate_token),
             detail = response_error.json()
         )
 
-@router.put("/")
-async def put():
-    return {}
+# @router.put("/")
+# async def put():
+#     return {}
 
-@router.post("/")
-async def post():
-    return {}
+# @router.post("/")
+# async def post():
+#     return {}
 
-@router.delete("/")
-async def delete():
-    return {}
+# @router.delete("/")
+# async def delete():
+#     return {}
