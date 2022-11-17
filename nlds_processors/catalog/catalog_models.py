@@ -91,6 +91,8 @@ class File(Base):
 class Storage(enum.Enum):
     OBJECT_STORAGE = 1
     TAPE = 2
+    def to_json(self):
+        return ["OBJECT_STORAGE", "TAPE"][self.value]
 
 
 class Location(Base):

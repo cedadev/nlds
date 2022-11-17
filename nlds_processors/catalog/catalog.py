@@ -88,7 +88,7 @@ class Catalog():
 
 
     def get_holding(self, user: str, group: str, 
-                    label: str, holding_id: int=None,
+                    label: str=None, holding_id: int=None,
                     tag: dict=None) -> object:
         """Get a holding from the database"""
         try:
@@ -104,7 +104,10 @@ class Catalog():
                     Holding.group == group,
                     Holding.label.regexp_match(label)
                 ).all()
-                # check the user has permission to view the holding(s)
+            # check if at least one holding found
+            if len(holding) == 0:
+                raise KeyError
+            # check the user has permission to view the holding(s)
             for h in holding:
                 if not self._user_has_get_holding_permission(user, group, h):
                     raise CatalogException(
@@ -149,15 +152,20 @@ class Catalog():
         return holding
 
 
-    def get_transaction(self, transaction_id: str) -> object:
+    def get_transaction(self, id: int=None, transaction_id: str=None) -> object:
         """Get a transaction from the database"""
         try:
-            transaction = self.session.query(Transaction).filter(
-                Transaction.transaction_id == transaction_id
-            ).one_or_none()
+            if transaction_id:
+                transaction = self.session.query(Transaction).filter(
+                    Transaction.transaction_id == transaction_id
+                ).one_or_none()
+            else:
+                transaction = self.session.query(Transaction).filter(
+                    Transaction.id == id
+                ).one_or_none()
         except (IntegrityError, KeyError) as e:
             raise CatalogException(
-                f"Transaction with transaction_id {transaction_id} not found."
+                f"Transaction with transaction_id {id} not found."
             )
         return transaction
 
@@ -180,8 +188,9 @@ class Catalog():
             )
         return transaction
 
+
     def _user_has_get_file_permission(self, user: str, group: str,
-                                      file: object):
+                                      file: object) -> bool:
         """Check whether a user has permission to access a file.
         Later, when we implement the ROLES this function will be a lot more
         complicated!"""
@@ -196,22 +205,28 @@ class Catalog():
 
         return permitted
 
+
     def get_file(self, user: str, group: str,
-                 original_path: str, holding = None):
+                 original_path: str, holding: object = None) -> object:
         """Get a single file details from the database, given the original path 
         of the file.  
         An optional holding can be supplied to get the file details from a
         particular holding - e.g. with a holding label, or tags"""
         try:
+            # holding is a list, but there should only be one
             if holding:
                 file = self.session.query(File).filter(
                     Transaction.id == File.transaction_id,
-                    Transaction.holding_id == holding.id,
+                    Transaction.holding_id == holding[0].id,
                     File.original_path == original_path,
                 # this order->first by is in case multiple copies of a file
                 # have been added to the holding.  This will be illegal at some
                 # point, but for now this is an easy fix
                 ).order_by(Transaction.ingest_time.desc()).first()
+                err_msg = (
+                    f"File:{original_path} not found in holding:"
+                    f"{holding[0].label} for user:{user} in group:{group}."
+                )
             else:
                 # if no holding given then we want to return the most recent
                 # file with this original path
@@ -219,6 +234,14 @@ class Catalog():
                     File.original_path == original_path,
                     Transaction.id == File.transaction_id
                 ).order_by(Transaction.ingest_time.desc()).first()
+                err_msg = (
+                    f"File:{original_path} not found for user:{user} in "
+                    f"group:{group}."
+                )
+
+            # check the file was found
+            if not file:
+                raise CatalogException(err_msg)
 
             # check user has permission to access this file
             if not self._user_has_get_file_permission(user, group, file):
@@ -235,6 +258,49 @@ class Catalog():
                 err_msg = f"File with original path:{original_path} not found"
             raise CatalogException(err_msg)
         return file
+
+
+    def get_files(self, user: str, group: str, 
+                  holding_label: str=None, holding_id: int=None,
+                  path: str=None, tag: dict=None)->None:
+
+        """Get a multitue of file details from the database, given the user,
+        group, label, holding_id, path (can be regex) or tag(s)"""
+        # Nones are set to .* in the regexp matching
+        # get the matching holdings first, these match all but the path
+        if holding_label:
+            holding_search = holding_label
+        else:
+            holding_search = ".*"
+        holding = self.get_holding(
+            user, group, holding_search, holding_id, tag
+        )
+
+        if path:
+            search_path = path
+        else:
+            search_path = ".*"
+
+        # (permissions have been checked by get_holding)
+        file_list = []
+        try:
+            for h in holding:
+                file = self.session.query(File).filter(
+                    Transaction.id == File.transaction_id,
+                    Transaction.holding_id == h.id,
+                    File.original_path.regexp_match(search_path)
+                ).all()
+                for f in file:
+                    file_list.append(f)
+            # no files found
+            if len(file_list) == 0:
+                raise KeyError
+
+        except (IntegrityError, KeyError):
+            err_msg = f"File with original_path:{path} not found "
+            raise CatalogException(err_msg)
+        
+        return file_list
 
 
     def create_file(self, 

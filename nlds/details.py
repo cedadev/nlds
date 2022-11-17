@@ -26,6 +26,14 @@ class PathType(Enum):
     LINK_ABSOLUTE_PATH = 4
     NOT_RECOGNISED = 5
     UNINDEXED = 6
+    def __str__(self):
+        return ["FILE",
+                "DIRECTORY",
+                "LINK_UNCLASSIFIED",
+                "LINK_COMMON_PATH",
+                "LINK_ABSOLUTE_PATH",
+                "NOT_RECOGNISED",
+                "UNINDEXED"][self.value]
 
 class PathDetails(BaseModel):
     original_path: Optional[str]
