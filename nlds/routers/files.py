@@ -291,11 +291,11 @@ async def put(transaction_id: UUID,
                         content = response.json())
 
 
-@router.post("/")
-async def post():
-    return {}
+# @router.post("/")
+# async def post():
+#     return {}
 
 
-@router.delete("/")
-async def delete():
-    return {}
+# @router.delete("/")
+# async def delete():
+#     return {}
