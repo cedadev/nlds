@@ -74,6 +74,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     self.RK_INITIATE])
         self.publish_and_log_message(new_routing_key, body_json)
 
+        # Do initial monitoring update to ensure that a subrecord at ROUTING is 
+        # created before the first job 
         self.log(f"Updating monitor", self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_MONITOR_PUT, 
@@ -92,9 +94,19 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                  f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
 
+        # Do initial monitoring update to ensure that a subrecord at ROUTING is 
+        # created before the first job 
+        self.log(f"Updating monitor", self.RK_LOG_INFO)
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
+        body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
+        self.publish_and_log_message(new_routing_key, body_json)
+
 
     def _process_rk_list(self, body_json: dict) -> None:
         # forward to catalog_get
+        # NOTE: Is this needed now we're doing RPCs from the api-server?
         queue = f"{self.RK_CATALOG_GET}"
         new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_LIST])        
         self.log(f"Sending  message to {queue} queue with routing "
@@ -118,6 +130,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
     def _process_rk_transfer_put_complete(self, rk_parts: list, 
         body_json: dict) -> None:
         # forward confirmation to monitor
+        # NOTE: Not needed any more but might be good to keep as redundancy
         self.log(f"Sending message to {self.RK_MONITOR} queue", 
                     self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 
@@ -137,6 +150,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
     def _process_rk_catalog_put_complete(self, rk_parts: list,
         body_json: dict) -> None:
         # forward confirmation to monitor
+        # NOTE: Not needed any more but might be good to keep as redundancy
         self.log(f"Sending message to {self.RK_MONITOR} queue", 
                     self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 

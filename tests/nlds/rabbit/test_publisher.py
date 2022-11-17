@@ -58,7 +58,7 @@ def test_create_message(default_rmq_body):
 def test_publish_message(default_publisher):
     # Trying to send a message without first making a connection should fail. 
     with pytest.raises(AttributeError):
-        default_publisher.publish_message("test.rk", "test message")
+        default_publisher.publish_message("test.rk", {"body": "test message"})
 
     # Attempting to establish a connection with the template config should also 
     # fail with a socket error

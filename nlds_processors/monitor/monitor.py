@@ -304,17 +304,9 @@ class MonitorConsumer(RabbitMQConsumer):
                          self.RK_LOG_ERROR)
                 return
 
-            # Check whether all jobs haven't reached their final, non-complete 
-            # state or are retrying
-            all_jobs_finished_fl = not any(
-                (
-                    sr.state not in State.get_final_states()
-                    or 
-                    sr.retry_count != 0
-                ) 
-                for sr in sub_records
-            )
-            if all_jobs_finished_fl:
+            # Check whether all jobs have reached their final, but not-complete, 
+            # state.
+            if all([sr.has_finished() for sr in sub_records]):
                 # If all have, then set all non-failed jobs to complete
                 self.log("All sub_records now in their final state, bumping "
                          "everything to COMPLETE if not already FAILED", 
@@ -328,8 +320,8 @@ class MonitorConsumer(RabbitMQConsumer):
                          self.RK_LOG_INFO)
 
         except IntegrityError:
-            self.log("IntegrityError raised when attempting to get/create "
-                     "sub_record", self.RK_LOG_WARNING) 
+            self.log("IntegrityError raised when attempting to get sub_records",
+                     self.RK_LOG_WARNING) 
 
     def _monitor_put(self, body: Dict[str, str]) -> None:
         """
@@ -524,11 +516,11 @@ class MonitorConsumer(RabbitMQConsumer):
                 state = State[state]
             else:
                 self.log("State found in message invalid, continuing without.", 
-                        self.RK_LOG_ERROR)
+                         self.RK_LOG_INFO)
                 state = None
         except KeyError:
             self.log("Required state not in message, continuing without.", 
-                     self.RK_LOG_ERROR)
+                     self.RK_LOG_INFO)
             state = None
         
         # get the desired sub_record id from the details section of the message
@@ -536,21 +528,22 @@ class MonitorConsumer(RabbitMQConsumer):
             sub_id = body[self.MSG_DETAILS][self.MSG_SUB_ID]
         except KeyError:
             self.log("Transaction sub-id not in message, continuing without.", 
-                     self.RK_LOG_ERROR)
+                     self.RK_LOG_INFO)
             sub_id = None
 
         # get the desired retry_count from the DETAILS section of the message
         try: 
             retry_count = int(body[self.MSG_DETAILS][self.MSG_RETRY_COUNT])
-        except KeyError:
+        except (KeyError, TypeError):
             self.log("Transaction sub-id not in message, continuing without.", 
-                     self.RK_LOG_ERROR)
+                     self.RK_LOG_INFO)
             retry_count = None
 
         # create a SQL alchemy session
         session = Session(self.db_engine)
 
         # generate a query of both tables to apply filters to
+        self.log("Starting query construction", self.RK_LOG_INFO)
         query = session.query(TransactionRecord, SubRecord).join(SubRecord)
         
         # apply filters one at a time if present. Results in a big 'and' query 
@@ -622,9 +615,10 @@ class MonitorConsumer(RabbitMQConsumer):
 
         # check whether this is a GET or a PUT
         if (api_method == self.RK_STAT):
-            self.log("Starting put into monitoring db.", self.RK_LOG_INFO)
+            self.log("Starting stat from monitoring db.", self.RK_LOG_INFO)
             self._monitor_get(body, properties)
-        if api_method in (self.RK_PUT, self.RK_PUTLIST, self.RK_GET, self.RK_GETLIST):
+        elif api_method in (self.RK_PUT, self.RK_PUTLIST, 
+                            self.RK_GET, self.RK_GETLIST):
             # Verify routing key is appropriate
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
@@ -632,7 +626,7 @@ class MonitorConsumer(RabbitMQConsumer):
                 self.log("Routing key inappropriate length, exiting callback.", 
                         self.RK_LOG_ERROR)
                 return
-            # NOTE: Could check that rk_parts[2] is start here? No particular 
+            # NOTE: Could check that rk_parts[2] is 'start' here? No particular 
             # need as the exchange does that for us and merely having three 
             # parts is enough to tell that it didn't come from the api-server
             self.log("Starting put into monitoring db.", self.RK_LOG_INFO)

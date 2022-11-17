@@ -140,8 +140,8 @@ class CatalogConsumer(RMQC):
 
         # build the Pathlist from each file
         # two lists: completed PathDetails, failed PathDetails
-        complete_pathlist = []
-        failed_pathlist = []
+        _complete_pathlist = []
+        _failed_pathlist = []
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
@@ -181,43 +181,65 @@ class CatalogConsumer(RMQC):
                         link_path = file.link_path
                     )
                 except CatalogException as e:
-                    self.log(e.message, self.RK_LOG_ERROR)
-                    failed_pathlist.append(file_details)
+                    if file_details.retries > self.max_retries:
+                        self.failedlist.append(file_details)
+                    else:
+                        self.retrylist.append(file_details)
+                        file_details.increment_retry(
+                            retry_reason=f"{e.message}"
+                        )
+                    self.log(e.message, RMQC.RK_LOG_ERROR)
                     continue
-                complete_pathlist.append(new_file)
+                self.completelist.append(new_file)
 
             except CatalogException as e:
-                self.log(e.message, self.RK_LOG_ERROR)
-                failed_pathlist.append(file_details)
+                if file_details.retries > self.max_retries:
+                    self.failedlist.append(file_details)
+                else:
+                    file_details.increment_retry(
+                        retry_reason=f"{e.message}"
+                    )
+                    self.retrylist.append(file_details)
+                self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
 
-        # send the succeeded and failed messages back to the NLDS worker Q
+        # log the successful and non-successful catalog puts
         # SUCCESS
-        if len(complete_pathlist) > 0:
+        if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin,
                                     self.RK_CATALOG_GET, 
                                     self.RK_COMPLETE])
             self.log(
-                f"Sending completed PathList from CATALOG_GET {complete_pathlist}",
+                f"Sending completed PathList from CATALOG_PUT {self.completelist}",
                 self.RK_LOG_DEBUG
             )
-            body[self.MSG_DATA][self.MSG_FILELIST] = complete_pathlist
-            self.publish_message(rk_complete, body)
-
+            self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_GETTING)
+        # RETRY
+        if len(self.retrylist) > 0:
+            rk_retry = ".".join([rk_origin,
+                                 self.RK_CATALOG_GET, 
+                                 self.RK_START])
+            self.log(
+                f"Sending retry PathList from CATALOG_PUT {self.retrylist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
+                               state=State.CATALOG_GETTING)
         # FAILED
-        if len(failed_pathlist) > 0:
+        if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin,
                                   self.RK_CATALOG_GET, 
                                   self.RK_FAILED])
             self.log(
-                f"Sending failed PathList from CATALOG_GET {failed_pathlist}",
+                f"Sending failed PathList from CATALOG_PUT {self.failedlist}",
                 self.RK_LOG_DEBUG
             )
-            body[self.MSG_DATA][self.MSG_FILELIST] = failed_pathlist
-            self.publish_message(rk_failed, body)
+            self.send_pathlist(self.failedlist, rk_failed, body, 
+                               mode="failed")
+
         # stop db transistions and commit
         self.catalog.end_session()
-
 
     def _catalog_list(self, body: dict, 
                       method: Method, properties: Header) -> None:
@@ -431,8 +453,6 @@ class CatalogConsumer(RMQC):
             self.logger(e.message, RMQC.RK_LOG_ERROR)
             return
 
-        complete_pathlist = []
-        failed_pathlist = []
         # loop over the filelist
         for f in filelist:
             # convert to PathDetails class
@@ -463,6 +483,9 @@ class CatalogConsumer(RMQC):
                 if pd.retries > self.max_retries:
                     self.failedlist.append(pd)
                 else:
+                    pd.increment_retry(
+                        retry_reason=f"{e.message}"
+                    )
                     self.retrylist.append(pd)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue

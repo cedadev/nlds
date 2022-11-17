@@ -40,6 +40,17 @@ class SubRecord(Base):
     transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
                                    index=True, nullable=False)
 
+    def has_finished(self):
+        """Convenience method for checking whether a given SubRecord is in a 
+        'final' state, i.e. is no longer going ot change and the transaction can 
+        therefore be marked as COMPLETE.
+
+        Checks whether all states have gotten to the final stage of a workflow 
+        (CATALOG_PUT or TRANSFER_GET) and are not retrying, OR have failed. This
+        should cover all bases. 
+        """
+        return ((self.state in State.get_final_states() and self.retry_count == 0) 
+                or self.state == State.FAILED)
 
 class FailedFile(Base):
     __tablename__ = "failed_file"
