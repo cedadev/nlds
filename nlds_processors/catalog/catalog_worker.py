@@ -296,6 +296,60 @@ class CatalogConsumer(RMQC):
         )
 
 
+    def _catalog_find(self, body: dict,
+                      method: Method, properties: Header) -> None:
+        """List the user's files"""
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
+
+        # get the holding label from the details section of the message
+        # could (legit) be None
+        try: 
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            holding_label = None
+
+        # get the path from the detaisl section of the message
+        try:
+            path = body[self.MSG_META][self.MSG_PATH]
+        except KeyError:
+            path = None
+
+        # get the tags from the details sections of the message
+        try:
+            tag = body[self.MSG_META][self.MSG_TAG]
+        except KeyError:
+            tag = None
+
+        print(user, group, holding_id, holding_label, path, tag)
+        ret_list = []
+        # send the rpc return message
+        body[self.MSG_DATA][self.MSG_FILE_LIST] = ret_list
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )
+
+
     def _catalog_put(self, body: dict, rk_origin: str) -> None:
         """Put a file record into the catalog - end of a put transaction"""
         # get the filelist from the data section of the message
@@ -516,6 +570,10 @@ class CatalogConsumer(RMQC):
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method
             self._catalog_list(body, method, properties)
+
+        elif (api_method == self.RK_FIND):
+            # don't need to split any routing key for an RPC method
+            self._catalog_find(body, method, properties)
 
 
 def main():

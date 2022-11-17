@@ -116,7 +116,7 @@ class Catalog():
         given"""
         try:
             if tags:
-                pass
+                holdings = {}
             else:
                 holdings = self.session.query(Holding).filter(
                     Holding.user == user,
