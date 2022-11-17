@@ -3,8 +3,8 @@
 
 """
 __author__ = 'Neil Massey and Jack Leland'
-__date__ = '30 Nov 2021'
-__copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
+__date__ = '16 Nov 2022'
+__copyright__ = 'Copyright 2022 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
@@ -26,14 +26,27 @@ from ..authenticators.authenticate_methods import authenticate_token, \
 
 router = APIRouter()
 
-class HoldingResponse(BaseModel):
-    holdings: List[Dict]
+class FindResponse(BaseModel):
+    files: List[Dict]
+
+def process_tag(tag):
+    try:
+        tag_dict = {}
+        # strip whitespace and "{" "}" symbolsfirst
+        tag_list = (tag.replace(" ","").replace("{", "").replace("}", "")
+                    ).split(",")
+        for tag_i in tag_list:
+            tag_kv = tag_i.split(":")
+            tag_dict[tag_kv[0]] = tag_kv[1]
+    except: # what exceptions might be raised here?
+        raise ValueError
+    return tag_dict
 
 ############################ GET METHOD ############################
 @router.get("/",
             status_code = status.HTTP_202_ACCEPTED,
             responses = {
-                status.HTTP_202_ACCEPTED: {"model" : HoldingResponse},
+                status.HTTP_202_ACCEPTED: {"model" : FindResponse},
                 status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
                 status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
                 status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
@@ -46,12 +59,13 @@ async def get(token: str = Depends(authenticate_token),
               group: str = Depends(authenticate_group),
               label: Optional[str] = None,
               holding_id: Optional[int] = None,
+              path: Optional[str] = None,
               tag: Optional[str] = None
               ):
     # create the message dictionary
     
-    routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_LIST}"
-    api_action = f"{RMQP.RK_LIST}"
+    routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_FIND}"
+    api_action = f"{RMQP.RK_FIND}"
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_USER: user,
@@ -68,18 +82,12 @@ async def get(token: str = Depends(authenticate_token),
     if (holding_id):
         meta_dict[RMQP.MSG_HOLDING_ID] = holding_id
     if (tag):
-        tag_dict = {}
         # convert the string into a dictionary
         try:
-            # strip whitespace and "{" "}" symbolsfirst
-            tag_list = (tag.replace(" ","").replace("{", "").replace("}", "")
-                       ).split(",")
-            for tag_i in tag_list:
-                tag_kv = tag_i.split(":")
-                tag_dict[tag_kv[0]] = tag_kv[1]
-        except: # what exception might be raised here?
+            tag_dict = process_tag(tag)
+        except ValueError:
             response_error = ResponseError(
-                loc = ["holdings", "get"],
+                loc = ["find", "get"],
                 msg = "tag cannot be processed.",
                 type = "Incomplete request."
             )
@@ -89,6 +97,8 @@ async def get(token: str = Depends(authenticate_token),
             )
         else:
             meta_dict[RMQP.MSG_TAG] = tag_dict
+    if (path):
+        meta_dict[RMQP.MSG_PATH] = path
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
 
@@ -114,15 +124,3 @@ async def get(token: str = Depends(authenticate_token),
             status_code = status.HTTP_504_GATEWAY_TIMEOUT,
             detail = response_error.json()
         )
-
-@router.put("/")
-async def put():
-    return {}
-
-@router.post("/")
-async def post():
-    return {}
-
-@router.delete("/")
-async def delete():
-    return {}
