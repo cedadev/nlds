@@ -77,6 +77,16 @@ class Catalog():
         self.session = None
 
 
+    def _user_has_get_holding_permission(self, user: str, group: str,
+                                         holding: object):
+        """Check whether a user has permission to view this holding.
+        When we implement ROLES this will be more complicated."""
+        permitted = True
+        permitted &= holding.user == user
+        permitted &= holding.group == group
+        return permitted
+
+
     def get_holding(self, user: str, group: str, 
                     label: str, holding_id: int=None,
                     tag: dict=None) -> object:
@@ -94,8 +104,13 @@ class Catalog():
                     Holding.group == group,
                     Holding.label.regexp_match(label)
                 ).all()
-            # should we throw an error here if there is more than one holding
-            # returned?
+                # check the user has permission to view the holding(s)
+            for h in holding:
+                if not self._user_has_get_holding_permission(user, group, h):
+                    raise CatalogException(
+                       f"User:{user} in group:{group} does not have permission "
+                       f"to access the holding with label:{h.label}."
+                    )
         except (IntegrityError, KeyError) as e:
             if holding_id:
                 raise CatalogException(
@@ -114,23 +129,6 @@ class Catalog():
             )
 
         return holding
-
-
-    # def get_holdings(self, user: str, group: str,
-    #                  tags: dict=None) -> object:
-    #     """Plural version of get holding, where a specific label or id is NOT
-    #     given"""
-    #     try:
-    #         if tags:
-    #             holdings = {}
-    #         else:
-    #             holdings = self.session.query(Holding).filter(
-    #                 Holding.user == user,
-    #                 Holding.group == group                    
-    #             ).all()
-    #     except (IntegrityError, KeyError) as e:
-    #         pass
-    #     return holdings
 
 
     def create_holding(self, user: str, group: str, label: str) -> object:
@@ -182,8 +180,24 @@ class Catalog():
             )
         return transaction
 
+    def _user_has_get_file_permission(self, user: str, group: str,
+                                      file: object):
+        """Check whether a user has permission to access a file.
+        Later, when we implement the ROLES this function will be a lot more
+        complicated!"""
+        holding = self.session.query(Holding).filter(
+            Transaction.id == file.transaction_id,
+            Holding.id == Transaction.holding_id
+        ).all()
+        permitted = True
+        for h in holding:
+            permitted &= h.user == user
+            permitted &= h.group == group
 
-    def get_file(self, original_path: str, holding = None):
+        return permitted
+
+    def get_file(self, user: str, group: str,
+                 original_path: str, holding = None):
         """Get a single file details from the database, given the original path 
         of the file.  
         An optional holding can be supplied to get the file details from a
@@ -194,7 +208,10 @@ class Catalog():
                     Transaction.id == File.transaction_id,
                     Transaction.holding_id == holding.id,
                     File.original_path == original_path,
-                ).one_or_none()
+                # this order->first by is in case multiple copies of a file
+                # have been added to the holding.  This will be illegal at some
+                # point, but for now this is an easy fix
+                ).order_by(Transaction.ingest_time.desc()).first()
             else:
                 # if no holding given then we want to return the most recent
                 # file with this original path
@@ -202,12 +219,20 @@ class Catalog():
                     File.original_path == original_path,
                     Transaction.id == File.transaction_id
                 ).order_by(Transaction.ingest_time.desc()).first()
-        except:  # which exceptions???
+
+            # check user has permission to access this file
+            if not self._user_has_get_file_permission(user, group, file):
+                raise CatalogException(
+                    f"User:{user} in group:{group} does not have permission to "
+                    f"access the file with original path:{original_path}."
+                )
+
+        except (IntegrityError, KeyError) as e:  # which exceptions???
             if holding:
-                err_msg = (f"File with original path {original_path} not found "
-                        f"in holding {holding.label}")
+                err_msg = (f"File with original path:{original_path} not found "
+                           f"in holding:{holding.label}")
             else:
-                err_msg = f"File with original path {original_path} not found"
+                err_msg = f"File with original path:{original_path} not found"
             raise CatalogException(err_msg)
         return file
 

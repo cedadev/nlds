@@ -77,12 +77,14 @@ class CatalogConsumer(RMQC):
             self.RETRY_DELAYS
         )
 
+
     def reset(self):
         super().reset()
 
         self.completelist = []
         self.retrylist = []
         self.failedlist = []
+
 
     def _catalog_get(self, body: dict, rk_origin: str) -> None:
         """Get the details for each file in a filelist and send it to the 
@@ -147,6 +149,7 @@ class CatalogConsumer(RMQC):
             try:
                 # get the file first
                 file = self.catalog.get_file(
+                    user, group,
                     file_details.original_path, holding
                 )
                 if file is None:
@@ -210,7 +213,7 @@ class CatalogConsumer(RMQC):
                                     self.RK_CATALOG_GET, 
                                     self.RK_COMPLETE])
             self.log(
-                f"Sending completed PathList from CATALOG_PUT {self.completelist}",
+                f"Sending completed PathList from CATALOG_GET {self.completelist}",
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.completelist, rk_complete, body, 
@@ -221,7 +224,7 @@ class CatalogConsumer(RMQC):
                                  self.RK_CATALOG_GET, 
                                  self.RK_START])
             self.log(
-                f"Sending retry PathList from CATALOG_PUT {self.retrylist}",
+                f"Sending retry PathList from CATALOG_GET {self.retrylist}",
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
@@ -232,7 +235,7 @@ class CatalogConsumer(RMQC):
                                   self.RK_CATALOG_GET, 
                                   self.RK_FAILED])
             self.log(
-                f"Sending failed PathList from CATALOG_PUT {self.failedlist}",
+                f"Sending failed PathList from CATALOG_GET {self.failedlist}",
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.failedlist, rk_failed, body, 
@@ -240,6 +243,7 @@ class CatalogConsumer(RMQC):
 
         # stop db transistions and commit
         self.catalog.end_session()
+
 
     def _catalog_list(self, body: dict, 
                       method: Method, properties: Header) -> None:
