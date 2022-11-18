@@ -1,18 +1,22 @@
 import uuid
 import socket
 
+from retry import retry
 import pika
 from pika.frame import Method, Header
 from pika.channel import Channel
 from pika.connection import Connection
+from pika.exceptions import ChannelClosedByBroker
 
 from .publisher import RabbitMQPublisher
 
 class RabbitMQRPCPublisher(RabbitMQPublisher):
     RPC_CONFIG_SECTION = "rpc_publisher"
     RPC_TIME_LIMIT = "time_limit"
+    RPC_QUEUE_EXCLUSIVITY = "queue_exclusivity_fl"
     DEFAULT_CONFIG = {
         RPC_TIME_LIMIT: 30, #seconds
+        RPC_QUEUE_EXCLUSIVITY: True,
     }
 
     def __init__(self):
@@ -20,6 +24,7 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
 
         self.response = None
         self.corr_id = None
+        self.queue_suffix = 0
 
         rpc_config = self.DEFAULT_CONFIG
 
@@ -32,24 +37,34 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
             self.time_limit = int(rpc_config[self.RPC_TIME_LIMIT])
         except ValueError:
             raise ValueError(f"time_limit config option must be an integer.")
+        try:
+            self.q_exclusivity_fl = bool(rpc_config[self.RPC_QUEUE_EXCLUSIVITY])
+        except (ValueError, TypeError):
+            raise ValueError(f"The {self.RPC_QUEUE_EXCLUSIVITY} config option "
+                             "must be True or False.")
 
+    @retry(ChannelClosedByBroker, tries=5, backoff=1, delay=0)
     def declare_bindings(self) -> None:
         # Declare an exclusive queue to receive our reply back on. Here we use
         # the hostname of the machine running the Publisher so it is 
         # (a) consistent upon redeclaring bindings, and (b) unique for multiple 
         # instances of the server being run concurrently.
-        result = self.channel.queue_declare(
-            queue=socket.gethostname(), 
-            exclusive=True
-        )
-        self.callback_queue = result.method.queue
+        try:
+            result = self.channel.queue_declare(
+                queue=f"{socket.gethostname()}_{self.queue_suffix}", 
+                exclusive=self.q_exclusivity_fl,
+            )
+            self.callback_queue = result.method.queue
 
-        # Define a basic consumer with auto-acknowledgement of messages
-        self.channel.basic_consume(
-            queue=self.callback_queue,
-            on_message_callback=self.callback,
-            auto_ack=True
-        )
+            # Define a basic consumer with auto-acknowledgement of messages
+            self.channel.basic_consume(
+                queue=self.callback_queue,
+                on_message_callback=self.callback,
+                auto_ack=True
+            )
+        except ChannelClosedByBroker as e:
+            self.queue_suffix += 1
+            raise e
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes):
