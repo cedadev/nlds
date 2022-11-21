@@ -1,5 +1,6 @@
 import uuid
 import socket
+import os
 
 from retry import retry
 import pika
@@ -15,7 +16,7 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
     RPC_TIME_LIMIT = "time_limit"
     RPC_QUEUE_EXCLUSIVITY = "queue_exclusivity_fl"
     DEFAULT_CONFIG = {
-        RPC_TIME_LIMIT: 30, #seconds
+        RPC_TIME_LIMIT: 30, # seconds
         RPC_QUEUE_EXCLUSIVITY: True,
     }
 
@@ -46,12 +47,19 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
     @retry(ChannelClosedByBroker, tries=5, backoff=1, delay=0)
     def declare_bindings(self) -> None:
         # Declare an exclusive queue to receive our reply back on. Here we use
-        # the hostname of the machine running the Publisher so it is 
-        # (a) consistent upon redeclaring bindings, and (b) unique for multiple 
-        # instances of the server being run concurrently.
+        # the hostname of the machine running the Publisher and the pid of the 
+        # thread/process so it is (a) consistent upon redeclaring bindings, and 
+        # (b) unique for multiple instances of the server being run concurrently
+        
+        # Also include a failsafe for appending a number if somehow multiple 
+        # queues of the same name are created. 
+        queue_name = f"{socket.gethostname()}_{os.getpid()}"
+        if self.queue_suffix > 0:
+            queue_name = f"{queue_name}_{self.queue_suffix}"
+
         try:
             result = self.channel.queue_declare(
-                queue=f"{socket.gethostname()}_{self.queue_suffix}", 
+                queue=queue_name, 
                 exclusive=self.q_exclusivity_fl,
             )
             self.callback_queue = result.method.queue
