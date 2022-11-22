@@ -16,7 +16,7 @@ Actors: CEDA Archive manager, data scientists setting policy, users retriving
     - Tidy cache copies - partial copies on performance storage
     - Fixity Audit
     - Migration - copy and remove (could be archive, cache or recovery copies)
-    - Perge - remove data. Needs to be carefully controlled.
+    - Purge - remove data. Needs to be carefully controlled.
     - Report on Space on each media system.
     - Report on comformace to media policy.
 
