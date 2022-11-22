@@ -5,6 +5,7 @@ Purpose: storage management for the CEDA Archive for tape and object store
 Actors: CEDA Archive manager, data scientists setting policy, users retriving 
 
  - Data to archive tape/ob
+ 
     Make archive copies - exact copy of what is in the archive for redundancy 
     and Recovery copies - copies with deleted and modified (Backup)
     - Queue data to go to tape/object store via a policy set by data scientist as data is deposited.  
