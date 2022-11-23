@@ -243,10 +243,6 @@ async def put(transaction_id: UUID,
     # Convert filepath or filelist to lists
     contents = filemodel.get_cleaned_list()
 
-    # # TEST OF RPC CLIENT
-    # test_response = await rpc_client.call(msg="from api-server.put command.",
-    #                                       queue="test_q")
-
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
