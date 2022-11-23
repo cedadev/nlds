@@ -23,24 +23,12 @@ from ..errors import ResponseError
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
+from ..utils.process_tag import process_tag
 
 router = APIRouter()
 
 class FindResponse(BaseModel):
     files: List[Dict]
-
-def process_tag(tag):
-    try:
-        tag_dict = {}
-        # strip whitespace and "{" "}" symbolsfirst
-        tag_list = (tag.replace(" ","").replace("{", "").replace("}", "")
-                    ).split(",")
-        for tag_i in tag_list:
-            tag_kv = tag_i.split(":")
-            tag_dict[tag_kv[0]] = tag_kv[1]
-    except: # what exceptions might be raised here?
-        raise ValueError
-    return tag_dict
 
 ############################ GET METHOD ############################
 @router.get("/",
