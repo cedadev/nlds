@@ -12,12 +12,16 @@ from fastapi import FastAPI
 
 from .nlds_setup import API_VERSION
 
-from .routers import list, files, probe, status, find
+from .routers import list, files, probe, status, find, meta
 
 nlds = FastAPI()
 
 PREFIX = "/api/" + API_VERSION
-
+nlds.include_router(
+    meta.router,
+    tags = ["meta",],
+    prefix = PREFIX + "/catalog/meta"
+)
 nlds.include_router(
     list.router,
     tags = ["list",],
