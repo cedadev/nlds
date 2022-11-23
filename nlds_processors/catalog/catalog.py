@@ -152,6 +152,50 @@ class Catalog():
         return holding
 
 
+    def modify_holding(self, user: str, group:str, 
+                       holding_label: str=None, holding_id: int=None, 
+                       tag: dict=None,
+                       new_label: str=None, new_tag: dict=None):
+        """Find a holding and modify the information in it"""
+        holdings=None
+        if holding_label or holding_id:
+            holdings = self.get_holding(
+                user, group, holding_label, holding_id
+            )
+
+        if not holdings or len(holdings) == 0:
+            raise CatalogException(
+                "Holding not found: holding_id or label not specified"
+            )
+        
+        if len(holdings) > 1:
+            if holding_label:
+                raise CatalogException(
+                    f"More than one holding returned for label:{holding_label}"
+                )
+            elif holding_id:
+                raise CatalogException(
+                    f"More than one holding returned for holding_id:{holding_id}"
+                )
+        else:
+            holding = holdings[0]
+
+        # change the label if a new_label supplied
+        if new_label:
+            try:
+                holding.label = new_label
+                self.session.flush()
+                self.commit_required = True
+            except IntegrityError:
+                raise CatalogException(
+                    f"Cannot change holding with label:{holding_label} and "
+                    f"holding_id:{holding_id} to new label:{new_label}. New "
+                    f"label:{new_label} already in use by another holding."
+                )
+
+        return holding
+
+
     def get_transaction(self, id: int=None, transaction_id: str=None) -> object:
         """Get a transaction from the database"""
         try:

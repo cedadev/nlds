@@ -86,360 +86,6 @@ class CatalogConsumer(RMQC):
         self.failedlist = []
 
 
-    def _catalog_get(self, body: dict, rk_origin: str) -> None:
-        """Get the details for each file in a filelist and send it to the 
-        exchange to be processed by the transfer processor"""
-        # get the filelist from the data section of the message
-        try:
-            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
-        except KeyError as e:
-            self.log(f"Invalid message contents, filelist should be in the data"
-                     f"section of the message body.",
-                     self.RK_LOG_ERROR)
-            return
-
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = int(body[self.MSG_META][self.MSG_HOLDING_ID])
-        except KeyError:
-            holding_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # start the database transactions
-        self.catalog.start_session()
-
-        # get the holding from the database
-        if holding_label is None and holding_id is None:
-            holding = None
-        else:
-            try:
-                holding = self.catalog.get_holding(
-                    user, group, holding_label, holding_id
-                )
-            except CatalogException as e:
-                self.log(e.message, RMQC.RK_LOG_ERROR)
-                return
-
-        for f in filelist:
-            file_details = PathDetails.from_dict(f)
-            try:
-                # get the file first
-                file = self.catalog.get_file(
-                    user, group,
-                    file_details.original_path, holding
-                )
-                if file is None:
-                    raise CatalogException(
-                        f"Could not find file with original path "
-                        f"{file_details.original_path}"
-                    )
-                # now get the location so we can get where it is stored
-                try:
-                    location = self.catalog.get_location(
-                        file, Storage.OBJECT_STORAGE
-                    )
-                    if location is None:
-                        raise CatalogException(
-                            f"Could not find location for file with original path "
-                            f"{file_details.original_path}"
-                        )         
-                    object_name = ("nlds." +
-                                location.root + ":" + 
-                                location.path)
-                    access_time = location.access_time.timestamp()
-                    # create a new PathDetails with all the info from the DB
-                    new_file = PathDetails(
-                        original_path = file.original_path,
-                        object_name = object_name,
-                        size = file.size,
-                        user = file.user,
-                        group = file.group,
-                        permissions = file.file_permissions,                    
-                        access_time = access_time,
-                        path_type = file.path_type,
-                        link_path = file.link_path
-                    )
-                except CatalogException as e:
-                    if file_details.retries > self.max_retries:
-                        self.failedlist.append(file_details)
-                    else:
-                        self.retrylist.append(file_details)
-                        file_details.increment_retry(
-                            retry_reason=f"{e.message}"
-                        )
-                    self.log(e.message, RMQC.RK_LOG_ERROR)
-                    continue
-                self.completelist.append(new_file)
-
-            except CatalogException as e:
-                if file_details.retries > self.max_retries:
-                    self.failedlist.append(file_details)
-                else:
-                    file_details.increment_retry(
-                        retry_reason=f"{e.message}"
-                    )
-                    self.retrylist.append(file_details)
-                self.log(e.message, RMQC.RK_LOG_ERROR)
-                continue
-
-        # log the successful and non-successful catalog puts
-        # SUCCESS
-        if len(self.completelist) > 0:
-            rk_complete = ".".join([rk_origin,
-                                    self.RK_CATALOG_GET, 
-                                    self.RK_COMPLETE])
-            self.log(
-                f"Sending completed PathList from CATALOG_GET {self.completelist}",
-                self.RK_LOG_DEBUG
-            )
-            self.send_pathlist(self.completelist, rk_complete, body, 
-                               state=State.CATALOG_GETTING)
-        # RETRY
-        if len(self.retrylist) > 0:
-            rk_retry = ".".join([rk_origin,
-                                 self.RK_CATALOG_GET, 
-                                 self.RK_START])
-            self.log(
-                f"Sending retry PathList from CATALOG_GET {self.retrylist}",
-                self.RK_LOG_DEBUG
-            )
-            self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
-                               state=State.CATALOG_GETTING)
-        # FAILED
-        if len(self.failedlist) > 0:
-            rk_failed = ".".join([rk_origin,
-                                  self.RK_CATALOG_GET, 
-                                  self.RK_FAILED])
-            self.log(
-                f"Sending failed PathList from CATALOG_GET {self.failedlist}",
-                self.RK_LOG_DEBUG
-            )
-            self.send_pathlist(self.failedlist, rk_failed, body, 
-                               mode="failed")
-
-        # stop db transistions and commit
-        self.catalog.end_session()
-
-
-    def _catalog_list(self, body: dict, 
-                      method: Method, properties: Header) -> None:
-        """List the users holdings"""
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # get the tags from the details sections of the message
-        try:
-            tag = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            tag = None
-
-        self.catalog.start_session()
-        # holding_label and holding_id is None means that more than one
-        # holding wil be returned
-        try:
-            if holding_label is None and holding_id is None:
-                holdings = self.catalog.get_holding(
-                    user, group, ".*", None, tag
-                )
-            # holding_label or holding_id not None
-            else:
-                holdings = self.catalog.get_holding(
-                    user, group, holding_label, holding_id
-                )
-        except CatalogException as e:
-            # failed to get the holdings - send a return message saying so
-            self.log(e.message, self.RK_LOG_ERROR)
-            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
-            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = []
-        else:
-            # fill the dictionary to generate JSON for the response
-            ret_list = []
-            for h in holdings:
-                ret_dict = {
-                    "id": h.id,
-                    "label": h.label,
-                    "user": h.user,
-                    "group": h.group,
-                    "tags": h.tags
-                }
-                ret_list.append(ret_dict)
-            # add the return list to successfully completed holding listings
-            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
-            # add a reason for the ret_list being empty
-            if len(ret_list) == 0:
-                body[self.MSG_DETAILS][self.MSG_FAILURE] = (
-                    f"Holding with label:{holding_label} not found."
-                )
-
-        self.catalog.end_session()
-        # send the rpc return message for failed or success
-        self.publish_message(
-            properties.reply_to,
-            msg_dict=body,
-            exchange={'name': ''},
-            correlation_id=properties.correlation_id
-        )
-
-
-    def _catalog_find(self, body: dict,
-                      method: Method, properties: Header) -> None:
-        """List the user's files"""
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # get the path from the detaisl section of the message
-        try:
-            path = body[self.MSG_META][self.MSG_PATH]
-        except KeyError:
-            path = None
-
-        # get the tags from the details sections of the message
-        try:
-            tag = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            tag = None
-
-        self.catalog.start_session()
-        ret_dict = {"holdings":{}}
-        try:
-            files = self.catalog.get_files(
-                user, group, holding_label, holding_id, path, tag
-            )
-            for f in files:
-                # get the transaction and the holding:
-                t = self.catalog.get_transaction(
-                    id = f.transaction_id
-                ) # should only be one!
-                h = self.catalog.get_holding(
-                    user, group, holding_id=t.holding_id
-                )[0] # should only be one!
-                # create a holding dictionary if it doesn't exists
-                if h.label in ret_dict["holdings"]:
-                    h_rec = ret_dict["holdings"][h.label]
-                else:
-                    h_rec = {
-                        "transactions": {},
-                        "label": h.label,
-                        "user": h.user,
-                        "group": h.group
-                    }
-                    ret_dict["holdings"][h.label] = h_rec                    
-                # create a transaction dictionary if it doesn't exist
-                if t.transaction_id in ret_dict["holdings"][h.label]["transactions"]:
-                    t_rec = ret_dict["holdings"][h.label]["transactions"]
-                else:
-                    t_rec = {
-                        "files": [],
-                        "transaction_id": t.transaction_id,
-                        #"ingest_time": t.ingest_time
-                    }
-                    ret_dict["holdings"][h.label]["transactions"][t.transaction_id] = t_rec
-                # get the locations
-                locations = []
-                for l in f.location:
-                    l_rec = {
-                        "storage_type" : l.storage_type,
-                        "root": l.root,
-                        "path": l.path,
-                        #"access_time": l.access_time,
-                    }
-                    locations.append(l_rec)
-                # build the file record
-                f_rec = {
-                    "original_path" : f.original_path,
-                    "path_type" : str(f.path_type),
-                    "link_path" : f.link_path,
-                    "size" : f.size,
-                    "user" : f.user,
-                    "group" : f.group,
-                    "locations" : locations
-                }
-                t_rec["files"].append(f_rec)
-
-        except CatalogException as e:
-            # failed to get the holdings - send a return message saying so
-            self.log(e.message, self.RK_LOG_ERROR)
-            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
-            body[self.MSG_DATA][self.MSG_FILE_LIST] = []
-        else:
-            # add the return list to successfully completed holding listings
-            body[self.MSG_DATA][self.MSG_FILE_LIST] = ret_dict
-        self.publish_message(
-            properties.reply_to,
-            msg_dict=body,
-            exchange={'name': ''},
-            correlation_id=properties.correlation_id
-        )
-
-
     def _catalog_put(self, body: dict, rk_origin: str) -> None:
         """Put a file record into the catalog - end of a put transaction"""
         # get the filelist from the data section of the message
@@ -596,6 +242,449 @@ class CatalogConsumer(RMQC):
                                mode="failed")
 
 
+    def _catalog_get(self, body: dict, rk_origin: str) -> None:
+        """Get the details for each file in a filelist and send it to the 
+        exchange to be processed by the transfer processor"""
+        # get the filelist from the data section of the message
+        try:
+            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
+        except KeyError as e:
+            self.log(f"Invalid message contents, filelist should be in the data"
+                     f"section of the message body.",
+                     self.RK_LOG_ERROR)
+            return
+
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = int(body[self.MSG_META][self.MSG_HOLDING_ID])
+        except KeyError:
+            holding_id = None
+
+        # get the holding label from the details section of the message
+        # could (legit) be None
+        try: 
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            holding_label = None
+
+        # start the database transactions
+        self.catalog.start_session()
+
+        # get the holding from the database
+        if holding_label is None and holding_id is None:
+            holding = None
+        else:
+            try:
+                holding = self.catalog.get_holding(
+                    user, group, holding_label, holding_id
+                )
+            except CatalogException as e:
+                self.log(e.message, RMQC.RK_LOG_ERROR)
+                return
+
+        for f in filelist:
+            file_details = PathDetails.from_dict(f)
+            try:
+                # get the file first
+                file = self.catalog.get_file(
+                    user, group,
+                    file_details.original_path, holding
+                )
+                if file is None:
+                    raise CatalogException(
+                        f"Could not find file with original path "
+                        f"{file_details.original_path}"
+                    )
+                # now get the location so we can get where it is stored
+                try:
+                    location = self.catalog.get_location(
+                        file, Storage.OBJECT_STORAGE
+                    )
+                    if location is None:
+                        raise CatalogException(
+                            f"Could not find location for file with original path "
+                            f"{file_details.original_path}"
+                        )         
+                    object_name = ("nlds." +
+                                location.root + ":" + 
+                                location.path)
+                    access_time = location.access_time.timestamp()
+                    # create a new PathDetails with all the info from the DB
+                    new_file = PathDetails(
+                        original_path = file.original_path,
+                        object_name = object_name,
+                        size = file.size,
+                        user = file.user,
+                        group = file.group,
+                        permissions = file.file_permissions,                    
+                        access_time = access_time,
+                        path_type = file.path_type,
+                        link_path = file.link_path
+                    )
+                except CatalogException as e:
+                    if file_details.retries > self.max_retries:
+                        self.failedlist.append(file_details)
+                    else:
+                        self.retrylist.append(file_details)
+                        file_details.increment_retry(
+                            retry_reason=f"{e.message}"
+                        )
+                    self.log(e.message, RMQC.RK_LOG_ERROR)
+                    continue
+                self.completelist.append(new_file)
+
+            except CatalogException as e:
+                if file_details.retries > self.max_retries:
+                    self.failedlist.append(file_details)
+                else:
+                    file_details.increment_retry(
+                        retry_reason=f"{e.message}"
+                    )
+                    self.retrylist.append(file_details)
+                self.log(e.message, RMQC.RK_LOG_ERROR)
+                continue
+
+        # log the successful and non-successful catalog puts
+        # SUCCESS
+        if len(self.completelist) > 0:
+            rk_complete = ".".join([rk_origin,
+                                    self.RK_CATALOG_GET, 
+                                    self.RK_COMPLETE])
+            self.log(
+                f"Sending completed PathList from CATALOG_GET {self.completelist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_GETTING)
+        # RETRY
+        if len(self.retrylist) > 0:
+            rk_retry = ".".join([rk_origin,
+                                 self.RK_CATALOG_GET, 
+                                 self.RK_START])
+            self.log(
+                f"Sending retry PathList from CATALOG_GET {self.retrylist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
+                               state=State.CATALOG_GETTING)
+        # FAILED
+        if len(self.failedlist) > 0:
+            rk_failed = ".".join([rk_origin,
+                                  self.RK_CATALOG_GET, 
+                                  self.RK_FAILED])
+            self.log(
+                f"Sending failed PathList from CATALOG_GET {self.failedlist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.failedlist, rk_failed, body, 
+                               mode="failed")
+
+        # stop db transistions and commit
+        self.catalog.end_session()
+
+
+    def _catalog_list(self, body: dict, properties: Header) -> None:
+        """List the users holdings"""
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
+
+        # get the holding label from the details section of the message
+        # could (legit) be None
+        try: 
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            holding_label = None
+
+        # get the tags from the details sections of the message
+        try:
+            tag = body[self.MSG_META][self.MSG_TAG]
+        except KeyError:
+            tag = None
+
+        self.catalog.start_session()
+
+        # holding_label and holding_id is None means that more than one
+        # holding wil be returned
+        try:
+            if holding_label is None and holding_id is None:
+                holdings = self.catalog.get_holding(
+                    user, group, ".*", None, tag
+                )
+            # holding_label or holding_id not None
+            else:
+                holdings = self.catalog.get_holding(
+                    user, group, holding_label, holding_id
+                )
+        except CatalogException as e:
+            # failed to get the holdings - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = []
+        else:
+            # fill the dictionary to generate JSON for the response
+            ret_list = []
+            for h in holdings:
+                ret_dict = {
+                    "id": h.id,
+                    "label": h.label,
+                    "user": h.user,
+                    "group": h.group,
+                    "tags": h.tags
+                }
+                ret_list.append(ret_dict)
+            # add the return list to successfully completed holding listings
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
+            self.log(
+                f"Listing holdings from CATALOG_LIST {ret_list}",
+                self.RK_LOG_DEBUG
+            )
+        self.catalog.end_session()
+
+        # send the rpc return message for failed or success
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )
+
+
+    def _catalog_find(self, body: dict, properties: Header) -> None:
+        """List the user's files"""
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
+
+        # get the holding label from the details section of the message
+        # could (legit) be None
+        try: 
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            holding_label = None
+
+        # get the path from the detaisl section of the message
+        try:
+            path = body[self.MSG_META][self.MSG_PATH]
+        except KeyError:
+            path = None
+
+        # get the tags from the details sections of the message
+        try:
+            tag = body[self.MSG_META][self.MSG_TAG]
+        except KeyError:
+            tag = None
+
+        self.catalog.start_session()
+        ret_dict = {"holdings":{}}
+        try:
+            files = self.catalog.get_files(
+                user, group, holding_label, holding_id, path, tag
+            )
+            for f in files:
+                # get the transaction and the holding:
+                t = self.catalog.get_transaction(
+                    id = f.transaction_id
+                ) # should only be one!
+                h = self.catalog.get_holding(
+                    user, group, holding_id=t.holding_id
+                )[0] # should only be one!
+                # create a holding dictionary if it doesn't exists
+                if h.label in ret_dict["holdings"]:
+                    h_rec = ret_dict["holdings"][h.label]
+                else:
+                    h_rec = {
+                        "transactions": {},
+                        "label": h.label,
+                        "user": h.user,
+                        "group": h.group
+                    }
+                    ret_dict["holdings"][h.label] = h_rec                    
+                # create a transaction dictionary if it doesn't exist
+                if t.transaction_id in ret_dict["holdings"][h.label]["transactions"]:
+                    t_rec = ret_dict["holdings"][h.label]["transactions"]
+                else:
+                    t_rec = {
+                        "files": [],
+                        "transaction_id": t.transaction_id,
+                        #"ingest_time": t.ingest_time
+                    }
+                    ret_dict["holdings"][h.label]["transactions"][t.transaction_id] = t_rec
+                # get the locations
+                locations = []
+                for l in f.location:
+                    l_rec = {
+                        "storage_type" : l.storage_type,
+                        "root": l.root,
+                        "path": l.path,
+                        #"access_time": l.access_time,
+                    }
+                    locations.append(l_rec)
+                # build the file record
+                f_rec = {
+                    "original_path" : f.original_path,
+                    "path_type" : str(f.path_type),
+                    "link_path" : f.link_path,
+                    "size" : f.size,
+                    "user" : f.user,
+                    "group" : f.group,
+                    "locations" : locations
+                }
+                t_rec["files"].append(f_rec)
+
+        except CatalogException as e:
+            # failed to get the holdings - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_FILE_LIST] = []
+        else:
+            # add the return list to successfully completed holding listings
+            body[self.MSG_DATA][self.MSG_FILE_LIST] = ret_dict
+            self.log(
+                f"Listing files from CATALOG_FIND {ret_dict}",
+                self.RK_LOG_DEBUG
+            )
+
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )
+
+
+    def _catalog_meta(self, body: dict, properties: Header) -> None:
+        """Change metadata for a user's holding"""
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
+
+        # get the holding label from the details section of the message
+        # could (legit) be None
+        try: 
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            holding_label = None
+
+        # get the tags from the details sections of the message
+        try:
+            tag = body[self.MSG_META][self.MSG_TAG]
+        except KeyError:
+            tag = None
+
+        # get the new label from the new meta section of the message
+        try:
+            new_label = body[self.MSG_META][self.MSG_NEW_META][self.MSG_LABEL]
+        except KeyError:
+            new_label = None
+
+        # get the new tag(s) from the new meta section of the message
+        try:
+            new_tag = body[self.MSG_META][self.MSG_NEW_META][self.MSG_TAG]
+        except KeyError:
+            new_tag = None
+
+        self.catalog.start_session()
+
+        # if there is the holding label or holding id then get the holding
+        try:
+            holding = self.catalog.modify_holding(
+                user, group, holding_label, holding_id, tag,
+                new_label, new_tag
+            )
+        except CatalogException as e:
+            # failed to get the holdings - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = []
+        else:
+            # fill the return message with a dictionary of the holding
+            ret_dict = {
+                "id": holding.id,
+                "label": holding.label,
+                "user": holding.user,
+                "group": holding.group,
+                "tags": holding.tags
+            }
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = [ret_dict]
+            self.log(
+                f"Modified metadata from CATALOG_META {ret_dict}",
+                self.RK_LOG_DEBUG
+            )
+
+        self.catalog.end_session()
+
+        # return message to complete RPC
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )       
+
+
     def attach_catalog(self):
         """Attach the Catalog to the consumer"""
         # Load config options or fall back to default values.
@@ -660,11 +749,15 @@ class CatalogConsumer(RMQC):
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method
-            self._catalog_list(body, method, properties)
+            self._catalog_list(body, properties)
 
         elif (api_method == self.RK_FIND):
             # don't need to split any routing key for an RPC method
-            self._catalog_find(body, method, properties)
+            self._catalog_find(body, properties)
+
+        elif (api_method == self.RK_META):
+            # don't need to split any routing key for an RPC method
+            self._catalog_meta(body, properties)
 
 
 def main():
