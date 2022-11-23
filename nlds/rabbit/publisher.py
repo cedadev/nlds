@@ -43,6 +43,7 @@ class RabbitMQPublisher():
     RK_LIST = "list"
     RK_STAT = "stat"
     RK_FIND = "find"
+    RK_META = "meta"
 
     # Exchange routing key parts – root
     RK_ROOT = "nlds-api"
@@ -105,6 +106,7 @@ class RabbitMQPublisher():
     MSG_LOG_TARGET = "log_target"
     MSG_LOG_MESSAGE = "log_message"
     MSG_META = "meta"
+    MSG_NEW_META = "new_meta"
     MSG_LABEL = "label"
     MSG_TAG = "tag"
     MSG_PATH = "path"
