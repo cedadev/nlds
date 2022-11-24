@@ -92,7 +92,7 @@ class Storage(enum.Enum):
     OBJECT_STORAGE = 1
     TAPE = 2
     def to_json(self):
-        return ["OBJECT_STORAGE", "TAPE"][self.value]
+        return ["OBJECT_STORAGE", "TAPE"][self.value-1]
 
 
 class Location(Base):

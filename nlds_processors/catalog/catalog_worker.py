@@ -522,7 +522,7 @@ class CatalogConsumer(RMQC):
             tag = None
 
         self.catalog.start_session()
-        ret_dict = {"holdings":{}}
+        ret_dict = {}
         try:
             files = self.catalog.get_files(
                 user, group, holding_label, holding_id, path, tag
@@ -536,26 +536,26 @@ class CatalogConsumer(RMQC):
                     user, group, holding_id=t.holding_id
                 )[0] # should only be one!
                 # create a holding dictionary if it doesn't exists
-                if h.label in ret_dict["holdings"]:
-                    h_rec = ret_dict["holdings"][h.label]
+                if h.label in ret_dict:
+                    h_rec = ret_dict[h.label]
                 else:
                     h_rec = {
-                        "transactions": {},
-                        "label": h.label,
-                        "user": h.user,
-                        "group": h.group
+                        self.MSG_TRANSACTIONS: {},
+                        self.MSG_LABEL: h.label,
+                        self.MSG_USER: h.user,
+                        self.MSG_GROUP: h.group
                     }
-                    ret_dict["holdings"][h.label] = h_rec                    
+                    ret_dict[h.label] = h_rec                    
                 # create a transaction dictionary if it doesn't exist
-                if t.transaction_id in ret_dict["holdings"][h.label]["transactions"]:
-                    t_rec = ret_dict["holdings"][h.label]["transactions"]
+                if t.transaction_id in ret_dict[h.label][self.MSG_TRANSACTIONS]:
+                    t_rec = ret_dict[h.label][self.MSG_TRANSACTIONS]
                 else:
                     t_rec = {
-                        "files": [],
-                        "transaction_id": t.transaction_id,
+                        self.MSG_FILELIST: [],
+                        self.MSG_TRANSACT_ID: t.transaction_id,
                         #"ingest_time": t.ingest_time
                     }
-                    ret_dict["holdings"][h.label]["transactions"][t.transaction_id] = t_rec
+                    ret_dict[h.label][self.MSG_TRANSACTIONS][t.transaction_id] = t_rec
                 # get the locations
                 locations = []
                 for l in f.location:
@@ -572,20 +572,20 @@ class CatalogConsumer(RMQC):
                     "path_type" : str(f.path_type),
                     "link_path" : f.link_path,
                     "size" : f.size,
-                    "user" : f.user,
-                    "group" : f.group,
+                    self.MSG_USER : f.user,
+                    self.MSG_GROUP : f.group,
                     "locations" : locations
                 }
-                t_rec["files"].append(f_rec)
+                t_rec[self.MSG_FILELIST].append(f_rec)
 
         except CatalogException as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
             body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
-            body[self.MSG_DATA][self.MSG_FILE_LIST] = []
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = []
         else:
             # add the return list to successfully completed holding listings
-            body[self.MSG_DATA][self.MSG_FILE_LIST] = ret_dict
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_dict
             self.log(
                 f"Listing files from CATALOG_FIND {ret_dict}",
                 self.RK_LOG_DEBUG
