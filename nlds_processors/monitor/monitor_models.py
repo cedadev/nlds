@@ -1,6 +1,7 @@
 """Declare the SQLAlchemy ORM models for the NLDS Monitoring database"""
-from sqlalchemy import Integer, String, Column, Enum, ForeignKey
+from sqlalchemy import Integer, String, Column, Enum, ForeignKey, DateTime
 from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.sql import func
 
 from nlds.rabbit.consumer import State
 
@@ -19,6 +20,10 @@ class TransactionRecord(Base):
     user = Column(String, nullable=False)
     # group who owns this holding
     group = Column(String, nullable=False)
+    # defining api-action invoked to start the transaction
+    api_action = Column(String, nullable=False)
+    # Time of initial submission
+    creation_time = Column(DateTime, default=func.now())
     # relationship for SubRecords (One to many)
     sub_records = relationship("SubRecord")
 
@@ -33,6 +38,9 @@ class SubRecord(Base):
     state = Column(Enum(State), nullable=False)
     # count of how many times the subrecord has been retried
     retry_count = Column(Integer, nullable=False)
+    # timestamp of last update
+    last_updated = Column(DateTime, nullable=False, default=func.now(), 
+                          onupdate=func.now())
     # relationship for failed files (zero to many)
     failed_files = relationship("FailedFile")
 

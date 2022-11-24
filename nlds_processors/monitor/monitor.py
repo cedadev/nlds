@@ -126,6 +126,7 @@ class MonitorConsumer(RabbitMQConsumer):
             transaction_id: str, 
             user: str,
             group: str,
+            api_action: str,
             session: Session = None,
         ) -> TransactionRecord:
         """Creates a transaction_record with the minimum required input. 
@@ -135,6 +136,7 @@ class MonitorConsumer(RabbitMQConsumer):
             transaction_id = transaction_id, 
             user = user,
             group = group, 
+            api_action = api_action,
         )
         if session:
             session.add(transaction_record)
@@ -185,10 +187,14 @@ class MonitorConsumer(RabbitMQConsumer):
     
     def _get_transaction_record(
             self, session: Session, transaction_id: str, user: str, group: str,
-            create_fl: bool = True
+            api_action: str, create_fl: bool = True
         ) -> TransactionRecord:
         """Gets a TransactionRecord from the DB from the given transaction_id or 
         creates one if not present.
+
+        TODO: This doesn't really work as an idea for a method, should be 
+        refactored into separate get and create methods. Do this in the upcoming 
+        refactor.
         """
         try:
             tr_query = session.execute(
@@ -208,7 +214,8 @@ class MonitorConsumer(RabbitMQConsumer):
                 # create a new, minimum TransactionRecord with the transaction_id 
                 # and user info passed through arguments
                 transaction_record = self._create_transaction_record(
-                    transaction_id, user, group, session=session
+                    transaction_id, user, group, api_action=api_action, 
+                    session=session,
                 )
             elif transaction_record is not None:
                 transaction_record = transaction_record.TransactionRecord
@@ -352,6 +359,14 @@ class MonitorConsumer(RabbitMQConsumer):
             self.log("Group not in message, exiting callback.", 
                      self.RK_LOG_ERROR)
             return
+
+        # get the api-action from the details section of the message
+        try:
+            api_action = body[self.MSG_DETAILS][self.MSG_API_ACTION]
+        except KeyError:
+            self.log("API-action not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
         
         # get the state from the details section of the message
         try:
@@ -405,7 +420,7 @@ class MonitorConsumer(RabbitMQConsumer):
         #   - open question whether we delete the older subrecords (i.e. before
         #     a split)
         transaction_record = self._get_transaction_record(
-            session, transaction_id, user, group
+            session, transaction_id, user, group, api_action,
         )
         sub_record = self._get_sub_record(session, sub_id, transaction_record)
         if sub_record.transaction_record_id != transaction_record.id:
@@ -471,6 +486,14 @@ class MonitorConsumer(RabbitMQConsumer):
             self.log("Group not in message, exiting callback.", 
                      self.RK_LOG_ERROR)
             return
+        
+        # get the api-action from the details section of the message
+        try:
+            api_action = body[self.MSG_DETAILS][self.MSG_API_ACTION]
+        except KeyError:
+            self.log("API-action not in message, continuing without.", 
+                     self.RK_LOG_ERROR)
+            api_action = None
 
         # get the desired user id from the details section of the message
         try:
@@ -558,6 +581,8 @@ class MonitorConsumer(RabbitMQConsumer):
             query = query.filter(SubRecord.retry_count == retry_count)
         if transaction_id is not None:
             query = query.filter(TransactionRecord.transaction_id == transaction_id)
+        if api_action is not None:
+            api_action = query.filter(TransactionRecord.api_action == api_action)
         if query_user is not None: 
             query = query.filter(TransactionRecord.user == query_user) 
         if query_group is not None:
@@ -573,12 +598,15 @@ class MonitorConsumer(RabbitMQConsumer):
                     "transaction_id": transaction_record.transaction_id,
                     "user": transaction_record.user,
                     "group": transaction_record.group,
+                    "api_action": transaction_record.api_action,
+                    "creation_time": transaction_record.creation_time.isoformat(),
                 },
                 "sub_record": {
                     "id": sub_record.id,
                     "sub_id": sub_record.sub_id,
                     "state": sub_record.state.name,
                     "retry_count": sub_record.retry_count,
+                    "last_updated": sub_record.last_updated.isoformat(),
                 },
                 "failed_files": [orm_to_dict(ff) for ff in sub_record.failed_files]
             }
