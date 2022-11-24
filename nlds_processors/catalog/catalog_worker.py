@@ -542,6 +542,7 @@ class CatalogConsumer(RMQC):
                     h_rec = {
                         self.MSG_TRANSACTIONS: {},
                         self.MSG_LABEL: h.label,
+                        self.MSG_HOLDING_ID: h.id,
                         self.MSG_USER: h.user,
                         self.MSG_GROUP: h.group
                     }
@@ -553,7 +554,7 @@ class CatalogConsumer(RMQC):
                     t_rec = {
                         self.MSG_FILELIST: [],
                         self.MSG_TRANSACT_ID: t.transaction_id,
-                        #"ingest_time": t.ingest_time
+                        "ingest_time": t.ingest_time.isoformat()
                     }
                     ret_dict[h.label][self.MSG_TRANSACTIONS][t.transaction_id] = t_rec
                 # get the locations
@@ -563,7 +564,7 @@ class CatalogConsumer(RMQC):
                         "storage_type" : l.storage_type,
                         "root": l.root,
                         "path": l.path,
-                        #"access_time": l.access_time,
+                        "access_time": l.access_time.isoformat(),
                     }
                     locations.append(l_rec)
                 # build the file record
@@ -574,6 +575,7 @@ class CatalogConsumer(RMQC):
                     "size" : f.size,
                     self.MSG_USER : f.user,
                     self.MSG_GROUP : f.group,
+                    "permissions": f.file_permissions,
                     "locations" : locations
                 }
                 t_rec[self.MSG_FILELIST].append(f_rec)
