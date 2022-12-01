@@ -1,84 +1,30 @@
 # SQLalchemy imports
-from sqlalchemy import create_engine, func, Enum
-from sqlalchemy.exc import ArgumentError, IntegrityError, OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy import func, Enum
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from nlds_processors.catalog.catalog_models import Base, File, Holding,\
      Location, Transaction, Storage, Checksum, Tag
+from nlds_processors.db_mixin import DBMixin
 
-class CatalogException(Exception):
+class CatalogError(Exception):
     def __init__(self, message, *args):
         super().__init__(args)
         self.message = message
 
-class Catalog():
+class Catalog(DBMixin):
     """Catalog object containing methods to manipulate the Catalog Database"""
 
     def __init__(self, db_engine: str, db_options: str):
-        """Create a catalog engine from the config strings passed in"""
+        """Store the catalog engine from the config strings passed in"""
         self.db_engine = db_engine
         self.db_options = db_options
+        self.base = Base
 
 
-    def _get_db_string(self):
-        # create the connection string with the engine
-        db_connect = self.db_engine + "://"
-        # add user if defined
-        if len(self.db_options["db_user"]) > 0:
-            db_connect += self.db_options["db_user"]
-            # add password if defined
-            if len(self.db_options["db_passwd"]) > 0:
-                db_connect += ":" + self.db_options["db_passwd"]
-            # add @ symbol
-            db_connect += "@"
-        # add the database name
-        db_connect += self.db_options["db_name"]
-        return db_connect
-
-
-    def connect(self):
-        # connect to the database using the information in the config
-        # get the database connection string
-        db_connect = self._get_db_string()
-
-        # indicate database not connected yet
-        self.db_engine = None
-
-        # connect to the database
-        try:
-            self.db_engine  = create_engine(
-                                db_connect, 
-                                echo=self.db_options["echo"],
-                                future=True
-                            )
-        except ArgumentError as e:
-            raise CatalogException("Could not create database engine")
-
-        # create the db if not already created
-        try:
-            Base.metadata.create_all(self.db_engine)
-        except IntegrityError as e:
-            raise CatalogException("Could not create database tables")
-        # return db_connect string to log
-        return db_connect
-
-
-    def start_session(self):
-        """Create a SQL alchemy session"""
-        self.session = Session(self.db_engine)
-        self.commit_required = False
-
-
-    def end_session(self):
-        """Finish and commit a SQL alchemy session"""
-        if self.commit_required:
-            self.session.commit()
-        self.commit_required = False
-        self.session = None
-
-
-    def _user_has_get_holding_permission(self, user: str, group: str,
-                                         holding: object):
+    def _user_has_get_holding_permission(self, 
+                                         user: str, 
+                                         group: str,
+                                         holding: Holding) -> bool:
         """Check whether a user has permission to view this holding.
         When we implement ROLES this will be more complicated."""
         permitted = True
@@ -87,9 +33,12 @@ class Catalog():
         return permitted
 
 
-    def get_holding(self, user: str, group: str, 
-                    label: str=None, holding_id: int=None,
-                    tag: dict=None) -> object:
+    def get_holding(self, 
+                    user: str, 
+                    group: str, 
+                    label: str=None, 
+                    holding_id: int=None,
+                    tag: dict=None) -> Holding:
         """Get a holding from the database"""
         try:
             if holding_id:
@@ -110,23 +59,23 @@ class Catalog():
             # check the user has permission to view the holding(s)
             for h in holding:
                 if not self._user_has_get_holding_permission(user, group, h):
-                    raise CatalogException(
+                    raise CatalogError(
                        f"User:{user} in group:{group} does not have permission "
                        f"to access the holding with label:{h.label}."
                     )
-        except (IntegrityError, KeyError) as e:
+        except (IntegrityError, KeyError):
             if holding_id:
-                raise CatalogException(
+                raise CatalogError(
                     f"Holding with holding_id:{holding_id} not found for "
                     f"user:{user} and group:{group}."
                 )
             else:
-                raise CatalogException(
+                raise CatalogError(
                     f"Holding with label:{label} not found for "
                     f"user:{user} and group:{group}."
                 )
         except (OperationalError):
-            raise CatalogException(
+            raise CatalogError(
                 f"Invalid regular expression:{label} when listing holding for "
                 f"user:{user} and group:{group}."
             )
@@ -134,7 +83,10 @@ class Catalog():
         return holding
 
 
-    def create_holding(self, user: str, group: str, label: str) -> object:
+    def create_holding(self, 
+                       user: str, 
+                       group: str, 
+                       label: str) -> Holding:
         """Create the new Holding with the label, user, group"""
         try:
             holding = Holding(
@@ -146,16 +98,20 @@ class Catalog():
             self.session.flush()            # update holding.id
             self.commit_required = True     # indicate a commit at end of session
         except (IntegrityError, KeyError) as e:
-            raise CatalogException(
-                f"Holding with label {label} could not be added to the database."
+            raise CatalogError(
+                f"Holding with label:{label} could not be added to the database."
             )
         return holding
 
 
-    def modify_holding(self, user: str, group:str, 
-                       holding_label: str=None, holding_id: int=None, 
+    def modify_holding(self, 
+                       user: str, 
+                       group:str, 
+                       holding_label: str=None, 
+                       holding_id: int=None, 
                        tag: dict=None,
-                       new_label: str=None, new_tag: dict=None):
+                       new_label: str=None, 
+                       new_tag: dict=None) -> Holding:
         """Find a holding and modify the information in it"""
         holdings=None
         if holding_label or holding_id:
@@ -164,17 +120,17 @@ class Catalog():
             )
 
         if not holdings or len(holdings) == 0:
-            raise CatalogException(
+            raise CatalogError(
                 "Holding not found: holding_id or label not specified"
             )
         
         if len(holdings) > 1:
             if holding_label:
-                raise CatalogException(
+                raise CatalogError(
                     f"More than one holding returned for label:{holding_label}"
                 )
             elif holding_id:
-                raise CatalogException(
+                raise CatalogError(
                     f"More than one holding returned for holding_id:{holding_id}"
                 )
         else:
@@ -187,7 +143,7 @@ class Catalog():
                 self.session.flush()
                 self.commit_required = True
             except IntegrityError:
-                raise CatalogException(
+                raise CatalogError(
                     f"Cannot change holding with label:{holding_label} and "
                     f"holding_id:{holding_id} to new label:{new_label}. New "
                     f"label:{new_label} already in use by another holding."
@@ -196,7 +152,9 @@ class Catalog():
         return holding
 
 
-    def get_transaction(self, id: int=None, transaction_id: str=None) -> object:
+    def get_transaction(self, 
+                        id: int=None, 
+                        transaction_id: str=None) -> Transaction:
         """Get a transaction from the database"""
         try:
             if transaction_id:
@@ -207,14 +165,22 @@ class Catalog():
                 transaction = self.session.query(Transaction).filter(
                     Transaction.id == id
                 ).one_or_none()
-        except (IntegrityError, KeyError) as e:
-            raise CatalogException(
-                f"Transaction with transaction_id {id} not found."
-            )
+        except (IntegrityError, KeyError):
+            if transaction_id:
+                raise CatalogError(
+                    f"Transaction with transaction_id:{transaction_id} not "
+                    "found."
+                )
+            else:
+                raise CatalogError(
+                    f"Transaction with id {id} not found."
+                )
         return transaction
 
 
-    def create_transaction(self, holding: object, transaction_id: str) -> object:
+    def create_transaction(self, 
+                           holding: Holding, 
+                           transaction_id: str) -> Transaction:
         """Create a transaction that belongs to a holding and will contain files"""
         try:
             transaction = Transaction(
@@ -225,16 +191,18 @@ class Catalog():
             self.session.add(transaction)
             self.session.flush()           # flush to generate transaction.id
             self.commit_required = True    # indicate a commit at end of session
-        except (IntegrityError, KeyError) as e:
-            raise CatalogException(
-                f"Transaction with transaction_id {transaction_id} could not "
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Transaction with transaction_id:{transaction_id} could not "
                 "be added to the database"
             )
         return transaction
 
 
-    def _user_has_get_file_permission(self, user: str, group: str,
-                                      file: object) -> bool:
+    def _user_has_get_file_permission(self, 
+                                      user: str, 
+                                      group: str,
+                                      file: File) -> bool:
         """Check whether a user has permission to access a file.
         Later, when we implement the ROLES this function will be a lot more
         complicated!"""
@@ -250,8 +218,11 @@ class Catalog():
         return permitted
 
 
-    def get_file(self, user: str, group: str,
-                 original_path: str, holding: object = None) -> object:
+    def get_file(self, 
+                 user: str, 
+                 group: str,
+                 original_path: str, 
+                 holding: Holding = None) -> File:
         """Get a single file details from the database, given the original path 
         of the file.  
         An optional holding can be supplied to get the file details from a
@@ -263,7 +234,7 @@ class Catalog():
                     Transaction.id == File.transaction_id,
                     Transaction.holding_id == holding[0].id,
                     File.original_path == original_path,
-                # this order->first by is in case multiple copies of a file
+                # this order_by->first is in case multiple copies of a file
                 # have been added to the holding.  This will be illegal at some
                 # point, but for now this is an easy fix
                 ).order_by(Transaction.ingest_time.desc()).first()
@@ -285,28 +256,32 @@ class Catalog():
 
             # check the file was found
             if not file:
-                raise CatalogException(err_msg)
+                raise CatalogError(err_msg)
 
             # check user has permission to access this file
             if not self._user_has_get_file_permission(user, group, file):
-                raise CatalogException(
+                raise CatalogError(
                     f"User:{user} in group:{group} does not have permission to "
                     f"access the file with original path:{original_path}."
                 )
 
-        except (IntegrityError, KeyError) as e:  # which exceptions???
+        except (IntegrityError, KeyError):
             if holding:
                 err_msg = (f"File with original path:{original_path} not found "
                            f"in holding:{holding.label}")
             else:
                 err_msg = f"File with original path:{original_path} not found"
-            raise CatalogException(err_msg)
+            raise CatalogError(err_msg)
         return file
 
 
-    def get_files(self, user: str, group: str, 
-                  holding_label: str=None, holding_id: int=None,
-                  path: str=None, tag: dict=None)->None:
+    def get_files(self, 
+                  user: str, 
+                  group: str, 
+                  holding_label: str=None, 
+                  holding_id: int=None,
+                  path: str=None, 
+                  tag: dict=None) -> list:
 
         """Get a multitue of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -342,20 +317,20 @@ class Catalog():
 
         except (IntegrityError, KeyError):
             err_msg = f"File with original_path:{path} not found "
-            raise CatalogException(err_msg)
+            raise CatalogError(err_msg)
         
         return file_list
 
 
     def create_file(self, 
-                    transaction: object, 
+                    transaction: Transaction, 
                     user: str = None,
                     group: str = None,
                     original_path: str = None,
                     path_type: str = None,
                     link_path: str = None,
                     size: str = None,
-                    file_permissions: str = None) -> object:
+                    file_permissions: str = None) -> File:
         """Create a file that belongs to a transaction and will contain 
         locations"""
         try:
@@ -372,15 +347,17 @@ class Catalog():
             self.session.add(new_file)
             self.session.flush()           # flush to generate file.id
             self.commit_required = True    # indicate a commit at end of session            
-        except (IntegrityError, KeyError) as e:
-            raise CatalogException(
+        except (IntegrityError, KeyError):
+            raise CatalogError(
                 f"File with original path {original_path} could not be added to"
                  " the database"
             )
         return new_file
 
 
-    def get_location(self, file: object, storage_type: Enum):
+    def get_location(self, 
+                     file: File, 
+                     storage_type: Enum) -> Location:
         """Get a storage location for a file, given the file and the storage
         type"""
         try:
@@ -388,8 +365,8 @@ class Catalog():
                 Location.file_id == file.id,
                 Location.storage_type == storage_type
             ).one_or_none()
-        except (IntegrityError, KeyError) as e:
-            raise CatalogException(            
+        except (IntegrityError, KeyError):
+            raise CatalogError(            
                 f"Location of storage type {storage_type} not found for file "
                 f"{file.original_path}"
             )
@@ -397,11 +374,11 @@ class Catalog():
 
 
     def create_location(self, 
-                        file,
+                        file: File,
                         storage_type: Enum,
                         root: str,
                         object_name: str, 
-                        access_time: float) -> object:
+                        access_time: float) -> Location:
         """Add the storage location for object storage"""
         try:
             location = Location(
@@ -418,8 +395,8 @@ class Catalog():
             self.session.add(location)
             self.session.flush()           # flush to generate location.id
             self.commit_required = True    # indicate a commit at end of session
-        except (IntegrityError, KeyError) as e:
-            raise CatalogException(
+        except (IntegrityError, KeyError):
+            raise CatalogError(
                 f"Location with root {root}, path {file.original_path} and "
                 f"storage type {Storage.OBJECT_STORAGE} could not be added to "
                  "the database")

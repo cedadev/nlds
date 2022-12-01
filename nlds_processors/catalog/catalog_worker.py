@@ -36,9 +36,10 @@ from datetime import datetime, timezone
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 
-from nlds_processors.catalog.catalog import Catalog, CatalogException
+from nlds_processors.catalog.catalog import Catalog, CatalogError
 from nlds_processors.catalog.catalog_models import Storage
 from nlds.details import PathDetails
+from nlds_processors.db_mixin import DBError
 
 class CatalogConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "catalog_q"
@@ -147,13 +148,13 @@ class CatalogConsumer(RMQC):
         # try to get the holding to see if it already exists and can be added to
         try:
             holding = self.catalog.get_holding(user, group, label, holding_id)
-        except CatalogException:
-            pass
+        except CatalogError:
+            holding = None
 
         if holding is None:
             try:
                 holding = self.catalog.create_holding(user, group, label)
-            except CatalogException as e:
+            except CatalogError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 return
 
@@ -163,7 +164,7 @@ class CatalogConsumer(RMQC):
                 holding, 
                 transaction_id
             )
-        except CatalogException as e:
+        except CatalogError as e:
             self.log(e.message, RMQC.RK_LOG_ERROR)
             return
 
@@ -193,7 +194,7 @@ class CatalogConsumer(RMQC):
                     )
                 )
                 self.completelist.append(pd)
-            except CatalogException as e:
+            except CatalogError as e:
                 if pd.retries > self.max_retries:
                     self.failedlist.append(pd)
                 else:
@@ -292,7 +293,7 @@ class CatalogConsumer(RMQC):
                 holding = self.catalog.get_holding(
                     user, group, holding_label, holding_id
                 )
-            except CatalogException as e:
+            except CatalogError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 return
 
@@ -305,7 +306,7 @@ class CatalogConsumer(RMQC):
                     file_details.original_path, holding
                 )
                 if file is None:
-                    raise CatalogException(
+                    raise CatalogError(
                         f"Could not find file with original path "
                         f"{file_details.original_path}"
                     )
@@ -315,7 +316,7 @@ class CatalogConsumer(RMQC):
                         file, Storage.OBJECT_STORAGE
                     )
                     if location is None:
-                        raise CatalogException(
+                        raise CatalogError(
                             f"Could not find location for file with original path "
                             f"{file_details.original_path}"
                         )         
@@ -335,7 +336,7 @@ class CatalogConsumer(RMQC):
                         path_type = file.path_type,
                         link_path = file.link_path
                     )
-                except CatalogException as e:
+                except CatalogError as e:
                     if file_details.retries > self.max_retries:
                         self.failedlist.append(file_details)
                     else:
@@ -347,7 +348,7 @@ class CatalogConsumer(RMQC):
                     continue
                 self.completelist.append(new_file)
 
-            except CatalogException as e:
+            except CatalogError as e:
                 if file_details.retries > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
@@ -446,7 +447,7 @@ class CatalogConsumer(RMQC):
                 holdings = self.catalog.get_holding(
                     user, group, holding_label, holding_id
                 )
-        except CatalogException as e:
+        except CatalogError as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
             body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
@@ -580,7 +581,7 @@ class CatalogConsumer(RMQC):
                 }
                 t_rec[self.MSG_FILELIST].append(f_rec)
 
-        except CatalogException as e:
+        except CatalogError as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
             body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
@@ -656,7 +657,7 @@ class CatalogConsumer(RMQC):
                 user, group, holding_label, holding_id, tag,
                 new_label, new_tag
             )
-        except CatalogException as e:
+        except CatalogError as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
             body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
@@ -690,18 +691,14 @@ class CatalogConsumer(RMQC):
     def attach_catalog(self):
         """Attach the Catalog to the consumer"""
         # Load config options or fall back to default values.
-        db_engine = self.load_config_value(
-            self._DB_ENGINE
-        )
-
-        db_options = self.load_config_value(
-            self._DB_OPTIONS
-        )
+        db_engine = self.load_config_value(self._DB_ENGINE)
+        db_options = self.load_config_value(self._DB_OPTIONS)
         self.catalog = Catalog(db_engine, db_options)
+
         try:
             db_connect = self.catalog.connect()
             self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
-        except CatalogException as e:
+        except DBError as e:
             self.log(e.message, RMQC.RK_LOG_CRITICAL)
 
 

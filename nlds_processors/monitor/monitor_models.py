@@ -60,6 +60,7 @@ class SubRecord(Base):
         return ((self.state in State.get_final_states() and self.retry_count == 0) 
                 or self.state == State.FAILED)
 
+
 class FailedFile(Base):
     __tablename__ = "failed_file"
 

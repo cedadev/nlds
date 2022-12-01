@@ -7,7 +7,7 @@ participant wex as "Exchange"
 
 queue qw as "NLDS Q" #lightgrey
 note over qw
-    topic = nlds-api.nlds.#
+    topic = nlds-api.nlds.*
 end note
 collections work as "NLDS\nWorker" #lightgrey
 
@@ -15,7 +15,7 @@ queue qc as "Catalog Q" #springgreen
 collections catalog_get as "Cataloguers" #springgreen
 database catalog_db as "Catalog DB" #springgreen
 note over qc
-    topic = #.catalog-get.#
+    topic = *.catalog-get.*
 end note
 
 user -> client : GET(filelist,target,\n\tuser,group,id)
@@ -41,14 +41,14 @@ work -> wex : key=(nlds-api).catalog-get.start
 deactivate work
 
 activate wex
-wex -> qc : key=(#).catalog-get.start
+wex -> qc : key=(*).catalog-get.start
 deactivate wex
 
 activate qc
-qc -> catalog_get : key=(#).catalog-get.start
+qc -> catalog_get : key=(*).catalog-get.start
 deactivate qc
 note right of qc
-    (#) here will match the calling
+    (*) here will match the calling
     application.
     `nlds-api` in this case.
 end note
@@ -59,7 +59,7 @@ loop #lightgrey for file in filelist
     catalog_db -> catalog_get : TRUE || FALSE
     deactivate catalog_db
 end
-catalog_get -> wex : key=(#).catalog-get.complete
+catalog_get -> wex : key=(*).catalog-get.complete
 deactivate catalog_get
 
 @enduml

@@ -12,7 +12,7 @@ focus
 
 # create the monitor
 screen -t "monitor"
-exec "$PYTHON_DIR/python" "$NLDS_PROC/monitor/monitor.py"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/monitor/monitor_worker.py"
 split
 focus
 
