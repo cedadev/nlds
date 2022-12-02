@@ -1,5 +1,5 @@
 import os
-from typing import NamedTuple
+from typing import NamedTuple, List
 
 
 ACCESSES = (
@@ -8,16 +8,15 @@ ACCESSES = (
     os.X_OK,    # =1
 )
 
-def check_permissions(uid: int, gid: int, access=os.R_OK, path: str = None,
-                      stat_result: NamedTuple = None) -> bool:
-    # TODO: (2022-07-25) Should we be adding an exception for root whereby any 
-    # check returns True? Probably not super necessary as it's very unlikely to 
-    # be actually used by root in our context, but is technically incomplete 
-    # otherwise.
-
+def check_permissions(uid: int, gids: List[int], access=os.R_OK, 
+                      path: str = None, stat_result: NamedTuple = None
+                      ) -> bool:
     if access not in ACCESSES:
         raise ValueError("Invalid access bit passed, must be one of "
                          f"{ACCESSES}.")
+    
+    if not isinstance(gids, list):
+        raise ValueError("The parameter 'gids' must be a list.")
 
     if stat_result is None and path is not None:
         stat_result = os.lstat(path)
@@ -27,11 +26,11 @@ def check_permissions(uid: int, gid: int, access=os.R_OK, path: str = None,
     
     # Get file permissions mask from stat result
     mode = stat_result.st_mode & 0o777
-    if uid != stat_result.st_uid and gid != stat_result.st_gid:
+    if uid != stat_result.st_uid and stat_result.st_gid not in gids:
         # Check other permissions, bitwise-and the file permissions mask with 
         # the appropriate access mask.
         return bool((access) & mode)
-    elif uid != stat_result.st_uid and gid == stat_result.st_gid:
+    elif uid != stat_result.st_uid and stat_result.st_gid in gids:
         # Check group permissions, Multiplied by 8 to shift the access bit 1 
         # place to the left in octary (e.g. 040 for group read)
         return bool((access * 8) & mode)

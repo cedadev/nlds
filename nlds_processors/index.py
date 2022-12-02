@@ -23,7 +23,6 @@ class IndexerConsumer(StattingConsumer):
     _MAX_RETRIES = "max_retries"
     _CHECK_PERMISSIONS = "check_permissions_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
-    _USE_PWD_GID = "use_pwd_gid_fl"
     
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
@@ -32,7 +31,6 @@ class IndexerConsumer(StattingConsumer):
         _MAX_RETRIES: 5,
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
-        _USE_PWD_GID: False,
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
     }
 
@@ -56,7 +54,6 @@ class IndexerConsumer(StattingConsumer):
             self._CHECK_PERMISSIONS
         )
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
-        self.use_pwd_gid_fl = self.load_config_value(self._USE_PWD_GID)
         self.retry_delays = self.load_config_value(self.RETRY_DELAYS)
 
         self.reset()
@@ -95,7 +92,7 @@ class IndexerConsumer(StattingConsumer):
                 # First change user and group so file permissions can be 
                 # checked. This should be deactivated when testing locally. 
                 if self.check_permissions_fl:
-                    self.set_ids(body_json, self.use_pwd_gid_fl)
+                    self.set_ids(body_json)
             
                 # Append routing info and then run the index
                 body_json = self.append_route_info(body_json)
@@ -250,7 +247,7 @@ class IndexerConsumer(StattingConsumer):
                             # If file is not valid, not accessible with uid and 
                             # gid if checking permissions, and not existing 
                             # otherwise, then add to problem list. Note that we 
-                            # don't check the size of the problem list as files 
+                            # can't check the size of the problem list as files 
                             # may not exist
                             self.log(f"{walk_path_details.path} is inaccessible.", 
                                      self.RK_LOG_DEBUG)
