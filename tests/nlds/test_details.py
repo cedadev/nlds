@@ -43,6 +43,6 @@ def test_path_details():
     assert sr_from_pd.st_mtime == stat_result.st_mtime
     assert sr_from_pd != stat_result
     assert (
-        check_permissions(20, 100, path=__file__) 
-        == check_permissions(20, 100, stat_result=sr_from_pd)
+        check_permissions(20, [100, ], path=__file__) 
+        == check_permissions(20, [100, ], stat_result=sr_from_pd)
     )
