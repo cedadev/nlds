@@ -29,7 +29,6 @@ class StattingConsumer(RabbitMQConsumer):
     _MAX_RETRIES = "max_retries"
     _CHECK_PERMISSIONS = "check_permissions_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
-    _USE_PWD_GID = "use_pwd_gid_fl"
 
     # The corresponding default values
     DEFAULT_CONSUMER_CONFIG = {
@@ -37,7 +36,6 @@ class StattingConsumer(RabbitMQConsumer):
         _MESSAGE_MAX_SIZE: 1000,    # in kB
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
-        _USE_PWD_GID: False,
         RabbitMQConsumer.RETRY_DELAYS: RabbitMQConsumer.DEFAULT_RETRY_DELAYS,
     }
 
@@ -45,7 +43,7 @@ class StattingConsumer(RabbitMQConsumer):
         super().__init__(queue=queue, setup_logging_fl=setup_logging_fl)
 
         # Member variables to temporarily hold user- and group-id of a message
-        self.gid = None
+        self.gids = None
         self.uid = None
 
         # Memeber variable to keep track of the total filesize of a message's 
@@ -54,7 +52,7 @@ class StattingConsumer(RabbitMQConsumer):
 
     def reset(self) -> None:
         super().reset()
-        self.gid = None
+        self.gids = None
         self.uid = None
         self.completelist_size = 0
 
@@ -144,7 +142,6 @@ class StattingConsumer(RabbitMQConsumer):
     def set_ids(
             self, 
             body_json: Dict[str, str], 
-            use_pwd_gid_fl: bool = True
         ) -> None:
         """Changes the real user- and group-ids stored in the class to that 
         specified in the incoming message details section so that permissions 
@@ -163,31 +160,20 @@ class StattingConsumer(RabbitMQConsumer):
                 self.RK_LOG_ERROR
             )
             raise e
+        
+        # Get list of groups containing the given username
+        gids = {g.gr_gid for g in grp.getgrall() if username in g.gr_mem}
+        # Add the gid from the pwd call. 
+        gids.add(pwd_gid)
+        gids = list(gids)
 
-        # Attempt to get gid from group name using grp module
-        try:
-            group_name = body_json[self.MSG_DETAILS][self.MSG_GROUP]
-            grp_data = grp.getgrnam(group_name)
-            grp_gid = grp_data.gr_gid
-        except KeyError as e:         
-            # If consumer setting is configured to allow the use of the gid 
-            # gained from the pwd call, use that instead
-            if use_pwd_gid_fl:
-                self.log(
-                    f"Problem fetching gid using grp, group name was "
-                    f"{group_name}. Continuing with pwd_gid ({pwd_gid}).", 
-                    self.RK_LOG_WARNING
-                )
-                grp_gid = pwd_gid
-            else:
-                self.log(
-                    f"Problem fetching gid using grp, group name was "
-                    f"{group_name}.", self.RK_LOG_ERROR
-                )
-                raise e
+        # Check for list validity
+        if len(gids) == 0:
+            raise ValueError(f"Problem fetching gid list, no matching gids "
+                             f"found. User name was {username} ({pwd_uid})")
 
         self.uid = pwd_uid
-        self.gid = grp_gid
+        self.gids = gids
 
     def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
                           access: int = os.R_OK, 
@@ -200,7 +186,8 @@ class StattingConsumer(RabbitMQConsumer):
         performed RabbitMQConsumer.set_ids() beforehand.
 
         """
-        if check_permissions_fl and (self.uid is None or self.gid is None):
+        if check_permissions_fl and (self.uid is None or self.gids is None 
+                                     or not isinstance(self.gids, list)):
             raise ValueError("uid and gid not set properly.")
         
         if not isinstance(path, pth.Path):
@@ -213,7 +200,7 @@ class StattingConsumer(RabbitMQConsumer):
             # If no stat result is passed through then get our own
             if stat_result is None:
                 stat_result = path.stat()
-            return check_permissions(self.uid, self.gid, access=access, 
+            return check_permissions(self.uid, self.gids, access=access, 
                                      stat_result=stat_result)
         else:
             return True
