@@ -39,8 +39,7 @@ class DBMixin:
         try:
             self.db_engine  = create_engine(
                                 db_connect, 
-                                echo=self.db_options["echo"],
-                                future=True
+                                echo=self.db_options["echo"]
                             ).connect()
         except ArgumentError as e:
             raise DBError("Could not create database engine")
@@ -63,8 +62,8 @@ class DBMixin:
     def save(self):
         """Commit all pending transactions"""
         self.session.commit()
-        #self.session.expire()
-        # why is this required???
+        # a commit at the level of the connection to the engine is required
+        # when future=True in the create_engine code above
         #self.db_engine.commit()
 
 
