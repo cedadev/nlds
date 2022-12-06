@@ -49,12 +49,22 @@ class Monitor(DBMixin):
         return transaction_record
     
 
-    def get_transaction_record(self, transaction_id: str) -> TransactionRecord:
+    def get_transaction_record(self, 
+                               user: str,
+                               group: str,
+                               transaction_id: str) -> list:
         """Gets a TransactionRecord from the DB from the given transaction_id"""
+        if transaction_id:
+            transaction_search = transaction_id
+        else:
+            transaction_search = ".*"
+
         try:
             trec = self.session.query(TransactionRecord).filter(
-                TransactionRecord.transaction_id == transaction_id
-            ).one_or_none()
+                TransactionRecord.user == user,
+                TransactionRecord.group == group,
+                TransactionRecord.transaction_id.regexp_match(transaction_search)
+            ).all()
 
         except (IntegrityError, KeyError):
             raise MonitorError(
@@ -64,8 +74,8 @@ class Monitor(DBMixin):
 
 
     def create_sub_record(self, 
+                          transaction_record: TransactionRecord,
                           sub_id: str, 
-                          transaction_record_id: int, 
                           state: State = None) -> SubRecord:
         """Creates a SubRecord with the minimum required input. Optionally adds 
         to a session and flushes to get the id field populated. 
@@ -79,14 +89,14 @@ class Monitor(DBMixin):
                 sub_id = sub_id, 
                 state = state,
                 retry_count = 0,
-                transaction_record_id = transaction_record_id,
+                transaction_record_id = transaction_record.id,
             )
             self.session.add(sub_record)
             # need to flush to update the transaction_record.id
             self.session.flush()
         except (IntegrityError, KeyError):
             raise MonitorError(
-                f"SubRecord for transaction_record_id:{transaction_record_id} "
+                f"SubRecord for transaction_record_id:{transaction_record.id} "
                 "could not be added to the database"
             )
         return sub_record
@@ -127,19 +137,21 @@ class Monitor(DBMixin):
 
 
     def get_sub_records(self,
+                        transaction_record: TransactionRecord,
                         sub_id: str = None,
                         user: str = None,
                         group: str = None,
                         state: State = None,
                         retry_count: int = None,
-                        transaction_id: str = None,
                         api_action: str = None) -> list:
 
         """Return many sub records, identified by one of the (many) function
         parameters"""
 
         try:
-            query = self.session.query(TransactionRecord, SubRecord)
+            query = self.session.query(SubRecord).filter(
+                SubRecord.transaction_record_id == transaction_record.id
+            )
 
             # apply filters one at a time if present. Results in a big 'and' query 
             # of the passed flags
@@ -151,8 +163,6 @@ class Monitor(DBMixin):
                 query = query.filter(SubRecord.state == state)
             if retry_count is not None:
                 query = query.filter(SubRecord.retry_count == retry_count)
-            if transaction_id is not None:
-                query = query.filter(TransactionRecord.transaction_id == transaction_id)
             if api_action is not None:
                 api_action = query.filter(TransactionRecord.api_action == api_action)
             if user is not None: 

@@ -158,19 +158,23 @@ class MonitorConsumer(RMQC):
         #   - open question whether we delete the older subrecords (i.e. before
         #     a split)
         try:
-            trec = self.monitor.get_transaction_record(transaction_id)
+            trec = self.monitor.get_transaction_record(
+                user, group, transaction_id
+            )
         except MonitorError:
             # fine to pass here as if transaction_record is not returned then it
             # will be created in the next step
             trec = None 
 
-        if trec is None:
+        if trec is None or len(trec) == 0:
             try:
                 trec = self.monitor.create_transaction_record(
                     user, group, transaction_id, api_action
                 )        
             except MonitorError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
+        else:
+            trec = trec[0]
 
         try:
             srec = self.monitor.get_sub_record(sub_id)
@@ -180,7 +184,7 @@ class MonitorConsumer(RMQC):
         # create the sub rec if not found
         if not srec:
             try:
-                srec = self.monitor.create_sub_record(sub_id, trec.id, state)
+                srec = self.monitor.create_sub_record(trec, sub_id, state)
             except MonitorError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
 
@@ -330,38 +334,49 @@ class MonitorConsumer(RMQC):
         # start a SQL alchemy session
         self.monitor.start_session()
 
-        # generate a query of both tables to apply filters to
-        srecs = self.monitor.get_sub_records(
-            sub_id, query_user, query_group, state, 
-            retry_count, transaction_id, api_action
+        trecs = self.monitor.get_transaction_record(
+            user, group, transaction_id
         )
         # Convert list of objects to json-friendly dict
-        return_list = []
-        for transaction_record, sub_record in srecs:
-            row_dict = {
-                "transaction_record": {
-                    "id": transaction_record.id,
-                    "transaction_id": transaction_record.transaction_id,
-                    "user": transaction_record.user,
-                    "group": transaction_record.group,
-                    "api_action": transaction_record.api_action,
-                    "creation_time": transaction_record.creation_time.isoformat(),
-                },
-                "sub_record": {
-                    "id": sub_record.id,
-                    "sub_id": sub_record.sub_id,
-                    "state": sub_record.state.name,
-                    "retry_count": sub_record.retry_count,
-                    "last_updated": sub_record.last_updated.isoformat(),
-                },
-                "failed_files": [orm_to_dict(ff) for ff in sub_record.failed_files]
-            }
-            return_list.append(row_dict)
+        # we want a list of transaction_records, each transaction_record
+        # contains a list of sub_records
+        trecs_dict = {}
+        for tr in trecs:
+            srecs = self.monitor.get_sub_records(
+                tr, sub_id, query_user, query_group, state, 
+                retry_count, api_action
+            )
+
+            if tr.id in trecs_dict:
+                t_rec = trecs_dict[tr.id]
+            else:
+                t_rec = {
+                    "id": tr.id,
+                    "transaction_id": tr.transaction_id,
+                    "user": tr.user,
+                    "group": tr.group,
+                    "api_action": tr.api_action,
+                    "creation_time": tr.creation_time.isoformat(),
+                    "sub_records" : []
+                }
+                trecs_dict[tr.id] = t_rec
+
+            for sr in srecs:
+                s_rec = {
+                    "id": sr.id,
+                    "sub_id": sr.sub_id,
+                    "state": sr.state.name,
+                    "retry_count": sr.retry_count,
+                    "last_updated": sr.last_updated.isoformat(),
+                    "failed_files": [orm_to_dict(ff) for ff in sr.failed_files]
+                }
+                t_rec["sub_records"].append(s_rec)
 
         self.monitor.end_session()
 
         # Send the recovered sub_record as an RPC response.
-        body[self.MSG_DATA][self.MSG_RECORD_LIST] = return_list
+        ret_list = [trecs_dict[id] for id in trecs_dict]
+        body[self.MSG_DATA][self.MSG_RECORD_LIST] = ret_list
         self.publish_message(
             properties.reply_to,
             msg_dict=body,
