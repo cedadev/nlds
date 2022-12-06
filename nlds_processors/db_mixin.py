@@ -39,8 +39,9 @@ class DBMixin:
         try:
             self.db_engine  = create_engine(
                                 db_connect, 
-                                echo=self.db_options["echo"]
-                            ).connect()
+                                echo=self.db_options["echo"],
+                                future=True
+                            )
         except ArgumentError as e:
             raise DBError("Could not create database engine")
 
@@ -56,15 +57,12 @@ class DBMixin:
     def start_session(self):
         """Create a SQL alchemy session"""
         assert(self.session == None)
-        self.session = Session(bind=self.db_engine)
+        self.session = Session(bind=self.db_engine, future=True)
 
 
     def save(self):
         """Commit all pending transactions"""
         self.session.commit()
-        # a commit at the level of the connection to the engine is required
-        # when future=True in the create_engine code above
-        #self.db_engine.commit()
 
 
     def end_session(self):
