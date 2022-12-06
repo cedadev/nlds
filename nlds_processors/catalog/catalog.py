@@ -22,12 +22,6 @@ class Catalog(DBMixin):
         self.db_options = db_options
         self.base = CatalogBase
         self.session = None
-        self.commit_required = False
-
-    # def __del__(self):
-        # if self.commit_required:
-        #     self.db_engine.commit()
-        # self.db_engine.close()
 
 
     def _user_has_get_holding_permission(self, 
@@ -107,7 +101,6 @@ class Catalog(DBMixin):
             )
             self.session.add(holding)
             self.session.flush()            # update holding.id
-            self.commit_required = True     # indicate a commit at end of session
         except (IntegrityError, KeyError) as e:
             raise CatalogError(
                 f"Holding with label:{label} could not be added to the database."
@@ -153,7 +146,6 @@ class Catalog(DBMixin):
             try:
                 holding.label = new_label
                 self.session.flush()
-                self.commit_required = True
             except IntegrityError:
                 raise CatalogError(
                     f"Cannot change holding with label:{holding_label} and "
@@ -204,7 +196,6 @@ class Catalog(DBMixin):
             )
             self.session.add(transaction)
             self.session.flush()           # flush to generate transaction.id
-            self.commit_required = True    # indicate a commit at end of session
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Transaction with transaction_id:{transaction_id} could not "
@@ -364,7 +355,6 @@ class Catalog(DBMixin):
             )
             self.session.add(new_file)
             self.session.flush()           # flush to generate file.id
-            self.commit_required = True    # indicate a commit at end of session            
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"File with original path {original_path} could not be added to"
@@ -414,7 +404,6 @@ class Catalog(DBMixin):
             )
             self.session.add(location)
             self.session.flush()           # flush to generate location.id
-            self.commit_required = True    # indicate a commit at end of session
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location with root {root}, path {file.original_path} and "

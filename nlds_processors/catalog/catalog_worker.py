@@ -207,6 +207,7 @@ class CatalogConsumer(RMQC):
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
         # stop db transitions and commit
+        self.catalog.save()
         self.catalog.end_session()
 
         # log the successful and non-successful catalog puts
@@ -681,6 +682,7 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
 
+        self.catalog.save()
         self.catalog.end_session()
 
         # return message to complete RPC
