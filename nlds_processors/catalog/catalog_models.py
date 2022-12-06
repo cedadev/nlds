@@ -9,9 +9,9 @@ import enum
 from nlds.details import PathType
 
 """Declarative base class, containing the Metadata object"""
-Base = declarative_base()
+CatalogBase = declarative_base()
 
-class Holding(Base):
+class Holding(CatalogBase):
     """Class containing the details of a Holding - i.e. a batch"""
     __tablename__ = "holding"
     # primary key / integer id / batch id
@@ -30,7 +30,7 @@ class Holding(Base):
     __table_args__ = (UniqueConstraint('label', 'user'),)
 
 
-class Transaction(Base):
+class Transaction(CatalogBase):
     """Class containing details of a transaction.  Note that a holding can consist
     of many transactions."""
     __tablename__ = "transaction"
@@ -47,7 +47,7 @@ class Transaction(Base):
                         index=True, nullable=False)
 
 
-class Tag(Base):
+class Tag(CatalogBase):
     """Class containing the details of a Tag that can be assigned to a Holding"""
     __tablename__ = "tag"
     # primary key
@@ -59,7 +59,7 @@ class Tag(Base):
                         index=True, nullable=False)
 
 
-class File(Base):
+class File(CatalogBase):
     """Class containing the details of a single File"""
     __tablename__ = "file"
     # primary key / integer id
@@ -95,7 +95,7 @@ class Storage(enum.Enum):
         return ["OBJECT_STORAGE", "TAPE"][self.value-1]
 
 
-class Location(Base):
+class Location(CatalogBase):
     """Class containing the location on NLDS of a single File"""
     __tablename__ = "location"
     # primary key / integer id
@@ -113,7 +113,7 @@ class Location(Base):
                      index=True, nullable=False)
 
 
-class Checksum(Base):
+class Checksum(CatalogBase):
     """Class containing checksum and algorithm used to calculate checksum"""
     __tablename__ = "checksum"
     # primary key / integer id
@@ -134,4 +134,4 @@ if __name__ == "__main__":
     # needs fixed version of eralchemy from:
     # https://github.com/maurerle/eralchemy2.git
     from eralchemy2 import render_er 
-    render_er(Base, 'catalog_schema.png')
+    render_er(CatalogBase, 'catalog_schema.png')

@@ -7,9 +7,9 @@ from nlds.rabbit.consumer import State
 
 
 """Declarative base class, containing the Metadata object"""
-Base = declarative_base()
+MonitorBase = declarative_base()
 
-class TransactionRecord(Base):
+class TransactionRecord(MonitorBase):
     """Class containing the details of the state of a transaction"""
     __tablename__ = "transaction_record"
     # primary key / integer id / batch id
@@ -28,7 +28,7 @@ class TransactionRecord(Base):
     sub_records = relationship("SubRecord")
 
 
-class SubRecord(Base):
+class SubRecord(MonitorBase):
     __tablename__ = "sub_record"
     # primary key / integer id / batch id
     id = Column(Integer, primary_key=True)
@@ -61,7 +61,7 @@ class SubRecord(Base):
                 or self.state == State.FAILED)
 
 
-class FailedFile(Base):
+class FailedFile(MonitorBase):
     __tablename__ = "failed_file"
 
     # primary key / integer id / batch id

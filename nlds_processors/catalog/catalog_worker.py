@@ -78,6 +78,8 @@ class CatalogConsumer(RMQC):
             self.RETRY_DELAYS
         )
 
+        self.catalog = None
+
 
     def reset(self):
         super().reset()
@@ -204,7 +206,7 @@ class CatalogConsumer(RMQC):
                     self.retrylist.append(pd)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
-        # stop db transistions and commit
+        # stop db transitions and commit
         self.catalog.end_session()
 
         # log the successful and non-successful catalog puts
@@ -593,6 +595,8 @@ class CatalogConsumer(RMQC):
                 f"Listing files from CATALOG_FIND {ret_dict}",
                 self.RK_LOG_DEBUG
             )
+
+        self.catalog.end_session()
 
         self.publish_message(
             properties.reply_to,

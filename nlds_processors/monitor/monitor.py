@@ -2,7 +2,7 @@ from sqlalchemy import create_engine, func, Enum
 from sqlalchemy.exc import ArgumentError, IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from nlds_processors.monitor.monitor_models import Base, TransactionRecord
+from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile
 
 from nlds.rabbit.consumer import State
@@ -22,8 +22,9 @@ class Monitor(DBMixin):
         """Record the monitor engine from the config strings passed in"""
         self.db_engine = db_engine
         self.db_options = db_options
-        self.base = Base
-
+        self.base = MonitorBase
+        self.session = None
+        self.commit_required = False
 
     def create_transaction_record(self,
                                   user: str,

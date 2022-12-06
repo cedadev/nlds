@@ -2,7 +2,7 @@
 from sqlalchemy import func, Enum
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from nlds_processors.catalog.catalog_models import Base, File, Holding,\
+from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Storage, Checksum, Tag
 from nlds_processors.db_mixin import DBMixin
 
@@ -11,14 +11,23 @@ class CatalogError(Exception):
         super().__init__(args)
         self.message = message
 
+
 class Catalog(DBMixin):
     """Catalog object containing methods to manipulate the Catalog Database"""
 
     def __init__(self, db_engine: str, db_options: str):
         """Store the catalog engine from the config strings passed in"""
-        self.db_engine = db_engine
+        self.db_engine = None
+        self.db_engine_str = db_engine
         self.db_options = db_options
-        self.base = Base
+        self.base = CatalogBase
+        self.session = None
+        self.commit_required = False
+
+    # def __del__(self):
+        # if self.commit_required:
+        #     self.db_engine.commit()
+        # self.db_engine.close()
 
 
     def _user_has_get_holding_permission(self, 
@@ -40,6 +49,7 @@ class Catalog(DBMixin):
                     holding_id: int=None,
                     tag: dict=None) -> Holding:
         """Get a holding from the database"""
+        assert(self.session != None)
         try:
             if holding_id:
                 holding = self.session.query(Holding).filter(
@@ -88,6 +98,7 @@ class Catalog(DBMixin):
                        group: str, 
                        label: str) -> Holding:
         """Create the new Holding with the label, user, group"""
+        assert(self.session != None)
         try:
             holding = Holding(
                 label = label, 
@@ -113,6 +124,7 @@ class Catalog(DBMixin):
                        new_label: str=None, 
                        new_tag: dict=None) -> Holding:
         """Find a holding and modify the information in it"""
+        assert(self.session != None)
         holdings=None
         if holding_label or holding_id:
             holdings = self.get_holding(
@@ -156,6 +168,7 @@ class Catalog(DBMixin):
                         id: int=None, 
                         transaction_id: str=None) -> Transaction:
         """Get a transaction from the database"""
+        assert(self.session != None)
         try:
             if transaction_id:
                 transaction = self.session.query(Transaction).filter(
@@ -182,6 +195,7 @@ class Catalog(DBMixin):
                            holding: Holding, 
                            transaction_id: str) -> Transaction:
         """Create a transaction that belongs to a holding and will contain files"""
+        assert(self.session != None)
         try:
             transaction = Transaction(
                 holding_id = holding.id,
@@ -206,6 +220,7 @@ class Catalog(DBMixin):
         """Check whether a user has permission to access a file.
         Later, when we implement the ROLES this function will be a lot more
         complicated!"""
+        assert(self.session != None)
         holding = self.session.query(Holding).filter(
             Transaction.id == file.transaction_id,
             Holding.id == Transaction.holding_id
@@ -227,6 +242,7 @@ class Catalog(DBMixin):
         of the file.  
         An optional holding can be supplied to get the file details from a
         particular holding - e.g. with a holding label, or tags"""
+        assert(self.session != None)
         try:
             # holding is a list, but there should only be one
             if holding:
@@ -285,6 +301,7 @@ class Catalog(DBMixin):
 
         """Get a multitue of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
+        assert(self.session != None)
         # Nones are set to .* in the regexp matching
         # get the matching holdings first, these match all but the path
         if holding_label:
@@ -333,6 +350,7 @@ class Catalog(DBMixin):
                     file_permissions: str = None) -> File:
         """Create a file that belongs to a transaction and will contain 
         locations"""
+        assert(self.session != None)
         try:
             new_file = File(
                 transaction_id = transaction.id,
@@ -360,6 +378,7 @@ class Catalog(DBMixin):
                      storage_type: Enum) -> Location:
         """Get a storage location for a file, given the file and the storage
         type"""
+        assert(self.session != None)
         try:
             location = self.session.query(Location).filter(
                 Location.file_id == file.id,
@@ -380,6 +399,7 @@ class Catalog(DBMixin):
                         object_name: str, 
                         access_time: float) -> Location:
         """Add the storage location for object storage"""
+        assert(self.session != None)
         try:
             location = Location(
                 storage_type = storage_type,
@@ -402,4 +422,3 @@ class Catalog(DBMixin):
                  "the database")
             return None
         return location
-

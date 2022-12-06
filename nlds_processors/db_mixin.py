@@ -1,6 +1,7 @@
 from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from nlds_processors.catalog.catalog_models import CatalogBase
 
 class DBError(Exception):
     def __init__(self, message, *args):
@@ -12,8 +13,7 @@ class DBMixin:
     def _get_db_string(self):
         """Mixin refactored from monitor and catalog classes"""
         # create the connection string with the engine
-        db_connect = self.db_engine + "://"
-        print(self.db_options)
+        db_connect = self.db_engine_str + "://"
         # add user if defined
         if len(self.db_options["db_user"]) > 0:
             db_connect += self.db_options["db_user"]
@@ -24,8 +24,6 @@ class DBMixin:
             db_connect += "@"
         # add the database name
         db_connect += self.db_options["db_name"]
-
-        
         return db_connect
     
 
@@ -58,13 +56,18 @@ class DBMixin:
 
     def start_session(self):
         """Create a SQL alchemy session"""
+        assert(self.session == None)
         self.session = Session(self.db_engine)
         self.commit_required = False
 
 
     def end_session(self):
         """Finish and commit a SQL alchemy session"""
+        self.session.commit()
         if self.commit_required:
-            self.session.commit()
+            # why is this required???
+            self.db_engine.commit()
+            
         self.commit_required = False
+        self.session.close()
         self.session = None
