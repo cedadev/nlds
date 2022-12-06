@@ -20,11 +20,10 @@ class Monitor(DBMixin):
     """Monitor object containing methods to manipulate the Monitor Database"""
     def __init__(self, db_engine: str, db_options: str):
         """Record the monitor engine from the config strings passed in"""
-        self.db_engine = db_engine
+        self.db_engine_str = db_engine
         self.db_options = db_options
         self.base = MonitorBase
         self.session = None
-        self.commit_required = False
 
     def create_transaction_record(self,
                                   user: str,
@@ -41,9 +40,7 @@ class Monitor(DBMixin):
             )
 
             self.session.add(transaction_record)
-            self.commit_required = True
             self.session.flush()     # flush to update the transaction_record.id
-            self.commit_required = True # indicate commit on session end
         except (IntegrityError, KeyError) as e:
             raise MonitorError(
                 f"Transaction record with transaction_id {transaction_id} "
@@ -85,7 +82,6 @@ class Monitor(DBMixin):
                 transaction_record_id = transaction_record_id,
             )
             self.session.add(sub_record)
-            self.commit_required = True
             # need to flush to update the transaction_record.id
             self.session.flush()
         except (IntegrityError, KeyError):
@@ -106,7 +102,6 @@ class Monitor(DBMixin):
                 sub_record_id=sub_record.id,
             )
             self.session.add(failed_file)
-            self.commit_required = True
             self.session.flush()
         except (IntegrityError, KeyError):
             raise MonitorError(
@@ -200,7 +195,6 @@ class Monitor(DBMixin):
                              )
         sub_record.state = new_state
         self.session.flush()
-        self.commit_required = True
 
 
     def check_completion(self,

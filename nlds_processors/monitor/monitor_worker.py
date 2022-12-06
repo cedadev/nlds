@@ -216,7 +216,8 @@ class MonitorConsumer(RMQC):
                      "final state.", self.RK_LOG_INFO)
             self.monitor.check_completion(trec)
 
-        # Commit all transactions when we're sure everything is as it should be. 
+        # Commit all transactions when we're sure everything is as it should be.
+        self.monitor.save() 
         self.monitor.end_session()
         self.log(f"Successfully commited monitoring update for transaction "
                  f"{transaction_id}, sub_record {sub_id}.", self.RK_LOG_INFO)
