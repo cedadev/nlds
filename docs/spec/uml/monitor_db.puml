@@ -5,6 +5,8 @@ object "**Transaction Record**" as tran_rec {
     transaction_id [UUID_64|STRING](unique)
     user [STRING]
     group [STRING]
+    api_action [STRING]
+    creation_time [DATETIME]
 }
 
 object "**Sub Record**" as sub_rec {
@@ -12,6 +14,7 @@ object "**Sub Record**" as sub_rec {
     sub_id [UUID_64|STRING](unique)
     state [ROUTING | SPLITTING | INDEXING | TRANSFERRING | CATALOGING | COMPLETE | FAILED]
     retry_count [INT]
+    last_updated [DATETIME]
 }
 
 object "**Failed Files**" as fail_rec {
