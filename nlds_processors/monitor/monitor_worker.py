@@ -159,7 +159,7 @@ class MonitorConsumer(RMQC):
         #     a split)
         try:
             trec = self.monitor.get_transaction_record(
-                user, group, transaction_id
+                user, group, None, transaction_id
             )
         except MonitorError:
             # fine to pass here as if transaction_record is not returned then it
@@ -288,6 +288,14 @@ class MonitorConsumer(RMQC):
                      "user, exiting callback", self.RK_LOG_ERROR)
             return
         
+        # get the id / primary key
+        try: 
+            idd = body[self.MSG_DETAILS][self.MSG_ID]
+        except KeyError:
+            self.log("Transaction id not in message, continuing without.", 
+                     self.RK_LOG_INFO)
+            idd = None
+
         # get the desired transaction id from the details section of the message
         try: 
             transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
@@ -335,7 +343,7 @@ class MonitorConsumer(RMQC):
         self.monitor.start_session()
 
         trecs = self.monitor.get_transaction_record(
-            user, group, transaction_id
+            user, group, idd, transaction_id
         )
         # Convert list of objects to json-friendly dict
         # we want a list of transaction_records, each transaction_record
@@ -374,8 +382,12 @@ class MonitorConsumer(RMQC):
 
         self.monitor.end_session()
 
-        # Send the recovered sub_record as an RPC response.
-        ret_list = [trecs_dict[id] for id in trecs_dict]
+        # Send the recovered record as an RPC response if there are one or more
+        # sub records
+        ret_list = []
+        for id in trecs_dict:
+            if len(trecs_dict[id]['sub_records']) > 0:
+                ret_list.append(trecs_dict[id])
         body[self.MSG_DATA][self.MSG_RECORD_LIST] = ret_list
         self.publish_message(
             properties.reply_to,

@@ -658,9 +658,35 @@ class CatalogConsumer(RMQC):
 
         # if there is the holding label or holding id then get the holding
         try:
+            if not holding_label and not holding_id == 0:
+                raise CatalogError(
+                    "Holding not found: holding_id or label not specified"
+                )
+            holdings = self.catalog.get_holding(
+                user, group, holding_label, holding_id, tag
+            )
+
+            if len(holdings) > 1:
+                if holding_label:
+                    raise CatalogError(
+                        f"More than one holding returned for label:"
+                        f"{holding_label}"
+                    )
+                elif holding_id:
+                    raise CatalogError(
+                        f"More than one holding returned for holding_id:"
+                        f"{holding_id}"
+                    )
+            else:
+                holding = holdings[0]
+
+            old_meta = {
+                "label": holding.label,
+                "tags":  holding.tags
+            }
+
             holding = self.catalog.modify_holding(
-                user, group, holding_label, holding_id, tag,
-                new_label, new_tag
+                holding, new_label, new_tag
             )
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
@@ -671,10 +697,13 @@ class CatalogConsumer(RMQC):
             # fill the return message with a dictionary of the holding
             ret_dict = {
                 "id": holding.id,
-                "label": holding.label,
                 "user": holding.user,
                 "group": holding.group,
-                "tags": holding.tags
+                "old_meta" : old_meta,
+                "new_meta" : {
+                    "label": holding.label,
+                    "tags":  holding.tags
+                }
             }
             body[self.MSG_DATA][self.MSG_HOLDING_LIST] = [ret_dict]
             self.log(

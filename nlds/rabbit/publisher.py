@@ -88,6 +88,7 @@ class RabbitMQPublisher():
 
     # Message json sections
     MSG_DETAILS = "details"
+    MSG_ID = "id"
     MSG_TRANSACT_ID = "transaction_id"
     MSG_TIMESTAMP = "timestamp"
     MSG_USER = "user"

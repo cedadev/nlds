@@ -44,6 +44,7 @@ class StatusResponse(BaseModel):
 async def get(token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
+              id: Optional[int] = None,
               transaction_id: Optional[str] = None,
               state: Optional[Union[int, str]] = None,
               sub_id: Optional[str] = None,
@@ -117,7 +118,8 @@ async def get(token: str = Depends(authenticate_token),
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_USER: user,
-            RMQP.MSG_GROUP: group,        
+            RMQP.MSG_GROUP: group,
+            RMQP.MSG_ID: id,
             RMQP.MSG_API_ACTION: api_action,
             RMQP.MSG_TRANSACT_ID: transaction_id,
             RMQP.MSG_STATE: state,

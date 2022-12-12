@@ -1,6 +1,6 @@
 # SQLalchemy imports
 from sqlalchemy import func, Enum
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError
 
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Storage, Checksum, Tag
@@ -67,7 +67,7 @@ class Catalog(DBMixin):
                        f"User:{user} in group:{group} does not have permission "
                        f"to access the holding with label:{h.label}."
                     )
-        except (IntegrityError, KeyError):
+        except (IntegrityError, KeyError, ArgumentError):
             if holding_id:
                 raise CatalogError(
                     f"Holding with holding_id:{holding_id} not found for "
@@ -109,38 +109,11 @@ class Catalog(DBMixin):
 
 
     def modify_holding(self, 
-                       user: str, 
-                       group:str, 
-                       holding_label: str=None, 
-                       holding_id: int=None, 
-                       tag: dict=None,
+                       holding: Holding,
                        new_label: str=None, 
                        new_tag: dict=None) -> Holding:
         """Find a holding and modify the information in it"""
         assert(self.session != None)
-        holdings=None
-        if holding_label or holding_id:
-            holdings = self.get_holding(
-                user, group, holding_label, holding_id
-            )
-
-        if not holdings or len(holdings) == 0:
-            raise CatalogError(
-                "Holding not found: holding_id or label not specified"
-            )
-        
-        if len(holdings) > 1:
-            if holding_label:
-                raise CatalogError(
-                    f"More than one holding returned for label:{holding_label}"
-                )
-            elif holding_id:
-                raise CatalogError(
-                    f"More than one holding returned for holding_id:{holding_id}"
-                )
-        else:
-            holding = holdings[0]
-
         # change the label if a new_label supplied
         if new_label:
             try:
@@ -148,8 +121,8 @@ class Catalog(DBMixin):
                 self.session.flush()
             except IntegrityError:
                 raise CatalogError(
-                    f"Cannot change holding with label:{holding_label} and "
-                    f"holding_id:{holding_id} to new label:{new_label}. New "
+                    f"Cannot change holding with label:{holding.label} and "
+                    f"holding_id:{holding.id} to new label:{new_label}. New "
                     f"label:{new_label} already in use by another holding."
                 )
 

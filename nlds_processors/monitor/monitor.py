@@ -52,25 +52,43 @@ class Monitor(DBMixin):
     def get_transaction_record(self, 
                                user: str,
                                group: str,
-                               transaction_id: str) -> list:
-        """Gets a TransactionRecord from the DB from the given transaction_id"""
+                               idd: int = None,
+                               transaction_id: str = None) -> list:
+        """Gets a TransactionRecord from the DB from the given transaction_id,
+        or the primary key (id)"""
         if transaction_id:
             transaction_search = transaction_id
         else:
             transaction_search = ".*"
 
         try:
-            trec = self.session.query(TransactionRecord).filter(
-                TransactionRecord.user == user,
-                TransactionRecord.group == group,
-                TransactionRecord.transaction_id.regexp_match(transaction_search)
-            ).all()
+            if idd:
+                trec = self.session.query(TransactionRecord).filter(
+                    TransactionRecord.user == user,
+                    TransactionRecord.group == group,
+                    TransactionRecord.id == idd
+                )
+            else:
+                trec = self.session.query(TransactionRecord).filter(
+                    TransactionRecord.user == user,
+                    TransactionRecord.group == group,
+                    TransactionRecord.transaction_id.regexp_match(
+                        transaction_search
+                    )
+                )
+            trecs = trec.all()
 
         except (IntegrityError, KeyError):
-            raise MonitorError(
-                f"TransactionRecord with transaction_id:{transaction_id} not "
-                f"found")
-        return trec
+            if id:
+                raise MonitorError(
+                    f"TransactionRecord with id:{id} not found"
+                )
+            else:
+                raise MonitorError(
+                    f"TransactionRecord with transaction_id:{transaction_id} "
+                    f"not found"
+                )
+        return trecs
 
 
     def create_sub_record(self, 

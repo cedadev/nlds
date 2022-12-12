@@ -1,34 +1,76 @@
 @startuml overview
 
-actor user as "User"
-agent client as "Client API / CLI"
-agent API_server as "API server"
-queue message_broker as "Message broker"
-agent monitoring as "Monitoring"
-database catalogue as "Catalogue"
+together {
+    actor user as "User"
+    agent client as "Client API / CLI" #MediumPurple
+    agent API_server as "API server" #DodgerBlue
+}
+
+interface monitoring as "Monitoring"
+interface logging as "Logging"
+
+database catalogdb as "Catalog" #SpringGreen
+database monitordb as "Monitor" #tomato
+
 cloud object_storage as "Object Storage"
-agent transfer as "Transfer system"
 component posix as "POSIX disk"
 component tape as "Tape"
 
+package Exchange{
+    control mb as "Message Broker"
+    queue mq as "Monitor Q" #tomato
+    queue iq as "Index Q" #lightblue
+    queue tq as "Transfer Q" #gold
+    queue wq as "NLDS Q" #lightgrey
+    queue cq as "Catalog Q" #SpringGreen
+    queue lq as "Logging Q" #hotpink
+}
+
 package Microservices {
-node micro_service_1 as "Microservice"
-node micro_service_2 as "Microservice"
-node micro_service_3 as "Microservice"
-}  
+    component monitor as "Monitor" #tomato
+    component indexer as "Indexer" #lightblue
+    component transfer as "Transfer" #gold
+    component work as "NLDS" #lightgrey
+    component catalog as "Catalog" #SpringGreen
+    component logger as "Logger" #hotpink
+}
+
+Microservices-->mb
 
 user-->client
 client<-->API_server
-API_server-->message_broker
-message_broker <--> micro_service_1
-message_broker <--> micro_service_2
-message_broker <--> micro_service_3
-micro_service_3 --> monitoring
-micro_service_1 --> catalogue
-monitoring --> API_server
-micro_service_3 <--> transfer
+API_server-->mb
+
+mb --> wq
+mb --> iq
+mb --> tq
+mb --> cq
+mb --> mq
+mb --> lq
+
+wq --> work
+iq --> indexer
+tq --> transfer
+cq --> catalog
+mq --> monitor
+lq --> logger
+
+
+monitor --> monitoring
+API_server <--- monitoring
+
+logger --> logging
+API_server <--- logging
+
+catalog <--> catalogdb
 transfer <--> object_storage
 transfer <--> posix
 transfer <--> tape
+indexer <--> posix
+
+posix <-> object_storage
+object_storage <-> tape
+
+monitor <--> monitordb
 
 @enduml 
