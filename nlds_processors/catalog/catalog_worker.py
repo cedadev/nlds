@@ -553,7 +553,7 @@ class CatalogConsumer(RMQC):
                     ret_dict[h.label] = h_rec                    
                 # create a transaction dictionary if it doesn't exist
                 if t.transaction_id in ret_dict[h.label][self.MSG_TRANSACTIONS]:
-                    t_rec = ret_dict[h.label][self.MSG_TRANSACTIONS]
+                    t_rec = ret_dict[h.label][self.MSG_TRANSACTIONS][t.transaction_id]
                 else:
                     t_rec = {
                         self.MSG_FILELIST: [],
