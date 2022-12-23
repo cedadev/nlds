@@ -56,7 +56,12 @@ class DBMixin:
 
     def start_session(self):
         """Create a SQL alchemy session"""
-        assert(self.session == None)
+        # Check if there is an existing open session
+        if self.session is not None:
+            # The only way there can be is if there was some error and it wasn't
+            # properly finished. We can (probably) just roll it back.
+            self.session.rollback()
+            self.session = None
         self.session = Session(bind=self.db_engine, future=True)
 
 
