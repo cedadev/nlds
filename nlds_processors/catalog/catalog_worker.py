@@ -482,7 +482,80 @@ class CatalogConsumer(RMQC):
             exchange={'name': ''},
             correlation_id=properties.correlation_id
         )
+    
+    def _catalog_stat(self, body: dict, properties: Header) -> None:
+        """Get the labels for a list of transaction ids"""
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
 
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the transaction_ids from the metadata section of the message
+        try:
+            transaction_records = body[self.MSG_DATA][self.MSG_RECORD_LIST]
+        except KeyError:
+            self.log("Transaction ids not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+        
+        # Verify transaction list
+        if transaction_records is None or len(transaction_records) <= 0:
+            self.log("Passed list of transactions is not valid, check message " 
+                     "contents. Exiting callback", self.RK_LOG_ERROR)
+            return
+
+        self.catalog.start_session()
+
+        # Get transactions from catalog using transaction_ids from monitoring
+        ret_dict = {}
+        try:
+            # Get the transaction and holding for each transaction_record
+            for tr in transaction_records:
+                transaction_id = tr["transaction_id"]
+                t = self.catalog.get_transaction(
+                    transaction_id=transaction_id
+                )
+                if t is None:
+                    raise CatalogError(f"Could not find a transaction with "
+                                       f"transaction_id {transaction_id}.")
+                h = self.catalog.get_holding(
+                    user, group, holding_id=t.holding_id
+                )[0] # should only be one!
+                ret_dict[t.transaction_id] = h.label
+
+                # Add label to the transaction_record dict
+                tr[self.MSG_LABEL] = h.label
+        except CatalogError as e:
+            # failed to get the transactions - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_TRANSACTIONS] = {}
+        else:            
+            # add the return list to successfully completed holding listings
+            body[self.MSG_DATA][self.MSG_TRANSACTIONS] = ret_dict
+            body[self.MSG_DATA][self.MSG_RECORD_LIST] = transaction_records
+            self.log(
+                f"Getting holding labels from CATALOG_STAT {ret_dict}",
+                self.RK_LOG_DEBUG
+            )
+        self.catalog.end_session()
+
+        # send the rpc return message for failed or success
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )
 
     def _catalog_find(self, body: dict, properties: Header) -> None:
         """List the user's files"""
@@ -792,6 +865,9 @@ class CatalogConsumer(RMQC):
         elif (api_method == self.RK_META):
             # don't need to split any routing key for an RPC method
             self._catalog_meta(body, properties)
+
+        elif (api_method == self.RK_STAT):
+            self._catalog_stat(body, properties)
 
 
 def main():

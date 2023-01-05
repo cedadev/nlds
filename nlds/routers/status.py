@@ -10,6 +10,7 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 from typing import Optional, List, Dict, Union
 import uuid
+import json
 
 from fastapi import Depends, APIRouter, status
 from fastapi.exceptions import HTTPException
@@ -140,9 +141,29 @@ async def get(token: str = Depends(authenticate_token),
     )
     # Check if response is valid or whether the request timed out
     if response is not None:
+        # convert byte response to dict for label fetching
+        response_dict = json.loads(response)
+        # Attempt to get list of transaction records
+        transaction_records = None
+        try: 
+            transaction_records = response_dict[RMQP.MSG_DATA][RMQP.MSG_RECORD_LIST]
+        except KeyError as e:
+            print(f"Encountered error when trying to get a record list from the"
+                  f" message response ({e})")
+        
+        transaction_response = None
+        # Only continue if the response actually had any transactions in it
+        if transaction_records is not None and len(transaction_records) > 0:
+            routing_key = "catalog_q"
+            transaction_response = await rpc_publisher.call(
+                msg_dict=response_dict, routing_key=routing_key
+            )
+
+        if transaction_response is not None:
+            response = transaction_response
+
         # convert byte response to str
         response = response.decode()
-
         return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                             content = response)
     else:
