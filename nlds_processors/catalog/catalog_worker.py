@@ -459,12 +459,15 @@ class CatalogConsumer(RMQC):
             # fill the dictionary to generate JSON for the response
             ret_list = []
             for h in holdings:
+                # get the first transaction
+                t = h.transactions[0]
                 ret_dict = {
                     "id": h.id,
                     "label": h.label,
                     "user": h.user,
                     "group": h.group,
-                    "tags": h.tags
+                    "tags": h.tags,
+                    "date": t.ingest_time.isoformat()
                 }
                 ret_list.append(ret_dict)
             # add the return list to successfully completed holding listings

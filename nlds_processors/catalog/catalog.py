@@ -213,7 +213,7 @@ class Catalog(DBMixin):
                 file = self.session.query(File).filter(
                     Transaction.id == File.transaction_id,
                     Transaction.holding_id == holding[0].id,
-                    File.original_path == original_path,
+                    File.original_path.regexp_match(original_path),
                 # this order_by->first is in case multiple copies of a file
                 # have been added to the holding.  This will be illegal at some
                 # point, but for now this is an easy fix
@@ -226,8 +226,8 @@ class Catalog(DBMixin):
                 # if no holding given then we want to return the most recent
                 # file with this original path
                 file = self.session.query(File).filter(
-                    File.original_path == original_path,
-                    Transaction.id == File.transaction_id
+                    Transaction.id == File.transaction_id,
+                    File.original_path.regexp_match(original_path)
                 ).order_by(Transaction.ingest_time.desc()).first()
                 err_msg = (
                     f"File:{original_path} not found for user:{user} in "
@@ -296,7 +296,7 @@ class Catalog(DBMixin):
             if len(file_list) == 0:
                 raise KeyError
 
-        except (IntegrityError, KeyError):
+        except (IntegrityError, KeyError, OperationalError):
             err_msg = f"File with original_path:{path} not found "
             raise CatalogError(err_msg)
         
