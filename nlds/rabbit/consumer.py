@@ -17,6 +17,7 @@ from typing import Dict, List
 import pathlib as pth
 from datetime import datetime, timedelta
 import uuid
+import json
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -298,7 +299,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                   self.RK_START])
         self.publish_message(monitoring_rk, body_json)
         self.sent_message_count += 1
-        
 
     def setup_logging(self, enable=False, log_level: str = None, 
                       log_format: str = None, add_stdout_fl: bool = False, 
@@ -400,6 +400,21 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 PermissionError,
                 RabbitRetryError,
             ) as e:
+            try: 
+                # Attempt to mark job as failed in monitoring db
+                # TODO: this probably isn't the best way of doing this!
+                rk_parts = self.split_routing_key(method.routing_key)
+                body_json = json.loads(body)
+                
+                # Send message to monitoring to keep track of state
+                monitoring_rk = ".".join([rk_parts[0], 
+                                          self.RK_MONITOR_PUT, 
+                                          self.RK_START])
+                body_json[self.MSG_DETAILS][self.MSG_STATE] = State.FAILED
+                self.publish_message(monitoring_rk, body_json)
+            except:
+                self.log("Failed attempt to mark job as failed in monitoring.",
+                         self.RK_LOG_WARNING)
             if self.print_tracebacks_fl:
                 tb = traceback.format_exc()
                 self.log(tb, self.RK_LOG_DEBUG)

@@ -2,7 +2,7 @@
 
 actor user as "User"
 package sci_machines as "sci Machines"{
-    agent client as "Client API / CLI"
+    agent client as "Client API / CLI" #MediumPurple
 }
 
 component posix as "POSIX disk"
@@ -11,29 +11,29 @@ component tape as "Tape"
 
 package kubernetes as "Wigbiorg (Kubernetes)" {
     package consumers as "Basic deployment" {
-        agent logger as "Logger"
-        agent indexer as "Indexer"
-        agent transfer_put as "Put Transfer"
-        agent nlds_worker as "NLDS Worker"
-        agent monitoring as "Monitor"
-        agent cataloguer as "Cataloguer"
+        agent logger as "Logger" #hotpink
+        agent indexer as "Indexer" #LightBlue
+        agent transfer_put as "Put Transfer" #gold
+        agent nlds_worker as "NLDS Worker" #lightgrey
+        agent monitoring as "Monitor" #tomato
+        agent cataloguer as "Cataloguer" #springgreen
     }
     package nginx as "Load balanced deployment"{
-        agent api_server as "API Server"
+        agent "API Server" as api_server #DodgerBlue 
     }  
 }
 package vms as "VMs"{
     package cloud_vm_consumer as "Cloud VM /w write access"{
-        agent transfer_get as "Get Transfer" 
+        agent transfer_get as "Get Transfer" #gold
     }
 
     package cloud_vm_rabbit as "Cloud VM"{
-        agent rabbit_server as "Rabbit server" 
+        agent rabbit_server as "Rabbit server" #DarkOrange
     }
 }
 package db_server as "DB Server"{
-    database catalogue_db as "Catalogue"
-    database monitoring_db as "Monitoring DB"
+    database catalogue_db as "Catalogue DB" #springgreen
+    database monitoring_db as "Monitoring DB" #tomato
 }
 
 user-->client

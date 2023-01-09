@@ -385,9 +385,10 @@ class MonitorConsumer(RMQC):
         # Send the recovered record as an RPC response if there are one or more
         # sub records
         ret_list = []
-        for id in trecs_dict:
-            if len(trecs_dict[id]['sub_records']) > 0:
-                ret_list.append(trecs_dict[id])
+        for id_ in trecs_dict:
+            if len(trecs_dict[id_]['sub_records']) > 0:
+                ret_list.append(trecs_dict[id_])
+                
         body[self.MSG_DATA][self.MSG_RECORD_LIST] = ret_list
         self.publish_message(
             properties.reply_to,
