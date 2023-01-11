@@ -150,7 +150,7 @@ class CatalogConsumer(RMQC):
         # try to get the holding to see if it already exists and can be added to
         try:
             holding = self.catalog.get_holding(user, group, label, holding_id)
-        except CatalogError:
+        except (KeyError, CatalogError):
             holding = None
 
         if holding is None:
@@ -159,8 +159,11 @@ class CatalogConsumer(RMQC):
             except CatalogError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 return
+        else:
+            holding = holding[0]
 
-        # create the transaction within the  holding - check for error on return
+        # create the transaction within the  holding - check for error on 
+        # return
         try:
             transaction = self.catalog.create_transaction(
                 holding, 
@@ -469,6 +472,12 @@ class CatalogConsumer(RMQC):
                     "tags": h.tags,
                     "date": t.ingest_time.isoformat()
                 }
+                # add the transaction ids:
+                t_ids = []
+                for t in h.transactions:
+                    t_ids.append(t.transaction_id)
+
+                ret_dict["transactions"] = t_ids
                 ret_list.append(ret_dict)
             # add the return list to successfully completed holding listings
             body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
@@ -527,16 +536,20 @@ class CatalogConsumer(RMQC):
                 t = self.catalog.get_transaction(
                     transaction_id=transaction_id
                 )
+                # A transaction_id might not have an associated transaction in
+                # the catalog if the transaction FAILED or has not COMPLETED
+                # yet.  We allow for this and return an empty string instead.
                 if t is None:
-                    raise CatalogError(f"Could not find a transaction with "
-                                       f"transaction_id {transaction_id}.")
-                h = self.catalog.get_holding(
-                    user, group, holding_id=t.holding_id
-                )[0] # should only be one!
-                ret_dict[t.transaction_id] = h.label
+                    label = ""
+                else:
+                    h = self.catalog.get_holding(
+                        user, group, holding_id=t.holding_id
+                    )[0] # should only be one!
+                    label = h.label
+                    ret_dict[t.transaction_id] = label
 
                 # Add label to the transaction_record dict
-                tr[self.MSG_LABEL] = h.label
+                tr[self.MSG_LABEL] = label
         except CatalogError as e:
             # failed to get the transactions - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
