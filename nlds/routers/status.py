@@ -170,7 +170,7 @@ async def get(token: str = Depends(authenticate_token),
         response_error = ResponseError(
             loc = ["status", "get"],
             msg = "Monitoring service could not be reached in time.",
-            type = "Incomplete request."
+            type = "Request timed out."
         )
         raise HTTPException(
             status_code = status.HTTP_504_GATEWAY_TIMEOUT,
