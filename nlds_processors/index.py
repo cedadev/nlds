@@ -192,10 +192,10 @@ class IndexerConsumer(StattingConsumer):
             # If item does not exist, or is not accessible, add to problem list
             if not self.check_path_access(item_p):
                 # Increment retry counter and add to retry list
-                self.log(f"{path_details.path} is inaccessible.", 
-                         self.RK_LOG_DEBUG)
+                reason = (f"Path:{path_details.path} is inaccessible.")
+                self.log(reason, self.RK_LOG_DEBUG)
                 path_details.increment_retry(
-                    retry_reason="inaccessible"
+                    retry_reason=reason
                 )
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
@@ -249,10 +249,12 @@ class IndexerConsumer(StattingConsumer):
                             # otherwise, then add to problem list. Note that we 
                             # can't check the size of the problem list as files 
                             # may not exist
-                            self.log(f"{walk_path_details.path} is inaccessible.", 
-                                     self.RK_LOG_DEBUG)
+                            reason = (
+                                f"Path:{walk_path_details.path} is inaccessible."
+                            )
+                            self.log(reason, self.RK_LOG_DEBUG)
                             walk_path_details.increment_retry(
-                                retry_reason="inaccessible"
+                                retry_reason=reason
                             )
                             self.append_and_send(
                                 walk_path_details, rk_retry, body_json, 
@@ -273,10 +275,10 @@ class IndexerConsumer(StattingConsumer):
                                      body_json, list_type="indexed", 
                                      filesize=filesize)
             else:
-                self.log(f"{path_details.path} is of unknown type.", 
-                         self.RK_LOG_DEBUG)
+                reason = f"Path:{path_details.path} is of unknown type."
+                self.log(reason, self.RK_LOG_DEBUG)
                 path_details.increment_retry(
-                    retry_reason="unknown_type"
+                    retry_reason=reason
                 )
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"

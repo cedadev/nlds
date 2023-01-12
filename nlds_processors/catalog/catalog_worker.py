@@ -162,16 +162,25 @@ class CatalogConsumer(RMQC):
         else:
             holding = holding[0]
 
-        # create the transaction within the  holding - check for error on 
-        # return
+        # try to get the transaction to see if it already exists and can be 
+        # added to
         try:
-            transaction = self.catalog.create_transaction(
-                holding, 
-                transaction_id
+            transaction = self.catalog.get_transaction(
+                transaction_id=transaction_id
             )
-        except CatalogError as e:
-            self.log(e.message, RMQC.RK_LOG_ERROR)
-            return
+        except (KeyError, CatalogError):
+            transaction = None
+
+        # create the transaction within the  holding if it doesn't exist
+        if transaction is None:
+            try:
+                transaction = self.catalog.create_transaction(
+                    holding, 
+                    transaction_id
+                )
+            except CatalogError as e:
+                self.log(e.message, RMQC.RK_LOG_ERROR)
+                return
 
         # loop over the filelist
         for f in filelist:

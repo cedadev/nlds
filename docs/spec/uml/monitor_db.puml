@@ -3,6 +3,7 @@
 object "**Transaction Record**" as tran_rec {
     id [INT](unique)
     transaction_id [UUID_64|STRING](unique)
+    job_label [STRING]
     user [STRING]
     group [STRING]
     api_action [STRING]

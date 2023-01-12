@@ -59,10 +59,11 @@ class PutTransferConsumer(BaseTransferConsumer):
             # is accessible. 
             if (self.check_permissions_fl and 
                 not self.check_path_access(item_path)):
-
-                self.log(f"{path_details.path} is inaccessible.", 
-                         self.RK_LOG_DEBUG)
-                path_details.increment_retry(retry_reason="inaccessible")
+                reason = (f"Path:{path_details.path} is inaccessible.")
+                self.log(reason, self.RK_LOG_DEBUG)
+                path_details.increment_retry(
+                    retry_reason=reason
+                )
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
                 )
