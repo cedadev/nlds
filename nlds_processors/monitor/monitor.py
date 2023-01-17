@@ -29,6 +29,7 @@ class Monitor(DBMixin):
                                   user: str,
                                   group: str,
                                   transaction_id: str, 
+                                  job_label: str,
                                   api_action: str) -> TransactionRecord:
         """Creates a transaction_record with the minimum required input"""
         try:
@@ -37,6 +38,7 @@ class Monitor(DBMixin):
                 user = user,
                 group = group, 
                 api_action = api_action,
+                job_label = job_label,
             )
 
             self.session.add(transaction_record)

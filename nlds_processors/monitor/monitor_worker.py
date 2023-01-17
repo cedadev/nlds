@@ -105,6 +105,12 @@ class MonitorConsumer(RMQC):
             self.log("API-action not in message, exiting callback.", 
                      self.RK_LOG_ERROR)
             return
+
+        # get the job_label from the details section of the message
+        try:
+            job_label = body[self.MSG_DETAILS][self.MSG_JOB_LABEL]
+        except KeyError:
+            job_label = transaction_id[0:8]
         
         # get the state from the details section of the message
         try:
@@ -169,7 +175,7 @@ class MonitorConsumer(RMQC):
         if trec is None or len(trec) == 0:
             try:
                 trec = self.monitor.create_transaction_record(
-                    user, group, transaction_id, api_action
+                    user, group, transaction_id, job_label, api_action
                 )        
             except MonitorError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
@@ -363,6 +369,7 @@ class MonitorConsumer(RMQC):
                     "transaction_id": tr.transaction_id,
                     "user": tr.user,
                     "group": tr.group,
+                    "job_label": tr.job_label,
                     "api_action": tr.api_action,
                     "creation_time": tr.creation_time.isoformat(),
                     "sub_records" : []

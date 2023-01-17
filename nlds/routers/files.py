@@ -76,6 +76,7 @@ async def get(transaction_id: UUID,
               group: str = Depends(authenticate_group),
               filepath: str = None,
               target: Optional[str] = None,
+              job_label: Optional[str] = None,
               tenancy: Optional[str] = None,
               access_key: str = "",
               secret_key: str = ""
@@ -92,10 +93,12 @@ async def get(transaction_id: UUID,
             status_code = status.HTTP_400_BAD_REQUEST,
             detail = response_error.json()
         )
-    # return response, transaction id accepted for processing
+    if job_label is None:
+        job_label = transaction_id[0:8]
+    # return response, job label accepted for processing
     response = FileResponse(
         uuid = transaction_id,
-        msg = (f"GET transaction with id {transaction_id} accepted for "
+        msg = (f"GET transaction with job label:{job_label} accepted for "
                 "processing.")
     )
     contents = [filepath, ]
@@ -112,7 +115,8 @@ async def get(transaction_id: UUID,
             RMQP.MSG_TARGET: target,
             RMQP.MSG_ACCESS_KEY: access_key,
             RMQP.MSG_SECRET_KEY: secret_key,
-            RMQP.MSG_API_ACTION: api_method
+            RMQP.MSG_API_ACTION: api_method,
+            RMQP.MSG_JOB_LABEL: job_label
         }, 
         RMQP.MSG_DATA: {
             # Convert to PathDetails for JSON serialisation
@@ -142,7 +146,7 @@ async def put(transaction_id: UUID,
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
               tenancy: Optional[str]=None,
-              target: Optional[str]=None,
+              job_label: Optional[str] = None,
               access_key: str="",
               secret_key: str=""
               ):
@@ -158,10 +162,12 @@ async def put(transaction_id: UUID,
             status_code = status.HTTP_400_BAD_REQUEST,
             detail = response_error.json()
         )
+    if job_label is None:
+        job_label = transaction_id[0:8]
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
-        msg = (f"GETLIST transaction with id {transaction_id} accepted for "
+        msg = (f"GETLIST transaction with job_label:{job_label} accepted for "
                 "processing.")
     )
 
@@ -178,7 +184,7 @@ async def put(transaction_id: UUID,
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,
             RMQP.MSG_TENANCY: tenancy,
-            RMQP.MSG_TARGET: target,
+            RMQP.MSG_JOB_LABEL: job_label,
             RMQP.MSG_ACCESS_KEY: access_key,
             RMQP.MSG_SECRET_KEY: secret_key,
             RMQP.MSG_API_ACTION: api_method
@@ -224,6 +230,7 @@ async def put(transaction_id: UUID,
               group: str=Depends(authenticate_group),
               filemodel: Optional[FileModel]=None,
               tenancy: Optional[str]=None,
+              job_label: Optional[str] = None,
               access_key: str="",
               secret_key: str=""
             ):
@@ -243,10 +250,13 @@ async def put(transaction_id: UUID,
     # Convert filepath or filelist to lists
     contents = filemodel.get_cleaned_list()
 
+    if job_label is None:
+        job_label = transaction_id[0:8]
+
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
-        msg = (f"PUT transaction with id {transaction_id} accepted for "
+        msg = (f"PUT transaction with job_label:{job_label} accepted for "
                 "processing.\n")
     )
     # create the message dictionary - do this here now as it's more transparent
@@ -259,6 +269,7 @@ async def put(transaction_id: UUID,
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,
             RMQP.MSG_TENANCY: tenancy,
+            RMQP.MSG_JOB_LABEL: job_label,
             RMQP.MSG_ACCESS_KEY: access_key,
             RMQP.MSG_SECRET_KEY: secret_key,
             RMQP.MSG_API_ACTION: api_method

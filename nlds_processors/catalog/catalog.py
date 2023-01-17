@@ -245,10 +245,10 @@ class Catalog(DBMixin):
                     f"access the file with original path:{original_path}."
                 )
 
-        except (IntegrityError, KeyError):
+        except (IntegrityError, KeyError, OperationalError):
             if holding:
                 err_msg = (f"File with original path:{original_path} not found "
-                           f"in holding:{holding.label}")
+                           f"in holding:{holding[0].label}")
             else:
                 err_msg = f"File with original path:{original_path} not found"
             raise CatalogError(err_msg)

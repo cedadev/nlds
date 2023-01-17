@@ -20,6 +20,8 @@ class TransactionRecord(MonitorBase):
     user = Column(String, nullable=False)
     # group who owns this holding
     group = Column(String, nullable=False)
+    # job label - optional job label for PUT and GET
+    job_label = Column(String, nullable=True)
     # defining api-action invoked to start the transaction
     api_action = Column(String, nullable=False)
     # Time of initial submission

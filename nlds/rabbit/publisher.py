@@ -100,6 +100,7 @@ class RabbitMQPublisher():
     MSG_ACCESS_KEY = "access_key"
     MSG_SECRET_KEY = "secret_key"
     MSG_API_ACTION = "api_action"
+    MSG_JOB_LABEL = "job_label"
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
     MSG_FILELIST_ITEMS = "fl_items"
