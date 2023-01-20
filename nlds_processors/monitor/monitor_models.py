@@ -52,7 +52,7 @@ class SubRecord(MonitorBase):
 
     def has_finished(self):
         """Convenience method for checking whether a given SubRecord is in a 
-        'final' state, i.e. is no longer going ot change and the transaction can 
+        'final' state, i.e. is no longer going to change and the transaction can 
         therefore be marked as COMPLETE.
 
         Checks whether all states have gotten to the final stage of a workflow 

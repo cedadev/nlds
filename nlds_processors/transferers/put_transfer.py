@@ -3,6 +3,7 @@ from typing import List, Dict
 import minio
 from minio.error import S3Error
 from retry import retry
+from urllib3.exceptions import HTTPError
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import FilelistType, State
@@ -72,24 +73,37 @@ class PutTransferConsumer(BaseTransferConsumer):
             self.log(f"Attempting to upload file {path_details.original_path}", 
                      self.RK_LOG_DEBUG)
             
-            # The minio client doesn't like file paths starting at root (i.e. 
-            # with a slash at the very beginning) so it needs to be stripped if 
-            # using minio, and added back on get.
-            # TODO: Add this flag to the file details json metadata 
-            if self.remove_root_slash_fl and path_details.original_path[0] == "/":
-                path_details.object_name = path_details.original_path[1:]
-            else:
-                path_details.object_name = path_details.original_path
-            
-            result = client.fput_object(
-                bucket_name, 
-                path_details.object_name, 
-                path_details.original_path,
-            )
-            self.log(f"Successfully uploaded {path_details.original_path}", 
-                     self.RK_LOG_DEBUG)
-            self.append_and_send(path_details, rk_complete, body_json, 
-                                 list_type=FilelistType.transferred)
+            # NOTE: (2023-01-19) Removing the remove_root_slash_fl options as it 
+            # causes problems with the reorganisation of the workflow for 
+            # duplicate file catching. Given we're not even using the feature 
+            # this seems a better solution than having to update the location in
+            # the catalog once transfer has completed. In the future we may want 
+            # to encode the object name differently but this can be dealt with 
+            # when that occurs. 
+            # TODO: This begs the question of whether we need to store the 
+            # object-name at all
+            path_details.object_name = path_details.original_path
+            try:
+                if path_details.original_path == "/Users/jack.leland/coding/projects/nlds_repos/client-tests/test_dir_1/test_texts/test_file_7.txt":
+                    raise HTTPError
+                result = client.fput_object(
+                    bucket_name, 
+                    path_details.object_name, 
+                    path_details.original_path,
+                )
+                self.log(f"Successfully uploaded {path_details.original_path}", 
+                        self.RK_LOG_DEBUG)
+                self.append_and_send(path_details, rk_complete, body_json, 
+                                    list_type=FilelistType.transferred)
+            except HTTPError as e: 
+                reason = (f"Error uploading {path_details.path} to object "
+                          f"store: {e}.")
+                self.log(f"{reason} Adding to retry list.", self.RK_LOG_ERROR)
+                path_details.increment_retry(retry_reason=reason)
+                self.append_and_send(
+                    path_details, rk_retry, body_json, list_type="retry"
+                )
+                continue
 
         self.log("Transfer complete, passing lists back to worker for "
                  "re-routing and cataloguing.", self.RK_LOG_INFO)

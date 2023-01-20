@@ -54,6 +54,7 @@ class RabbitMQPublisher():
     RK_CATALOG = "catalog"
     RK_CATALOG_PUT = "catalog-put"
     RK_CATALOG_GET = "catalog-get"
+    RK_CATALOG_DEL = "catalog-del"
     RK_MONITOR = "monitor"
     RK_MONITOR_PUT = "monitor-put"
     RK_MONITOR_GET = "monitor-get"

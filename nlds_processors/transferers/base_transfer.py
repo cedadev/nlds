@@ -35,7 +35,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         _REQUIRE_SECURE: True,
         _CHECK_PERMISSIONS: True,
         _PRINT_TRACEBACKS: False,
-        _REMOVE_ROOT_SLASH: True,
         _MAX_RETRIES: 5,
         _FILELIST_MAX_LENGTH: 1000,
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
@@ -56,8 +55,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self._MAX_RETRIES)
         self.filelist_max_len = self.load_config_value(
             self._FILELIST_MAX_LENGTH)
-        self.remove_root_slash_fl = self.load_config_value(
-            self._REMOVE_ROOT_SLASH)
         self.retry_delays = self.load_config_value(
             self.RETRY_DELAYS)
 

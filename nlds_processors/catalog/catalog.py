@@ -201,7 +201,8 @@ class Catalog(DBMixin):
                  user: str, 
                  group: str,
                  original_path: str, 
-                 holding: Holding = None) -> File:
+                 holding: Holding = None, 
+                 missing_error_fl: bool = True) -> File:
         """Get a single file details from the database, given the original path 
         of the file.  
         An optional holding can be supplied to get the file details from a
@@ -210,9 +211,13 @@ class Catalog(DBMixin):
         try:
             # holding is a list, but there should only be one
             if holding:
+                try: 
+                    holding = holding[0]
+                except TypeError:
+                    pass
                 file = self.session.query(File).filter(
                     Transaction.id == File.transaction_id,
-                    Transaction.holding_id == holding[0].id,
+                    Transaction.holding_id == holding.id,
                     File.original_path.regexp_match(original_path),
                 # this order_by->first is in case multiple copies of a file
                 # have been added to the holding.  This will be illegal at some
@@ -220,7 +225,7 @@ class Catalog(DBMixin):
                 ).order_by(Transaction.ingest_time.desc()).first()
                 err_msg = (
                     f"File:{original_path} not found in holding:"
-                    f"{holding[0].label} for user:{user} in group:{group}."
+                    f"{holding.label} for user:{user} in group:{group}."
                 )
             else:
                 # if no holding given then we want to return the most recent
@@ -235,11 +240,12 @@ class Catalog(DBMixin):
                 )
 
             # check the file was found
-            if not file:
+            if not file and missing_error_fl: 
                 raise CatalogError(err_msg)
 
             # check user has permission to access this file
-            if not self._user_has_get_file_permission(user, group, file):
+            if (file and not self._user_has_get_file_permission(user, group, 
+                                                                    file)):
                 raise CatalogError(
                     f"User:{user} in group:{group} does not have permission to "
                     f"access the file with original path:{original_path}."
@@ -335,6 +341,32 @@ class Catalog(DBMixin):
             )
         return new_file
 
+    def delete_files(self, 
+                     user: str, 
+                     group: str, 
+                     holding_label: str=None,  
+                     holding_id: int=None,
+                     path: str=None, 
+                     tag: dict=None) -> list:
+        """Delete a given path from the catalog. If a holding is specified only 
+        the matching file from that holding will be deleted, otherwise all 
+        matching files will. Utilises get_files().
+        
+        """
+        assert(self.session != None)
+
+        files = self.get_files(user, group, holding_label=holding_label, 
+                               holding_id=holding_id, path=path, tag=tag)
+        checkpoint = self.session.begin_nested()
+        try:
+            for f in files:
+                self.session.delete(f)
+        except (IntegrityError, KeyError, OperationalError):
+            # This rollsback only to the checkpoint, so any successful deletes 
+            # done already will stay in the transaction.
+            checkpoint.rollback()
+            err_msg = f"File with original_path:{path} could not be deleted"
+            raise CatalogError(err_msg)
 
     def get_location(self, 
                      file: File, 
