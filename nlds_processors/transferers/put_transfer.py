@@ -94,7 +94,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                 self.log(f"Successfully uploaded {path_details.original_path}", 
                         self.RK_LOG_DEBUG)
                 self.append_and_send(path_details, rk_complete, body_json, 
-                                    list_type=FilelistType.transferred)
+                                     list_type=FilelistType.transferred)
             except HTTPError as e: 
                 reason = (f"Error uploading {path_details.path} to object "
                           f"store: {e}.")
