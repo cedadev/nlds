@@ -84,8 +84,6 @@ class PutTransferConsumer(BaseTransferConsumer):
             # object-name at all
             path_details.object_name = path_details.original_path
             try:
-                if path_details.original_path == "/Users/jack.leland/coding/projects/nlds_repos/client-tests/test_dir_1/test_texts/test_file_7.txt":
-                    raise HTTPError
                 result = client.fput_object(
                     bucket_name, 
                     path_details.object_name, 
