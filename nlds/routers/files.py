@@ -296,59 +296,6 @@ async def put(transaction_id: UUID,
 
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
-
-        # check if any files already exists for a given label. There's no point
-        # in checking if we don't have metadata as a new holding/transaction 
-        # will be created and there cannot be any file duplication
-        rpc_msg_dict = deepcopy(msg_dict)
-        rpc_msg_dict[RMQP.MSG_DETAILS][RMQP.MSG_API_ACTION] = RMQP.RK_FIND
-        rpc_routing_key = "catalog_q"
-        rpc_response = await rpc_publisher.call(
-            msg_dict=rpc_msg_dict, routing_key=rpc_routing_key
-        )
-        if rpc_response is not None: 
-            response_dict = json.loads(rpc_response)
-            print(json.dumps(response_dict, indent=4))
-            if RMQP.MSG_FAILURE in response_dict[RMQP.MSG_DETAILS]:
-                print(f"Could not find the given holding, error message: \n "
-                      f"{response_dict[RMQP.MSG_DETAILS][RMQP.MSG_FAILURE]}")
-            else:
-                # Holding found, so lets check for duplicates
-                try: 
-                    # Have to unpack in the hierarchy it's returned in, i.e. a 
-                    # nested dictionary of holdings, transactions, and files.
-                    holdings = response_dict[RMQP.MSG_DATA][RMQP.MSG_HOLDING_LIST]
-                    for _, holding in holdings.items():
-                        for _, transaction in holding[RMQP.MSG_TRANSACTIONS].items():
-                            file_records = [f_rec["original_path"] for f_rec 
-                                            in transaction[RMQP.MSG_FILELIST]]
-                            # Check if any files in the current transaction are 
-                            # already in the holding through set comparison
-                            if len(set(file_records) & set(contents)) > 0:
-                                # TODO: Remove the files or just fail?
-                                response_error = ResponseError(
-                                    loc = ["files", "put"],
-                                    msg = "At least one file already exists in the specified holding",
-                                    type = "Request forbidden."
-                                )
-                                raise HTTPException(
-                                    status_code = status.HTTP_403_FORBIDDEN,
-                                    detail = response_error.json()
-                                )
-                    
-                except KeyError as e:
-                    print(f"Encountered error when trying to get the catalog holdings "
-                        f"from the message response ({e})")
-                    response_error = ResponseError(
-                        loc = ["files", "put"],
-                        msg = "Could not complete duplicate check due to malformed RPC",
-                        type = "Internal server error."
-                    )
-                    raise HTTPException(
-                        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail = response_error.json()
-                    )
-            print("No problems with the contents")
         
     rabbit_publisher.publish_message(routing_key, msg_dict)
     

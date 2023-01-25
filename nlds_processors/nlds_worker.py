@@ -113,49 +113,47 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                  f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
                                      
-
     def _process_rk_index_complete(self, body_json: dict) -> None:
-        self.log(f"Scan successful, passing message to transfer queue", 
-                    self.RK_LOG_INFO)
+        # forward to catalog-put on the catalog_q
+        self.log(f"Index successful, sending file list for cataloguing.", 
+                 self.RK_LOG_INFO)
+
+        queue = f"{self.RK_CATALOG_PUT}"
+        new_routing_key = ".".join([self.RK_ROOT, queue,
+                                    self.RK_START])
+        self.log(f"Sending  message to {queue} queue with routing "
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
+
+    def _process_rk_catalog_put_complete(self, body_json: dict) -> None:
+        self.log(f"Catalog successful, sending filelist for transfer", 
+                 self.RK_LOG_INFO)
 
         queue = f"{self.RK_TRANSFER_PUT}"
         new_routing_key = ".".join([self.RK_ROOT, 
                                     queue, 
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
-                    f"key {new_routing_key}", self.RK_LOG_INFO)
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
 
+    def _process_rk_transfer_put_complete(self, body_json: dict) -> None:
+        # Nothing happens after a successful transfer anymore, so we leave this 
+        # empty in case any future messages are required (queueing archive for 
+        # example)
+        pass
 
-    def _process_rk_transfer_put_complete(self, rk_parts: list, 
-        body_json: dict) -> None:
-        # forward confirmation to monitor
-        # NOTE: Not needed any more but might be good to keep as redundancy
-        self.log(f"Sending message to {self.RK_MONITOR} queue", 
-                    self.RK_LOG_INFO)
+    def _process_rk_transfer_put_failed(self, body_json: dict) -> None:
+        self.log(f"Transfer unsuccessful, sending failed files back to catalog "
+                  "for deletion", 
+                 self.RK_LOG_INFO)
+
+        queue = f"{self.RK_CATALOG_DEL}"
         new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR, 
-                                    rk_parts[2]])
-        self.publish_and_log_message(new_routing_key, body_json)
-
-        # forward to catalog-put on the catalog_q
-        queue = f"{self.RK_CATALOG_PUT}"
-        new_routing_key = ".".join([self.RK_ROOT, queue,
+                                    queue, 
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
-                    f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, body_json)
-
-
-    def _process_rk_catalog_put_complete(self, rk_parts: list,
-        body_json: dict) -> None:
-        # forward confirmation to monitor
-        # NOTE: Not needed any more but might be good to keep as redundancy
-        self.log(f"Sending message to {self.RK_MONITOR} queue", 
-                    self.RK_LOG_INFO)
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR, 
-                                    rk_parts[2]])
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
 
 
@@ -181,9 +179,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
-        # NRM - more comments for the function methods, please!
-        # NRM - 21/09/2022 - refactor into smaller (private) functions
-        (rk_parts, body_json) = self._process_message(method, body)
+        rk_parts, body_json = self._process_message(method, body)
 
         # If putting then first scan file/filelist
         if self.RK_PUT in rk_parts[2]:
@@ -203,15 +199,21 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
             # If transfer_put completed
             elif (rk_parts[1] == f"{self.RK_TRANSFER_PUT}"):
-                self._process_rk_transfer_put_complete(rk_parts, body_json)
+                self._process_rk_transfer_put_complete(body_json)
 
             # if catalog_put completed
             elif (rk_parts[1] == f"{self.RK_CATALOG_PUT}"):
-                self._process_rk_catalog_put_complete(rk_parts, body_json)
+                self._process_rk_catalog_put_complete(body_json)
 
             # if catalog_get completed
             elif (rk_parts[1] == f"{self.RK_CATALOG_GET}"):
                 self._process_rk_catalog_get_complete(rk_parts, body_json)
+
+        elif rk_parts[2] == f"{self.RK_FAILED}":
+            # if transfer_put failed then we need to remove the failed files 
+            # from the catalog
+            if rk_parts[1] == f"{self.RK_TRANSFER_PUT}":
+                self._process_rk_transfer_put_failed(body_json)
 
         self.log(f"Worker callback complete!", self.RK_LOG_INFO)
 

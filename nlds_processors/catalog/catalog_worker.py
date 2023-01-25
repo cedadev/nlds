@@ -187,6 +187,17 @@ class CatalogConsumer(RMQC):
             # convert to PathDetails class
             pd = PathDetails.from_dict(f)
             try:
+                # Search first for file existence within holding, retry/fail if 
+                # present
+                file = self.catalog.get_file(
+                    user, 
+                    group, 
+                    pd.original_path, 
+                    holding,
+                    missing_error_fl=False
+                )
+                if file:
+                    raise CatalogError("File already exists in holding")
                 file = self.catalog.create_file(
                     transaction,
                     pd.user, 
@@ -197,11 +208,21 @@ class CatalogConsumer(RMQC):
                     pd.size, 
                     pd.permissions
                 )
+                # NOTE: This is an approximation/quick hack to get a value for 
+                # object_name before we have created the actual object. This is 
+                # fine as-is for now as the object name will always be 
+                # equivalent to original path, but this may change in the future 
+                # and require an extra step in the workflow to update the 
+                # Location with the appropriate object name. 
+                if pd.object_name is None:
+                    object_name = pd.original_path
+                else:
+                    object_name = pd.object_name
                 location = self.catalog.create_location(
                     file,
                     Storage.OBJECT_STORAGE,
                     transaction.transaction_id,
-                    pd.object_name, 
+                    object_name, 
                     # access time is passed in the file details
                     access_time = datetime.fromtimestamp(
                         pd.access_time, tz=timezone.utc
@@ -412,6 +433,126 @@ class CatalogConsumer(RMQC):
         # stop db transistions and commit
         self.catalog.end_session()
 
+    def _catalog_del(self, body: dict, rk_origin: str) -> None:
+        """Remove a given list of files from the catalog if the transfer 
+        fails"""
+        # get the filelist from the data section of the message
+        try:
+            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
+        except KeyError as e:
+            self.log(f"Invalid message contents, filelist should be in the data"
+                     f"section of the message body.",
+                     self.RK_LOG_ERROR)
+            return
+        
+        # check filelist is a list
+        try:
+            f = filelist[0]
+        except TypeError as e:
+            self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
+            return
+
+
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = int(body[self.MSG_META][self.MSG_HOLDING_ID])
+        except KeyError:
+            holding_id = None
+
+        # get the holding label from the details section of the message
+        # could (legit) be None
+        try: 
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            holding_label = None
+
+        # get the tags from the details sections of the message
+        try:
+            tag = body[self.MSG_META][self.MSG_TAG]
+        except KeyError:
+            tag = None
+
+        # start the database transactions
+        self.catalog.start_session()
+
+        # get the holding from the database
+        if holding_label is None and holding_id is None and tag is None:
+            self.log("No method for identifying a holding or transaction "
+                     "provided, will continue without.",
+                     self.RK_LOG_WARNING)
+
+        for f in filelist:
+            file_details = PathDetails.from_dict(f)
+            try:
+                # outsource deleting to the catalog itself
+                self.catalog.delete_files(
+                    user, group, holding_label=holding_label, 
+                    holding_id=holding_id, path=file_details.original_path,
+                    tag=tag
+                )
+            except CatalogError as e:
+                if file_details.retries > self.max_retries:
+                    self.failedlist.append(file_details)
+                else:
+                    file_details.increment_retry(
+                        retry_reason=f"{e.message}"
+                    )
+                    self.retrylist.append(file_details)
+                self.log(e.message, RMQC.RK_LOG_ERROR)
+                continue
+
+        # log the successful and non-successful catalog puts
+        # SUCCESS
+        if len(self.completelist) > 0:
+            rk_complete = ".".join([rk_origin,
+                                    self.RK_CATALOG_DEL, 
+                                    self.RK_COMPLETE])
+            self.log(
+                f"Sending completed PathList from CATALOG_DEL {self.completelist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_ROLLBACK)
+        # RETRY
+        if len(self.retrylist) > 0:
+            rk_retry = ".".join([rk_origin,
+                                 self.RK_CATALOG_DEL, 
+                                 self.RK_START])
+            self.log(
+                f"Sending retry PathList from CATALOG_DEL {self.retrylist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
+                               state=State.CATALOG_ROLLBACK)
+        # FAILED
+        if len(self.failedlist) > 0:
+            rk_failed = ".".join([rk_origin,
+                                  self.RK_CATALOG_DEL, 
+                                  self.RK_FAILED])
+            self.log(
+                f"Sending failed PathList from CATALOG_DEL {self.failedlist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.failedlist, rk_failed, body, 
+                               mode="failed")
+
+        # stop db transactions and commit
+        self.catalog.save()
+        self.catalog.end_session() 
 
     def _catalog_list(self, body: dict, properties: Header) -> None:
         """List the users holdings"""
@@ -853,7 +994,7 @@ class CatalogConsumer(RMQC):
             api_method = body[RMQC.MSG_DETAILS][RMQC.MSG_API_ACTION]
         except KeyError:
             self.log(f"Message did not contain appropriate API method", 
-                    self.RK_LOG_ERROR)
+                     self.RK_LOG_ERROR)
             return
 
         # check whether this is a GET or a PUT
@@ -863,7 +1004,7 @@ class CatalogConsumer(RMQC):
                 rk_parts = self.split_routing_key(method.routing_key)
             except ValueError as e:
                 self.log("Routing key inappropriate length, exiting callback.",
-                        self.RK_LOG_ERROR)
+                         self.RK_LOG_ERROR)
                 return 
             if (rk_parts[2] == self.RK_START):
                 self._catalog_get(body, rk_parts[0])
@@ -877,7 +1018,13 @@ class CatalogConsumer(RMQC):
                         self.RK_LOG_ERROR)
                 return             
             if (rk_parts[2] == self.RK_START):
-                self._catalog_put(body, rk_parts[0])
+                # Check the routing key worker section to determine which method 
+                # to call, as a del could be being called from a failed 
+                # transfer_put
+                if (rk_parts[1] == self.RK_CATALOG_PUT):
+                    self._catalog_put(body, rk_parts[0])
+                elif (rk_parts[1] == self.RK_CATALOG_DEL):
+                    self._catalog_del(body, rk_parts[0])
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method

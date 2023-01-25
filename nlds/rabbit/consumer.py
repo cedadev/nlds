@@ -69,10 +69,11 @@ class State(Enum):
     ROUTING = 0
     SPLITTING = 1
     INDEXING = 2
-    TRANSFER_PUTTING = 3
-    CATALOG_PUTTING = 4
-    CATALOG_GETTING = 5
-    TRANSFER_GETTING = 6
+    CATALOG_PUTTING = 3
+    TRANSFER_PUTTING = 4
+    CATALOG_ROLLBACK = 5
+    CATALOG_GETTING = 6
+    TRANSFER_GETTING = 7
     COMPLETE = 8
     FAILED = 9
 
@@ -86,7 +87,7 @@ class State(Enum):
 
     @classmethod
     def get_final_states(cls):
-        return cls.TRANSFER_GETTING, cls.CATALOG_PUTTING, cls.FAILED
+        return cls.TRANSFER_GETTING, cls.TRANSFER_PUTTING, cls.FAILED
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"

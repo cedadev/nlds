@@ -23,9 +23,9 @@ class Holding(CatalogBase):
     # group who owns this holding
     group = Column(String, nullable=False)
     # relationship for tags (One to many)
-    tags = relationship("Tag", backref="holding", cascade="delete")
+    tags = relationship("Tag", backref="holding", cascade="delete, delete-orphan")
     # relationship for transactions (One to many)
-    transactions = relationship("Transaction")
+    transactions = relationship("Transaction", cascade="delete, delete-orphan")
     # label must be unique per user
     __table_args__ = (UniqueConstraint('label', 'user'),)
 
@@ -41,7 +41,7 @@ class Transaction(CatalogBase):
     # date and time of ingest / adding to catalogue
     ingest_time = Column(DateTime)
     # relationship for files (One to many)
-    files = relationship("File")
+    files = relationship("File", cascade="delete, delete-orphan")
     # holding id as ForeignKey "Parent"
     holding_id = Column(Integer, ForeignKey("holding.id"), 
                         index=True, nullable=False)
@@ -83,9 +83,9 @@ class File(CatalogBase):
     file_permissions = Column(Integer)
 
     # relationship for location (one to many)
-    location = relationship("Location")
+    location = relationship("Location", cascade="delete, delete-orphan")
     # relationship for checksum (one to one)
-    checksum = relationship("Checksum")
+    checksum = relationship("Checksum", cascade="delete, delete-orphan")
 
 
 class Storage(enum.Enum):

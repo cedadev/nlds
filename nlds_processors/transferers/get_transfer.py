@@ -96,10 +96,6 @@ class GetTransferConsumer(BaseTransferConsumer):
             self.log(f"Attempting to get file {object_name} from {bucket_name}", 
                      self.RK_LOG_DEBUG)
 
-            if (self.remove_root_slash_fl and 
-                    object_name[0] == "/"):
-                object_name = object_name[1:]
-
             # Decide whether to prepend target path or download directly to it.
             if not target:
                 # In the case of no given target, we just download the files 
