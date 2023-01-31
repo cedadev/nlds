@@ -30,6 +30,13 @@ focus
 # create the catalog
 screen -t "catalog"
 exec "$PYTHON_DIR/python" "$NLDS_PROC/catalog/catalog_worker.py"
+split
+focus
+
+# right pos 4
+# create the logger
+screen -t "logger"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/logger.py"
 focus left
 split
 focus
