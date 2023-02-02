@@ -266,7 +266,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         if mode == FilelistType.processed:
             # Reset the retries upon successful indexing. 
             for path_details in pathlist:
-                path_details.reset_retries()
+                path_details.retries.reset()
         elif mode == FilelistType.retry:
             # Delay the retry message depending on how many retries have been 
             # accumulated. All retries in a retry list _should_ be the same so 

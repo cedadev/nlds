@@ -233,8 +233,8 @@ class CatalogConsumer(RMQC):
                 if pd.retries > self.max_retries:
                     self.failedlist.append(pd)
                 else:
-                    pd.increment_retry(
-                        retry_reason=f"{e.message}"
+                    pd.retries.increment(
+                        reason=f"{e.message}"
                     )
                     self.retrylist.append(pd)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
@@ -377,8 +377,8 @@ class CatalogConsumer(RMQC):
                         self.failedlist.append(file_details)
                     else:
                         self.retrylist.append(file_details)
-                        file_details.increment_retry(
-                            retry_reason=f"{e.message}"
+                        file_details.retries.increment(
+                            reason=f"{e.message}"
                         )
                     self.log(e.message, RMQC.RK_LOG_ERROR)
                     continue
@@ -388,8 +388,8 @@ class CatalogConsumer(RMQC):
                 if file_details.retries > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
-                    file_details.increment_retry(
-                        retry_reason=f"{e.message}"
+                    file_details.retries.increment(
+                        reason=f"{e.message}"
                     )
                     self.retrylist.append(file_details)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
@@ -507,8 +507,8 @@ class CatalogConsumer(RMQC):
                 if file_details.retries > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
-                    file_details.increment_retry(
-                        retry_reason=f"{e.message}"
+                    file_details.retries.increment(
+                        reason=f"{e.message}"
                     )
                     self.retrylist.append(file_details)
                 self.log(e.message, RMQC.RK_LOG_ERROR)

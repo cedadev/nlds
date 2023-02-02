@@ -35,6 +35,21 @@ class PathType(Enum):
                 "NOT_RECOGNISED",
                 "UNINDEXED"][self.value]
 
+
+class Retries(BaseModel):
+    count: Optional[int] = 0
+    reasons: Optional[List[str]] = []
+
+    def increment(self, reason: str = None) -> None:
+        self.count += 1 
+        if reason:
+            self.reasons.append(reason)
+
+    def reset(self) -> None:
+        self.count = 0
+        self.reasons = []
+
+
 class PathDetails(BaseModel):
     original_path: Optional[str]
     object_name: Optional[str]
@@ -47,8 +62,7 @@ class PathDetails(BaseModel):
     modify_time: Optional[float]
     path_type: Optional[PathType] = PathType.UNINDEXED
     link_path: Optional[str]
-    retries: Optional[int] = 0
-    retry_reasons: Optional[List[str]] = []
+    retries: Retries
 
     @property
     def path(self) -> str:
@@ -69,8 +83,8 @@ class PathDetails(BaseModel):
                 "path_type": self.path_type.value,
                 "link_path": self.link_path,  
             },
-            "retries": self.retries,
-            "retry_reasons": self.retry_reasons
+            "retries": self.retries.count,
+            "retry_reasons": self.retries.reasons
         }
     
     @classmethod
@@ -137,12 +151,12 @@ class PathDetails(BaseModel):
                                  path=self.original_path, 
                                  stat_result=self.get_stat_result())
 
-    def increment_retry(self, retry_reason: str = None) -> None:
-        self.retries += 1 
-        if retry_reason:
-            self.retry_reasons.append(retry_reason)
+    # def increment_retry(self, retry_reason: str = None) -> None:
+    #     # self.retries += 1 
+    #     # if retry_reason:
+    #     #     self.retry_reasons.append(retry_reason)
+    #     raise DeprecationWarning
 
-    def reset_retries(self) -> None:
-        self.retries = 0
-        self.retry_reasons = []
+    # def reset_retries(self) -> None:
+    #     raise DeprecationWarning
 
