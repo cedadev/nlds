@@ -52,11 +52,14 @@ class Tag(CatalogBase):
     __tablename__ = "tag"
     # primary key
     id = Column(Integer, primary_key=True)
-    # free text tag
-    tag = Column(String)
+    # key:value tags - key should be unique per holding_id
+    key = Column(String)
+    value = Column(String)
     # holding id as ForeignKey "Parent"
     holding_id = Column(Integer, ForeignKey("holding.id"), 
                         index=True, nullable=False)
+
+    __table_args__ = (UniqueConstraint('key', 'holding_id'),)
 
 
 class File(CatalogBase):

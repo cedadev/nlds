@@ -55,7 +55,8 @@ class Monitor(DBMixin):
                                user: str,
                                group: str,
                                idd: int = None,
-                               transaction_id: str = None) -> list:
+                               transaction_id: str = None,
+                               job_label: str = None) -> list:
         """Gets a TransactionRecord from the DB from the given transaction_id,
         or the primary key (id)"""
         if transaction_id:
@@ -70,6 +71,12 @@ class Monitor(DBMixin):
                     TransactionRecord.group == group,
                     TransactionRecord.id == idd
                 )
+            elif job_label:
+                trec = self.session.query(TransactionRecord).filter(
+                    TransactionRecord.user == user,
+                    TransactionRecord.group == group,
+                    TransactionRecord.job_label.regexp_match(job_label)
+                )
             else:
                 trec = self.session.query(TransactionRecord).filter(
                     TransactionRecord.user == user,
@@ -80,10 +87,15 @@ class Monitor(DBMixin):
                 )
             trecs = trec.all()
 
-        except (IntegrityError, KeyError):
-            if id:
+        except (IntegrityError, KeyError, OperationalError):
+            if idd:
                 raise MonitorError(
-                    f"TransactionRecord with id:{id} not found"
+                    f"TransactionRecord with id:{idd} not found"
+                )
+            elif job_label:
+                raise MonitorError(
+                    f"TransactionRecord with job_label:{job_label} "
+                    f"not found"
                 )
             else:
                 raise MonitorError(
