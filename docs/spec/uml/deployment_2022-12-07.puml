@@ -1,0 +1,58 @@
+@startuml deployment
+
+actor user as "User"
+package sci_machines as "sci Machines"{
+    agent client as "Client API / CLI" #MediumPurple
+}
+
+component posix as "POSIX disk"
+cloud object_storage as "Object Storage"
+component tape as "Tape"
+
+package kubernetes as "Wigbiorg (Kubernetes)" {
+    package consumers as "Basic deployment" {
+        agent logger as "Logger" #hotpink
+        agent indexer as "Indexer" #LightBlue
+        agent transfer_put as "Put Transfer" #gold
+        agent nlds_worker as "NLDS Worker" #lightgrey
+        agent monitoring as "Monitor" #tomato
+        agent cataloguer as "Cataloguer" #springgreen
+    }
+    package nginx as "Load balanced deployment"{
+        agent "API Server" as api_server #DodgerBlue 
+    }  
+}
+package vms as "VMs"{
+    package cloud_vm_consumer as "Cloud VM /w write access"{
+        agent transfer_get as "Get Transfer" #gold
+    }
+
+    package cloud_vm_rabbit as "Cloud VM"{
+        agent rabbit_server as "Rabbit server" #DarkOrange
+    }
+}
+package db_server as "DB Server"{
+    database catalogue_db as "Catalogue DB" #springgreen
+    database monitoring_db as "Monitoring DB" #tomato
+}
+
+user-->client
+client<-->api_server
+' api_server-->rabbit_server
+' message_broker <--> micro_service_1
+' message_broker <--> micro_service_2
+' message_broker <--> micro_service_3
+' micro_service_3 --> monitoring
+' micro_service_1 --> catalogue
+' monitoring <--> api_server
+' cataloguer <--> api_server
+catalogue_db <--> cataloguer
+monitoring_db <--> monitoring
+' micro_service_3 <--> transfer
+transfer_put --> object_storage
+transfer_put <-- posix
+transfer_get <-- object_storage
+transfer_get --> posix
+' transfer <--> tape
+
+@enduml 

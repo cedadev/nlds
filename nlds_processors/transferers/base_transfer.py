@@ -14,14 +14,13 @@ import os
 from typing import List, NamedTuple, Dict
 import pathlib as pth
 
-from nlds.rabbit.consumer import RabbitMQConsumer
+from nlds.rabbit.statting_consumer import StattingConsumer
+from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
 
-class BaseTransferConsumer(RabbitMQConsumer, ABC):
+class BaseTransferConsumer(StattingConsumer, ABC):
     DEFAULT_QUEUE_NAME = "transfer_q"
-    DEFAULT_ROUTING_KEY = (f"{RabbitMQConsumer.RK_ROOT}."
-                           f"{RabbitMQConsumer.RK_TRANSFER}."
-                           f"{RabbitMQConsumer.RK_WILD}")
+    DEFAULT_ROUTING_KEY = (f"{RMQP.RK_ROOT}.{RMQP.RK_TRANSFER}.{RMQP.RK_WILD}")
     DEFAULT_REROUTING_INFO = f"->{DEFAULT_QUEUE_NAME.upper()}"
 
     _TENANCY = "tenancy"
@@ -31,17 +30,14 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
     _MAX_RETRIES = "max_retries"
     _FILELIST_MAX_LENGTH = "filelist_max_length"
     _REMOVE_ROOT_SLASH = "remove_root_slash_fl"
-    _USE_PWD_GID = "use_pwd_gid_fl"
     DEFAULT_CONSUMER_CONFIG = {
         _TENANCY: None,
         _REQUIRE_SECURE: True,
         _CHECK_PERMISSIONS: True,
         _PRINT_TRACEBACKS: False,
-        _REMOVE_ROOT_SLASH: True,
-        _USE_PWD_GID: False,
         _MAX_RETRIES: 5,
         _FILELIST_MAX_LENGTH: 1000,
-        RabbitMQConsumer.RETRY_DELAYS: RabbitMQConsumer.DEFAULT_RETRY_DELAYS,
+        RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -59,22 +55,10 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
             self._MAX_RETRIES)
         self.filelist_max_len = self.load_config_value(
             self._FILELIST_MAX_LENGTH)
-        self.remove_root_slash_fl = self.load_config_value(
-            self._REMOVE_ROOT_SLASH)
-        self.user_pwd_gid_fl = self.load_config_value(
-            self._USE_PWD_GID)
         self.retry_delays = self.load_config_value(
             self.RETRY_DELAYS)
 
         self.reset()
-
-    def reset(self):
-        super().reset()
-
-        self.completelist = []
-        self.completelist_size = 0
-        self.retrylist = []
-        self.failedlist = []
         
     def callback(self, ch, method, properties, body, connection):
         self.reset()
@@ -143,7 +127,7 @@ class BaseTransferConsumer(RabbitMQConsumer, ABC):
         # Set uid and gid from message contents if configured to check 
         # permissions
         if self.check_permissions_fl:
-            self.set_ids(body_json, use_pwd_gid_fl=self.user_pwd_gid_fl)
+            self.set_ids(body_json)
 
         self.log(f"Starting object store transfer with {tenancy}", 
                  self.RK_LOG_INFO)

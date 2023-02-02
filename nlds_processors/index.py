@@ -2,19 +2,19 @@ import json
 import os
 import pathlib as pth
 from typing import List, NamedTuple, Dict
-from datetime import datetime, timedelta
 
-from nlds.rabbit.consumer import RabbitMQConsumer
-from nlds.rabbit.publisher import RabbitMQPublisher
+from nlds.rabbit.statting_consumer import StattingConsumer
+from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
+from nlds.rabbit.consumer import State, FilelistType
 from nlds.details import PathDetails
 
-class IndexerConsumer(RabbitMQConsumer):
+class IndexerConsumer(StattingConsumer):
     DEFAULT_QUEUE_NAME = "index_q"
     DEFAULT_ROUTING_KEY = (
-        f"{RabbitMQPublisher.RK_ROOT}.{RabbitMQPublisher.RK_INDEX}."
-        f"{RabbitMQPublisher.RK_WILD}"
+        f"{RMQP.RK_ROOT}.{RMQP.RK_INDEX}.{RMQP.RK_WILD}"
     )
     DEFAULT_REROUTING_INFO = f"->INDEX_Q"
+    DEFAULT_STATE = State.INDEXING
 
     # Possible options to set in config file
     _FILELIST_MAX_LENGTH = "filelist_max_length"
@@ -23,7 +23,6 @@ class IndexerConsumer(RabbitMQConsumer):
     _MAX_RETRIES = "max_retries"
     _CHECK_PERMISSIONS = "check_permissions_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
-    _USE_PWD_GID = "use_pwd_gid_fl"
     
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
@@ -32,8 +31,7 @@ class IndexerConsumer(RabbitMQConsumer):
         _MAX_RETRIES: 5,
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
-        _USE_PWD_GID: False,
-        RabbitMQConsumer.RETRY_DELAYS: RabbitMQConsumer.DEFAULT_RETRY_DELAYS,
+        RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -56,18 +54,9 @@ class IndexerConsumer(RabbitMQConsumer):
             self._CHECK_PERMISSIONS
         )
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
-        self.use_pwd_gid_fl = self.load_config_value(self._USE_PWD_GID)
         self.retry_delays = self.load_config_value(self.RETRY_DELAYS)
 
         self.reset()
-    
-    def reset(self):
-        super().reset()
-
-        self.completelist = []
-        self.completelist_size = 0
-        self.retrylist = []
-        self.failedlist = []
     
     def callback(self, ch, method, properties, body, connection):
         self.reset() 
@@ -103,7 +92,7 @@ class IndexerConsumer(RabbitMQConsumer):
                 # First change user and group so file permissions can be 
                 # checked. This should be deactivated when testing locally. 
                 if self.check_permissions_fl:
-                    self.set_ids(body_json, self.use_pwd_gid_fl)
+                    self.set_ids(body_json)
             
                 # Append routing info and then run the index
                 body_json = self.append_route_info(body_json)
@@ -139,8 +128,8 @@ class IndexerConsumer(RabbitMQConsumer):
         for i in range(0, filelist_len, self.filelist_max_len):
             slc = slice(i, min(i + self.filelist_max_len, filelist_len))
             self.send_pathlist(
-                filelist[slc], rk_index, 
-                body_json, mode="split"
+                filelist[slc], rk_index, body_json, mode=FilelistType.processed,
+                state=State.SPLITTING
             )
         
     def index(self, raw_filelist: List[NamedTuple], rk_origin: str, 
@@ -203,10 +192,10 @@ class IndexerConsumer(RabbitMQConsumer):
             # If item does not exist, or is not accessible, add to problem list
             if not self.check_path_access(item_p):
                 # Increment retry counter and add to retry list
-                self.log(f"{path_details.path} is inaccessible.", 
-                         self.RK_LOG_DEBUG)
+                reason = (f"Path:{path_details.path} is inaccessible.")
+                self.log(reason, self.RK_LOG_DEBUG)
                 path_details.increment_retry(
-                    retry_reason="inaccessible"
+                    retry_reason=reason
                 )
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
@@ -258,12 +247,14 @@ class IndexerConsumer(RabbitMQConsumer):
                             # If file is not valid, not accessible with uid and 
                             # gid if checking permissions, and not existing 
                             # otherwise, then add to problem list. Note that we 
-                            # don't check the size of the problem list as files 
+                            # can't check the size of the problem list as files 
                             # may not exist
-                            self.log(f"{walk_path_details.path} is inaccessible.", 
-                                     self.RK_LOG_DEBUG)
+                            reason = (
+                                f"Path:{walk_path_details.path} is inaccessible."
+                            )
+                            self.log(reason, self.RK_LOG_DEBUG)
                             walk_path_details.increment_retry(
-                                retry_reason="inaccessible"
+                                retry_reason=reason
                             )
                             self.append_and_send(
                                 walk_path_details, rk_retry, body_json, 
@@ -284,10 +275,10 @@ class IndexerConsumer(RabbitMQConsumer):
                                      body_json, list_type="indexed", 
                                      filesize=filesize)
             else:
-                self.log(f"{path_details.path} is of unknown type.", 
-                         self.RK_LOG_DEBUG)
+                reason = f"Path:{path_details.path} is of unknown type."
+                self.log(reason, self.RK_LOG_DEBUG)
                 path_details.increment_retry(
-                    retry_reason="unknown_type"
+                    retry_reason=reason
                 )
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"

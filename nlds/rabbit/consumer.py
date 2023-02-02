@@ -13,13 +13,11 @@ import functools
 from abc import ABC, abstractmethod
 import logging
 import traceback
-from typing import Dict, List, NamedTuple, Union
+from typing import Dict, List
 import pathlib as pth
-import grp
-import pwd
-import os
-import json
 from datetime import datetime, timedelta
+import uuid
+import json
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -35,8 +33,8 @@ from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES,
                              LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, 
                              RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
                              RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
-from ..utils.permissions import check_permissions
 from ..details import PathDetails
+from ..errors import RabbitRetryError
 
 logger = logging.getLogger("nlds.root")
 
@@ -64,6 +62,32 @@ class FilelistType(Enum):
     failed = 3
     indexed = 1
     transferred = 1
+    catalogued = 1
+
+class State(Enum):
+    INITIALISING = -1
+    ROUTING = 0
+    SPLITTING = 1
+    INDEXING = 2
+    CATALOG_PUTTING = 3
+    TRANSFER_PUTTING = 4
+    CATALOG_ROLLBACK = 5
+    CATALOG_GETTING = 6
+    TRANSFER_GETTING = 7
+    COMPLETE = 8
+    FAILED = 9
+
+    @classmethod
+    def has_value(cls, value):
+        return value in cls._value2member_map_
+    
+    @classmethod
+    def has_name(cls, name):
+        return name in cls._member_names_
+
+    @classmethod
+    def get_final_states(cls):
+        return cls.TRANSFER_GETTING, cls.TRANSFER_PUTTING, cls.FAILED
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
@@ -72,6 +96,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_REROUTING_INFO = "->"
 
     DEFAULT_CONSUMER_CONFIG = dict()
+
+    # The state associated with finishing the consumer, must be set but can be 
+    # overridden
+    DEFAULT_STATE = State.ROUTING
 
     def __init__(self, queue: str = None, setup_logging_fl=False):
         super().__init__(name=queue, setup_logging_fl=False)
@@ -113,9 +141,15 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         else: 
             self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
 
-        # Memeber variables to temporarily hold user- and group-id of a message
-        self.gid = None
-        self.uid = None
+        # Member variable to keep track of the number of messages spawned during 
+        # a callback, for monitoring sub_record creation
+        self.sent_message_count = 0
+
+        # (re)Declare the pathlists here to make them available without having 
+        # to pass them through every function call. 
+        self.completelist = []
+        self.retrylist = []
+        self.failedlist = []
         
         # Controls default behaviour of logging when certain exceptions are 
         # caught in the callback. 
@@ -125,8 +159,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         self.setup_logging(enable=setup_logging_fl)
 
     def reset(self) -> None:
-        self.gid = None
-        self.uid = None
+        self.sent_message_count = 0
+        self.completelist = []
+        self.retrylist = []
+        self.failedlist = []
     
     def load_config_value(self, config_option: str,
                           path_listify_fl: bool = False):
@@ -180,8 +216,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return return_val
     
     def parse_filelist(self, body_json: dict) -> List[PathDetails]:
-        # Convert flat list into list of PathDetails objects and the check it 
-        # is, in fact, a list
+        """Convert flat list from message json into list of PathDetails objects 
+        and the check it is, in fact, a list
+        """
         try:
             filelist = [PathDetails.from_dict(pd_dict) for pd_dict in 
                         list(body_json[self.MSG_DATA][self.MSG_FILELIST])]
@@ -195,102 +232,37 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         return filelist
 
-    def _choose_list(self, list_type: FilelistType = FilelistType.processed
-                    ) -> List[PathDetails]:
-        """ Choose the correct pathlist for a given mode of operation. This 
-        requires that the appropriate member variable be instantiated in the 
-        consumer class.
-        """
-        if list_type == FilelistType.processed:
-            return self.completelist
-        elif list_type == FilelistType.retry:
-            return self.retrylist
-        elif list_type == FilelistType.failed:
-            return self.failedlist
-        else: 
-            raise ValueError(f"Invalid list type provided ({list_type})")
-
-    def append_and_send(self, 
-            path_details: PathDetails, 
-            routing_key: str, 
-            body_json: Dict[str, str], 
-            filesize: int = None,
-            list_type: Union[FilelistType, str] = FilelistType.processed,
-        ) -> None:
-        """Append a path details item to an existing PathDetails list and then 
-        determine if said list requires sending to the exchange due to size 
-        limits (can be either file size or list length). Which pathlist is to 
-        be used is determined by the list_type passed, which can be either a 
-        FilelistType enum or an appropriate string that can be cast into one. 
-
-        The list will by default be capped by list-length, with the maximum 
-        determined by a filelist_max_length config variable (defaults to 1000). 
-        This behaviour is overriden by specifying the filesize kwarg, which is 
-        in kilobytes and must be an integer, at consumption time.
-
-        The message body and destination should be specified through body_json 
-        and routing_key respectively. 
-
-        NOTE: This was refactored here from the index/transfer processors. 
-        Might make more sense to put it somewhere else given there are specific 
-        config variables required (filelist_max_length, message_max_size) which 
-        could fail with an AttributeError?
-
-        """
-        # If list_type given as a string then attempt to cast it into an 
-        # appropriate enum
-        if not isinstance(list_type, FilelistType):
-            try:
-                list_type = FilelistType[list_type]
-            except KeyError:
-                raise ValueError("list_type value invalid, must be a "
-                                 "FilelistType enum or a string capabale of "
-                                 f"being cast to such (list_type={list_type})")
-
-        # Select correct pathlist and append the given PathDetails object
-        pathlist = self._choose_list(list_type)
-        pathlist.append(path_details)
-
-        # If filesize has been passed then use total list size as message cap
-        if filesize:
-            # NOTE: This references a general pathlist but a specific list size, 
-            # perhaps these two should be combined together into a single 
-            # pathlist object? Might not be necessary for just this small code 
-            # snippet. 
-            self.completelist_size += filesize
-            
-            # Send directly to exchange and reset filelist
-            if self.completelist_size >= self.message_max_size:
-                self.send_pathlist(
-                    pathlist, routing_key, body_json, mode=list_type
-                )
-                pathlist.clear()
-                self.completelist_size = 0
-
-        # The default message cap is the length of the pathlist. This applies
-        # to failed or problem lists by default
-        elif len(pathlist) >= self.filelist_max_len:
-            # Send directly to exchange and reset filelist
-            self.send_pathlist(
-                pathlist, routing_key, body_json, mode=list_type
-            )
-            pathlist.clear()
-
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
-                       body_json: Dict[str, str], 
-                       mode: FilelistType = FilelistType.processed
+                       body_json: Dict[str, str], state: State = None,
+                       mode: FilelistType = FilelistType.processed, 
                        ) -> None:
-        """ Convenience function which sends the given list of PathDetails 
+        """Convenience function which sends the given list of PathDetails 
         objects to the exchange with the given routing key and message body. 
         Mode specifies what to put into the log message, as well as determining 
         whether the list should be retry-reset and whether the message should be 
         delayed.
 
+        Additionally forwards transaction state info on to the monitor. As part 
+        of this it keeps track of the number of messages sent and reassigns 
+        message sub_ids appropriately so that monitoring can keep track of the 
+        transaction's state more easily. 
+
         """
+        # If list_type given as a string then attempt to cast it into an 
+        # appropriate enum
+        if not isinstance(mode, FilelistType):
+            try:
+                mode = FilelistType[mode]
+            except KeyError:
+                raise ValueError("mode value invalid, must be a FilelistType "
+                                 "enum or a string capabale of being cast to "
+                                 f"such (mode={mode})")
+
         self.log(f"Sending list back to exchange (routing_key = {routing_key})",
                  self.RK_LOG_INFO)
 
         delay = 0
+        body_json[self.MSG_DETAILS][self.MSG_RETRY] = False
         if mode == FilelistType.processed:
             # Reset the retries upon successful indexing. 
             for path_details in pathlist:
@@ -303,86 +275,31 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
                      f" {datetime.now() + timedelta(milliseconds=delay)}", 
                      self.RK_LOG_DEBUG)
+            body_json[self.MSG_DETAILS][self.MSG_RETRY] = True
+        elif mode == FilelistType.failed:
+            state = State.FAILED
         
+        # If state not set at this point then revert to the default value for 
+        # the consumer.
+        if state is None:
+            state = self.DEFAULT_STATE
+
+        # Create new sub_id for each extra subrecord created.
+        if self.sent_message_count >= 1:
+            body_json[self.MSG_DETAILS][self.MSG_SUB_ID] = str(uuid.uuid4())
+        
+        # Send message to next part of workflow
         body_json[self.MSG_DATA][self.MSG_FILELIST] = pathlist
-        self.publish_message(routing_key, json.dumps(body_json), delay=delay)
-
-    def set_ids(
-            self, 
-            body_json: Dict[str, str], 
-            use_pwd_gid_fl: bool = True
-        ) -> None:
-        """Changes the real user- and group-ids stored in the class to that 
-        specified in the incoming message details section so that permissions 
-        on each file in a filelist can be checked.
-
-        """
-        # Attempt to get uid from, given username, in password db
-        try:
-            username = body_json[self.MSG_DETAILS][self.MSG_USER]
-            pwddata = pwd.getpwnam(username)
-            pwd_uid = pwddata.pw_uid
-            pwd_gid = pwddata.pw_gid
-        except KeyError as e:
-            self.log(
-                f"Problem fetching uid using username {username}", 
-                self.RK_LOG_ERROR
-            )
-            raise e
-
-        # Attempt to get gid from group name using grp module
-        try:
-            group_name = body_json[self.MSG_DETAILS][self.MSG_GROUP]
-            grp_data = grp.getgrnam(group_name)
-            grp_gid = grp_data.gr_gid
-        except KeyError as e:         
-            # If consumer setting is configured to allow the use of the gid 
-            # gained from the pwd call, use that instead
-            if use_pwd_gid_fl:
-                self.log(
-                    f"Problem fetching gid using grp, group name was "
-                    f"{group_name}. Continuing with pwd_gid ({pwd_gid}).", 
-                    self.RK_LOG_WARNING
-                )
-                grp_gid = pwd_gid
-            else:
-                self.log(
-                    f"Problem fetching gid using grp, group name was "
-                    f"{group_name}.", self.RK_LOG_ERROR
-                )
-                raise e
-
-        self.uid = pwd_uid
-        self.gid = grp_gid
-
-    def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
-                          access: int = os.R_OK, 
-                          check_permissions_fl: bool = True) -> bool:
-        """Checks that the given path is accessible, either by checking for its 
-        existence or, if the check_permissions_fl is set, by doing a permissions
-        check on the file's bitmask. This requires a stat of the file, so one 
-        must be provided via stat_result else one is performed. The uid and gid 
-        of the user must be set in the object as well, usually by having 
-        performed RabbitMQConsumer.set_ids() beforehand.
-
-        """
-        if check_permissions_fl and (self.uid is None or self.gid is None):
-            raise ValueError("uid and gid not set properly.")
+        body_json[self.MSG_DETAILS][self.MSG_STATE] = state.value
         
-        if not isinstance(path, pth.Path):
-            raise ValueError("No valid path object was given.")
+        self.publish_message(routing_key, body_json, delay=delay)
 
-        if not path.exists():
-            # Can't access or stat something that doesn't exist
-            return False
-        elif check_permissions_fl:
-            # If no stat result is passed through then get our own
-            if stat_result is None:
-                stat_result = path.stat()
-            return check_permissions(self.uid, self.gid, access=access, 
-                                     stat_result=stat_result)
-        else:
-            return True
+        # Send message to monitoring to keep track of state
+        monitoring_rk = ".".join([routing_key[0], 
+                                  self.RK_MONITOR_PUT, 
+                                  self.RK_START])
+        self.publish_message(monitoring_rk, body_json)
+        self.sent_message_count += 1
 
     def setup_logging(self, enable=False, log_level: str = None, 
                       log_format: str = None, add_stdout_fl: bool = False, 
@@ -477,7 +394,28 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # errors which can be caught without stopping consumption. 
         try:
             self.callback(ch, method, properties, body, connection)
-        except (ValueError, TypeError, KeyError, PermissionError) as e:
+        except (
+                ValueError, 
+                TypeError, 
+                KeyError, 
+                PermissionError,
+                RabbitRetryError,
+            ) as e:
+            try: 
+                # Attempt to mark job as failed in monitoring db
+                # TODO: this probably isn't the best way of doing this!
+                rk_parts = self.split_routing_key(method.routing_key)
+                body_json = json.loads(body)
+                
+                # Send message to monitoring to keep track of state
+                monitoring_rk = ".".join([rk_parts[0], 
+                                          self.RK_MONITOR_PUT, 
+                                          self.RK_START])
+                body_json[self.MSG_DETAILS][self.MSG_STATE] = State.FAILED
+                self.publish_message(monitoring_rk, body_json)
+            except:
+                self.log("Failed attempt to mark job as failed in monitoring.",
+                         self.RK_LOG_WARNING)
             if self.print_tracebacks_fl:
                 tb = traceback.format_exc()
                 self.log(tb, self.RK_LOG_DEBUG)
@@ -491,7 +429,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             )
         finally:
             # Ack message only if it has failed in the limited number of ways 
-            # above
+            # above, otherwise the exception is reraised and breaks the 
+            # consumption
             self.acknowledge_message(ch, method.delivery_tag, connection)
 
             

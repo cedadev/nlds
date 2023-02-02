@@ -12,17 +12,30 @@ from fastapi import FastAPI
 
 from .nlds_setup import API_VERSION
 
-from .routers import collections, files, probe
-from .routers.routing_methods import rabbit_publisher
+from .routers import list, files, probe, status, find, meta
 
 nlds = FastAPI()
 
 PREFIX = "/api/" + API_VERSION
-
 nlds.include_router(
-    collections.router,
-    tags = ["collections",],
-    prefix = PREFIX + "/collections"
+    meta.router,
+    tags = ["meta",],
+    prefix = PREFIX + "/catalog/meta"
+)
+nlds.include_router(
+    list.router,
+    tags = ["list",],
+    prefix = PREFIX + "/catalog/list"
+)
+nlds.include_router(
+    find.router,
+    tags = ["find",],
+    prefix = PREFIX + "/catalog/find"
+)
+nlds.include_router(
+    status.router,
+    tags = ["status",],
+    prefix = PREFIX + "/status"
 )
 nlds.include_router(
     files.router,

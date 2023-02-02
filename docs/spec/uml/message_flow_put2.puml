@@ -6,7 +6,7 @@ participant wex as "Exchange"
 
 queue qw as "NLDS Q" #lightgrey
 note over qw
-    topic = nlds-api.nlds.#
+    topic = nlds-api.nlds.*
 end note
 collections work as "NLDS\nWorker" #lightgrey
 /'
@@ -14,7 +14,7 @@ database iddb as "Transaction DB" #lightgrey
 '/
 queue qt as "Transfer Put Q" #gold
 note over qt
-    topic = #.transfer-put.#
+    topic = *.transfer-put.*
 end note
 collections transfer_puts as "Transfer Puts" #gold
 
@@ -42,10 +42,10 @@ activate wex
 wex -> qt : key=nlds-api.transfer-put.start
 deactivate wex
 activate qt
-qt -> transfer_puts : key=(#).transfer-put.start
+qt -> transfer_puts : key=(*).transfer-put.start
 deactivate qt
 note right of qt
-    (#) here will match the calling
+    (*) here will match the calling
     application.
     `nlds-api` in this case.
     `gws-api` for group workspace scanner.
@@ -55,6 +55,6 @@ activate transfer_puts
 loop #lightgrey for file in indexed_list 
     transfer_puts -> obj : move file to storage
 end
-transfer_puts -> wex : key=(#).transfer-put.complete
+transfer_puts -> wex : key=(*).transfer-put.complete
 deactivate transfer_puts
 @enduml

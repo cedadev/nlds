@@ -22,3 +22,4 @@ dist/
 **/.processor_config
 logs/
 nlds_catalog.db
+nlds_monitor.db

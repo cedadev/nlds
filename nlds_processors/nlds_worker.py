@@ -16,7 +16,7 @@ from pika.frame import Method
 from pika.frame import Header
 
 # NLDS imports
-from nlds.rabbit.consumer import RabbitMQConsumer
+from nlds.rabbit.consumer import RabbitMQConsumer, State
 
 class NLDSWorkerConsumer(RabbitMQConsumer):
     DEFAULT_QUEUE_NAME = "nlds_q"
@@ -24,6 +24,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                            f"{RabbitMQConsumer.RK_ROUTE}.",
                            f"{RabbitMQConsumer.RK_WILD}")
     DEFAULT_REROUTING_INFO = "->NLDS_Q"
+    DEFAULT_STATE = State.ROUTING
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
@@ -62,12 +63,6 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         
         msg_data = body_json[self.MSG_DATA]
         msg_details = body_json[self.MSG_DETAILS]
-
-        # If message coming from api-server then stash the original action in 
-        # the message details so as not to lose it post-indexing.
-        if self.RK_ROUTE == rk_parts[1]:
-            msg_details[self.MSG_API_ACTION] = rk_parts[2]
-
         return rk_parts, body_json
 
 
@@ -77,7 +72,16 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_INDEX, 
                                     self.RK_INITIATE])
-        self.publish_and_log_message(new_routing_key, json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
+
+        # Do initial monitoring update to ensure that a subrecord at ROUTING is 
+        # created before the first job 
+        self.log(f"Updating monitor", self.RK_LOG_INFO)
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
+        body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def _process_rk_get(self, body_json: dict) -> None:
@@ -88,55 +92,69 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
                  f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
-    
+        # Do initial monitoring update to ensure that a subrecord at ROUTING is 
+        # created before the first job 
+        self.log(f"Updating monitor", self.RK_LOG_INFO)
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
+        body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
+        self.publish_and_log_message(new_routing_key, body_json)
+
+
+    def _process_rk_list(self, body_json: dict) -> None:
+        # forward to catalog_get
+        # NOTE: Is this needed now we're doing RPCs from the api-server?
+        queue = f"{self.RK_CATALOG_GET}"
+        new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_LIST])        
+        self.log(f"Sending  message to {queue} queue with routing "
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
+                                     
     def _process_rk_index_complete(self, body_json: dict) -> None:
-        self.log(f"Scan successful, passing message to transfer queue", 
-                    self.RK_LOG_INFO)
+        # forward to catalog-put on the catalog_q
+        self.log(f"Index successful, sending file list for cataloguing.", 
+                 self.RK_LOG_INFO)
+
+        queue = f"{self.RK_CATALOG_PUT}"
+        new_routing_key = ".".join([self.RK_ROOT, queue,
+                                    self.RK_START])
+        self.log(f"Sending  message to {queue} queue with routing "
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
+
+    def _process_rk_catalog_put_complete(self, body_json: dict) -> None:
+        self.log(f"Catalog successful, sending filelist for transfer", 
+                 self.RK_LOG_INFO)
 
         queue = f"{self.RK_TRANSFER_PUT}"
         new_routing_key = ".".join([self.RK_ROOT, 
                                     queue, 
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
-                    f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
 
+    def _process_rk_transfer_put_complete(self, body_json: dict) -> None:
+        # Nothing happens after a successful transfer anymore, so we leave this 
+        # empty in case any future messages are required (queueing archive for 
+        # example)
+        pass
 
-    def _process_rk_transfer_put_complete(self, rk_parts: list, 
-        body_json: dict) -> None:
-        # forward confirmation to monitor
-        self.log(f"Sending message to {self.RK_MONITOR} queue", 
-                    self.RK_LOG_INFO)
+    def _process_rk_transfer_put_failed(self, body_json: dict) -> None:
+        self.log(f"Transfer unsuccessful, sending failed files back to catalog "
+                  "for deletion", 
+                 self.RK_LOG_INFO)
+
+        queue = f"{self.RK_CATALOG_DEL}"
         new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR, 
-                                    rk_parts[2]])
-        self.publish_and_log_message(new_routing_key, 
-                                        json.dumps(body_json))
-
-        # forward to catalog-put on the catalog_q
-        queue = f"{self.RK_CATALOG_PUT}"
-        new_routing_key = ".".join([self.RK_ROOT, queue,
+                                    queue, 
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
-                    f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
-
-
-    def _process_rk_catalog_put_complete(self, rk_parts: list,
-        body_json: dict) -> None:
-        # forward confirmation to monitor
-        self.log(f"Sending message to {self.RK_MONITOR} queue", 
-                    self.RK_LOG_INFO)
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR, 
-                                    rk_parts[2]])
-        self.publish_and_log_message(new_routing_key, 
-                                        json.dumps(body_json))
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def _process_rk_catalog_get_complete(self, rk_parts: list, 
@@ -147,8 +165,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         new_routing_key = ".".join([self.RK_ROOT, 
                                     self.RK_MONITOR, 
                                     rk_parts[2]])
-        self.publish_and_log_message(new_routing_key, 
-                                        json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
         # forward to transfer_get
         queue = f"{self.RK_TRANSFER_GET}"
@@ -157,15 +174,12 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     self.RK_START])
         self.log(f"Sending  message to {queue} queue with routing "
                     f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, 
-                                     json.dumps(body_json))
+        self.publish_and_log_message(new_routing_key, body_json)
 
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
-        # NRM - more comments for the function methods, please!
-        # NRM - 21/09/2022 - refactor into smaller (private) functions
-        (rk_parts, body_json) = self._process_message(method, body)
+        rk_parts, body_json = self._process_message(method, body)
 
         # If putting then first scan file/filelist
         if self.RK_PUT in rk_parts[2]:
@@ -173,6 +187,9 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         
         elif self.RK_GET in rk_parts[2]:
             self._process_rk_get(body_json)
+
+        elif self.RK_LIST in rk_parts[2]:
+            self._process_rk_list(body_json)
 
         # If a task has completed, initiate new tasks
         elif rk_parts[2] == f"{self.RK_COMPLETE}":
@@ -182,19 +199,25 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
             # If transfer_put completed
             elif (rk_parts[1] == f"{self.RK_TRANSFER_PUT}"):
-                self._process_rk_transfer_put_complete(rk_parts, body_json)
+                self._process_rk_transfer_put_complete(body_json)
 
             # if catalog_put completed
             elif (rk_parts[1] == f"{self.RK_CATALOG_PUT}"):
-                self._process_rk_catalog_put_complete(rk_parts, body_json)
+                self._process_rk_catalog_put_complete(body_json)
 
             # if catalog_get completed
             elif (rk_parts[1] == f"{self.RK_CATALOG_GET}"):
                 self._process_rk_catalog_get_complete(rk_parts, body_json)
 
+        elif rk_parts[2] == f"{self.RK_FAILED}":
+            # if transfer_put failed then we need to remove the failed files 
+            # from the catalog
+            if rk_parts[1] == f"{self.RK_TRANSFER_PUT}":
+                self._process_rk_transfer_put_failed(body_json)
+
         self.log(f"Worker callback complete!", self.RK_LOG_INFO)
 
-    def publish_and_log_message(self, routing_key: str, msg: str, 
+    def publish_and_log_message(self, routing_key: str, msg: dict, 
                                 log_fl=True) -> None:
         """
         Wrapper around original publish message to additionally send message to 

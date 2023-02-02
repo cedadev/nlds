@@ -1,0 +1,61 @@
+# screen RC config file
+
+setenv PYTHON_DIR "$HOME/python-venvs/nlds-venv/bin"
+setenv NLDS "$HOME/Coding/nlds"
+setenv NLDS_PROC "$NLDS/nlds_processors"
+
+# titles at the top
+# left pos 1
+# create the indexer
+screen -t "indexer"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/index.py"
+split -v
+focus
+
+# right pos 1
+# create the worker
+screen -t "nlds_worker"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/nlds_worker.py"
+split
+focus
+
+# right pos 2
+# create the monitor
+screen -t "monitor"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/monitor/monitor_worker.py"
+split
+focus
+
+# right pos 3
+# create the catalog
+screen -t "catalog"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/catalog/catalog_worker.py"
+split
+focus
+
+# right pos 4
+# create the logger
+screen -t "logger"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/logger.py"
+focus left
+split
+focus
+
+# left pos 2
+# create the put_transfer
+screen -t "put_transfer"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/transferers/put_transfer.py"
+split
+focus
+
+# left pos 3
+# create the get_transfer
+screen -t "get_transfer"
+exec "$PYTHON_DIR/python" "$NLDS_PROC/transferers/get_transfer.py"
+split
+focus
+
+# left pos 4
+# run the server via uvicorn
+screen -t "server"
+exec "$PYTHON_DIR/uvicorn" "nlds.main:nlds" "--reload" "--log-level=trace" "--port=8000"

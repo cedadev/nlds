@@ -176,7 +176,6 @@ class JasminAuthenticator(BaseAuthenticator):
                 )
         else:
             return False
-        return group
 
 
     def authenticate_collection(self, oauth_token: str, collection: str):

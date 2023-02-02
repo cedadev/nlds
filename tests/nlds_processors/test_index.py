@@ -5,7 +5,7 @@ import pytest
 import functools
 
 from nlds.rabbit import publisher as publ
-import nlds.rabbit.consumer as cons
+import nlds.rabbit.statting_consumer as scons
 from nlds.details import PathDetails
 from nlds_processors.index import IndexerConsumer
 
@@ -37,14 +37,14 @@ def test_index(monkeypatch, caplog, default_indexer,
                         lambda *_args, **_kwargs: None)
     default_indexer.reset()
     default_indexer.uid = 100
-    default_indexer.gid = 100
+    default_indexer.gids = [100]
 
     # Should fail upon trying to unpack the namedtuple
     with pytest.raises(AttributeError):
         default_indexer.index([("/", 0), ], 'test', default_rmq_message_dict)
     default_indexer.reset()
     default_indexer.uid = 100
-    default_indexer.gid = 100
+    default_indexer.gids = [100]
 
 
     dirs = [
@@ -85,7 +85,7 @@ def test_index(monkeypatch, caplog, default_indexer,
 
         default_indexer.reset()
         default_indexer.uid = 100
-        default_indexer.gid = 100
+        default_indexer.gids = [100]
     
     # All files should be in failed list with any number of retries over the 
     # limit
@@ -99,7 +99,7 @@ def test_index(monkeypatch, caplog, default_indexer,
 
         default_indexer.reset()
         default_indexer.uid = 100
-        default_indexer.gid = 100
+        default_indexer.gids = [100]
 
 
 
@@ -113,14 +113,20 @@ def test_check_path_access(monkeypatch, default_indexer):
     p = Path("test.py")
 
     print(default_indexer.check_permissions_fl)
-    # Should fail with improperly initialised uid and gid
+    # Should fail with uninitialised uid and gid
     with pytest.raises(ValueError):
         default_indexer.check_path_access(p, access=os.R_OK)
 
-    # Should work if we set uid and gid to some value (shouldn't matter which 
+    # Should fail with improperly set uid and gids (gids should be a list)
+    default_indexer.uid = 100
+    default_indexer.gids = 100
+    with pytest.raises(ValueError):
+        default_indexer.check_path_access(p, access=os.R_OK)
+
+    # Should work if we set uid and gids to some value (shouldn't matter which 
     # as this file doesn't exist so will return false)
     default_indexer.uid = 100
-    default_indexer.gid = 100
+    default_indexer.gids = [100]
     assert default_indexer.check_path_access(p, access=os.R_OK) == False
 
     # Set permissions checking to false for now
@@ -142,7 +148,7 @@ def test_check_path_access(monkeypatch, default_indexer):
     sr = StatResult(int(0o100400), 0, 0)
 
     # If exists and has permissions, should be true
-    monkeypatch.setattr(cons, "check_permissions", 
+    monkeypatch.setattr(scons, "check_permissions", 
                         lambda uid, gid, access=None, stat_result=None: True)
     monkeypatch.setattr(Path, "exists", lambda *_: True)
     mp_exists = Path("test.py")
@@ -150,7 +156,7 @@ def test_check_path_access(monkeypatch, default_indexer):
 
     # If exists and doesn't have permissions, should be false as we're checking 
     # permissions!
-    monkeypatch.setattr(cons, "check_permissions", 
+    monkeypatch.setattr(scons, "check_permissions", 
                         lambda uid, gid, access=None, stat_result=None: False)
     monkeypatch.setattr(Path, "exists", lambda _: True)
     mp_no_exists = Path("test.py")

@@ -1,0 +1,30 @@
+@startuml monitor_db
+
+object "**Transaction Record**" as tran_rec {
+    id [INT](unique)
+    transaction_id [UUID_64|STRING](unique)
+    job_label [STRING]
+    user [STRING]
+    group [STRING]
+    api_action [STRING]
+    creation_time [DATETIME]
+}
+
+object "**Sub Record**" as sub_rec {
+    id [INT](unique)
+    sub_id [UUID_64|STRING](unique)
+    state [ROUTING | SPLITTING | INDEXING | TRANSFERRING | CATALOGING | COMPLETE | FAILED]
+    retry_count [INT]
+    last_updated [DATETIME]
+}
+
+object "**Failed Files**" as fail_rec {
+    id [INT](unique)
+    filepath [STRING]
+    reason [STRING]
+}
+
+tran_rec "1" *-- "many" sub_rec
+sub_rec "0" *-- "many" fail_rec
+
+@enduml

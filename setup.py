@@ -47,9 +47,9 @@ setup(
     entry_points = {
         'console_scripts': [
             'nlds_q=nlds_processors.nlds_worker:main',
-            'catalog_q=nlds_processors.catalog:main',
+            'catalog_q=nlds_processors.catalog.catalog_worker:main',
             'index_q=nlds_processors.index:main',
-            'monitor_q=nlds_processors.monitor:main',
+            'monitor_q=nlds_processors.monitor.monitor_worker:main',
             'transfer_put_q=nlds_processors.transferers.put_transfer:main',
             'transfer_get_q=nlds_processors.transferers.get_transfer:main',
             'logging_q=nlds_processors.logger:main'            

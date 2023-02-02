@@ -23,111 +23,117 @@ def test_check_permissions():
 
     ### User checks
 
-    # Create a file that's readable only by root
+    # Create a stat result for a file that's readable only by root
     sr = StatResult(int(0o100400), 0, 0)
     
+    # Firstly, check that passing gids as a non-list breaks appropriately
+    with pytest.raises(ValueError):
+        check_modes(sr, 1000, 20, outcomes=[False, False, False])
+        check_modes(sr, 1000, 'a', outcomes=[False, False, False])
+
     # Standard user checks should fail, even if in same group as root. 
-    check_modes(sr, 1000, 20, outcomes=[False, False, False])
-    check_modes(sr, 1000, 0, outcomes=[False, False, False])
+    check_modes(sr, 1000, [20,], outcomes=[False, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[False, False, False])
 
     # Should work as root only if we ask for read check
-    check_modes(sr, 0, 0, outcomes=[True, False, False])
+    check_modes(sr, 0, [0,], outcomes=[True, False, False])
 
 
     # Create a file that's writable only by root
     sr = StatResult(int(0o100200), 0, 0)
 
     # Standard user checks should fail, even if in same group as root. 
-    check_modes(sr, 1000, 20, outcomes=[False, False, False])
-    check_modes(sr, 1000, 0, outcomes=[False, False, False])
+    check_modes(sr, 1000, [20,], outcomes=[False, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[False, False, False])
 
     # Should work as root only if we ask for write check
-    check_modes(sr, 0, 0, outcomes=[False, True, False])
+    check_modes(sr, 0, [0,], outcomes=[False, True, False])
 
     # Should also work regardless of group
-    check_modes(sr, 0, 20, outcomes=[False, True, False])
-    check_modes(sr, 0, 50, outcomes=[False, True, False])
-    check_modes(sr, 0, 100, outcomes=[False, True, False])
+    check_modes(sr, 0, [20,], outcomes=[False, True, False])
+    check_modes(sr, 0, [50,], outcomes=[False, True, False])
+    check_modes(sr, 0, [100,], outcomes=[False, True, False])
+    check_modes(sr, 0, [20,50,100,], outcomes=[False, True, False])
 
 
     # Create a file that's executable only by root
     sr = StatResult(int(0o100100), 0, 0)
 
     # Standard user checks should fail, even if in same group as root. 
-    check_modes(sr, 1000, 20, outcomes=[False, False, False])
-    check_modes(sr, 1000, 0, outcomes=[False, False, False])
+    check_modes(sr, 1000, [20], outcomes=[False, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[False, False, False])
 
     # Should work as root only if we ask for execute check
-    check_modes(sr, 0, 0, outcomes=[False, False, True])
+    check_modes(sr, 0, [0,], outcomes=[False, False, True])
 
     # Should also work regardless of group
-    check_modes(sr, 0, 20, outcomes=[False, False, True])
-    check_modes(sr, 0, 50, outcomes=[False, False, True])
-    check_modes(sr, 0, 100, outcomes=[False, False, True])
+    check_modes(sr, 0, [20,], outcomes=[False, False, True])
+    check_modes(sr, 0, [50,], outcomes=[False, False, True])
+    check_modes(sr, 0, [100,], outcomes=[False, False, True])
 
 
     # Create a file that's full permissions for owner
     sr = StatResult(int(0o100700), 0, 0)
 
     # Standard user checks should fail, even if in same group as root. 
-    check_modes(sr, 1000, 20, outcomes=[False, False, False])
-    check_modes(sr, 1000, 0, outcomes=[False, False, False])
+    check_modes(sr, 1000, [20,], outcomes=[False, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[False, False, False])
 
     # Should work as root in all cases
-    check_modes(sr, 0, 0, outcomes=[True, True, True])
+    check_modes(sr, 0, [0,], outcomes=[True, True, True])
 
     # Should also work regardless of group
-    check_modes(sr, 0, 20, outcomes=[True, True, True])
-    check_modes(sr, 0, 50, outcomes=[True, True, True])
-    check_modes(sr, 0, 100, outcomes=[True, True, True])
+    check_modes(sr, 0, [20,], outcomes=[True, True, True])
+    check_modes(sr, 0, [50,], outcomes=[True, True, True])
+    check_modes(sr, 0, [100,], outcomes=[True, True, True])
 
 
     # Create a file that's read & write permissions for owner
     sr = StatResult(int(0o100600), 0, 0)
 
     # Standard user checks should fail, even if in same group as root. 
-    check_modes(sr, 1000, 20, outcomes=[False, False, False])
-    check_modes(sr, 1000, 0, outcomes=[False, False, False])
+    check_modes(sr, 1000, [20,], outcomes=[False, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[False, False, False])
 
     # Should work as root in all but the executable case
-    check_modes(sr, 0, 0, outcomes=[True, True, False])
+    check_modes(sr, 0, [0,], outcomes=[True, True, False])
 
     # Should also work regardless of group
-    check_modes(sr, 0, 20, outcomes=[True, True, False])
-    check_modes(sr, 0, 50, outcomes=[True, True, False])
-    check_modes(sr, 0, 100, outcomes=[True, True, False])
+    check_modes(sr, 0, [20,], outcomes=[True, True, False])
+    check_modes(sr, 0, [50,], outcomes=[True, True, False])
+    check_modes(sr, 0, [100,], outcomes=[True, True, False])
 
 
     # Create a file that's write & execute permissions for owner (unlikely?)
     sr = StatResult(int(0o100300), 0, 0)
 
     # Standard user checks should fail, even if in same group as root. 
-    check_modes(sr, 1000, 20, outcomes=[False, False, False])
-    check_modes(sr, 1000, 0, outcomes=[False, False, False])
+    check_modes(sr, 1000, [20,], outcomes=[False, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[False, False, False])
 
     # Should work as root in all but the read case
-    check_modes(sr, 0, 0, outcomes=[False, True, True])
+    check_modes(sr, 0, [0,], outcomes=[False, True, True])
 
     # Should also work regardless of group
-    check_modes(sr, 0, 20, outcomes=[False, True, True])
-    check_modes(sr, 0, 50, outcomes=[False, True, True])
-    check_modes(sr, 0, 100, outcomes=[False, True, True])
+    check_modes(sr, 0, [20,], outcomes=[False, True, True])
+    check_modes(sr, 0, [50,], outcomes=[False, True, True])
+    check_modes(sr, 0, [100,], outcomes=[False, True, True])
 
 
     # Create a file that's read & execute permissions for owner
     sr = StatResult(int(0o100500), 0, 0)
 
     # Standard user checks should fail, even if in same group as root. 
-    check_modes(sr, 1000, 20, outcomes=[False, False, False])
-    check_modes(sr, 1000, 0, outcomes=[False, False, False])
+    check_modes(sr, 1000, [20,], outcomes=[False, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[False, False, False])
 
     # Should work as root in all but the write case
-    check_modes(sr, 0, 0, outcomes=[True, False, True])
+    check_modes(sr, 0, [0,], outcomes=[True, False, True])
 
     # Should also work regardless of group
-    check_modes(sr, 0, 20, outcomes=[True, False, True])
-    check_modes(sr, 0, 50, outcomes=[True, False, True])
-    check_modes(sr, 0, 100, outcomes=[True, False, True])
+    check_modes(sr, 0, [20,], outcomes=[True, False, True])
+    check_modes(sr, 0, [50,], outcomes=[True, False, True])
+    check_modes(sr, 0, [100,], outcomes=[True, False, True])
 
 
     # Create a file that's null permissions for owner
@@ -135,12 +141,12 @@ def test_check_permissions():
 
     # All checks should fail, even if in same group as root, even if owner of 
     # file.
-    check_modes(sr, 1000, 20, outcomes=[False, False, False])
-    check_modes(sr, 1000, 0, outcomes=[False, False, False])
-    check_modes(sr, 0, 0, outcomes=[False, False, False])
-    check_modes(sr, 0, 20, outcomes=[False, False, False])
-    check_modes(sr, 0, 50, outcomes=[False, False, False])
-    check_modes(sr, 0, 100, outcomes=[False, False, False])
+    check_modes(sr, 1000, [20,], outcomes=[False, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[False, False, False])
+    check_modes(sr, 0, [0,], outcomes=[False, False, False])
+    check_modes(sr, 0, [20,], outcomes=[False, False, False])
+    check_modes(sr, 0, [50,], outcomes=[False, False, False])
+    check_modes(sr, 0, [100,], outcomes=[False, False, False])
 
     ### User + group checks
 
@@ -149,13 +155,14 @@ def test_check_permissions():
 
     # Standard user owns, so should be able to read, regardless of 
     # group. 
-    check_modes(sr, 1000, 20, outcomes=[True, False, False])
-    check_modes(sr, 1000, 0, outcomes=[True, False, False])
-    check_modes(sr, 1000, 50, outcomes=[True, False, False])
+    check_modes(sr, 1000, [20,], outcomes=[True, False, False])
+    check_modes(sr, 1000, [0,], outcomes=[True, False, False])
+    check_modes(sr, 1000, [50,], outcomes=[True, False, False])
 
     # Should work for a group user, but otherwise not accessible
-    check_modes(sr, 1001, 20, outcomes=[True, False, False])
-    check_modes(sr, 1001, 21, outcomes=[False, False, False])
+    check_modes(sr, 1001, [20,], outcomes=[True, False, False])
+    check_modes(sr, 1001, [10, 20, 50, 100], outcomes=[True, False, False])
+    check_modes(sr, 1001, [21,], outcomes=[False, False, False])
 
 
     # Create a file that's readable, writable and executable by user and 
@@ -164,13 +171,13 @@ def test_check_permissions():
 
     # Standard user owns, so should be able to do everything, regardless of 
     # group. 
-    check_modes(sr, 1000, 20, outcomes=[True, True, True])
-    check_modes(sr, 1000, 0, outcomes=[True, True, True])
-    check_modes(sr, 1000, 50, outcomes=[True, True, True])
+    check_modes(sr, 1000, [20,], outcomes=[True, True, True])
+    check_modes(sr, 1000, [0,], outcomes=[True, True, True])
+    check_modes(sr, 1000, [50,], outcomes=[True, True, True])
 
     # Should be readable for a group user, but otherwise not accessible at all  
-    check_modes(sr, 1001, 20, outcomes=[True, False, False])
-    check_modes(sr, 1001, 21, outcomes=[False, False, False])
+    check_modes(sr, 1001, [20,], outcomes=[True, False, False])
+    check_modes(sr, 1001, [21,], outcomes=[False, False, False])
 
 
     # Create a file that's readable, writable and executable by user, writable 
@@ -180,15 +187,15 @@ def test_check_permissions():
 
     # Standard user owns, so should be able to do everything, regardless of 
     # group. 
-    check_modes(sr, 1000, 20, outcomes=[True, True, True])
-    check_modes(sr, 1000, 0, outcomes=[True, True, True])
-    check_modes(sr, 1000, 50, outcomes=[True, True, True])
+    check_modes(sr, 1000, [20,], outcomes=[True, True, True])
+    check_modes(sr, 1000, [0,], outcomes=[True, True, True])
+    check_modes(sr, 1000, [50,], outcomes=[True, True, True])
 
     # Should be readable and writable for a group user 
-    check_modes(sr, 1001, 20, outcomes=[True, True, False])
+    check_modes(sr, 1001, [20,], outcomes=[True, True, False])
     # For everyone else (i.e. not the owner, not in the same group) should be 
     # readable  
-    check_modes(sr, 1001, 21, outcomes=[True, False, False])
+    check_modes(sr, 1001, [21,], outcomes=[True, False, False])
 
     ### That's enough for now, if we want this to be exhaustive then we probably 
     ### should do this programmatically. 

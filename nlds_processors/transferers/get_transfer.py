@@ -8,7 +8,7 @@ from minio.error import S3Error
 from retry import retry
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
-from nlds.rabbit.consumer import FilelistType
+from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
 
 
@@ -17,6 +17,7 @@ class GetTransferConsumer(BaseTransferConsumer):
     DEFAULT_ROUTING_KEY = (f"{BaseTransferConsumer.RK_ROOT}."
                            f"{BaseTransferConsumer.RK_TRANSFER_GET}."
                            f"{BaseTransferConsumer.RK_WILD}")
+    DEFAULT_STATE = State.TRANSFER_GETTING
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
@@ -41,12 +42,6 @@ class GetTransferConsumer(BaseTransferConsumer):
                         self.RK_LOG_ERROR)
                 return
 
-        # Get source transaction id (if available)
-        holding_transaction_id = msg_details[self.MSG_HOLDING_TRANSACTION_ID]
-        if holding_transaction_id:
-            # Convert to uuid and back to string to check it is a valid UUID
-            holding_transaction_id = str(UUID(holding_transaction_id))
-
         # Create client!
         client = minio.Minio(
             tenancy,
@@ -66,22 +61,19 @@ class GetTransferConsumer(BaseTransferConsumer):
                 )
                 continue
 
-            # If holding_transaction_id given then obtain just that transaction bucket 
-            # and files therein. 
-            # NOTE: (2022-10-05) I don't think this works anymore
-            if holding_transaction_id:
-                bucket_name = f"nlds.{holding_transaction_id}"
-                object_name = path_details.original_path
             # If bucketname inserted into object path (i.e. from catalogue) then 
             # extract both
             elif len(path_details.object_name.split(':')) == 2:
                 bucket_name, object_name = path_details.object_name.split(':')
             # Otherwise, log error and queue for retry
             else:
-                self.log("Unable to get bucket_name from message info, adding "
+                reason = "Unable to get bucket_name from message info"
+                self.log(f"{reason}, adding "
                          f"{path_details.object_name} to retry list.", 
                          self.RK_LOG_INFO)
-                path_details.increment_retry(retry_reason="non-existent-bucket")
+                path_details.increment_retry(
+                    retry_reason=reason
+                )
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="retry"
                 )
@@ -89,9 +81,13 @@ class GetTransferConsumer(BaseTransferConsumer):
 
             if bucket_name and not client.bucket_exists(bucket_name):
                 # If bucket doesn't exist then pass for retry
-                self.log("Transaction_id doesn't match any buckets. Adding "
-                         f"{object_name} to retry list.", self.RK_LOG_ERROR)
-                path_details.increment_retry(retry_reason="non-existent-bucket")
+                reason = (f"transaction_id {transaction_id} doesn't match any "
+                           "buckets")
+                self.log(f"{reason}. Adding {object_name} to retry list.", 
+                         self.RK_LOG_ERROR)
+                path_details.increment_retry(
+                    retry_reason=reason
+                )
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="retry"
                 )
@@ -99,10 +95,6 @@ class GetTransferConsumer(BaseTransferConsumer):
 
             self.log(f"Attempting to get file {object_name} from {bucket_name}", 
                      self.RK_LOG_DEBUG)
-
-            if (self.remove_root_slash_fl and 
-                    object_name[0] == "/"):
-                object_name = object_name[1:]
 
             # Decide whether to prepend target path or download directly to it.
             if not target:
@@ -114,10 +106,13 @@ class GetTransferConsumer(BaseTransferConsumer):
                 # will fail.
                 if not self.check_path_access(path_details.path.parent, 
                                               access=os.W_OK):
-                    self.log(f"Unable to download {download_path}, given target"
-                             " path is inaccessible. Adding to retry-list.", 
+                    reason = (f"Unable to download {download_path}.  Target "
+                               "path is inaccessible.")
+                    self.log(f"{reason}. Adding to retry-list.", 
                              self.RK_LOG_INFO)
-                    path_details.increment_retry(retry_reason="exception")
+                    path_details.increment_retry(
+                        retry_reason=reason
+                    )
                     self.append_and_send(path_details, rk_retry, body_json, 
                                          list_type=FilelistType.retry)
                     continue
@@ -140,10 +135,13 @@ class GetTransferConsumer(BaseTransferConsumer):
                     bucket_name, object_name, str(download_path),
                 )
             except Exception as e:
-                self.log(f"Exception occurred: {e}", self.RK_LOG_DEBUG)
+                reason = f"Download-time exception occurred: {e}"
+                self.log(reason, self.RK_LOG_DEBUG)
                 self.log(f"Exception encountered during download, adding "
                          f"{object_name} to retry-list.", self.RK_LOG_INFO)
-                path_details.increment_retry(retry_reason="exception")
+                path_details.increment_retry(
+                    retry_reason=reason
+                )
                 self.append_and_send(path_details, rk_retry, body_json, 
                                      list_type=FilelistType.retry)
                 continue
