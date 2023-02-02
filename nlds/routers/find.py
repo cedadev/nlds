@@ -47,6 +47,7 @@ async def get(token: str = Depends(authenticate_token),
               group: str = Depends(authenticate_group),
               label: Optional[str] = None,
               holding_id: Optional[int] = None,
+              transaction_id: Optional[str] = None,
               path: Optional[str] = None,
               tag: Optional[str] = None
               ):
@@ -69,6 +70,8 @@ async def get(token: str = Depends(authenticate_token),
         meta_dict[RMQP.MSG_LABEL] = label
     if (holding_id):
         meta_dict[RMQP.MSG_HOLDING_ID] = holding_id
+    if (transaction_id):
+        meta_dict[RMQP.MSG_TRANSACT_ID] = transaction_id
     if (tag):
         # convert the string into a dictionary
         try:

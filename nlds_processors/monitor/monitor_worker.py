@@ -298,7 +298,7 @@ class MonitorConsumer(RMQC):
         try: 
             idd = body[self.MSG_DETAILS][self.MSG_ID]
         except KeyError:
-            self.log("Transaction id not in message, continuing without.", 
+            self.log("Id not in message, continuing without.", 
                      self.RK_LOG_INFO)
             idd = None
 
@@ -309,6 +309,13 @@ class MonitorConsumer(RMQC):
             self.log("Transaction id not in message, continuing without.", 
                      self.RK_LOG_INFO)
             transaction_id = None
+        
+        try:
+            job_label = body[self.MSG_DETAILS][self.MSG_JOB_LABEL]
+        except:
+            self.log("job label not in message, continuing without.", 
+                     self.RK_LOG_INFO)
+            job_label = None
         
         # get the desired state from the details section of the message
         try:
@@ -348,9 +355,13 @@ class MonitorConsumer(RMQC):
         # start a SQL alchemy session
         self.monitor.start_session()
 
-        trecs = self.monitor.get_transaction_record(
-            user, group, idd, transaction_id
-        )
+        try:
+            trecs = self.monitor.get_transaction_record(
+                user, group, idd, transaction_id, job_label
+            )
+        except MonitorError:
+            trecs = []
+
         # Convert list of objects to json-friendly dict
         # we want a list of transaction_records, each transaction_record
         # contains a list of sub_records

@@ -41,6 +41,7 @@ class Catalog(DBMixin):
                     group: str, 
                     label: str=None, 
                     holding_id: int=None,
+                    transaction_id: str=None,
                     tag: dict=None) -> Holding:
         """Get a holding from the database"""
         assert(self.session != None)
@@ -49,13 +50,20 @@ class Catalog(DBMixin):
                 holding = self.session.query(Holding).filter(
                     Holding.user == user,
                     Holding.group == group,
-                    Holding.id == holding_id
+                    Holding.id == holding_id,
+                ).all()
+            elif transaction_id:
+                holding = self.session.query(Holding).filter(
+                    Holding.user == user,
+                    Holding.group == group,
+                    Transaction.holding_id == Holding.id,
+                    Transaction.transaction_id == transaction_id
                 ).all()
             else:
                 holding = self.session.query(Holding).filter(
                     Holding.user == user,
                     Holding.group == group,
-                    Holding.label.regexp_match(label)
+                    Holding.label.regexp_match(label),
                 ).all()
             # check if at least one holding found
             if len(holding) == 0:
@@ -72,6 +80,11 @@ class Catalog(DBMixin):
                 raise CatalogError(
                     f"Holding with holding_id:{holding_id} not found for "
                     f"user:{user} and group:{group}."
+                )
+            elif transaction_id:
+                raise CatalogError(
+                    f"Holding containing transaction_id:{transaction_id} not "
+                    f"found for user:{user} and group:{group}."
                 )
             else:
                 raise CatalogError(
@@ -111,7 +124,7 @@ class Catalog(DBMixin):
     def modify_holding(self, 
                        holding: Holding,
                        new_label: str=None, 
-                       new_tag: dict=None) -> Holding:
+                       new_tags: dict=None) -> Holding:
         """Find a holding and modify the information in it"""
         assert(self.session != None)
         # change the label if a new_label supplied
@@ -125,6 +138,12 @@ class Catalog(DBMixin):
                     f"holding_id:{holding.id} to new label:{new_label}. New "
                     f"label:{new_label} already in use by another holding."
                 )
+
+        if new_tags:
+            for k in new_tags:
+                # create_tag takes a key and value
+                tag = self.create_tag(holding, k, new_tags[k])
+                self.session.flush()
 
         return holding
 
@@ -266,6 +285,7 @@ class Catalog(DBMixin):
                   group: str, 
                   holding_label: str=None, 
                   holding_id: int=None,
+                  transaction_id: str=None,
                   path: str=None, 
                   tag: dict=None) -> list:
 
@@ -278,8 +298,9 @@ class Catalog(DBMixin):
             holding_search = holding_label
         else:
             holding_search = ".*"
+
         holding = self.get_holding(
-            user, group, holding_search, holding_id, tag
+            user, group, holding_search, holding_id, transaction_id, tag
         )
 
         if path:
@@ -291,11 +312,19 @@ class Catalog(DBMixin):
         file_list = []
         try:
             for h in holding:
-                file = self.session.query(File).filter(
-                    Transaction.id == File.transaction_id,
-                    Transaction.holding_id == h.id,
-                    File.original_path.regexp_match(search_path)
-                ).all()
+                if transaction_id:
+                    file = self.session.query(File).filter(
+                        Transaction.id == File.transaction_id,
+                        Transaction.transaction_id == transaction_id,
+                        Transaction.holding_id == h.id,
+                        File.original_path.regexp_match(search_path)
+                    ).all()
+                else:
+                    file = self.session.query(File).filter(
+                        Transaction.id == File.transaction_id,
+                        Transaction.holding_id == h.id,
+                        File.original_path.regexp_match(search_path)
+                    ).all()
                 for f in file:
                     file_list.append(f)
             # no files found
@@ -303,7 +332,14 @@ class Catalog(DBMixin):
                 raise KeyError
 
         except (IntegrityError, KeyError, OperationalError):
-            err_msg = f"File with original_path:{path} not found "
+            if holding_label:
+                err_msg = f"File with holding_label:{holding_label} not found "
+            elif holding_id:
+                err_msg = f"File with holding_id:{holding_id} not found "
+            elif transaction_id:
+                err_msg = f"File with transaction_id:{transaction_id} not found "
+            else:
+                err_msg = f"File with original_path:{path} not found "
             raise CatalogError(err_msg)
         
         return file_list
@@ -414,5 +450,23 @@ class Catalog(DBMixin):
                 f"Location with root {root}, path {file.original_path} and "
                 f"storage type {Storage.OBJECT_STORAGE} could not be added to "
                  "the database")
-            return None
         return location
+
+
+    def create_tag(self,
+                   holding: Holding,
+                   key: str,
+                   value: str):
+        """Create a tag and add it to a holding"""
+        assert(self.session != None)
+        try:
+            tag = Tag(
+                key = key,
+                value = value,
+                holding_id = holding.id
+            )
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Tag could not be added to holding:{holding.label}"
+            )
+        return tag

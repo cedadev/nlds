@@ -101,8 +101,8 @@ async def get(transaction_id: UUID,
     # return response, job label accepted for processing
     response = FileResponse(
         uuid = transaction_id,
-        msg = (f"GET transaction with job label:{job_label} accepted for "
-                "processing.")
+        msg = (f"GET transaction with transaction_id:{transaction_id} and "
+                "job label:{job_label} accepted for processing.")
     )
     contents = [filepath, ]
     # create the message dictionary - do this here now as it's more transparent
@@ -171,8 +171,8 @@ async def put(transaction_id: UUID,
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
-        msg = (f"GETLIST transaction with job_label:{job_label} accepted for "
-                "processing.")
+        msg = (f"GETLIST transaction with transaction_id:{transaction_id} and "
+                "job_label:{job_label} accepted for processing.")
     )
 
     # Convert filepath or filelist to lists
@@ -261,8 +261,8 @@ async def put(transaction_id: UUID,
     # return response, transaction id accepted for processing
     response = FileResponse(
         uuid = transaction_id,
-        msg = (f"PUT transaction with job_label:{job_label} accepted for "
-                "processing.\n")
+        msg = (f"PUT transaction with transaction_id:{transaction_id} and "
+                "job_label:{job_label} accepted for processing.\n")
     )
     # create the message dictionary - do this here now as it's more transparent
     routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_PUT}"

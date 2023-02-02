@@ -452,7 +452,6 @@ class CatalogConsumer(RMQC):
             self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
             return
 
-
         # get the user id from the details section of the message
         try:
             user = body[self.MSG_DETAILS][self.MSG_USER]
@@ -576,12 +575,18 @@ class CatalogConsumer(RMQC):
         except KeyError:
             holding_id = None
 
+        # get the transaction id if it exists
+        try:
+            transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
+        except KeyError:
+            transaction_id = None
+
         # get the holding label from the details section of the message
         # could (legit) be None
         try: 
             holding_label = body[self.MSG_META][self.MSG_LABEL]
         except KeyError:
-            holding_label = None
+            holding_label = ".*"
 
         # get the tags from the details sections of the message
         try:
@@ -594,15 +599,9 @@ class CatalogConsumer(RMQC):
         # holding_label and holding_id is None means that more than one
         # holding wil be returned
         try:
-            if holding_label is None and holding_id is None:
-                holdings = self.catalog.get_holding(
-                    user, group, ".*", None, tag
-                )
-            # holding_label or holding_id not None
-            else:
-                holdings = self.catalog.get_holding(
-                    user, group, holding_label, holding_id
-                )
+            holdings = self.catalog.get_holding(
+                user, group, holding_label, holding_id, transaction_id, tag
+            )
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
@@ -752,6 +751,12 @@ class CatalogConsumer(RMQC):
         except KeyError:
             holding_label = None
 
+        # get the transaction id from the details section of the message
+        try: 
+            transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
+        except KeyError:
+            transaction_id = None
+
         # get the path from the detaisl section of the message
         try:
             path = body[self.MSG_META][self.MSG_PATH]
@@ -768,7 +773,8 @@ class CatalogConsumer(RMQC):
         ret_dict = {}
         try:
             files = self.catalog.get_files(
-                user, group, holding_label, holding_id, path, tag
+                user, group, holding_label, holding_id, 
+                transaction_id, path, tag
             )
             for f in files:
                 # get the transaction and the holding:
@@ -897,7 +903,7 @@ class CatalogConsumer(RMQC):
 
         # if there is the holding label or holding id then get the holding
         try:
-            if not holding_label and not holding_id == 0:
+            if not holding_label and not holding_id:
                 raise CatalogError(
                     "Holding not found: holding_id or label not specified"
                 )
@@ -921,9 +927,8 @@ class CatalogConsumer(RMQC):
 
             old_meta = {
                 "label": holding.label,
-                "tags":  holding.tags
+                "tags":  {t.key:t.value for t in holding.tags}
             }
-
             holding = self.catalog.modify_holding(
                 holding, new_label, new_tag
             )
