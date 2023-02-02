@@ -359,13 +359,17 @@ containing the data required to carry out the processes:
             access_key     : <string>,
             secret_key     : <string>
         },
+        meta {
+        },
         data {
         }
     }
 
-All messages retain all parts of the `details` field in the JSON message.  This
-allows the details of the transaction to be passed from process to process, even
-when the process does not require some of the sub-fields in the `details` field.
+All messages retain all parts of the `details` and `meta` fields in the JSON 
+message.  This allows the details of the transaction to be passed from process to 
+process, even when the process does not require some of the sub-fields in the 
+`details` or `meta` fields.  The `data` field can, and will, change between each 
+process.
 
 The routing keys for the RabbitMQ messages have three components: the calling
 application, the worker to act upon and the state or command for the worker.
@@ -495,13 +499,17 @@ URL.
             transaction_id : <string>,
             user           : <string>,
             group          : <string>,
-            target         : <string> (optional),
             tenancy        : <string> (optional),
             access_key     : <string>,
             secret_key     : <string>
         },
         data : {
-            filelist       : <list<(json,int)>>
+            filelist       : <list<(json,int)>>,
+        },
+        meta : {
+            label          : <string> (optional),
+            holding_id     : <int> (optional),
+            tag            : <dict> (optional)
         }
     }
 
@@ -1006,26 +1014,84 @@ WARNING, ERROR, CRITICAL**
 `code_line` and `module_name` can be derived from the exception using the 
 `traceback` module.
 
+# User interaction via the NLDS client / client API
+
+User actions:
+
+## Transfer actions
+### PUT a single / list of files 
+  - `put`
+  - `putlist`
+  - Required arguments
+    - `--user`
+    - `--group`
+    - `filepath|filelist`
+  - Optional
+    - `--label=`: if a holding with label exists then add to an existing holding with the label, otherwise create a new holding with the label
+    - `--holding_id=`: adds to an existing holding with the (integer) id
+    - `--tag=key:value`: adds a tag to the holding on PUT
+
+### GET a single / list of files 
+  - `get`
+  - `getlist`
+  - Required arguments 
+    - `--user=`
+    - `--group=`
+    - `--target=` 
+    - `filepath|filelist`
+  - Optional
+    - `--label=`: get the file from a holding with matching label
+    - `--holding_id=`: get the file from a holding with the (integer) id
+    - `--tag=key:value`: get the file from a holding with the matching tag
+
+### DELETE a single / list of files 
+  - `del`
+  - `dellist`
+  - Required arguments 
+    - `--user=`
+    - `--group=`
+    - `filepath|filelist`
+
+## Query actions
+
+### List the holdings for a user / group
+  - `list`
+  - Required arguments
+    - `--user=`
+  - Optional arguments
+    - `--group=`
+    - `--holding_id=` (integer)
+    - `--tag=key:value` (filter by tag)
+    - `--label=` (filter by label)
+    - `--time=datetime|(start datetime, end datetime)` (time the files were ingested)
+
+### List the files for a user / group
+  - `find`
+  - Required arguments
+    - `--user=`
+  - Optional arguments
+    - `--group=`
+    - `--holding_id=` (integer)
+    - `--tag=key:value` (filter by tag for the holding containing the files)
+    - `--label=` (filter by the holding label)
+    - `--time=datetime|(start datetime, end datetime)` (time the files were ingested)
+    - `--path=` (filter by original path, can be a substring, regex or wildcard)
+
+### Update the holding metadata
+  - `meta`
+  - Required arguments
+    - `--user=`
+    - One of (must guarantee uniqueness)
+      - `--holding_id=`
+      - `--label=`
+    - Optional
+      - `--group`
+      - `--update_tag=key:value` (create or amend a tag)
+      - `--update_label=` (change the label)
 
 # Development notes
 
-**Transfer**
-Need separate get and put consumers
- - Probably good to have a base-transfer processor that does the core work 
-(verification of message, creation of minio client etc.) and then split the 
-transfer work into two child classes.
-
-Check file permissions in the transfer processor too, but add ability to 
-configure both the transfer and indexer to not do this - to reduce iteration 
-time.
- - Would be worth benchmarking this at some point!
- - Should we be checking filelist length here and reindexing / resizing the list 
-if too long?
-
-Currently designating the buckets with the transaction ID, probably a better way 
-of doing this - feeds into catalogue design. 
-
-**Indexer**
+## Indexer
 Sym-links and directories need to be preserved in the backup, this is still 
 being worked out but will need implementing! Symlinks with common path - i.e. 
 that point to a file/directory within the scope of the original batch - need to 
@@ -1033,5 +1099,58 @@ be converted to be relative so that restoring the files in a different directory
 structure works. Similarly, symlinks to locations not on the common path need to 
 be preserved as absolute links. 
 
-Test the permissions properly, with a sudoers file specifying a user which can 
-change to other users (a super user).
+## Monitoring
+Database for monitoring is quite simple (I think), we only require:
+- transaction_id
+- holding_id (when one exists)
+- tag (if one exists)
+- state
+- user
+- message_splits
+
+we can put this in a table called transaction_states
+
+#### What states do we want?
+We probably want, at least:
+1. Routing (sent from API-server?)
+2. Splitting
+3. Indexing
+4. Transferring
+5. Cataloging
+6. Complete
+7. Failed (just thought of this!)
+
+#### What to do about message splitting
+Given that messages can be split into batches and by size in the indexer, we could have a single transaction be split across N jobs where N >> 1. This is a worst case obviously, but it is absolutely necessary to be prepared for it. 
+
+We can keep track of how many splits have occurred in the indexer, both at the 'split' part and at the 'index' part. We could have a `message_split_count`  as part of the database holding. We could in fact have a second table of transaction_splits with a 1-to-many relationship and have each of these have a separate state, but this feels a little onorous - we're trying to have as little state as possible and this would require each individual message to keep track of how many times it has split. Not to mention the splits table could get VERY big VERY quickly - we would need to purge it basically 2 weeks after we're sure that a transaction has completed, 
+
+What we could do instead is have some table which is states, and that can keep track of how many times each state has been pinged for each transaction. For example, take a message that has been split 6 times, we would then have a state_count for each of the states that is incremented when a new state-update message comes in. Then we know a transaction has completely finished when a state_count == the split count. This is potentially problematic though as it could lead to a race condition - if two messages arrive at a very similar time and try to increment the counter at the same time then we could lose a count and the job would forever be stuck in 'not enough counts for X state'.
+
+Another alternative is to have the state be updated as soon as a _new_ state comes in. This gets around race conditions as it makes the overall database value matter less. Two messages arriving with conflicting states could race but the state is essentially ratcheting up - the later state will come out on top eventually. In fact all jobs will reach a COMPLETE state eventually as the final job going into the COMPLETE state will not have anything else to compete against. However, the state could therefore be unrepresentative of the actual state of the system.
+
+We could get around race conditions entirely by requiring that there only be one monitoring queue with a prefetch of 1. Therefore there will only ever be one read to the database at a time and it will definitely be serial. This might be a bottleneck though, especially if we're reading and writing to the database multiple times for each transaction at each step of the process. Say we have 1000 transactions, each split into a 1000 subjobs, each writing to the database at each stage of the put process. There would be $5\times1000\times1000 = 5,000,000$ individual database writes just for that clump of jobs.
+
+I think, on balance, this volume of writes probably isn't a problem (can discuss with Neil obviously) so I'm going to press ahead with a design which has both a ratcheting job state and individual transaction_state_counts, with a queue-prefetch of 1. Therefore we want a single table with the following: 
+1. id [INT]
+2. transaction_id [UUID | STRING] (unique)
+3. user [STRING] (uid?)
+4. group [STRING] (gid?)
+5. (ratcheted) state [ENUM | INT]
+6. split_count [INT] (set at split & index step)
+9. indexing_count [INT]
+10. transferring_count [INT]
+11. cataloging_count [INT]
+12. complete_count [INT]
+13. failed_count [INT]
+
+with the transaction_id either given, or gotten from a tag/holding_id from the catalog if requesting that way. Note that requesting by tag will therefore not work if the job has not reached the cataloging step yet, although a job will not have 
+
+An open question remains about timestamps - do we need one? The ingest time will be saved for any given catalog record, but reording the timestamp of most recent change for the furthest state might be useful? The whole idea of this is to be as slim as possible though, so it might be best to just leave it out given it doesn't provide that much benefit. 
+
+### On database visibility for monitoring requests
+Neil made the good point that having the api-server talk directly to the databases might be bad for the database if traffic levels get too high, i.e. the server or the database would be in danger of clogging up the whole system. A better approach would be to have the API-server be a consumer with its own queue, and use an asynchronous `await` command from within a given 'router' function block (i.e. one of the router endpoints ) to ensure that the information can be sent back to the user with the API http response. We need to do some figuring-out to work out if this is possible. 
+
+**Initial thoughts:** 
+- The awaiting thread will need to be picked back up by the consumer callback on the API-server - I am not sure how this works!
+- Could call an async `send_and_receive` function within the router function which creates a consumer, sends a message to the exchange and then waits for a response (for some timeout value...) 
