@@ -271,7 +271,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             # Delay the retry message depending on how many retries have been 
             # accumulated. All retries in a retry list _should_ be the same so 
             # base it off of the first one.
-            delay = self.get_retry_delay(pathlist[0].retries)
+            delay = self.get_retry_delay(pathlist[0].retries.count)
             self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
                      f" {datetime.now() + timedelta(milliseconds=delay)}", 
                      self.RK_LOG_DEBUG)

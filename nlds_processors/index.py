@@ -170,7 +170,7 @@ class IndexerConsumer(StattingConsumer):
 
             # If any items has exceeded the maximum number of retries we add it 
             # to the dead-end failed list
-            if path_details.retries > self.max_retries:
+            if path_details.retries.count > self.max_retries:
                 # Append to failed list (in self) and send back to exchange if 
                 # the appropriate size. 
                 self.log(f"{path_details.path} has exceeded max retry count, "
@@ -194,7 +194,7 @@ class IndexerConsumer(StattingConsumer):
                 # Increment retry counter and add to retry list
                 reason = (f"Path:{path_details.path} is inaccessible.")
                 self.log(reason, self.RK_LOG_DEBUG)
-                path_details.retries.increment(retry_reason=reason)
+                path_details.retries.increment(reason=reason)
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
                 )

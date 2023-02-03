@@ -50,7 +50,7 @@ class PutTransferConsumer(BaseTransferConsumer):
             item_path = path_details.path
 
             # First check whether index item has failed too many times
-            if path_details.retries > self.max_retries:
+            if path_details.retries.count > self.max_retries:
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="failed"
                 )

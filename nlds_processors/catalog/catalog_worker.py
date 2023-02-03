@@ -230,7 +230,7 @@ class CatalogConsumer(RMQC):
                 )
                 self.completelist.append(pd)
             except CatalogError as e:
-                if pd.retries > self.max_retries:
+                if pd.retries.count > self.max_retries:
                     self.failedlist.append(pd)
                 else:
                     pd.retries.increment(
@@ -373,7 +373,7 @@ class CatalogConsumer(RMQC):
                         link_path = file.link_path
                     )
                 except CatalogError as e:
-                    if file_details.retries > self.max_retries:
+                    if file_details.retries.count > self.max_retries:
                         self.failedlist.append(file_details)
                     else:
                         self.retrylist.append(file_details)
@@ -385,7 +385,7 @@ class CatalogConsumer(RMQC):
                 self.completelist.append(new_file)
 
             except CatalogError as e:
-                if file_details.retries > self.max_retries:
+                if file_details.retries.count > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
                     file_details.retries.increment(
@@ -504,7 +504,7 @@ class CatalogConsumer(RMQC):
                     tag=tag
                 )
             except CatalogError as e:
-                if file_details.retries > self.max_retries:
+                if file_details.retries.count > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
                     file_details.retries.increment(

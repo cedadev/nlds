@@ -55,7 +55,7 @@ class GetTransferConsumer(BaseTransferConsumer):
         rk_failed = ".".join([rk_origin, self.RK_TRANSFER_GET, self.RK_FAILED])
 
         for path_details in filelist:
-            if path_details.retries > self.max_retries:
+            if path_details.retries.count > self.max_retries:
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="failed"
                 )
