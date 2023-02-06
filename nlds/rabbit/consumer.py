@@ -266,12 +266,12 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         if mode == FilelistType.processed:
             # Reset the retries upon successful indexing. 
             for path_details in pathlist:
-                path_details.reset_retries()
+                path_details.retries.reset()
         elif mode == FilelistType.retry:
             # Delay the retry message depending on how many retries have been 
             # accumulated. All retries in a retry list _should_ be the same so 
             # base it off of the first one.
-            delay = self.get_retry_delay(pathlist[0].retries)
+            delay = self.get_retry_delay(pathlist[0].retries.count)
             self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
                      f" {datetime.now() + timedelta(milliseconds=delay)}", 
                      self.RK_LOG_DEBUG)

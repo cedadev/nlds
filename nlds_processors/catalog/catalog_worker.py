@@ -230,11 +230,11 @@ class CatalogConsumer(RMQC):
                 )
                 self.completelist.append(pd)
             except CatalogError as e:
-                if pd.retries > self.max_retries:
+                if pd.retries.count > self.max_retries:
                     self.failedlist.append(pd)
                 else:
-                    pd.increment_retry(
-                        retry_reason=f"{e.message}"
+                    pd.retries.increment(
+                        reason=f"{e.message}"
                     )
                     self.retrylist.append(pd)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
@@ -373,23 +373,23 @@ class CatalogConsumer(RMQC):
                         link_path = file.link_path
                     )
                 except CatalogError as e:
-                    if file_details.retries > self.max_retries:
+                    if file_details.retries.count > self.max_retries:
                         self.failedlist.append(file_details)
                     else:
                         self.retrylist.append(file_details)
-                        file_details.increment_retry(
-                            retry_reason=f"{e.message}"
+                        file_details.retries.increment(
+                            reason=f"{e.message}"
                         )
                     self.log(e.message, RMQC.RK_LOG_ERROR)
                     continue
                 self.completelist.append(new_file)
 
             except CatalogError as e:
-                if file_details.retries > self.max_retries:
+                if file_details.retries.count > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
-                    file_details.increment_retry(
-                        retry_reason=f"{e.message}"
+                    file_details.retries.increment(
+                        reason=f"{e.message}"
                     )
                     self.retrylist.append(file_details)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
@@ -504,11 +504,11 @@ class CatalogConsumer(RMQC):
                     tag=tag
                 )
             except CatalogError as e:
-                if file_details.retries > self.max_retries:
+                if file_details.retries.count > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
-                    file_details.increment_retry(
-                        retry_reason=f"{e.message}"
+                    file_details.retries.increment(
+                        reason=f"{e.message}"
                     )
                     self.retrylist.append(file_details)
                 self.log(e.message, RMQC.RK_LOG_ERROR)

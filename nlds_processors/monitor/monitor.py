@@ -140,7 +140,7 @@ class Monitor(DBMixin):
         try:
             failed_file = FailedFile(
                 filepath=path_details.original_path,
-                reason=path_details.retry_reasons[-1],
+                reason=path_details.retries.reasons[-1],
                 sub_record_id=sub_record.id,
             )
             self.session.add(failed_file)
