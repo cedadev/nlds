@@ -1,6 +1,7 @@
 # SQLalchemy imports
 from sqlalchemy import func, Enum
-from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError
+from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
+    NoResultFound
 
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Storage, Checksum, Tag
@@ -141,9 +142,17 @@ class Catalog(DBMixin):
 
         if new_tags:
             for k in new_tags:
-                # create_tag takes a key and value
-                tag = self.create_tag(holding, k, new_tags[k])
-                self.session.flush()
+                # if the tag exists then modify it, if it doesn't then create it
+                try:
+                    # get
+                    tag = self.get_tag(holding, k)
+                except CatalogError:
+                    # create
+                    tag = self.create_tag(holding, k, new_tags[k])
+                else:
+                    # modify
+                    tag = self.modify_tag(holding, k, new_tags[k])
+        self.session.flush()
 
         return holding
 
@@ -377,6 +386,7 @@ class Catalog(DBMixin):
             )
         return new_file
 
+
     def delete_files(self, 
                      user: str, 
                      group: str, 
@@ -403,6 +413,7 @@ class Catalog(DBMixin):
             checkpoint.rollback()
             err_msg = f"File with original_path:{path} could not be deleted"
             raise CatalogError(err_msg)
+
 
     def get_location(self, 
                      file: File, 
@@ -465,8 +476,42 @@ class Catalog(DBMixin):
                 value = value,
                 holding_id = holding.id
             )
+            self.session.add(tag)
+            self.session.flush()           # flush to generate tag.id
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Tag could not be added to holding:{holding.label}"
+            )
+        return tag
+
+
+    def get_tag(self, holding: Holding, key: str):
+        """Get the tag with a specific key"""
+        assert(self.session != None)
+        try:
+            tag = self.session.query(Tag).filter(
+                Tag.key == key,
+                Tag.holding_id == holding.id
+            ).one()  # uniqueness constraint guarantees only one
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Tag with key:{key} not found"
+            )
+        return tag
+
+
+    def modify_tag(self, holding: Holding, key: str, value: str):
+        """Modify a tag that has the key, with a new value.
+        Tag has to exist, current value will be overwritten."""
+        assert(self.session != None)
+        try:
+            tag = self.session.query(Tag).filter(
+                Tag.key == key,
+                Tag.holding_id == holding.id
+            ).one()  # uniqueness constraint guarantees only one
+            tag.value = value
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Tag with key:{key} not found"
             )
         return tag

@@ -70,16 +70,19 @@ async def get(token: str = Depends(authenticate_token),
         meta_dict[RMQP.MSG_TRANSACT_ID] = transaction_id
 
     if (tag):
+        print(tag)
         tag_dict = {}
         # convert the string into a dictionary
+        # try:
         try:
             # strip whitespace and "{" "}" symbolsfirst
             tag_list = (tag.replace(" ","").replace("{", "").replace("}", "")
                        ).split(",")
             for tag_i in tag_list:
-                tag_kv = tag_i.split(":")
-                tag_dict[tag_kv[0]] = tag_kv[1]
-        except: # what exception might be raised here?
+                if len(tag_i) > 0:
+                    tag_kv = tag_i.split(":")
+                    tag_dict[tag_kv[0]] = tag_kv[1]
+        except IndexError: # what exception might be raised here?
             response_error = ResponseError(
                 loc = ["holdings", "get"],
                 msg = "tag cannot be processed.",

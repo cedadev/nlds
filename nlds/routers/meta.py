@@ -53,7 +53,7 @@ async def post(metamodel: MetaModel,
                group: str = Depends(authenticate_group),
                label: Optional[str] = None,
                holding_id: Optional[int] = None,
-               tag: Optional[str] = None,
+               tag: Optional[str] = None
                ):
     # create the message dictionary
     

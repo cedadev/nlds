@@ -35,8 +35,9 @@ focus
 
 # right pos 4
 # create the logger
-screen -t "logger"
-exec "$PYTHON_DIR/python" "$NLDS_PROC/logger.py"
+# run the server via uvicorn
+screen -t "server"
+exec "$PYTHON_DIR/uvicorn" "nlds.main:nlds" "--reload" "--log-level=trace" "--port=8000"
 focus left
 split
 focus
@@ -56,6 +57,6 @@ split
 focus
 
 # left pos 4
-# run the server via uvicorn
-screen -t "server"
-exec "$PYTHON_DIR/uvicorn" "nlds.main:nlds" "--reload" "--log-level=trace" "--port=8000"
+screen -t "logger"
+#exec "$PYTHON_DIR/python" "$NLDS_PROC/logger.py"
+
