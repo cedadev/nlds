@@ -151,7 +151,7 @@ class RabbitMQPublisher():
         # Get rabbit-specific section of config file
         self.whole_config = load_config()
         self.config = self.whole_config[RABBIT_CONFIG_SECTION]
-        if GENERAL_CONFIG_SECTION in self.general_config:
+        if GENERAL_CONFIG_SECTION in self.whole_config:
             self.general_config = self.whole_config[GENERAL_CONFIG_SECTION]
         else:
             self.general_config = dict()
