@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
+from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog, CatalogError
 from nlds_processors.catalog.catalog_models import Storage
@@ -331,7 +332,10 @@ class CatalogConsumer(RMQC):
                 )
             except CatalogError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
-                return
+                message = (f"Could not find record of requested holding: "
+                           f"label: {holding_label}, id: {holding_id}")
+                self.log(message, self.RK_LOG_DEBUG)
+                raise CallbackError(message)
 
         for f in filelist:
             file_details = PathDetails.from_dict(f)
