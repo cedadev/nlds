@@ -36,7 +36,7 @@ from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES,
                              RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
                              RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
 from ..details import PathDetails, Retries
-from ..errors import RabbitRetryError
+from ..errors import RabbitRetryError, CallbackError
 
 logger = logging.getLogger("nlds.root")
 
@@ -518,6 +518,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 KeyError, 
                 PermissionError,
                 RabbitRetryError,
+                CallbackError,
                 JSONDecodeError,
                 HTTPError,
             ) as original_error:
