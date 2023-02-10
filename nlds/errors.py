@@ -23,7 +23,7 @@ class RabbitRetryError(BaseException):
         super().__init__(*args)
         self.ampq_exception = ampq_exception
 
-class MidCallbackError(BaseException):
+class CallbackError(BaseException):
     
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
