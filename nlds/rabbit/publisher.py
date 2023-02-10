@@ -128,8 +128,12 @@ class RabbitMQPublisher():
     MSG_FAILURE = "failure"
     MSG_USER_QUERY = "user_query"
     MSG_GROUP_QUERY = "group_query"
-    MSG_RETRY_COUNT = "retry_count"
+    MSG_RETRY_COUNT_QUERY = "retry_count"
     MSG_RECORD_LIST = "records"
+
+    MSG_RETRIES = "retries"
+    MSG_RETRIES_COUNT = "count"
+    MSG_RETRIES_REASONS = "reasons"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
