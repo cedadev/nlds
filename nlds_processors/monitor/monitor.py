@@ -1,3 +1,5 @@
+from typing import List
+
 from sqlalchemy import create_engine, func, Enum
 from sqlalchemy.exc import ArgumentError, IntegrityError, OperationalError
 from sqlalchemy.orm import Session
@@ -136,11 +138,26 @@ class Monitor(DBMixin):
 
     def create_failed_file(self, 
                            sub_record: SubRecord, 
-                           path_details: PathDetails) -> FailedFile:
+                           path_details: PathDetails,
+                           reason: str = None) -> FailedFile:
+        """Creates a FailedFile object for the monitoring database. Requires the 
+        input of the parent SubRecord and the PathDetails object of the failed 
+        file in question. Optionally requires a reason str, which will otherwise 
+        be attempted to be taken from the PathDetails object. If no reason can 
+        be found then a MonitorError will be raised. 
+        """
+        if reason is None: 
+            if len(path_details.retries.reasons) <= 0:
+                raise MonitorError(
+                    f"FailedFile for sub_record_id:{sub_record.id} could not be "
+                    "added to the database as no failure reason was supplied. "
+                )
+            else:
+                reason = path_details.retries.reasons[-1]
         try:
             failed_file = FailedFile(
                 filepath=path_details.original_path,
-                reason=path_details.retries.reasons[-1],
+                reason=reason,
                 sub_record_id=sub_record.id,
             )
             self.session.add(failed_file)

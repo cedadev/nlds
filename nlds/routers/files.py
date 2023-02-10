@@ -20,9 +20,8 @@ import json
 
 from ..routers import rabbit_publisher
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
-from . import rpc_publisher
 from ..errors import ResponseError
-from ..details import PathDetails
+from ..details import PathDetails, Retries
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
@@ -124,8 +123,9 @@ async def get(transaction_id: UUID,
         RMQP.MSG_DATA: {
             # Convert to PathDetails for JSON serialisation
             RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
-        },
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
+        }, 
+        **Retries().to_dict(),
+        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
     }
     rabbit_publisher.publish_message(routing_key, msg_dict)
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
@@ -198,7 +198,8 @@ async def put(transaction_id: UUID,
             # Convert to PathDetails for JSON serialisation
             RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
         },
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
+        **Retries().to_dict(),
+        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
     }
     # add the metadata
     meta_dict = {}
@@ -283,7 +284,8 @@ async def put(transaction_id: UUID,
             # Convert to PathDetails for JSON serialisation
             RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
         },
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
+        **Retries().to_dict(),
+        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
     }
     # add the metadata
     meta_dict = {}
