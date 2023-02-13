@@ -30,6 +30,7 @@ router = APIRouter()
 class MetaModel(BaseModel):
     new_label: str = None
     new_tag: Dict[str, str] = None
+    del_tag: Dict[str, str] = None
 
 class MetaResponse(BaseModel):
     files: List[Dict]
@@ -98,6 +99,8 @@ async def post(metamodel: MetaModel,
             new_meta_dict[RMQP.MSG_LABEL] = metamodel.new_label
         if (metamodel.new_tag):
             new_meta_dict[RMQP.MSG_TAG] = metamodel.new_tag
+        if (metamodel.del_tag):
+            new_meta_dict[RMQP.MSG_DEL_TAG] = metamodel.del_tag
 
     # add the "meta" section
     if (len(meta_dict) > 0):
