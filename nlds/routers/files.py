@@ -20,7 +20,6 @@ import json
 
 from ..routers import rabbit_publisher
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
-from . import rpc_publisher
 from ..errors import ResponseError
 from ..details import PathDetails
 from ..authenticators.authenticate_methods import authenticate_token, \
