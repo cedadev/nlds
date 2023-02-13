@@ -18,6 +18,8 @@ import pathlib as pth
 from datetime import datetime, timedelta
 import uuid
 import json
+from json.decoder import JSONDecodeError
+from urllib3.exceptions import HTTPError
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -33,8 +35,8 @@ from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES,
                              LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, 
                              RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
                              RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
-from ..details import PathDetails
-from ..errors import RabbitRetryError
+from ..details import PathDetails, Retries
+from ..errors import RabbitRetryError, CallbackError
 
 logger = logging.getLogger("nlds.root")
 
@@ -88,6 +90,9 @@ class State(Enum):
     @classmethod
     def get_final_states(cls):
         return cls.TRANSFER_GETTING, cls.TRANSFER_PUTTING, cls.FAILED
+
+    def to_json(self):
+        return self.value
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
@@ -265,7 +270,11 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         delay = 0
         body_json[self.MSG_DETAILS][self.MSG_RETRY] = False
         if mode == FilelistType.processed:
-            # Reset the retries upon successful indexing. 
+            # Reset the retries (both transaction-level and file-level) upon 
+            # successful completion of processing. 
+            trans_retries = Retries.from_dict(body_json)
+            trans_retries.reset()
+            body_json.update(trans_retries.to_dict())
             for path_details in pathlist:
                 path_details.retries.reset()
         elif mode == FilelistType.retry:
@@ -343,6 +352,115 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return super().setup_logging(enable, log_level, log_format, 
                                      add_stdout_fl, stdout_log_level, log_files,
                                      log_rollover)
+    def _log_errored_transaction(self, body, exception):
+        """Log message which has failed at some point in its callback"""
+        if self.print_tracebacks_fl:
+            tb = traceback.format_exc()
+            self.log("Printing traceback of error: ", self.RK_LOG_DEBUG)
+            self.log(tb, self.RK_LOG_DEBUG)
+        self.log(
+            f"Encountered error in message callback ({exception}), sending"
+            " to logger.", self.RK_LOG_ERROR, exc_info=exception
+        )
+        self.log(
+            f"Failed message content: {body}",
+            self.RK_LOG_DEBUG
+        )
+
+    def _handle_expected_error(self, body, routing_key, original_error):
+        """Handle the workflow of an expected error - attempt to retry the 
+        transaction or fail it as apparopriate. Given we don't know exactly what 
+        is wrong with the message we need to be quite defensive with error 
+        handling here so as to avoid breaking the consumption loop.
+        
+        """
+        # First we log the expected error 
+        self._log_errored_transaction(body, original_error)
+
+        # Then we try to parse its source and retry information from the message 
+        # body.
+        retries = None
+        try: 
+            # First try to parse message body for retry information
+            body_json = json.loads(body)
+            retries = Retries.from_dict(body_json)
+        except (JSONDecodeError, KeyError) as e:
+            self.log("Could not retrieve failed message retry information "
+                     f"{e}, will now attempt to fail message in monitoring.", 
+                     self.RK_LOG_INFO)            
+        try: 
+            # Get message source from routing key, if possible
+            rk_parts = self.split_routing_key(routing_key)
+            rk_source = rk_parts[0]
+        except Exception as e:
+            self.log("Could not retrieve routing key source, reverting to "
+                     "default NLDS value.", self.RK_LOG_WARNING)
+            rk_source = self.RK_ROOT
+
+        monitoring_rk = ".".join([rk_source, 
+                                  self.RK_MONITOR_PUT,  
+                                  self.RK_START])
+
+        if retries is not None and retries.count <= self.max_retries:
+            # Retry the job
+            self.log(f"Retrying errored job with routing key {routing_key}", 
+                     self.RK_LOG_INFO)
+            try:
+                self._retry_transaction(body_json, retries, routing_key, 
+                                        monitoring_rk, original_error)
+            except Exception as e:
+                self.log(f"Failed attempt to retry transaction that failed "
+                         "during callback. Error: {e}.",
+                        self.RK_LOG_WARNING)
+                # Fail the job if at any point the attempt to retry fails. 
+                self._fail_transaction(body_json, monitoring_rk)
+        else:
+            # Fail the job
+            self._fail_transaction(body_json, monitoring_rk)
+
+    def _fail_transaction(self, body_json, monitoring_rk):
+        """Attempt to mark transaction as failed in monitoring db"""
+        try:                
+            # Send message to monitoring to keep track of state
+            body_json[self.MSG_DETAILS][self.MSG_STATE] = State.FAILED
+            body_json[self.MSG_DETAILS][self.MSG_RETRY] = False
+            self.publish_message(monitoring_rk, body_json)
+        except Exception as e:
+            # If this fails there's not much we can do at this stage...
+            # TODO: might be worth figuring out a way of just extracting the 
+            # transaction id and failing the job from that? If it's gotten to 
+            # this point and failed then 
+            self.log("Failed attempt to mark transaction as failed in "
+                     "monitoring.", self.RK_LOG_WARNING)
+            self.log(f"Exception that arose during attempt to mark job as "
+                     f"failed: {e}", self.RK_LOG_DEBUG)
+            self.log(f"Message that couldn't be failed: "
+                     f"{json.dumps(body_json)}", self.RK_LOG_DEBUG)
+
+    def _retry_transaction(
+            self, 
+            body_json: Dict[str, str], 
+            retries: Retries, 
+            original_rk: str, 
+            monitoring_rk: str, 
+            error: Exception
+        ) -> None:
+        """Attempt to retry the message with a retry delay, back to the original 
+        routing_key"""              
+        # Delay the retry message depending on how many retries have been 
+        # accumulated - using simply the transaction-level retries
+        retries.increment(reason=f"Exception during callback: {error}")
+        body_json.update(retries.to_dict())
+        delay = self.get_retry_delay(retries.count)
+        self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
+                 f" {datetime.now() + timedelta(milliseconds=delay)}", 
+                 self.RK_LOG_DEBUG)
+        body_json[self.MSG_DETAILS][self.MSG_RETRY] = True
+
+        # Send to original routing key (i.e. retry it) with the requisite delay 
+        # and also update the monitoring db. 
+        self.publish_message(original_rk, body_json, delay=delay)
+        self.publish_message(monitoring_rk, body_json)
 
     @staticmethod
     def _acknowledge_message(channel: Channel, delivery_tag: str) -> None:
@@ -405,33 +523,13 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 KeyError, 
                 PermissionError,
                 RabbitRetryError,
-            ) as e:
-            try: 
-                # Attempt to mark job as failed in monitoring db
-                # TODO: this probably isn't the best way of doing this!
-                rk_parts = self.split_routing_key(method.routing_key)
-                body_json = json.loads(body)
-                
-                # Send message to monitoring to keep track of state
-                monitoring_rk = ".".join([rk_parts[0], 
-                                          self.RK_MONITOR_PUT, 
-                                          self.RK_START])
-                body_json[self.MSG_DETAILS][self.MSG_STATE] = State.FAILED
-                self.publish_message(monitoring_rk, body_json)
-            except:
-                self.log("Failed attempt to mark job as failed in monitoring.",
-                         self.RK_LOG_WARNING)
-            if self.print_tracebacks_fl:
-                tb = traceback.format_exc()
-                self.log(tb, self.RK_LOG_DEBUG)
-            self.log(
-                f"Encountered error ({e}), sending to logger.", 
-                self.RK_LOG_ERROR, exc_info=e
-            )
-            self.log(
-                f"Failed message content: {body}",
-                self.RK_LOG_DEBUG
-            )
+                CallbackError,
+                JSONDecodeError,
+                HTTPError,
+            ) as original_error:
+            self._handle_expected_error(body, method.routing_key, original_error)
+        except Exception as e:
+            self._log_errored_transaction(body, e)
         finally:
             # Ack message only if it has failed in the limited number of ways 
             # above, otherwise the exception is reraised and breaks the 

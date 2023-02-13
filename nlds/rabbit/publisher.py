@@ -10,25 +10,31 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 import sys
 from datetime import datetime, timedelta
-from uuid import UUID
 import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from typing import Dict, List
 import pathlib
-from collections import namedtuple
+import collections
 
 import pika
 from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
 from retry import retry
 
 from ..server_config import (
-    LOGGING_CONFIG_ROLLOVER, load_config, LOGGING_CONFIG_FILES, LOGGING_CONFIG_STDOUT, 
-    RABBIT_CONFIG_SECTION, LOGGING_CONFIG_SECTION, LOGGING_CONFIG_LEVEL, 
-    LOGGING_CONFIG_STDOUT_LEVEL, LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_ENABLE
+    load_config, 
+    GENERAL_CONFIG_SECTION,
+    RABBIT_CONFIG_SECTION, 
+    LOGGING_CONFIG_SECTION, 
+    LOGGING_CONFIG_ROLLOVER, 
+    LOGGING_CONFIG_FILES, 
+    LOGGING_CONFIG_STDOUT, 
+    LOGGING_CONFIG_LEVEL, 
+    LOGGING_CONFIG_STDOUT_LEVEL, 
+    LOGGING_CONFIG_FORMAT, 
+    LOGGING_CONFIG_ENABLE,
 )
 from ..errors import RabbitRetryError
-from ..details import PathDetails
 
 logger = logging.getLogger("nlds.root")
 
@@ -123,9 +129,13 @@ class RabbitMQPublisher():
     MSG_FAILURE = "failure"
     MSG_USER_QUERY = "user_query"
     MSG_GROUP_QUERY = "group_query"
-    MSG_RETRY_COUNT = "retry_count"
+    MSG_RETRY_COUNT_QUERY = "retry_count"
     MSG_RECORD_LIST = "records"
     MSG_WARNING = "warning"
+
+    MSG_RETRIES = "retries"
+    MSG_RETRIES_COUNT = "count"
+    MSG_RETRIES_REASONS = "reasons"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
@@ -147,6 +157,10 @@ class RabbitMQPublisher():
         # Get rabbit-specific section of config file
         self.whole_config = load_config()
         self.config = self.whole_config[RABBIT_CONFIG_SECTION]
+        if GENERAL_CONFIG_SECTION in self.whole_config:
+            self.general_config = self.whole_config[GENERAL_CONFIG_SECTION]
+        else:
+            self.general_config = dict()
 
         # Set name for logging purposes
         self.name = name
@@ -165,7 +179,15 @@ class RabbitMQPublisher():
       
         self.connection = None
         self.channel = None
-        self.retry_delays = self.DEFAULT_RETRY_DELAYS
+        try:
+            # Do some basic verification of the general retry delays. 
+            self.retry_delays = self.general_config[self.RETRY_DELAYS]
+            assert (isinstance(self.retry_delays, collections.Sequence) 
+                    and not isinstance(self.retry_delays, str))
+            assert len(self.retry_delays) > 0
+            assert isinstance(self.retry_delays[0], int)
+        except (KeyError, TypeError, AssertionError):
+            self.retry_delays = self.DEFAULT_RETRY_DELAYS
         
         if setup_logging_fl:
             self.setup_logging()
