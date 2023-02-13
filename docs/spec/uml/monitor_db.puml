@@ -10,6 +10,12 @@ object "**Transaction Record**" as tran_rec {
     creation_time [DATETIME]
 }
 
+
+object "**Warning**" as warn {
+    id [INT](unique)
+    warning [STRING]
+}
+
 object "**Sub Record**" as sub_rec {
     id [INT](unique)
     sub_id [UUID_64|STRING](unique)
@@ -26,5 +32,6 @@ object "**Failed Files**" as fail_rec {
 
 tran_rec "1" *-- "many" sub_rec
 sub_rec "0" *-- "many" fail_rec
+tran_rec "0" *-- "many" warn
 
 @enduml
