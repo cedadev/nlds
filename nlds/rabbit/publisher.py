@@ -113,6 +113,7 @@ class RabbitMQPublisher():
     MSG_NEW_META = "new_meta"
     MSG_LABEL = "label"
     MSG_TAG = "tag"
+    MSG_DEL_TAG = "del_tag"
     MSG_PATH = "path"
     MSG_HOLDING_ID = "holding_id"
     MSG_HOLDING_LIST = "holdings"
@@ -124,6 +125,7 @@ class RabbitMQPublisher():
     MSG_GROUP_QUERY = "group_query"
     MSG_RETRY_COUNT = "retry_count"
     MSG_RECORD_LIST = "records"
+    MSG_WARNING = "warning"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
