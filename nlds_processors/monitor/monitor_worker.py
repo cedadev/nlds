@@ -163,7 +163,6 @@ class MonitorConsumer(RMQC):
             self.log("No warning found in message, continuing without",
                      self.RK_LOG_DEBUG)
             warnings = []
-        print(warnings)
 
         # start the database transactions
         self.monitor.start_session()

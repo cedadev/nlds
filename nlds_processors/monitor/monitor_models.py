@@ -89,7 +89,7 @@ class Warning(MonitorBase):
     # just two columns - primary key and warning string
     id = Column(Integer, primary_key=True)
     warning = Column(String)
-    # linnk to transaction record warning about
+    # link to transaction record warning about
     transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
                                    index=True, nullable=False)
 
