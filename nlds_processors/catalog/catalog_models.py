@@ -28,6 +28,18 @@ class Holding(CatalogBase):
     transactions = relationship("Transaction", cascade="delete, delete-orphan")
     # label must be unique per user
     __table_args__ = (UniqueConstraint('label', 'user'),)
+    # return the tags as a dictionary
+    def get_tags(self):
+        tags = {}
+        for t in self.tags:
+            tags[t.key] = t.value
+        return tags
+    # return the transaction ids as a list
+    def get_transaction_ids(self):
+        t_ids = []
+        for t in self.transactions:
+            t_ids.append(t.transaction_id)
+        return t_ids
 
 
 class Transaction(CatalogBase):

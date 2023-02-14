@@ -156,13 +156,21 @@ class MonitorConsumer(RMQC):
                      "Retries object.", self.RK_LOG_DEBUG)
             trans_retries = Retries()
 
+        # get the warning(s) from the details section of the message
+        try:
+            warnings = body[self.MSG_DETAILS][self.MSG_WARNING]                
+        except KeyError:
+            self.log("No warning found in message, continuing without",
+                     self.RK_LOG_DEBUG)
+            warnings = []
+
         # start the database transactions
         self.monitor.start_session()
 
         # For any given monitoring update, we need to: 
         # - find the transaction record (create if not present)
         # - update the subrecord(s) associated with it
-        #   - find an exisiting
+        #   - find an existing
         #   - see if it matches sub_id in message
         #       - update it if it does
         #           - change state
@@ -185,11 +193,16 @@ class MonitorConsumer(RMQC):
             try:
                 trec = self.monitor.create_transaction_record(
                     user, group, transaction_id, job_label, api_action
-                )        
+                )
             except MonitorError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
         else:
             trec = trec[0]
+
+        # create any warnings if there are any
+        if warnings and len(warnings) > 0:
+            for w in warnings:
+                warning = self.monitor.create_warning(trec, w)
 
         try:
             srec = self.monitor.get_sub_record(sub_id)
@@ -399,6 +412,7 @@ class MonitorConsumer(RMQC):
                     "job_label": tr.job_label,
                     "api_action": tr.api_action,
                     "creation_time": tr.creation_time.isoformat(),
+                    "warnings": tr.get_warnings(),
                     "sub_records" : []
                 }
                 trecs_dict[tr.id] = t_rec

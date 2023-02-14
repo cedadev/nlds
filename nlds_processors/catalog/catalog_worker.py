@@ -143,7 +143,11 @@ class CatalogConsumer(RMQC):
         except KeyError:
             holding_id = None
 
-        ######## TAGS TAGS TAGS ########
+        # get any tags that exist
+        try:
+            tags = body[self.MSG_META][self.MSG_TAG]
+        except KeyError:
+            tags = None
 
         # start the database transactions
         self.catalog.start_session()
@@ -240,6 +244,25 @@ class CatalogConsumer(RMQC):
                     self.retrylist.append(pd)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
+
+        # add the tags - if the tag already exists then don't add it or modify
+        # it, with the reasoning that the user can change it with the `meta`
+        # command.
+        warnings = []
+        if tags:
+            for k in tags:
+                try:
+                    tag = self.catalog.get_tag(holding, k)
+                except CatalogError: # tag's key not found so create
+                    self.catalog.create_tag(holding, k, tags[k])
+                else:
+                    # append a warning that the tag could not be added to the holding
+                    warnings.append(
+                        f"Tag with key:{k} could not be added to holding with label"
+                        f":{label} as that tag already exists.  Tags can be modified"
+                        f" using the meta command"
+                    )
+
         # stop db transitions and commit
         self.catalog.save()
         self.catalog.end_session()
@@ -255,7 +278,8 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.completelist, rk_complete, body, 
-                               state=State.CATALOG_PUTTING)
+                               state=State.CATALOG_PUTTING,
+                               warning=warnings)
         # RETRY
         if len(self.retrylist) > 0:
             rk_retry = ".".join([rk_origin,
@@ -266,7 +290,8 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
-                               state=State.CATALOG_PUTTING)
+                               state=State.CATALOG_PUTTING,
+                               warning=warnings)
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin,
@@ -277,7 +302,8 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.failedlist, rk_failed, body, 
-                               mode="failed")
+                               mode="failed",
+                               warning=warnings)
 
 
     def _catalog_get(self, body: dict, rk_origin: str) -> None:
@@ -557,6 +583,7 @@ class CatalogConsumer(RMQC):
         self.catalog.save()
         self.catalog.end_session() 
 
+
     def _catalog_list(self, body: dict, properties: Header) -> None:
         """List the users holdings"""
         # get the user id from the details section of the message
@@ -590,7 +617,7 @@ class CatalogConsumer(RMQC):
         try: 
             holding_label = body[self.MSG_META][self.MSG_LABEL]
         except KeyError:
-            holding_label = ".*"
+            holding_label = None
 
         # get the tags from the details sections of the message
         try:
@@ -622,15 +649,10 @@ class CatalogConsumer(RMQC):
                     "label": h.label,
                     "user": h.user,
                     "group": h.group,
-                    "tags": h.tags,
+                    "tags": h.get_tags(),
+                    "transactions": h.get_transaction_ids(),
                     "date": t.ingest_time.isoformat()
                 }
-                # add the transaction ids:
-                t_ids = []
-                for t in h.transactions:
-                    t_ids.append(t.transaction_id)
-
-                ret_dict["transactions"] = t_ids
                 ret_list.append(ret_dict)
             # add the return list to successfully completed holding listings
             body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
@@ -648,6 +670,7 @@ class CatalogConsumer(RMQC):
             correlation_id=properties.correlation_id
         )
     
+
     def _catalog_stat(self, body: dict, properties: Header) -> None:
         """Get the labels for a list of transaction ids"""
         # get the user id from the details section of the message
@@ -725,6 +748,7 @@ class CatalogConsumer(RMQC):
             exchange={'name': ''},
             correlation_id=properties.correlation_id
         )
+
 
     def _catalog_find(self, body: dict, properties: Header) -> None:
         """List the user's files"""
@@ -903,63 +927,63 @@ class CatalogConsumer(RMQC):
         except KeyError:
             new_tag = None
 
+        # get the deleted tag(s) from the new_meta section of the message
+        try:
+            del_tag = body[self.MSG_META][self.MSG_NEW_META][self.MSG_DEL_TAG]
+        except KeyError:
+            del_tag = None
+
         self.catalog.start_session()
 
         # if there is the holding label or holding id then get the holding
         try:
-            if not holding_label and not holding_id:
+            if not holding_label and not holding_id and not tag:
                 raise CatalogError(
-                    "Holding not found: holding_id or label not specified"
+                    "Holding not found: holding_id or label or tag(s) not specified."
                 )
             holdings = self.catalog.get_holding(
-                user, group, holding_label, holding_id, tag
+                user, group, holding_label, holding_id, tag=tag
             )
+            ret_list = []
+            for holding in holdings:
+                # get the old metadata so we can record it, then modify
+                old_meta = {
+                    "label": holding.label,
+                    "tags" : holding.get_tags()
+                }
+                holding = self.catalog.modify_holding(
+                    holding, new_label, new_tag, del_tag
+                )
+                # record the new metadata
+                new_meta = {
+                    "label": holding.label,
+                    "tags":  holding.get_tags()
+                }
+                # build the return dictionary and append it to the list of
+                # holdings that have been modified
+                ret_dict = {
+                    "id": holding.id,
+                    "user": holding.user,
+                    "group": holding.group,
+                    "old_meta" : old_meta,
+                    "new_meta" : new_meta,
+                }
+                ret_list.append(ret_dict)
 
-            if len(holdings) > 1:
-                if holding_label:
-                    raise CatalogError(
-                        f"More than one holding returned for label:"
-                        f"{holding_label}"
-                    )
-                elif holding_id:
-                    raise CatalogError(
-                        f"More than one holding returned for holding_id:"
-                        f"{holding_id}"
-                    )
-            else:
-                holding = holdings[0]
-
-            old_meta = {
-                "label": holding.label,
-                "tags":  {t.key:t.value for t in holding.tags}
-            }
-            holding = self.catalog.modify_holding(
-                holding, new_label, new_tag
-            )
+            self.catalog.save()
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
             body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
             body[self.MSG_DATA][self.MSG_HOLDING_LIST] = []
         else:
-            # fill the return message with a dictionary of the holding
-            ret_dict = {
-                "id": holding.id,
-                "user": holding.user,
-                "group": holding.group,
-                "old_meta" : old_meta,
-                "new_meta" : {
-                    "label": holding.label,
-                    "tags":  holding.tags
-                }
-            }
-            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = [ret_dict]
+            # fill the return message with a dictionary of the holding(s)
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
             self.log(
-                f"Modified metadata from CATALOG_META {ret_dict}",
+                f"Modified metadata from CATALOG_META {ret_list}",
                 self.RK_LOG_DEBUG
             )
 
-        self.catalog.save()
         self.catalog.end_session()
 
         # return message to complete RPC

@@ -21,6 +21,7 @@ from ..errors import ResponseError
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
+from ..utils.process_tag import process_tag
 
 router = APIRouter()
 
@@ -73,13 +74,8 @@ async def get(token: str = Depends(authenticate_token),
         tag_dict = {}
         # convert the string into a dictionary
         try:
-            # strip whitespace and "{" "}" symbolsfirst
-            tag_list = (tag.replace(" ","").replace("{", "").replace("}", "")
-                       ).split(",")
-            for tag_i in tag_list:
-                tag_kv = tag_i.split(":")
-                tag_dict[tag_kv[0]] = tag_kv[1]
-        except: # what exception might be raised here?
+            tag_dict = process_tag(tag)
+        except ValueError:
             response_error = ResponseError(
                 loc = ["holdings", "get"],
                 msg = "tag cannot be processed.",

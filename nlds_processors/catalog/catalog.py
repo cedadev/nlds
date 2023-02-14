@@ -1,6 +1,7 @@
 # SQLalchemy imports
 from sqlalchemy import func, Enum
-from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError
+from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
+    NoResultFound
 
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Storage, Checksum, Tag
@@ -47,24 +48,52 @@ class Catalog(DBMixin):
         assert(self.session != None)
         try:
             if holding_id:
-                holding = self.session.query(Holding).filter(
+                holding_q = self.session.query(Holding).filter(
                     Holding.user == user,
                     Holding.group == group,
                     Holding.id == holding_id,
-                ).all()
+                )
             elif transaction_id:
-                holding = self.session.query(Holding).filter(
+                holding_q = self.session.query(Holding).filter(
                     Holding.user == user,
                     Holding.group == group,
                     Transaction.holding_id == Holding.id,
                     Transaction.transaction_id == transaction_id
-                ).all()
+                )
             else:
-                holding = self.session.query(Holding).filter(
+                # label == None is return all holdings
+                if label is None:
+                    search_label = ".*"
+                else:
+                    search_label = label
+
+                holding_q = self.session.query(Holding).filter(
                     Holding.user == user,
                     Holding.group == group,
-                    Holding.label.regexp_match(label),
-                ).all()
+                    Holding.label.regexp_match(search_label),
+                )
+            # filter the query on any tags
+            if tag:
+                # get the holdings that have a key that matches one or more of
+                # the keys in the tag dictionary passed as a parameter
+                holding_q = holding_q.join(Tag).filter(
+                    Tag.key.in_(tag.keys())
+                )
+                # check for zero
+                if holding_q.count == 0:
+                    holding = []
+                else:
+                    # we have now got a subset of holdings with a tag that has 
+                    # a key that matches the keys in the input dictionary
+                    # now find the holdings where the key and value match
+                    for key, item in tag.items():
+                        holding_q = holding_q.filter(
+                            Tag.key == key,
+                            Tag.value == item
+                        )
+                    holding = holding_q.all()
+            else:
+                holding = holding_q.all()
             # check if at least one holding found
             if len(holding) == 0:
                 raise KeyError
@@ -76,21 +105,21 @@ class Catalog(DBMixin):
                        f"to access the holding with label:{h.label}."
                     )
         except (IntegrityError, KeyError, ArgumentError):
+            msg = ""
             if holding_id:
-                raise CatalogError(
-                    f"Holding with holding_id:{holding_id} not found for "
-                    f"user:{user} and group:{group}."
-                )
+                msg = (f"Holding with holding_id:{holding_id} not found for "
+                       f"user:{user} and group:{group}")
             elif transaction_id:
-                raise CatalogError(
-                    f"Holding containing transaction_id:{transaction_id} not "
-                    f"found for user:{user} and group:{group}."
-                )
+                msg = (f"Holding containing transaction_id:{transaction_id} not "
+                       f"found for user:{user} and group:{group}")
             else:
-                raise CatalogError(
-                    f"Holding with label:{label} not found for "
-                    f"user:{user} and group:{group}."
-                )
+                msg = (f"Holding with label:{label} not found for "
+                       f"user:{user} and group:{group}")
+            if tag:
+                msg += f" with tags:{tag}."
+            else:
+                msg += "."
+            raise CatalogError(msg)
         except (OperationalError):
             raise CatalogError(
                 f"Invalid regular expression:{label} when listing holding for "
@@ -124,7 +153,8 @@ class Catalog(DBMixin):
     def modify_holding(self, 
                        holding: Holding,
                        new_label: str=None, 
-                       new_tags: dict=None) -> Holding:
+                       new_tags: dict=None,
+                       del_tags: dict=None) -> Holding:
         """Find a holding and modify the information in it"""
         assert(self.session != None)
         # change the label if a new_label supplied
@@ -141,9 +171,23 @@ class Catalog(DBMixin):
 
         if new_tags:
             for k in new_tags:
-                # create_tag takes a key and value
-                tag = self.create_tag(holding, k, new_tags[k])
-                self.session.flush()
+                # if the tag exists then modify it, if it doesn't then create it
+                try:
+                    # get
+                    tag = self.get_tag(holding, k)
+                except CatalogError:
+                    # create
+                    tag = self.create_tag(holding, k, new_tags[k])
+                else:
+                    # modify
+                    tag = self.modify_tag(holding, k, new_tags[k])
+        if del_tags:
+            for k in del_tags:
+                # if the tag exists and the value matches then delete it
+                tag = self.get_tag(holding, k)
+                if tag.value == del_tags[k]:
+                    self.del_tag(holding, k)
+        self.session.flush()
 
         return holding
 
@@ -294,13 +338,9 @@ class Catalog(DBMixin):
         assert(self.session != None)
         # Nones are set to .* in the regexp matching
         # get the matching holdings first, these match all but the path
-        if holding_label:
-            holding_search = holding_label
-        else:
-            holding_search = ".*"
 
         holding = self.get_holding(
-            user, group, holding_search, holding_id, transaction_id, tag
+            user, group, holding_label, holding_id, transaction_id, tag
         )
 
         if path:
@@ -377,6 +417,7 @@ class Catalog(DBMixin):
             )
         return new_file
 
+
     def delete_files(self, 
                      user: str, 
                      group: str, 
@@ -403,6 +444,7 @@ class Catalog(DBMixin):
             checkpoint.rollback()
             err_msg = f"File with original_path:{path} could not be deleted"
             raise CatalogError(err_msg)
+
 
     def get_location(self, 
                      file: File, 
@@ -465,8 +507,62 @@ class Catalog(DBMixin):
                 value = value,
                 holding_id = holding.id
             )
+            self.session.add(tag)
+            self.session.flush()           # flush to generate tag.id
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Tag could not be added to holding:{holding.label}"
             )
         return tag
+
+
+    def get_tag(self, holding: Holding, key: str):
+        """Get the tag with a specific key"""
+        assert(self.session != None)
+        try:
+            tag = self.session.query(Tag).filter(
+                Tag.key == key,
+                Tag.holding_id == holding.id
+            ).one()  # uniqueness constraint guarantees only one
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Tag with key:{key} not found"
+            )
+        return tag
+
+
+    def modify_tag(self, holding: Holding, key: str, value: str):
+        """Modify a tag that has the key, with a new value.
+        Tag has to exist, current value will be overwritten."""
+        assert(self.session != None)
+        try:
+            tag = self.session.query(Tag).filter(
+                Tag.key == key,
+                Tag.holding_id == holding.id
+            ).one()  # uniqueness constraint guarantees only one
+            tag.value = value
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Tag with key:{key} not found"
+            )
+        return tag
+
+
+    def del_tag(self, holding: Holding, key: str):
+        """Delete a tag that has the key"""
+        assert(self.session != None)
+        # use a checkpoint as the tags are being deleted in an external loop and
+        # using a checkpoint will ensure that any completed deletes are committed
+        checkpoint = self.session.begin_nested()
+        try:
+            tag = self.session.query(Tag).filter(
+                Tag.key == key,
+                Tag.holding_id == holding.id
+            ).one()  # uniqueness constraint guarantees only one
+            self.session.delete(tag)
+        except (NoResultFound, KeyError):
+            checkpoint.rollback()
+            raise CatalogError(
+                f"Tag with key:{key} not found"
+            )
+        return None

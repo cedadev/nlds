@@ -112,7 +112,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.log(f"Sending  message to {queue} queue with routing "
                  f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
-                                     
+
+
     def _process_rk_index_complete(self, body_json: dict) -> None:
         # forward to catalog-put on the catalog_q
         self.log(f"Index successful, sending file list for cataloguing.", 
@@ -124,6 +125,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.log(f"Sending  message to {queue} queue with routing "
                  f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
+
 
     def _process_rk_catalog_put_complete(self, body_json: dict) -> None:
         self.log(f"Catalog successful, sending filelist for transfer", 
@@ -137,11 +139,13 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                  f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
 
+
     def _process_rk_transfer_put_complete(self, body_json: dict) -> None:
         # Nothing happens after a successful transfer anymore, so we leave this 
         # empty in case any future messages are required (queueing archive for 
         # example)
         pass
+
 
     def _process_rk_transfer_put_failed(self, body_json: dict) -> None:
         self.log(f"Transfer unsuccessful, sending failed files back to catalog "
@@ -216,6 +220,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                 self._process_rk_transfer_put_failed(body_json)
 
         self.log(f"Worker callback complete!", self.RK_LOG_INFO)
+
 
     def publish_and_log_message(self, routing_key: str, msg: dict, 
                                 log_fl=True) -> None:

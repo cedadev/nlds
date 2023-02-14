@@ -5,7 +5,7 @@ from sqlalchemy.exc import ArgumentError, IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
-from nlds_processors.monitor.monitor_models import SubRecord, FailedFile
+from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
 
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
@@ -289,3 +289,23 @@ class Monitor(DBMixin):
             raise MonitorError(
                 "IntegrityError raised when attempting to get sub_records"
             )
+
+
+    def create_warning(self, 
+                       transaction_record: TransactionRecord,
+                       warning: str) -> Warning:
+        """Create a warning and add it to the TransactionRecord"""
+        assert(self.session != None)
+        try:
+            warning = Warning(
+                warning = warning,
+                transaction_record_id = transaction_record.id
+            )
+            self.session.add(warning)
+            self.session.flush()
+        except (IntegrityError, KeyError):
+            raise MonitorError(
+                f"Warning for transaction_record:{transaction_record.id} could "
+                "not be added to the database"
+            )
+        return warning    

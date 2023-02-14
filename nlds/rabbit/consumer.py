@@ -240,6 +240,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
                        body_json: Dict[str, str], state: State = None,
                        mode: FilelistType = FilelistType.processed, 
+                       warning: List[str] = None
                        ) -> None:
         """Convenience function which sends the given list of PathDetails 
         objects to the exchange with the given routing key and message body. 
@@ -304,6 +305,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         self.publish_message(routing_key, body_json, delay=delay)
 
         # Send message to monitoring to keep track of state
+        # add any warning
+        if warning and len(warning) > 0:
+            body_json[self.MSG_DETAILS][self.MSG_WARNING] = warning
+
         monitoring_rk = ".".join([routing_key[0], 
                                   self.RK_MONITOR_PUT, 
                                   self.RK_START])
