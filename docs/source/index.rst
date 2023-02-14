@@ -8,13 +8,19 @@ Welcome to Near-line Data Store's documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Contents
 
-   Getting started<home>
+   Getting started <home>
    Specification <specification>
    NLDS Server API <nlds-server>
    NLDS Processors API <nlds-processors>
 
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Advanced
+
+   Setting up a CTA tape emulator <cta_emulator>
 
 
 Indices and tables
