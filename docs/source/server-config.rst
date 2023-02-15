@@ -114,17 +114,92 @@ if not specified. These are ``logging``, and ``general``.
 Logging
 ^^^^^^^
 
+The logging configuration options look like the following::
+
+    "logging": {
+        "enable": boolean
+        "log_level": str  - ("none" | "debug" | "info" | "warning" | "error" | "critical"),
+        "log_format": str - see python logging docs for details,
+        "add_stdout_fl": boolean,
+        "stdout_log_level": str  - ("none" | "debug" | "info" | "warning" | "error" | "critical"),
+        "rollover": str - see python logging docs for details
+    }
+
+These all set default options the native python logging system, with 
+``log_level`` being the log level, ``log_format`` being a string describing the 
+log output format, and rollover describing the frequency of rollover for log 
+files in the standard manner. For details on all of this, see the python docs 
+for inbuilt logging. ``enable`` and ``add_stdout_fl`` are boolean flags 
+controlling log output to files and ``stdout`` respectively, and the 
+``stdout_log_level`` is the log level for the stdout logging, if you require it 
+to be different from the default log level. 
+
+As stated, these all set the default log options for all publishers and 
+consumers within the NLDS - these can be overridden on a consumer-specific basis 
+by inserting a ``logging`` sub-dictionary into a consumer-specific optional 
+section.
+
 General
 ^^^^^^^
+
+The general config, as of writing this page, only covers one option: the 
+retry_delays list::
+
+    "general": {
+        "retry_delays": List[int]
+    }
+
+This retry delays list gives the delay applied to retried messages in seconds, 
+with the `n`th element being the delay for the `n`th retry. Setting the value 
+here sets a default for _all_ consumers, but the retry_delays option can be 
+inserted into any consumer-specific config to override this. 
 
 Consumer-specific optional sections
 -----------------------------------
 
+Each of the consumers have their own configuration dictionary, named by 
+convention as ``{consumername}_q``, e.g. ``transfer_put_q``. Each has a set of 
+default options and will accept both a logging dictionary and a retry_delays 
+list for consumer-specific override of the default options, mentioned above. 
+Each consumer also has a specific set of config options, some shared, which will 
+control its behaviour. The following is a brief rundown of the server config 
+options for each consumer. 
+
 NLDS Worker
 ^^^^^^^^^^^
+The server config section is ``nlds_q``, and the following options are available::
+
+    "nlds_q":{
+        "logging": [standard_logging_dictionary],
+        "retry_delays": List[int]
+        "print_tracebacks_fl": boolean,
+    }
+
+Not much specifically happens in the NLDS worker that requires configuration, so 
+it basically just has the default settings. One that has not been covered yet, 
+``print_tracebacks_fl``, is a boolean flag to control whether the full 
+stacktrace of any caught exception is sent to the logger. This is a standard 
+across all consumers. You may set retry_delays if you wish but the NLDS worker 
+doesn't retry messages specifically, only in the case of something going 
+unexpectedly wrong.
 
 Indexer
 ^^^^^^^
+
+Server config section is ``index_q``, and the following options are available::
+
+    "index_q":{
+        "logging": {standard_logging_dictionary},
+        "retry_delays": List[int]
+        "print_tracebacks_fl": boolean,
+        "filelist_max_length": int,
+        "message_threshold": int,
+        "max_retries": int,
+        "check_permissions_fl": boolean,
+        "check_filesize_fl": boolean,
+    }
+
+where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are as above.
 
 Cataloguer
 ^^^^^^^^^^
