@@ -67,6 +67,9 @@ class RabbitMQPublisher():
     RK_TRANSFER = "transfer"
     RK_TRANSFER_PUT = "transfer-put"
     RK_TRANSFER_GET = "transfer-get"
+    RK_ARCHIVE = "archive"
+    RK_ARCHIVE_PUT = "archive-put"
+    RK_ARCHIVE_GET = "archive-get"
     RK_ROUTE = "route"
     RK_LOG = "log"
 
