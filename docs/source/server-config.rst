@@ -122,6 +122,7 @@ The logging configuration options look like the following::
         "log_format": str - see python logging docs for details,
         "add_stdout_fl": boolean,
         "stdout_log_level": str  - ("none" | "debug" | "info" | "warning" | "error" | "critical"),
+        "log_files": List[str],
         "rollover": str - see python logging docs for details
     }
 
@@ -133,6 +134,15 @@ for inbuilt logging. ``enable`` and ``add_stdout_fl`` are boolean flags
 controlling log output to files and ``stdout`` respectively, and the 
 ``stdout_log_level`` is the log level for the stdout logging, if you require it 
 to be different from the default log level. 
+
+``log_files`` is a list of strings describing the path or paths to log files 
+being written to. If no log files paths are given then no file logging will be 
+done. If active, the file logging will be done with a TimedRotatingFileHandler, 
+i.e. the files will be rotated on a rolling basis, with the rollover time 
+denoted by the ``rollover`` option, which is a time string similar to that found 
+in crontab. Please see the [python logging docs]
+(https://docs.python.org/3/library/logging.handlers.html#logging.handlers.TimedRotatingFileHandler)
+for more info on this. 
 
 As stated, these all set the default log options for all publishers and 
 consumers within the NLDS - these can be overridden on a consumer-specific basis 
@@ -169,7 +179,7 @@ NLDS Worker
 ^^^^^^^^^^^
 The server config section is ``nlds_q``, and the following options are available::
 
-    "nlds_q":{
+    "nlds_q": {
         "logging": [standard_logging_dictionary],
         "retry_delays": List[int]
         "print_tracebacks_fl": boolean,
@@ -188,33 +198,158 @@ Indexer
 
 Server config section is ``index_q``, and the following options are available::
 
-    "index_q":{
+    "index_q": {
         "logging": {standard_logging_dictionary},
-        "retry_delays": List[int]
+        "retry_delays": List[int],
         "print_tracebacks_fl": boolean,
         "filelist_max_length": int,
         "message_threshold": int,
         "max_retries": int,
         "check_permissions_fl": boolean,
         "check_filesize_fl": boolean,
+        "use_pwd_gid_fl": boolean
     }
 
-where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are as above.
+where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are, as above,
+standard configurables within the NLDS consumer ecosystem. 
+``filelist_maxlength`` determines the maximum length that any file-list provided 
+to the indexer consumer during the `init` (i.e. `split`) step can be. Any 
+transaction that is given initially with a list that is longer than this value 
+will be split down into many sub-transactions with this as a maximum length. For 
+example, with the default value of 1000, and a transaction with an initial list 
+size of 2500, will be split into 3 sub-transactions; 2 of them having a 
+list of 1000 files and the remaining 500 files being put into the third 
+sub-transaction. 
+
+``message threshold`` is very similar in that it places a limit on the total 
+size of files within a given filelist. It is applied at the indexing 
+(`nlds.index`) step when files have actually been statted, and so will further 
+sub-divide any sub-transactions at that point if they are too large or are 
+revealed to contain lots of folders with files in upon indexing. ``max_retries``
+control the maximum number of times an entry in a filelist can be attempted to 
+be indexed, either because it doesn't exist or the user doesn't have the 
+appropriate permissions to access it at time of indexing. This feeds into retry 
+delays, as each subsequent time a sub-transaction is retried it will be delayed 
+by the amount specified at that index within the ``retry_delays`` list. If 
+``max_retries`` exceeds ``len(retry_delays)``, then any retries which don't have 
+an explicit retry delay to use will use the final element in the ``retry_delays`` 
+list.
+
+``check_permissions_fl`` and ``check_filesize_fl`` are commonly used boolean 
+flags to control whether the indexer checks the permissions and filesize of 
+files respectively during the indexing step. 
+
+``use_pwd_gid_fl`` is a final boolean flag which controls how permissions 
+checking goes about getting the gid to check group permissions against. If True, 
+it will _just_ use the gid found in the ``pwd`` table on whichever machine the 
+indexer is running on. If false, then this gid is used `as well as` all of those 
+found using the ``os.groups`` command - which will read all groups found on the 
+machine the indexer is running on. 
+ 
 
 Cataloguer
 ^^^^^^^^^^
 
-Transfer-put
-^^^^^^^^^^^^
+The server config entry for the catalog consumer is as follows::
 
-Transfer-get
-^^^^^^^^^^^^
+    "catalog_q": {
+        "logging": {standard_logging_dictionary},
+        "retry_delays": List[int],
+        "print_tracebacks_fl": boolean,
+        "db_engine": str,
+        "db_options": {
+            "db_name" : str,
+            "db_user" : str,
+            "db_passwd" : str,
+            "echo": boolean
+        },
+        "max_retries": int
+    }
+
+where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are, as above,
+standard configurables within the NLDS consumer ecosystem. ``max_retries`` is 
+similarly available in the cataloguer, with the same meaning as above. 
+
+Here we also have two keys which control database behaviour via SQLAlchemy: 
+``db_engine`` and ``db_options``. ``db_engine`` is a string which specifies 
+which SQL flavour you would like SQLAlchemy. Currently this has been tried with 
+SQLite and PostgreSQL but, given how SQLAlchemy works, we expect few roadblocks 
+interacting with other database types. ``db_options`` is a further 
+sub-dictionary specifying the database name (which must be appropriate for 
+your chosen flavour of database), along with the database username and password 
+(if in use), respectively controlled by the keys ``db_name``, ``db_user``, and 
+``db_password``. Finally in this sub-dictionary ``echo``, an optional 
+boolean flag which controls the auto-logging of the SQLAlchemy engine. 
+
+
+Transfer-put and Transfer-get
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The server entry for the transfer-put consumer is as follows::
+
+    "transfer_put_q": {
+        "logging": {standard_logging_dictionary},
+        "max_retries": int,
+        "retry_delays": List[int],
+        "print_tracebacks_fl": boolean,
+        "filelist_max_length": int,
+        "check_permissions_fl": boolean,
+        "use_pwd_gid_fl": boolean,
+        "tenancy": "cedadev-o.s3.jc.rl.ac.uk",
+        "require_secure_fl": false
+    }
+
+where we have ``logging``, ``retry_delays`` and ``print_tracebacks_fl`` as their
+standard definitions defined above, and ``max_retries``, ``filelist_max_length``
+, ``check_permissions_fl``, and ``use_pwd_gid_fl`` defined the same as for the 
+Indexer consumer. 
+
+New definitions for the transfer processor are the ``tenancy`` and 
+``require_secure_fl``, which control ``minio`` behaviour. ``tenancy`` is a 
+string which denotes the address of the object store tenancy to upload/download 
+files to/from, and ``require_secure_fl`` which specifies whether or not you 
+require signed ssl certificates at the tenancy location. 
+
 
 Monitor
 ^^^^^^^
 
+The server config entry for the monitor consumer is as follows::
+
+    "monitor_q": {
+        "logging": {standard_logging_dictionary},
+        "retry_delays": List[int],
+        "print_tracebacks_fl": boolean,
+        "db_engine": str,
+        "db_options": {
+            "db_name" : str,
+            "db_user" : str,
+            "db_passwd" : str,
+            "echo": boolean
+        }
+    }
+
+where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` have the 
+standard, previously stated definitions, and ``db_engine`` and ``db_options`` 
+are as defined for the Catalog consumer - due to the use of an SQL database on 
+the Monitor. Note the minimal retry control, as the monitor only retries 
+messages which failed due to an unexpected exception. 
+
 Logger
 ^^^^^^
+
+And finally, the server config entry for the Logger consumer is as follows::
+
+    "logging_q": {
+        "logging": {standard_logging_dictionary},
+        "print_tracebacks_fl": boolean,
+    }
+
+where the options have been previously defined. Note that there is no special 
+configurable behaviour on the Logger consumer as it is simply a relay for 
+redirecting logging messages into log files. It should also be noted that the 
+``log_files`` option should be set in the logging sub-dictionary for this to 
+work properly, which may be a mandatory setting in future versions. 
 
 Examples
 ========
