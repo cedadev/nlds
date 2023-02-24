@@ -162,7 +162,7 @@ retry_delays list::
 This retry delays list gives the delay applied to retried messages in seconds, 
 with the `n`th element being the delay for the `n`th retry. Setting the value 
 here sets a default for _all_ consumers, but the retry_delays option can be 
-inserted into any consumer-specific config to override this. 
+inserted into any consumer-specific config section to override this. 
 
 Consumer-specific optional sections
 -----------------------------------
@@ -350,12 +350,3 @@ configurable behaviour on the Logger consumer as it is simply a relay for
 redirecting logging messages into log files. It should also be noted that the 
 ``log_files`` option should be set in the logging sub-dictionary for this to 
 work properly, which may be a mandatory setting in future versions. 
-
-Examples
-========
-
-Local NLDS
-----------
-
-Distributed NLDS
-----------------

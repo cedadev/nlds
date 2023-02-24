@@ -20,7 +20,8 @@ Welcome to Near-line Data Store's documentation!
    :maxdepth: 2
    :caption: Advanced
 
-   The server config file <server-config>
+   The server config file <server-config/server-config>
+   Server config examples <server-config/examples>
    Setting up a CTA tape emulator <cta-emulator>
 
 
