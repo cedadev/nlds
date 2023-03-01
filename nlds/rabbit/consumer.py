@@ -155,6 +155,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         self.completelist = []
         self.retrylist = []
         self.failedlist = []
+        self.max_retries = 5
         
         # Controls default behaviour of logging when certain exceptions are 
         # caught in the callback. 
