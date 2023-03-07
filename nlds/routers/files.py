@@ -16,7 +16,6 @@ from pydantic import BaseModel
 from uuid import UUID, uuid4
 from typing import Optional, List, Dict
 from copy import deepcopy
-import json
 
 from ..routers import rabbit_publisher
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
@@ -25,6 +24,7 @@ from ..details import PathDetails, Retries
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
+
 router = APIRouter()
 
 # uuid (for testing)
@@ -232,8 +232,9 @@ async def put(transaction_id: UUID,
         meta_dict[RMQP.MSG_HOLDING_ID] = filemodel.holding_id
         response.holding_id = filemodel.holding_id
     if (filemodel.tag):
-        meta_dict[RMQP.MSG_TAG] = filemodel.tag
-        response.tag = filemodel.tag
+        tag_dict = filemodel.tag
+        meta_dict[RMQP.MSG_TAG] = tag_dict
+        response.tag = tag_dict
 
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
@@ -327,8 +328,9 @@ async def put(transaction_id: UUID,
         meta_dict[RMQP.MSG_HOLDING_ID] = filemodel.holding_id
         response.holding_id = filemodel.holding_id
     if (filemodel.tag):
-        meta_dict[RMQP.MSG_TAG] = filemodel.tag
-        response.tag = filemodel.tag
+        tag_dict = filemodel.tag
+        meta_dict[RMQP.MSG_TAG] = tag_dict
+        response.tag = tag_dict
 
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
