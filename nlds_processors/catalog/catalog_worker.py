@@ -157,8 +157,15 @@ class CatalogConsumer(RMQC):
             holding = self.catalog.get_holding(user, group, label, holding_id)
         except (KeyError, CatalogError):
             holding = None
-
         if holding is None:
+            # if the holding_id is not None then raise an error as the user is
+            # trying to add to a holding that doesn't exist, but creating a new
+            # holding won't have a holding_id that matches the one they passed in
+            if (holding_id is not None):
+                message = (f"Could not add files to holding with holding_id: "
+                            "{holding_id}.  holding_id does not exist.")
+                self.log(message, self.RK_LOG_DEBUG)
+                raise CallbackError(message)
             try:
                 holding = self.catalog.create_holding(user, group, label)
             except CatalogError as e:
