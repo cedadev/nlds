@@ -25,8 +25,8 @@ class Catalog(DBMixin):
         self.session = None
 
 
-    def _user_has_get_holding_permission(self, 
-                                         user: str, 
+    @staticmethod
+    def _user_has_get_holding_permission(user: str, 
                                          group: str,
                                          holding: Holding) -> bool:
         """Check whether a user has permission to view this holding.
