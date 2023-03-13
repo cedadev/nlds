@@ -157,6 +157,11 @@ class Catalog(DBMixin):
                        del_tags: dict=None) -> Holding:
         """Find a holding and modify the information in it"""
         assert(self.session != None)
+        if not isinstance(holding, Holding):
+            raise CatalogError(
+                f"Cannot modify holding, it does not appear to be a valid "
+                f"Holding ({holding})." 
+            )
         # change the label if a new_label supplied
         if new_label:
             try:
