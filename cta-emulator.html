@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CERN Tape Archive Set Up &mdash; Near-line Data Store 0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Examples" href="server-config/examples.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html">
+            <img src="_static/ceda.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Setting up a CTA tape emulator</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#commissioning-the-vm">Commissioning the VM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#setting-up-cta-on-the-vm">Setting up CTA on the VM</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Near-line Data Store</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>CERN Tape Archive Set Up</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/cta-emulator.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="cern-tape-archive-set-up">
+<h1>CERN Tape Archive Set Up<a class="headerlink" href="#cern-tape-archive-set-up" title="Permalink to this headline"></a></h1>
+<p>As part of the development of the NLDS, a tape emulator was set up to better
+understand how to interact with <code class="docutils literal notranslate"><span class="pre">xrootd</span></code> and the CERN tape archive. The
+following instructions detail how to set up such a tape emulator and are adapted
+from the instructions on [the CTA repo]
+(<a class="reference external" href="https://gitlab.cern.ch/cta/CTA/-/tree/main/continuousintegration/buildtree_runner">https://gitlab.cern.ch/cta/CTA/-/tree/main/continuousintegration/buildtree_runner</a>)
+and those provided by STFC’s Scientific Computing Department at the Rutherford
+Appleton Laboratory. There are two major parts: commissioning the virtual
+machine, and setting it up appropriately according to the CERN instructions.</p>
+<div class="section" id="commissioning-the-vm">
+<h2>Commissioning the VM<a class="headerlink" href="#commissioning-the-vm" title="Permalink to this headline"></a></h2>
+<p>These instructions are specifically for commissioning a VM on the STFC openstack
+cloud interface. For other machines, slightly different instructions will need
+to be followed.</p>
+<p>After you have logged in to the openstack interface, you click on the “Launch
+Instance” button on the top to create the VM and then:</p>
+<ol class="arabic simple">
+<li><p>In the “Details” tab, give your VM a suitable name</p></li>
+<li><p>In the “Source” tab, select scientificlinux-7-aq as a source image</p></li>
+<li><p>In the “Flavour” tab, select a VM type depending on how many VCPUs, RAM and
+disk size you need</p></li>
+<li><p>In the “Networks” tab, select “Internal”</p></li>
+<li><p>In the “Key Pair” tab, upload your public rsa ssh key so you can login to the
+VM once it is created.</p></li>
+<li><p>In the “Metadata” tab, click on the pull-down menu “Aquilon Image Properties”
+and then set it to “Aquilon Archetype”, specifying <code class="docutils literal notranslate"><span class="pre">ral-tier1</span></code>, and also
+“Aquilon Personality” specifying it as <code class="docutils literal notranslate"><span class="pre">eoscta_ci_cd</span></code>. Note that you will
+have to manually write these values out so it’s worth copy pasting to avoid
+typos!</p></li>
+<li><p>Press the “Launch Instance” button and the VM will be created. Give it some
+time so that quattor runs - quattor being a vm management tool like Puppet.
+It may also need a reboot at some point.</p></li>
+</ol>
+<p>This setup produces a vm which requires logging in as your openstack username -
+in most cases this will be your STFC federal ID. You will be able to sudo
+assuming the machine remains in the correct configuration.</p>
+<p><strong>Note:</strong>
+The above setup is one that theoretically works. However, the machine which –
+after some attempts – successfully had CTA installed on it had to be
+commissioned manually by SCD so that</p>
+<ol class="loweralpha simple">
+<li><p>quattor could be made sure to have run successfully and then subsequently
+disabled</p></li>
+<li><p>I would be able to log in as <code class="docutils literal notranslate"><span class="pre">root</span></code> thus negating the need to edit the
+sudoers file after each reboot.</p></li>
+</ol>
+<p>I would strongly recommend this approach if SCD are agreeable to commissioning
+your vm for you.</p>
+</div>
+<div class="section" id="setting-up-cta-on-the-vm">
+<h2>Setting up CTA on the VM<a class="headerlink" href="#setting-up-cta-on-the-vm" title="Permalink to this headline"></a></h2>
+<p>The following are the working set of instructions at time of writing, provided
+by SCD at RAL.</p>
+<ul>
+<li><p><strong>Ensure quattor is not running</strong></p>
+<p>There should be an empty file at <code class="docutils literal notranslate"><span class="pre">/etc/noquattor</span></code>, if there is not one then
+create it with</p>
+<p><code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">touch</span> <span class="pre">/etc/noquattor</span></code></p>
+</li>
+<li><p><strong>Clone the CTA gitlab repo</strong></p>
+<p><code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span> <span class="pre">https://gitlab.cern.ch/cta/CTA.git</span></code></p>
+</li>
+<li><p><strong>User environment</strong></p>
+<p>As per instructions</p>
+<p><code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">./CTA/continuousintegration/buildtree_runner/vmBootstrap</span></code></p>
+<p>BUT in bootstrapSystem.sh, delete/comment line 46 and then</p>
+<p><code class="docutils literal notranslate"><span class="pre">./bootstrapSystem.sh</span></code></p>
+<p>When prompted for password, press return (i.e don’t give one). This creates
+the <code class="docutils literal notranslate"><span class="pre">cta</span></code> user and adds them to sudoers</p>
+</li>
+<li><p><strong>CTA build tree</strong></p>
+<p>As per instructions</p>
+<p><code class="docutils literal notranslate"><span class="pre">su</span> <span class="pre">-</span> <span class="pre">cta</span></code>
+<code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">~/CTA/continuousintegration/buildtree_runner/vmBootstrap</span></code></p>
+<p>BUT edit lines 54,55 in bootstrapCTA.sh to look like</p>
+<p><code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">wget</span> <span class="pre">https://public-yum.oracle.com/RPM-GPG-KEY-oracle-ol7</span> <span class="pre">-O</span> <span class="pre">/etc/pki/rpm-gpg/RPM-GPG-KEY-oracle</span> <span class="pre">--no-check-certificate</span></code>
+<code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">wget</span> <span class="pre">https://download.ceph.com/keys/release.asc</span> <span class="pre">-O</span> <span class="pre">/etc/pki/rpm-gpg/RPM-ASC-KEY-ceph</span> <span class="pre">--no-check-certificate</span></code></p>
+<p>Note the change in the URL on line 55 from <code class="docutils literal notranslate"><span class="pre">git.ceph.com</span></code> to
+<code class="docutils literal notranslate"><span class="pre">download.ceph.com</span></code>, as well as the addition of the <code class="docutils literal notranslate"><span class="pre">--no-check-certificate</span></code>
+flag.</p>
+<p>Then run bootstrapCTA.sh (without any args)</p>
+<p><code class="docutils literal notranslate"><span class="pre">./bootstrapCTA.sh</span></code></p>
+</li>
+<li><p><strong>Install MHVTL</strong></p>
+<p>As per instructions</p>
+<p><code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">~/CTA/continuousintegration/buildtree_runner/vmBootstrap</span></code>
+<code class="docutils literal notranslate"><span class="pre">./bootstrapMHVTL.sh</span></code></p>
+</li>
+<li><p><strong>Kubernetes setup</strong></p>
+<p>As per instructions</p>
+<p><code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">~/CTA/continuousintegration/buildtree_runner/vmBootstrap</span></code>
+<code class="docutils literal notranslate"><span class="pre">./bootstrapKubernetes.sh</span></code></p>
+<p>and reboot host</p>
+<p><code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">reboot</span></code></p>
+</li>
+<li><p><strong>Docker image</strong></p>
+<p>Depending on how your machine was set up you may now need to ensure that
+quattor is still disabled (i.e. that the <code class="docutils literal notranslate"><span class="pre">/etc/noquattor</span></code> file still exists)
+and that the cta user is still in the sudoers file. This will not be necessary
+if you are running as <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
+<p>Then, as per instructions</p>
+<p><code class="docutils literal notranslate"><span class="pre">su</span> <span class="pre">-</span> <span class="pre">cta</span></code>
+<code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">~/CTA/continuousintegration/buildtree_runner</span></code></p>
+<p>BUT edit lines 38,39 in  /home/cta/CTA/continuousintegration/docker/ctafrontend/cc7/buildtree-stage1-rpms-public/Dockerfile to look like</p>
+<p><code class="docutils literal notranslate"><span class="pre">RUN</span> <span class="pre">wget</span> <span class="pre">https://public-yum.oracle.com/RPM-GPG-KEY-oracle-ol7</span> <span class="pre">-O</span> <span class="pre">/etc/pki/rpm-gpg/RPM-GPG-KEY-oracle</span> <span class="pre">--no-check-certificate</span></code>
+<code class="docutils literal notranslate"><span class="pre">RUN</span> <span class="pre">wget</span> <span class="pre">https://download.ceph.com/keys/release.asc</span> <span class="pre">-O</span> <span class="pre">/etc/pki/rpm-gpg/RPM-ASC-KEY-ceph</span> <span class="pre">--no-check-certificate</span></code></p>
+<p>then run the master script to prepare all the Docker images.</p>
+<p><code class="docutils literal notranslate"><span class="pre">./prepareImage.sh</span></code></p>
+</li>
+<li><p><strong>Preparing the environment (MHVTL, kubernetes volumes…)</strong></p>
+<p>As per instructions</p>
+<p><code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">~/CTA/continuousintegration/buildtree_runner</span></code>
+<code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">./recreate_buildtree_running_environment.sh</span></code></p>
+</li>
+<li><p><strong>Preparing the CTA instance</strong></p>
+<p>As per instructions</p>
+<p><code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">~/CTA/continuousintegration/orchestration</span></code>
+<code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">./create_instance.sh</span>&#160; <span class="pre">-n</span> <span class="pre">cta</span> <span class="pre">-b</span> <span class="pre">~</span> <span class="pre">-B</span> <span class="pre">CTA-build</span> <span class="pre">-O</span> <span class="pre">-D</span> <span class="pre">-d</span> <span class="pre">internal_postgres.yaml</span></code></p>
+<p>This may work first time but it never did for me, so the fix is to then run</p>
+<p><code class="docutils literal notranslate"><span class="pre">./delete_instance.sh</span> <span class="pre">-n</span> <span class="pre">cta</span></code></p>
+<p>To remove the instance and then re-create it with the same command as above
+<code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">./create_instance.sh</span>&#160; <span class="pre">-n</span> <span class="pre">cta</span> <span class="pre">-b</span> <span class="pre">~</span> <span class="pre">-B</span> <span class="pre">CTA-build</span> <span class="pre">-O</span> <span class="pre">-D</span> <span class="pre">-d</span> <span class="pre">internal_postgres.yaml</span></code></p>
+<p>This can be verified to be working with a call to</p>
+<p><code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">-n</span> <span class="pre">cta</span> <span class="pre">get</span> <span class="pre">pods</span></code></p>
+<p>which should return a list of the working pods, looking something like:</p>
+<blockquote>
+<div><table class="docutils align-default">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 23%" />
+<col style="width: 8%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>NAME</p></th>
+<th class="head"><p>READY</p></th>
+<th class="head"><p>STATUS</p></th>
+<th class="head"><p>RESTARTS</p></th>
+<th class="head"><p>AGE</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>client</p></td>
+<td><p>1/1</p></td>
+<td><p>Running</p></td>
+<td><p>0</p></td>
+<td><p>35m</p></td>
+</tr>
+<tr class="row-odd"><td><p>ctacli</p></td>
+<td><p>1/1</p></td>
+<td><p>Running</p></td>
+<td><p>0</p></td>
+<td><p>35m</p></td>
+</tr>
+<tr class="row-even"><td><p>ctaeos</p></td>
+<td><p>1/1</p></td>
+<td><p>Running</p></td>
+<td><p>0</p></td>
+<td><p>35m</p></td>
+</tr>
+<tr class="row-odd"><td><p>ctafrontend</p></td>
+<td><p>1/1</p></td>
+<td><p>Running</p></td>
+<td><p>0</p></td>
+<td><p>35m</p></td>
+</tr>
+<tr class="row-even"><td><p>kdc</p></td>
+<td><p>1/1</p></td>
+<td><p>Running</p></td>
+<td><p>0</p></td>
+<td><p>35m</p></td>
+</tr>
+<tr class="row-odd"><td><p>postgres</p></td>
+<td><p>1/1</p></td>
+<td><p>Running</p></td>
+<td><p>0</p></td>
+<td><p>36m</p></td>
+</tr>
+<tr class="row-even"><td><p>tpsrv01</p></td>
+<td><p>2/2</p></td>
+<td><p>Running</p></td>
+<td><p>0</p></td>
+<td><p>35m</p></td>
+</tr>
+<tr class="row-odd"><td><p>tpsrv02</p></td>
+<td><p>2/2</p></td>
+<td><p>Running</p></td>
+<td><p>0</p></td>
+<td><p>35m</p></td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</li>
+</ul>
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="server-config/examples.html" class="btn btn-neutral float-left" title="Examples" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Neil Massey &amp; Jack Leland.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

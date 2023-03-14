@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Core content of the nlds-processors &mdash; Near-line Data Store 0.1 documentation</title>
+  <title>Microservices &mdash; Near-line Data Store 0.1 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -17,7 +17,8 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="Core content of the nlds-server" href="nlds-server.html" /> 
+    <link rel="next" title="Server config" href="server-config/server-config.html" />
+    <link rel="prev" title="NLDS API-server" href="nlds-server.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -25,7 +26,8 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="index.html" class="icon icon-home"> Near-line Data Store
+            <a href="index.html">
+            <img src="_static/ceda.png" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -35,7 +37,7 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
@@ -45,6 +47,12 @@
 <li class="toctree-l2"><a class="reference internal" href="#the-processors">The processors</a></li>
 </ul>
 </li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a></li>
 </ul>
 
         </div>
@@ -61,7 +69,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Core content of the nlds-processors</li>
+      <li>Microservices</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/nlds-processors.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -71,8 +79,9 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <div class="section" id="core-content-of-the-nlds-processors">
-<h1>Core content of the nlds-processors<a class="headerlink" href="#core-content-of-the-nlds-processors" title="Permalink to this headline"></a></h1>
+  <div class="section" id="microservices">
+<h1>Microservices<a class="headerlink" href="#microservices" title="Permalink to this headline"></a></h1>
+<p>Core content of the nlds-processors.</p>
 <div class="section" id="module-nlds.rabbit.consumer">
 <span id="the-consumer-class"></span><h2>The Consumer class<a class="headerlink" href="#module-nlds.rabbit.consumer" title="Permalink to this headline"></a></h2>
 <dl class="py class">
@@ -173,7 +182,7 @@ The connection should get reset if that happens.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="nlds.rabbit.consumer.RabbitMQConsumer.send_pathlist">
-<span class="sig-name descname"><span class="pre">send_pathlist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pathlist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">nlds.details.PathDetails</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">routing_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body_json</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#nlds.rabbit.consumer.State" title="nlds.rabbit.consumer.State"><span class="pre">nlds.rabbit.consumer.State</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds.rabbit.consumer.FilelistType" title="nlds.rabbit.consumer.FilelistType"><span class="pre">nlds.rabbit.consumer.FilelistType</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">FilelistType.processed</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.send_pathlist" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">send_pathlist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pathlist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">nlds.details.PathDetails</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">routing_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body_json</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#nlds.rabbit.consumer.State" title="nlds.rabbit.consumer.State"><span class="pre">nlds.rabbit.consumer.State</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds.rabbit.consumer.FilelistType" title="nlds.rabbit.consumer.FilelistType"><span class="pre">nlds.rabbit.consumer.FilelistType</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">FilelistType.processed</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warning</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds.rabbit.consumer.RabbitMQConsumer.send_pathlist" title="Permalink to this definition"></a></dt>
 <dd><p>Convenience function which sends the given list of PathDetails 
 objects to the exchange with the given routing key and message body. 
 Mode specifies what to put into the log message, as well as determining 
@@ -205,6 +214,12 @@ to take precedence over the general logging configuration.</p>
 
 </dd></dl>
 
+<dl class="py exception">
+<dt class="sig sig-object py" id="nlds.rabbit.consumer.SigTermError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds.rabbit.consumer.</span></span><span class="sig-name descname"><span class="pre">SigTermError</span></span><a class="headerlink" href="#nlds.rabbit.consumer.SigTermError" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></p>
+</dd></dl>
+
 <dl class="py class">
 <dt class="sig sig-object py" id="nlds.rabbit.consumer.State">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds.rabbit.consumer.</span></span><span class="sig-name descname"><span class="pre">State</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds.rabbit.consumer.State" title="Permalink to this definition"></a></dt>
@@ -215,7 +230,7 @@ to take precedence over the general logging configuration.</p>
 </div>
 <div class="section" id="the-processors">
 <h2>The processors<a class="headerlink" href="#the-processors" title="Permalink to this headline"></a></h2>
-<p>Also referred to as ‘microservices’</p>
+<p>Also referred to as ‘microservices’, ‘consumers’, or ‘workers’:</p>
 <span class="target" id="module-nlds_processors.index"></span><dl class="py class">
 <dt class="sig sig-object py" id="nlds_processors.index.IndexerConsumer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.index.</span></span><span class="sig-name descname"><span class="pre">IndexerConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'index_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.index.IndexerConsumer" title="Permalink to this definition"></a></dt>
@@ -281,7 +296,358 @@ length and resubmit each to exchange for indexing proper.</p>
 
 </dd></dl>
 
-<span class="target" id="module-nlds_processors.catalog"></span><span class="target" id="module-nlds_processors.monitor"></span><span class="target" id="module-nlds_processors.logger"></span><dl class="py class">
+<span class="target" id="module-nlds_processors.transferers.base_transfer"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.transferers.base_transfer.BaseTransferConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.transferers.base_transfer.</span></span><span class="sig-name descname"><span class="pre">BaseTransferConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'transfer_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.transferers.base_transfer.BaseTransferConsumer" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.transferers.base_transfer.BaseTransferConsumer.callback">
+<span class="sig-name descname"><span class="pre">callback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">properties</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connection</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.transferers.base_transfer.BaseTransferConsumer.callback" title="Permalink to this definition"></a></dt>
+<dd><p>Standard consumer callback function as defined by rabbitMQ, with the 
+standard callback parameters of Channel, Method, Header, Body (in bytes)
+and Connection.</p>
+<p>This is the working method of a consumer, i.e. it does the job the 
+consumer has been designed to do, and so must be implemented and 
+overridden by any child consumer classes.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.transferers.base_transfer.BaseTransferConsumer.check_path_access">
+<span class="sig-name descname"><span class="pre">check_path_access</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stat_result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">NamedTuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">access</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#nlds_processors.transferers.base_transfer.BaseTransferConsumer.check_path_access" title="Permalink to this definition"></a></dt>
+<dd><p>Checks that the given path is accessible, either by checking for its 
+existence or, if the check_permissions_fl is set, by doing a permissions
+check on the file’s bitmask. This requires a stat of the file, so one 
+must be provided via stat_result else one is performed. The uid and gid 
+of the user must be set in the object as well, usually by having 
+performed RabbitMQConsumer.set_ids() beforehand.</p>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-nlds_processors.transferers.put_transfer"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.transferers.put_transfer.PutTransferConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.transferers.put_transfer.</span></span><span class="sig-name descname"><span class="pre">PutTransferConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'transfer_put_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.transferers.put_transfer.PutTransferConsumer" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.transferers.get_transfer"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.transferers.get_transfer.GetTransferConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.transferers.get_transfer.</span></span><span class="sig-name descname"><span class="pre">GetTransferConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'transfer_get_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.transferers.get_transfer.GetTransferConsumer" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.db_mixin"></span><dl class="py exception">
+<dt class="sig sig-object py" id="nlds_processors.db_mixin.DBError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.db_mixin.</span></span><span class="sig-name descname"><span class="pre">DBError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.db_mixin.DBError" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.catalog.catalog_models"></span><p>Declare the SQLAlchemy ORM models for the NLDS Catalog database</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_models.Checksum">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_models.</span></span><span class="sig-name descname"><span class="pre">Checksum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_models.Checksum" title="Permalink to this definition"></a></dt>
+<dd><p>Class containing checksum and algorithm used to calculate checksum</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_models.File">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_models.</span></span><span class="sig-name descname"><span class="pre">File</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_models.File" title="Permalink to this definition"></a></dt>
+<dd><p>Class containing the details of a single File</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_models.Holding">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_models.</span></span><span class="sig-name descname"><span class="pre">Holding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_models.Holding" title="Permalink to this definition"></a></dt>
+<dd><p>Class containing the details of a Holding - i.e. a batch</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_models.Location">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_models.</span></span><span class="sig-name descname"><span class="pre">Location</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_models.Location" title="Permalink to this definition"></a></dt>
+<dd><p>Class containing the location on NLDS of a single File</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_models.Storage">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_models.</span></span><span class="sig-name descname"><span class="pre">Storage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_models.Storage" title="Permalink to this definition"></a></dt>
+<dd><p>An enumeration.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_models.Tag">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_models.</span></span><span class="sig-name descname"><span class="pre">Tag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_models.Tag" title="Permalink to this definition"></a></dt>
+<dd><p>Class containing the details of a Tag that can be assigned to a Holding</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_models.Transaction">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_models.</span></span><span class="sig-name descname"><span class="pre">Transaction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_models.Transaction" title="Permalink to this definition"></a></dt>
+<dd><p>Class containing details of a transaction.  Note that a holding can consist
+of many transactions.</p>
+</dd></dl>
+
+<span class="target" id="module-nlds_processors.catalog.catalog"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog.</span></span><span class="sig-name descname"><span class="pre">Catalog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db_engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog" title="Permalink to this definition"></a></dt>
+<dd><p>Catalog object containing methods to manipulate the Catalog Database</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.create_file">
+<span class="sig-name descname"><span class="pre">create_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transaction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Transaction" title="nlds_processors.catalog.catalog_models.Transaction"><span class="pre">nlds_processors.catalog.catalog_models.Transaction</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">original_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">link_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_permissions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.File" title="nlds_processors.catalog.catalog_models.File"><span class="pre">nlds_processors.catalog.catalog_models.File</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.create_file" title="Permalink to this definition"></a></dt>
+<dd><p>Create a file that belongs to a transaction and will contain 
+locations</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.create_holding">
+<span class="sig-name descname"><span class="pre">create_holding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.create_holding" title="Permalink to this definition"></a></dt>
+<dd><p>Create the new Holding with the label, user, group</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.create_location">
+<span class="sig-name descname"><span class="pre">create_location</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.File" title="nlds_processors.catalog.catalog_models.File"><span class="pre">nlds_processors.catalog.catalog_models.File</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">sqlalchemy.sql.sqltypes.Enum</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">object_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">access_time</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Location" title="nlds_processors.catalog.catalog_models.Location"><span class="pre">nlds_processors.catalog.catalog_models.Location</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.create_location" title="Permalink to this definition"></a></dt>
+<dd><p>Add the storage location for object storage</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.create_tag">
+<span class="sig-name descname"><span class="pre">create_tag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">holding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.create_tag" title="Permalink to this definition"></a></dt>
+<dd><p>Create a tag and add it to a holding</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.create_transaction">
+<span class="sig-name descname"><span class="pre">create_transaction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">holding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Transaction" title="nlds_processors.catalog.catalog_models.Transaction"><span class="pre">nlds_processors.catalog.catalog_models.Transaction</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.create_transaction" title="Permalink to this definition"></a></dt>
+<dd><p>Create a transaction that belongs to a holding and will contain files</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.del_tag">
+<span class="sig-name descname"><span class="pre">del_tag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">holding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.del_tag" title="Permalink to this definition"></a></dt>
+<dd><p>Delete a tag that has the key</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.delete_files">
+<span class="sig-name descname"><span class="pre">delete_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holding_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holding_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.delete_files" title="Permalink to this definition"></a></dt>
+<dd><p>Delete a given path from the catalog. If a holding is specified only 
+the matching file from that holding will be deleted, otherwise all 
+matching files will. Utilises get_files().</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.get_file">
+<span class="sig-name descname"><span class="pre">get_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">original_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">missing_error_fl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.File" title="nlds_processors.catalog.catalog_models.File"><span class="pre">nlds_processors.catalog.catalog_models.File</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.get_file" title="Permalink to this definition"></a></dt>
+<dd><p>Get a single file details from the database, given the original path 
+of the file.  
+An optional holding can be supplied to get the file details from a
+particular holding - e.g. with a holding label, or tags</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.get_files">
+<span class="sig-name descname"><span class="pre">get_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holding_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holding_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.get_files" title="Permalink to this definition"></a></dt>
+<dd><p>Get a multitue of file details from the database, given the user,
+group, label, holding_id, path (can be regex) or tag(s)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.get_holding">
+<span class="sig-name descname"><span class="pre">get_holding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holding_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.get_holding" title="Permalink to this definition"></a></dt>
+<dd><p>Get a holding from the database</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.get_location">
+<span class="sig-name descname"><span class="pre">get_location</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.File" title="nlds_processors.catalog.catalog_models.File"><span class="pre">nlds_processors.catalog.catalog_models.File</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">sqlalchemy.sql.sqltypes.Enum</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Location" title="nlds_processors.catalog.catalog_models.Location"><span class="pre">nlds_processors.catalog.catalog_models.Location</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.get_location" title="Permalink to this definition"></a></dt>
+<dd><p>Get a storage location for a file, given the file and the storage
+type</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.get_tag">
+<span class="sig-name descname"><span class="pre">get_tag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">holding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.get_tag" title="Permalink to this definition"></a></dt>
+<dd><p>Get the tag with a specific key</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.get_transaction">
+<span class="sig-name descname"><span class="pre">get_transaction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Transaction" title="nlds_processors.catalog.catalog_models.Transaction"><span class="pre">nlds_processors.catalog.catalog_models.Transaction</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.get_transaction" title="Permalink to this definition"></a></dt>
+<dd><p>Get a transaction from the database</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.modify_holding">
+<span class="sig-name descname"><span class="pre">modify_holding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">holding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_tags</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">del_tags</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.modify_holding" title="Permalink to this definition"></a></dt>
+<dd><p>Find a holding and modify the information in it</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.Catalog.modify_tag">
+<span class="sig-name descname"><span class="pre">modify_tag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">holding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.catalog.catalog_models.Holding" title="nlds_processors.catalog.catalog_models.Holding"><span class="pre">nlds_processors.catalog.catalog_models.Holding</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog.Catalog.modify_tag" title="Permalink to this definition"></a></dt>
+<dd><p>Modify a tag that has the key, with a new value.
+Tag has to exist, current value will be overwritten.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog.CatalogError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog.</span></span><span class="sig-name descname"><span class="pre">CatalogError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog.CatalogError" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.catalog.catalog_worker"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_worker.CatalogConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_worker.</span></span><span class="sig-name descname"><span class="pre">CatalogConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'catalog_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_worker.CatalogConsumer" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_worker.CatalogConsumer.attach_catalog">
+<span class="sig-name descname"><span class="pre">attach_catalog</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_worker.CatalogConsumer.attach_catalog" title="Permalink to this definition"></a></dt>
+<dd><p>Attach the Catalog to the consumer</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_worker.CatalogConsumer.callback">
+<span class="sig-name descname"><span class="pre">callback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pika.channel.Channel</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pika.frame.Method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">properties</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pika.frame.Header</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pika.connection.Connection</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog_worker.CatalogConsumer.callback" title="Permalink to this definition"></a></dt>
+<dd><p>Standard consumer callback function as defined by rabbitMQ, with the 
+standard callback parameters of Channel, Method, Header, Body (in bytes)
+and Connection.</p>
+<p>This is the working method of a consumer, i.e. it does the job the 
+consumer has been designed to do, and so must be implemented and 
+overridden by any child consumer classes.</p>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-nlds_processors.monitor.monitor_models"></span><p>Declare the SQLAlchemy ORM models for the NLDS Monitoring database</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor_models.FailedFile">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.monitor.monitor_models.</span></span><span class="sig-name descname"><span class="pre">FailedFile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor_models.FailedFile" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor_models.SubRecord">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.monitor.monitor_models.</span></span><span class="sig-name descname"><span class="pre">SubRecord</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor_models.SubRecord" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor_models.SubRecord.has_finished">
+<span class="sig-name descname"><span class="pre">has_finished</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor_models.SubRecord.has_finished" title="Permalink to this definition"></a></dt>
+<dd><p>Convenience method for checking whether a given SubRecord is in a 
+‘final’ state, i.e. is no longer going to change and the transaction can 
+therefore be marked as COMPLETE.</p>
+<p>Checks whether all states have gotten to the final stage of a workflow 
+(CATALOG_PUT or TRANSFER_GET) and are not retrying, OR have failed. This
+should cover all bases.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor_models.TransactionRecord">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.monitor.monitor_models.</span></span><span class="sig-name descname"><span class="pre">TransactionRecord</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor_models.TransactionRecord" title="Permalink to this definition"></a></dt>
+<dd><p>Class containing the details of the state of a transaction</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor_models.Warning">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.monitor.monitor_models.</span></span><span class="sig-name descname"><span class="pre">Warning</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor_models.Warning" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.monitor.monitor"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.monitor.monitor.</span></span><span class="sig-name descname"><span class="pre">Monitor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db_engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">db_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor" title="Permalink to this definition"></a></dt>
+<dd><p>Monitor object containing methods to manipulate the Monitor Database</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.check_completion">
+<span class="sig-name descname"><span class="pre">check_completion</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transaction_record</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.TransactionRecord" title="nlds_processors.monitor.monitor_models.TransactionRecord"><span class="pre">nlds_processors.monitor.monitor_models.TransactionRecord</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.check_completion" title="Permalink to this definition"></a></dt>
+<dd><p>Get the complete list of sub records from a transaction record and 
+check whether they are all in a final state, and update them to COMPLETE
+if so.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.create_failed_file">
+<span class="sig-name descname"><span class="pre">create_failed_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sub_record</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.SubRecord" title="nlds_processors.monitor.monitor_models.SubRecord"><span class="pre">nlds_processors.monitor.monitor_models.SubRecord</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_details</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">nlds.details.PathDetails</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reason</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.FailedFile" title="nlds_processors.monitor.monitor_models.FailedFile"><span class="pre">nlds_processors.monitor.monitor_models.FailedFile</span></a></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.create_failed_file" title="Permalink to this definition"></a></dt>
+<dd><p>Creates a FailedFile object for the monitoring database. Requires the 
+input of the parent SubRecord and the PathDetails object of the failed 
+file in question. Optionally requires a reason str, which will otherwise 
+be attempted to be taken from the PathDetails object. If no reason can 
+be found then a MonitorError will be raised.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.create_sub_record">
+<span class="sig-name descname"><span class="pre">create_sub_record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transaction_record</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.TransactionRecord" title="nlds_processors.monitor.monitor_models.TransactionRecord"><span class="pre">nlds_processors.monitor.monitor_models.TransactionRecord</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">sub_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#nlds.rabbit.consumer.State" title="nlds.rabbit.consumer.State"><span class="pre">nlds.rabbit.consumer.State</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.SubRecord" title="nlds_processors.monitor.monitor_models.SubRecord"><span class="pre">nlds_processors.monitor.monitor_models.SubRecord</span></a></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.create_sub_record" title="Permalink to this definition"></a></dt>
+<dd><p>Creates a SubRecord with the minimum required input. Optionally adds 
+to a session and flushes to get the id field populated.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.create_transaction_record">
+<span class="sig-name descname"><span class="pre">create_transaction_record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.TransactionRecord" title="nlds_processors.monitor.monitor_models.TransactionRecord"><span class="pre">nlds_processors.monitor.monitor_models.TransactionRecord</span></a></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.create_transaction_record" title="Permalink to this definition"></a></dt>
+<dd><p>Creates a transaction_record with the minimum required input</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.create_warning">
+<span class="sig-name descname"><span class="pre">create_warning</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transaction_record</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.TransactionRecord" title="nlds_processors.monitor.monitor_models.TransactionRecord"><span class="pre">nlds_processors.monitor.monitor_models.TransactionRecord</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">warning</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.Warning" title="nlds_processors.monitor.monitor_models.Warning"><span class="pre">nlds_processors.monitor.monitor_models.Warning</span></a></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.create_warning" title="Permalink to this definition"></a></dt>
+<dd><p>Create a warning and add it to the TransactionRecord</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.get_sub_record">
+<span class="sig-name descname"><span class="pre">get_sub_record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sub_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.SubRecord" title="nlds_processors.monitor.monitor_models.SubRecord"><span class="pre">nlds_processors.monitor.monitor_models.SubRecord</span></a></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.get_sub_record" title="Permalink to this definition"></a></dt>
+<dd><p>Return a single sub record identified by the sub_id</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.get_sub_records">
+<span class="sig-name descname"><span class="pre">get_sub_records</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transaction_record</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.TransactionRecord" title="nlds_processors.monitor.monitor_models.TransactionRecord"><span class="pre">nlds_processors.monitor.monitor_models.TransactionRecord</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">sub_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#nlds.rabbit.consumer.State" title="nlds.rabbit.consumer.State"><span class="pre">nlds.rabbit.consumer.State</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">retry_count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.get_sub_records" title="Permalink to this definition"></a></dt>
+<dd><p>Return many sub records, identified by one of the (many) function
+parameters</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.get_transaction_record">
+<span class="sig-name descname"><span class="pre">get_transaction_record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transaction_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.get_transaction_record" title="Permalink to this definition"></a></dt>
+<dd><p>Gets a TransactionRecord from the DB from the given transaction_id,
+or the primary key (id)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.Monitor.update_sub_record">
+<span class="sig-name descname"><span class="pre">update_sub_record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sub_record</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.SubRecord" title="nlds_processors.monitor.monitor_models.SubRecord"><span class="pre">nlds_processors.monitor.monitor_models.SubRecord</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#nlds.rabbit.consumer.State" title="nlds.rabbit.consumer.State"><span class="pre">nlds.rabbit.consumer.State</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">retry_fl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#nlds_processors.monitor.monitor_models.SubRecord" title="nlds_processors.monitor.monitor_models.SubRecord"><span class="pre">nlds_processors.monitor.monitor_models.SubRecord</span></a></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor.Monitor.update_sub_record" title="Permalink to this definition"></a></dt>
+<dd><p>Update a retrieved SubRecord to reflect the new monitoring info. 
+Furthest state is updated, if required, and the retry count is 
+incremented by one if appropriate.
+TODO: Should retrying be a flag instead of a separate state? Probably, 
+yes</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor.MonitorError">
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.monitor.monitor.</span></span><span class="sig-name descname"><span class="pre">MonitorError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor.MonitorError" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<span class="target" id="module-nlds_processors.monitor.monitor_worker"></span><dl class="py class">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor_worker.MonitorConsumer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.monitor.monitor_worker.</span></span><span class="sig-name descname"><span class="pre">MonitorConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'monitor_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor_worker.MonitorConsumer" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor_worker.MonitorConsumer.attach_monitor">
+<span class="sig-name descname"><span class="pre">attach_monitor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.monitor.monitor_worker.MonitorConsumer.attach_monitor" title="Permalink to this definition"></a></dt>
+<dd><p>Attach the Monitor to the consumer</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="nlds_processors.monitor.monitor_worker.MonitorConsumer.callback">
+<span class="sig-name descname"><span class="pre">callback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pika.channel.Channel</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pika.frame.Method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">properties</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pika.frame.Header</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pika.connection.Connection</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#nlds_processors.monitor.monitor_worker.MonitorConsumer.callback" title="Permalink to this definition"></a></dt>
+<dd><p>Standard consumer callback function as defined by rabbitMQ, with the 
+standard callback parameters of Channel, Method, Header, Body (in bytes)
+and Connection.</p>
+<p>This is the working method of a consumer, i.e. it does the job the 
+consumer has been designed to do, and so must be implemented and 
+overridden by any child consumer classes.</p>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-nlds_processors.logger"></span><dl class="py class">
 <dt class="sig sig-object py" id="nlds_processors.logger.LoggingConsumer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.logger.</span></span><span class="sig-name descname"><span class="pre">LoggingConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'logging_q'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">setup_logging_fl</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.logger.LoggingConsumer" title="Permalink to this definition"></a></dt>
 <dd><dl class="py method">
@@ -325,7 +691,8 @@ i.e. the logging package</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="nlds-server.html" class="btn btn-neutral float-left" title="Core content of the nlds-server" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="nlds-server.html" class="btn btn-neutral float-left" title="NLDS API-server" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="server-config/server-config.html" class="btn btn-neutral float-right" title="Server config" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
