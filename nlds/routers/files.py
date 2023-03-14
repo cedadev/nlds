@@ -16,16 +16,15 @@ from pydantic import BaseModel
 from uuid import UUID, uuid4
 from typing import Optional, List, Dict
 from copy import deepcopy
-import json
 
 from ..routers import rabbit_publisher
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
-from . import rpc_publisher
 from ..errors import ResponseError
-from ..details import PathDetails
+from ..details import PathDetails, Retries
 from ..authenticators.authenticate_methods import authenticate_token, \
                                                   authenticate_group, \
                                                   authenticate_user
+
 router = APIRouter()
 
 # uuid (for testing)
@@ -58,11 +57,20 @@ class FileModel(BaseModel):
 
 
 class FileResponse(BaseModel):
-    uuid: UUID
+    transaction_id: UUID
     msg: str
-
+    user: str = ""
+    group: str = ""
+    api_action: str = ""
+    job_label: str = ""
+    tenancy: str = ""
+    label: str = ""
+    holding_id: int = -1
+    tag: str = ""
 
 ############################ GET METHOD ############################
+# this is not used by the NLDS client but is left in case another
+# program contacts this URL
 @router.get("/",
             status_code = status.HTTP_202_ACCEPTED,
             responses = {
@@ -100,14 +108,13 @@ async def get(transaction_id: UUID,
         job_label = transaction_id[0:8]
     # return response, job label accepted for processing
     response = FileResponse(
-        uuid = transaction_id,
-        msg = (f"GET transaction with transaction_id:{transaction_id} and "
-                "job label:{job_label} accepted for processing.")
+        transaction_id = transaction_id,
+        msg = (f"GET transaction accepted for processing.")
     )
     contents = [filepath, ]
     # create the message dictionary - do this here now as it's more transparent
     routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_GETLIST}"
-    api_method = f"{RMQP.RK_GETLIST}"
+    api_action = f"{RMQP.RK_GETLIST}"
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_TRANSACT_ID: str(transaction_id),
@@ -118,15 +125,24 @@ async def get(transaction_id: UUID,
             RMQP.MSG_TARGET: target,
             RMQP.MSG_ACCESS_KEY: access_key,
             RMQP.MSG_SECRET_KEY: secret_key,
-            RMQP.MSG_API_ACTION: api_method,
+            RMQP.MSG_API_ACTION: api_action,
             RMQP.MSG_JOB_LABEL: job_label
         }, 
         RMQP.MSG_DATA: {
             # Convert to PathDetails for JSON serialisation
             RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
-        },
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
+        }, 
+        **Retries().to_dict(),
+        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
     }
+    response.user = user
+    response.group = group
+    response.api_action = api_action
+    if job_label:
+        response.job_label = job_label
+    if tenancy:
+        response.tenancy = tenancy
+
     rabbit_publisher.publish_message(routing_key, msg_dict)
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
@@ -170,9 +186,8 @@ async def put(transaction_id: UUID,
         job_label = transaction_id[0:8]
     # return response, transaction id accepted for processing
     response = FileResponse(
-        uuid = transaction_id,
-        msg = (f"GETLIST transaction with transaction_id:{transaction_id} and "
-                "job_label:{job_label} accepted for processing.")
+        transaction_id = transaction_id,
+        msg = (f"GETLIST transaction accepted for processing.")
     )
 
     # Convert filepath or filelist to lists
@@ -198,16 +213,28 @@ async def put(transaction_id: UUID,
             # Convert to PathDetails for JSON serialisation
             RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
         },
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
+        **Retries().to_dict(),
+        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
     }
+    response.user = user
+    response.group = group
+    response.api_action = api_method
+    if job_label:
+        response.job_label = job_label
+    if tenancy:
+        response.tenancy = tenancy
     # add the metadata
     meta_dict = {}
     if (filemodel.label):
         meta_dict[RMQP.MSG_LABEL] = filemodel.label
+        response.label = filemodel.label
     if (filemodel.holding_id):
         meta_dict[RMQP.MSG_HOLDING_ID] = filemodel.holding_id
+        response.holding_id = filemodel.holding_id
     if (filemodel.tag):
-        meta_dict[RMQP.MSG_TAG] = filemodel.tag
+        tag_dict = filemodel.tag
+        meta_dict[RMQP.MSG_TAG] = tag_dict
+        response.tag = tag_dict
 
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict
@@ -257,12 +284,11 @@ async def put(transaction_id: UUID,
 
     if job_label is None:
         job_label = transaction_id[0:8]
-
+        
     # return response, transaction id accepted for processing
     response = FileResponse(
-        uuid = transaction_id,
-        msg = (f"PUT transaction with transaction_id:{transaction_id} and "
-                "job_label:{job_label} accepted for processing.\n")
+        transaction_id = transaction_id,
+        msg = (f"PUT transaction accepted for processing.")
     )
     # create the message dictionary - do this here now as it's more transparent
     routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_PUT}"
@@ -283,16 +309,28 @@ async def put(transaction_id: UUID,
             # Convert to PathDetails for JSON serialisation
             RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
         },
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
+        **Retries().to_dict(),
+        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
     }
+    response.user = user
+    response.group = group
+    response.api_action = api_method
+    if job_label:
+        response.job_label = job_label
+    if tenancy:
+        response.tenancy = tenancy
     # add the metadata
     meta_dict = {}
     if (filemodel.label):
         meta_dict[RMQP.MSG_LABEL] = filemodel.label
+        response.label = filemodel.label
     if (filemodel.holding_id):
         meta_dict[RMQP.MSG_HOLDING_ID] = filemodel.holding_id
+        response.holding_id = filemodel.holding_id
     if (filemodel.tag):
-        meta_dict[RMQP.MSG_TAG] = filemodel.tag
+        tag_dict = filemodel.tag
+        meta_dict[RMQP.MSG_TAG] = tag_dict
+        response.tag = tag_dict
 
     if (len(meta_dict) > 0):
         msg_dict[RMQP.MSG_META] = meta_dict

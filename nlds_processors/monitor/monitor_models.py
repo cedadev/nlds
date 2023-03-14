@@ -28,6 +28,13 @@ class TransactionRecord(MonitorBase):
     creation_time = Column(DateTime, default=func.now())
     # relationship for SubRecords (One to many)
     sub_records = relationship("SubRecord")
+    # relationship for Warnings (One to many)
+    warnings = relationship("Warning", cascade="delete, delete-orphan")
+    def get_warnings(self):
+        warnings = []
+        for w in self.warnings:
+            warnings.append(w.warning)
+        return warnings
 
 
 class SubRecord(MonitorBase):
@@ -76,6 +83,15 @@ class FailedFile(MonitorBase):
     sub_record_id = Column(Integer, ForeignKey("sub_record.id"), 
                            index=True, nullable=False)
 
+class Warning(MonitorBase):
+    __tablename__ = "warning"
+
+    # just two columns - primary key and warning string
+    id = Column(Integer, primary_key=True)
+    warning = Column(String)
+    # link to transaction record warning about
+    transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
+                                   index=True, nullable=False)
 
 def orm_to_dict(obj):
     retdict = obj.__dict__

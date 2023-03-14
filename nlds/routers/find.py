@@ -17,7 +17,6 @@ import json
 from typing import Optional, List, Dict
 
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
-from ..rabbit.rpc_publisher import RabbitMQRPCPublisher
 from ..routers import rpc_publisher
 from ..errors import ResponseError
 from ..authenticators.authenticate_methods import authenticate_token, \

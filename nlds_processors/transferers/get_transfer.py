@@ -55,7 +55,7 @@ class GetTransferConsumer(BaseTransferConsumer):
         rk_failed = ".".join([rk_origin, self.RK_TRANSFER_GET, self.RK_FAILED])
 
         for path_details in filelist:
-            if path_details.retries > self.max_retries:
+            if path_details.retries.count > self.max_retries:
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="failed"
                 )
@@ -71,9 +71,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                 self.log(f"{reason}, adding "
                          f"{path_details.object_name} to retry list.", 
                          self.RK_LOG_INFO)
-                path_details.increment_retry(
-                    retry_reason=reason
-                )
+                path_details.retries.increment(reason=reason)
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="retry"
                 )
@@ -85,9 +83,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                            "buckets")
                 self.log(f"{reason}. Adding {object_name} to retry list.", 
                          self.RK_LOG_ERROR)
-                path_details.increment_retry(
-                    retry_reason=reason
-                )
+                path_details.retries.increment(reason=reason)
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="retry"
                 )
@@ -110,9 +106,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                                "path is inaccessible.")
                     self.log(f"{reason}. Adding to retry-list.", 
                              self.RK_LOG_INFO)
-                    path_details.increment_retry(
-                        retry_reason=reason
-                    )
+                    path_details.retries.increment(reason=reason)
                     self.append_and_send(path_details, rk_retry, body_json, 
                                          list_type=FilelistType.retry)
                     continue
@@ -139,9 +133,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                 self.log(reason, self.RK_LOG_DEBUG)
                 self.log(f"Exception encountered during download, adding "
                          f"{object_name} to retry-list.", self.RK_LOG_INFO)
-                path_details.increment_retry(
-                    retry_reason=reason
-                )
+                path_details.retries.increment(reason=reason)
                 self.append_and_send(path_details, rk_retry, body_json, 
                                      list_type=FilelistType.retry)
                 continue

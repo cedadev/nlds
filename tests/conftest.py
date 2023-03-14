@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
-from nlds.details import PathDetails
+from nlds.details import PathDetails, Retries
 
 
 TEMPLATE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 
@@ -52,6 +52,7 @@ def default_rmq_body(test_uuid):
             # Convert to PathDetails for JSON serialisation
             RMQP.MSG_FILELIST: [PathDetails(original_path="item_path"),],
         },
+        **Retries().to_dict(),
         RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
     }
     return json.dumps(msg_dict)

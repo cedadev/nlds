@@ -1,9 +1,11 @@
+from typing import List
+
 from sqlalchemy import create_engine, func, Enum
 from sqlalchemy.exc import ArgumentError, IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
-from nlds_processors.monitor.monitor_models import SubRecord, FailedFile
+from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
 
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
@@ -136,11 +138,26 @@ class Monitor(DBMixin):
 
     def create_failed_file(self, 
                            sub_record: SubRecord, 
-                           path_details: PathDetails) -> FailedFile:
+                           path_details: PathDetails,
+                           reason: str = None) -> FailedFile:
+        """Creates a FailedFile object for the monitoring database. Requires the 
+        input of the parent SubRecord and the PathDetails object of the failed 
+        file in question. Optionally requires a reason str, which will otherwise 
+        be attempted to be taken from the PathDetails object. If no reason can 
+        be found then a MonitorError will be raised. 
+        """
+        if reason is None: 
+            if len(path_details.retries.reasons) <= 0:
+                raise MonitorError(
+                    f"FailedFile for sub_record_id:{sub_record.id} could not be "
+                    "added to the database as no failure reason was supplied. "
+                )
+            else:
+                reason = path_details.retries.reasons[-1]
         try:
             failed_file = FailedFile(
                 filepath=path_details.original_path,
-                reason=path_details.retry_reasons[-1],
+                reason=reason,
                 sub_record_id=sub_record.id,
             )
             self.session.add(failed_file)
@@ -272,3 +289,23 @@ class Monitor(DBMixin):
             raise MonitorError(
                 "IntegrityError raised when attempting to get sub_records"
             )
+
+
+    def create_warning(self, 
+                       transaction_record: TransactionRecord,
+                       warning: str) -> Warning:
+        """Create a warning and add it to the TransactionRecord"""
+        assert(self.session != None)
+        try:
+            warning = Warning(
+                warning = warning,
+                transaction_record_id = transaction_record.id
+            )
+            self.session.add(warning)
+            self.session.flush()
+        except (IntegrityError, KeyError):
+            raise MonitorError(
+                f"Warning for transaction_record:{transaction_record.id} could "
+                "not be added to the database"
+            )
+        return warning    

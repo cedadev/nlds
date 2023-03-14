@@ -1,5 +1,7 @@
-Core content of the nlds-server
-===============================
+NLDS API-server
+===============
+
+The core content of the NLDS API-server run using FastAPI. 
 
 The Publisher class
 -------------------
@@ -28,7 +30,7 @@ The authenticators
     :members:
     :undoc-members:
 
-Authenicate methods also contains 3 general methods, used by the above 2 
+Authenticate methods also contains 3 general methods, used by the above 2 
 modules, to validate the given user, group and token.
 
     

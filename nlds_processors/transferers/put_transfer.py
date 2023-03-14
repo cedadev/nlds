@@ -50,7 +50,7 @@ class PutTransferConsumer(BaseTransferConsumer):
             item_path = path_details.path
 
             # First check whether index item has failed too many times
-            if path_details.retries > self.max_retries:
+            if path_details.retries.count > self.max_retries:
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="failed"
                 )
@@ -62,9 +62,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                 not self.check_path_access(item_path)):
                 reason = (f"Path:{path_details.path} is inaccessible.")
                 self.log(reason, self.RK_LOG_DEBUG)
-                path_details.increment_retry(
-                    retry_reason=reason
-                )
+                path_details.retries.increment(reason=reason)
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
                 )
@@ -97,7 +95,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                 reason = (f"Error uploading {path_details.path} to object "
                           f"store: {e}.")
                 self.log(f"{reason} Adding to retry list.", self.RK_LOG_ERROR)
-                path_details.increment_retry(retry_reason=reason)
+                path_details.retries.increment(reason=reason)
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
                 )

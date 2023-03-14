@@ -31,6 +31,8 @@ LOGGING_CONFIG_ENABLE = "enable"
 LOGGING_CONFIG_FILES = "log_files"
 LOGGING_CONFIG_ROLLOVER = "rollover"
 
+GENERAL_CONFIG_SECTION = "general"
+
 # Defines the compulsory server config file sections
 CONFIG_SCHEMA = (
     (AUTH_CONFIG_SECTION, ("authenticator_backend", )),
