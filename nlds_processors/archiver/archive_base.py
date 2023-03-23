@@ -18,6 +18,8 @@ from nlds.rabbit.consumer import RabbitMQConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
 
+from XRootD import client
+
 class BaseArchiveConsumer(RabbitMQConsumer, ABC):
     DEFAULT_QUEUE_NAME = "archive_q"
     DEFAULT_ROUTING_KEY = (f"{RMQP.RK_ROOT}.{RMQP.RK_ARCHIVE}.{RMQP.RK_WILD}")
@@ -35,6 +37,7 @@ class BaseArchiveConsumer(RabbitMQConsumer, ABC):
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
     }
 
+
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
@@ -50,6 +53,7 @@ class BaseArchiveConsumer(RabbitMQConsumer, ABC):
             self.RETRY_DELAYS)
 
         self.reset()
+
 
     def callback(self, ch, method, properties, body, connection):
         self.reset()
