@@ -11,12 +11,17 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 from abc import ABC, abstractmethod
 import json
 import os
-from typing import List, NamedTuple, Dict
+from typing import List, NamedTuple, Dict, Tuple
 import pathlib as pth
 
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
+
+
+class TransferError(Exception):
+    pass
+
 
 class BaseTransferConsumer(StattingConsumer, ABC):
     DEFAULT_QUEUE_NAME = "transfer_q"
@@ -59,7 +64,8 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.RETRY_DELAYS)
 
         self.reset()
-        
+
+
     def callback(self, ch, method, properties, body, connection):
         self.reset()
         
@@ -96,34 +102,14 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         filelist = self.parse_filelist(body_json)
 
         try:
-            access_key = body_json[self.MSG_DETAILS][self.MSG_ACCESS_KEY]
-            secret_key = body_json[self.MSG_DETAILS][self.MSG_SECRET_KEY]
-        except KeyError:
-            self.log(
-                "Secret key or access key unobtainable, exiting callback.", 
-                self.RK_LOG_ERROR
+            access_key, secret_key, tenancy = self.get_objectstore_config(
+                body_json
             )
+        except TransferError: 
+            self.log("Objectstore config unobtainable, exiting callback.", 
+                     self.RK_LOG_ERROR)
             return
 
-        tenancy = None
-        # If tenancy specified in message details then override the server-
-        # config value
-        if (self.MSG_TENANCY in body_json[self.MSG_DETAILS] 
-                and body_json[self.MSG_DETAILS][self.MSG_TENANCY] is not None):
-            tenancy = body_json[self.MSG_DETAILS][self.MSG_TENANCY]
-        else:
-            tenancy = self.tenancy
-        
-        # Check to see whether tenancy has been specified in either the message 
-        # or the server_config - exit if not. 
-        if tenancy is None:
-            self.log(
-                "No tenancy specified at server- or request-level, exiting "
-                "callback.", 
-                self.RK_LOG_ERROR
-            )
-            return 
-        
         # Set uid and gid from message contents if configured to check 
         # permissions
         if self.check_permissions_fl:
@@ -139,6 +125,40 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         # classes 
         self.transfer(transaction_id, tenancy, access_key, secret_key, 
                       filelist, rk_parts[0], body_json)
+        
+
+    def get_objectstore_config(self, body_dict) -> Tuple:
+        try:
+            access_key = body_dict[self.MSG_DETAILS][self.MSG_ACCESS_KEY]
+            secret_key = body_dict[self.MSG_DETAILS][self.MSG_SECRET_KEY]
+        except KeyError:
+            self.log(
+                "Secret key or access key unobtainable, exiting callback.", 
+                self.RK_LOG_ERROR
+            )
+            raise TransferError()
+
+        tenancy = None
+        # If tenancy specified in message details then override the server-
+        # config value
+        if (self.MSG_TENANCY in body_dict[self.MSG_DETAILS] 
+                and body_dict[self.MSG_DETAILS][self.MSG_TENANCY] is not None):
+            tenancy = body_dict[self.MSG_DETAILS][self.MSG_TENANCY]
+        else:
+            tenancy = self.tenancy
+        
+        # Check to see whether tenancy has been specified in either the message 
+        # or the server_config - exit if not. 
+        if tenancy is None:
+            self.log(
+                "No tenancy specified at server- or request-level, exiting "
+                "callback.", 
+                self.RK_LOG_ERROR
+            )
+            raise TransferError() 
+        
+        return access_key, secret_key, tenancy
+      
 
     def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
                           access: int = os.R_OK) -> bool:
@@ -148,6 +168,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             access, 
             self.check_permissions_fl
         )
+
 
     @abstractmethod
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 

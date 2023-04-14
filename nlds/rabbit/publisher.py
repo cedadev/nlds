@@ -135,6 +135,8 @@ class RabbitMQPublisher():
     MSG_RETRY_COUNT_QUERY = "retry_count"
     MSG_RECORD_LIST = "records"
     MSG_WARNING = "warning"
+    MSG_TAPE_URL = "tape_url"
+    MSG_TAPE_POOL = "tape_pool"
 
     MSG_RETRIES = "retries"
     MSG_RETRIES_COUNT = "count"
