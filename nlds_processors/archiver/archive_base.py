@@ -29,11 +29,13 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
     _TAPE_POOL = 'tape_pool'
     _TAPE_URL = 'tape_url'
+    _CHUNK_SIZE = 'chunk_size'
     _MAX_RETRIES = 'max_retries'
     _PRINT_TRACEBACKS = 'print_tracebacks_fl'
     DEFAULT_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
         _TAPE_URL: True,
+        _CHUNK_SIZE: (1024**2), # Default to 1 MiB
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
@@ -47,6 +49,9 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             self._TAPE_POOL)
         self.tape_url = self.load_config_value(
             self._TAPE_URL)
+        self.chunk_size = self.load_config_value(
+            self._CHUNK_SIZE
+        )
         
         # Verify the tape_url is valid
         self.split_tape_url(self.tape_url)
