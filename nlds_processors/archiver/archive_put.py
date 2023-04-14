@@ -142,14 +142,17 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     # Stream the file one chunk at a time
                     # NOTE: this could take a while if the file is large, might 
                     # need a plan to deal with that 
+                    pos = 0
                     for chunk in result.stream(self.chunk_size):
-                        f.write(chunk)
+                        to_write = min(self.chunk_size, result.length_remaining)
+                        f.write(chunk, offset=pos, size=to_write)
+                        pos += to_write
                     
                     if (result.length_remaining != 0 
                             and result.length_remaining <= self.chunk_size):
                         f.write(result.read(result.length_remaining)) 
                     else:
-                        raise ArchiveError("Streaming file failed")
+                        raise ArchiveError("Streaming file seems to have failed.")
 
             except (HTTPError, ArchiveError) as e:
                 reason = f"Stream-time exception occurred: {e}"
@@ -172,7 +175,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 result.release_conn()
                 continue
 
-        self.log("Transfer complete, passing lists back to worker for "
+        self.log("Archive complete, passing lists back to worker for "
                  "re-routing and cataloguing.", self.RK_LOG_INFO)
         
         # Send whatever remains after all items have been (attempted to be) put
