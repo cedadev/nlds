@@ -52,7 +52,9 @@ setup(
             'monitor_q=nlds_processors.monitor.monitor_worker:main',
             'transfer_put_q=nlds_processors.transferers.put_transfer:main',
             'transfer_get_q=nlds_processors.transferers.get_transfer:main',
-            'logging_q=nlds_processors.logger:main'            
+            'logging_q=nlds_processors.logger:main',
+            'archive_put_q=nlds_processors.archiver.archive_put:main',
+            'archive_get_q=nlds_processors.archiver.archive_get:main',
         ],
     }
 )
