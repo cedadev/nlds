@@ -12,7 +12,7 @@ from XRootD.client.flags import (DirListFlags, PrepareFlags, DirListFlags,
 
 from nlds_processors.archiver.archive_base import (BaseArchiveConsumer, 
                                                    ArchiveError)
-from nlds.rabbit.consumer import FilelistType, State
+from nlds.rabbit.consumer import FilelistType
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
 
@@ -128,7 +128,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 # NOTE: Slightly unclear which way round to nest this, going to 
                 # keep it this way round for now but it may be that in the 
                 # future, if we decide that we should be pre-allocating chunks 
-                # to write at the policy level
+                # to write at the policy level, we might decide to change it 
+                # round
                 result = client.get_object(
                     bucket_name, object_name,
                 )
@@ -169,7 +170,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 self.log(f"Successfully got {path_details.original_path}", 
                          self.RK_LOG_DEBUG)
                 self.append_and_send(path_details, rk_complete, body_json, 
-                                     list_type=FilelistType.transferred)
+                                     list_type=FilelistType.archived)
             finally:
                 result.close()
                 result.release_conn()
@@ -181,7 +182,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # Send whatever remains after all items have been (attempted to be) put
         if len(self.completelist) > 0:
             self.send_pathlist(
-                self.completelist, rk_complete, body_json, mode="transferred"
+                self.completelist, rk_complete, body_json, mode="archived"
             )
         if len(self.retrylist) > 0:
             self.send_pathlist(

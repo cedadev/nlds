@@ -65,6 +65,7 @@ class FilelistType(Enum):
     indexed = 1
     transferred = 1
     catalogued = 1
+    archived = 1
 
 class State(Enum):
     INITIALISING = -1
