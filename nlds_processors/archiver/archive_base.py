@@ -35,7 +35,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     DEFAULT_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
         _TAPE_URL: True,
-        _CHUNK_SIZE: 2 * (1024**2), # Default to 2 MiB
+        _CHUNK_SIZE: 5 * (1024**2), # Default to 5 MiB
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
