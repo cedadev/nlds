@@ -32,15 +32,16 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     _CHUNK_SIZE = 'chunk_size'
     _MAX_RETRIES = 'max_retries'
     _PRINT_TRACEBACKS = 'print_tracebacks_fl'
-    DEFAULT_CONSUMER_CONFIG = {
+    ARCHIVE_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
-        _TAPE_URL: True,
+        _TAPE_URL: None,
         _CHUNK_SIZE: 5 * (1024**2), # Default to 5 MiB
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
     }
-
+    DEFAULT_CONSUMER_CONFIG = (BaseTransferConsumer.DEFAULT_CONSUMER_CONFIG 
+                               | ARCHIVE_CONSUMER_CONFIG)
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
