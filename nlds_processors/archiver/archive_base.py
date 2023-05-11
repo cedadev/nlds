@@ -54,8 +54,9 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             self._CHUNK_SIZE
         )
         
-        # Verify the tape_url is valid
-        self.split_tape_url(self.tape_url)
+        # Verify the tape_url is valid, if it exists
+        if self.tape_url is not None:
+            self.split_tape_url(self.tape_url)
 
         self.reset()
 
