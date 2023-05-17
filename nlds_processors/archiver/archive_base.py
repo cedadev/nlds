@@ -105,6 +105,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         # Set uid and gid from message contents if configured to check 
         # permissions
         if self.check_permissions_fl:
+            self.log("Check permissions flag is set, setting uid and gids now.")
             self.set_ids(body_dict)
 
         try:
