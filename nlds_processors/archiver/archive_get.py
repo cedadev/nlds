@@ -40,7 +40,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_ROUTING_KEY = (f"{BaseArchiveConsumer.RK_ROOT}."
                            f"{BaseArchiveConsumer.RK_TRANSFER_PUT}."
                            f"{BaseArchiveConsumer.RK_WILD}")
-    DEFAULT_STATE = None
+    DEFAULT_STATE = State.ARCHIVE_GETTING
 
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):

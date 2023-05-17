@@ -12,7 +12,7 @@ from XRootD.client.flags import (DirListFlags, PrepareFlags, DirListFlags,
 
 from nlds_processors.archiver.archive_base import (BaseArchiveConsumer, 
                                                    ArchiveError)
-from nlds.rabbit.consumer import FilelistType
+from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
 
@@ -21,7 +21,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_ROUTING_KEY = (f"{BaseArchiveConsumer.RK_ROOT}."
                            f"{BaseArchiveConsumer.RK_TRANSFER_PUT}."
                            f"{BaseArchiveConsumer.RK_WILD}")
-    DEFAULT_STATE = None
+    DEFAULT_STATE = State.ARCHIVE_PUTTING
 
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -156,7 +156,11 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                             and result.length_remaining <= self.chunk_size):
                         f.write(result.read(result.length_remaining)) 
                     else:
-                        raise ArchiveError("Streaming file seems to have failed.")
+                        self.log(f"remaining = {result.length_remaining}, "
+                                 f"chunk_size = {self.chunk_size}, pos = {pos}", 
+                                 self.RK_LOG_DEBUG)
+                        raise ArchiveError("Streaming seems to have failed due "
+                                           "to incomplete stream read.")
 
             except (HTTPError, ArchiveError) as e:
                 reason = f"Stream-time exception occurred: {e}"
