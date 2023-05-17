@@ -152,12 +152,17 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                         f.write(chunk, offset=pos, size=to_write)
                         pos += to_write
                     
+                    # NOTE: Any retries after the attempted opening of the file
+                    # will result in failure - might need to append something to 
+                    # the filename or just abandon hope 
+
                     if (result.length_remaining != 0 
                             and result.length_remaining <= self.chunk_size):
                         f.write(result.read(result.length_remaining)) 
-                    else:
+                    elif (result.length_remaining != 0):
                         self.log(f"remaining = {result.length_remaining}, "
-                                 f"chunk_size = {self.chunk_size}, pos = {pos}", 
+                                 f"chunk_size = {self.chunk_size}, pos = {pos},"
+                                 f" to_write = {to_write}", 
                                  self.RK_LOG_DEBUG)
                         raise ArchiveError("Streaming seems to have failed due "
                                            "to incomplete stream read.")
