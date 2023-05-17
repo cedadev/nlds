@@ -170,7 +170,9 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                                "form: root://{server}//{archive/path}, was "
                                f"given as {tape_url}.")
         _, server, base_dir = tape_url_parts
-        return server, base_dir
+        # prepend a slash onto the base_dir so it can directly be used to make 
+        # directories with the pyxrootd client
+        return server, f"/{base_dir}"
     
 
     @abstractmethod

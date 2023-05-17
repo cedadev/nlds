@@ -54,8 +54,9 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # but otherwise will be passed for message-level retry. 
         status, _ = fs_client.mkdir(tape_base_dir, MkDirFlags.MAKEPATH)
         if status.status != 0:
-            raise CallbackError(f"Base dir derived from tape_url ({tape_url}) "
-                                f"could not be created or verified.")
+            raise CallbackError(f"Base dir {tape_base_dir} derived from "
+                                f"tape_url ({tape_url}) could not be created or"
+                                f" verified.")
 
         rk_complete = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_COMPLETE])
         rk_retry = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_START])
@@ -89,8 +90,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
             if bucket_name and not s3_client.bucket_exists(bucket_name):
                 # If bucket doesn't exist then fail for retrying
-                reason = (f"transaction_id {transaction_id} doesn't match any "
-                           "buckets")
+                reason = (f"bucket_name {bucket_name} doesn't match any "
+                          "exisiting buckets in object store.")
                 self.log(f"{reason}. Adding {object_name} to retry list.", 
                          self.RK_LOG_ERROR)
                 path_details.retries.increment(reason=reason)
@@ -120,8 +121,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                      self.RK_LOG_DEBUG)
             
             # NOTE: Do we want to use the object name or the original path here?
-            tape_full_path = (f"root://{tape_server}//{tape_base_dir}/"
-                         f"{bucket_name}/{object_name}")
+            tape_full_path = (f"root://{tape_server}/{tape_base_dir}/"
+                              f"{bucket_name}/{object_name}")
 
             # Attempt to stream the object directly into the File object            
             try:
