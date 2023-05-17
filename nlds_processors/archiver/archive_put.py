@@ -133,7 +133,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 # future, if we decide that we should be pre-allocating chunks 
                 # to write at the policy level, we might decide to change it 
                 # round
-                result = client.get_object(
+                result = s3_client.get_object(
                     bucket_name, object_name,
                 )
                 with client.File() as f:
