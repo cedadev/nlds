@@ -160,10 +160,10 @@ async def get(transaction_id: UUID,
             }
         )
 async def put(transaction_id: UUID,
-              filemodel: FileModel,
               token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
+              filemodel: Optional[FileModel]=None,
               tenancy: Optional[str]=None,
               target: Optional[str]=None,
               job_label: Optional[str] = None,
