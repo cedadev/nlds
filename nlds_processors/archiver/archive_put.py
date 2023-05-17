@@ -54,6 +54,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # but otherwise will be passed for message-level retry. 
         status, _ = fs_client.mkdir(tape_base_dir, MkDirFlags.MAKEPATH)
         if status.status != 0:
+            self.log(f"Failed status message: {status.message}", 
+                     self.RK_LOG_ERROR)
             raise CallbackError(f"Base dir {tape_base_dir} derived from "
                                 f"tape_url ({tape_url}) could not be created or"
                                 f" verified.")
