@@ -154,7 +154,9 @@ class CatalogConsumer(RMQC):
 
         # try to get the holding to see if it already exists and can be added to
         try:
-            holding = self.catalog.get_holding(user, group, label, holding_id)
+            holding = self.catalog.get_holding(
+                user, group, label, holding_id, tag=tags
+            )
         except (KeyError, CatalogError):
             holding = None
         if holding is None:
@@ -352,21 +354,34 @@ class CatalogConsumer(RMQC):
         except KeyError:
             holding_label = None
 
+        # get the holding tag from the details section of the message
+        try:
+            holding_tag = body[self.MSG_META][self.MSG_TAG]
+        except KeyError:
+            holding_tag = None
+
         # start the database transactions
         self.catalog.start_session()
 
         # get the holding from the database
-        if holding_label is None and holding_id is None:
+        if holding_label is None and holding_id is None and holding_tag is None:
             holding = None
         else:
             try:
                 holding = self.catalog.get_holding(
-                    user, group, holding_label, holding_id
+                    user, group, holding_label, holding_id, tag=holding_tag
                 )
             except CatalogError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
-                message = (f"Could not find record of requested holding: "
-                           f"label: {holding_label}, id: {holding_id}")
+                message = (f"Could not find record of requested holding: ")
+                if holding_label:
+                    message += f"label: {holding_label}, "
+                if holding_id:
+                    message += f"id: {holding_id}, "
+                if holding_tag:
+                    message += f"tag: {holding_tag}, "
+                if holding_label or holding_id or holding_tag:
+                    message = message[:-2]
                 self.log(message, self.RK_LOG_DEBUG)
                 raise CallbackError(message)
 
