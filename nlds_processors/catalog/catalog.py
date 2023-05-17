@@ -343,7 +343,6 @@ class Catalog(DBMixin):
         assert(self.session != None)
         # Nones are set to .* in the regexp matching
         # get the matching holdings first, these match all but the path
-
         holding = self.get_holding(
             user, group, holding_label, holding_id, transaction_id, tag
         )
@@ -383,6 +382,8 @@ class Catalog(DBMixin):
                 err_msg = f"File with holding_id:{holding_id} not found "
             elif transaction_id:
                 err_msg = f"File with transaction_id:{transaction_id} not found "
+            elif tag:
+                err_msg = f"File with tag:{tag} not found"
             else:
                 err_msg = f"File with original_path:{path} not found "
             raise CatalogError(err_msg)
