@@ -103,8 +103,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             
             try:
                 # Check that bucket exists, and create if not
-                if not client.bucket_exists(bucket_name):
-                    client.make_bucket(bucket_name)
+                if not s3_client.bucket_exists(bucket_name):
+                    s3_client.make_bucket(bucket_name)
                     self.log(f"Creating bucket ({bucket_name}) for this"
                             " transaction", self.RK_LOG_INFO)
                 else:
