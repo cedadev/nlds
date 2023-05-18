@@ -153,6 +153,25 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 # future, if we decide that we should be pre-allocating chunks 
                 # to write at the policy level, we might decide to change it 
                 # round
+                result = None
+
+                # Prepare the file for reading. The filename must be encoded 
+                # into a list of byte strings
+                prepare_bytearray = (f"{tape_base_dir}/{bucket_name}/"
+                                     f"{object_name}").encode("utf_8")
+                status = fs_client.prepare([prepare_bytearray], 
+                                           PrepareFlags.STAGE)
+                if status.status != 0:
+                    # If bucket tape-folder can't be found then pass for retry
+                    reason = (f"File ({prepare_bytearray.decode()}) could not "
+                              f"be prepared for reading.")
+                    self.log(f"{reason}. Adding {object_name} to retry list.", 
+                            self.RK_LOG_ERROR)
+                    path_details.retries.increment(reason=reason)
+                    self.append_and_send(
+                        path_details, rk_failed, body_json, list_type="retry"
+                    )
+                    continue
                 
                 with client.File() as f:
                     # Open the file with READ
