@@ -36,7 +36,7 @@ class XRDFileWrapper():
         return result
     
 class GetArchiveConsumer(BaseArchiveConsumer):
-    DEFAULT_QUEUE_NAME = "archive_put_q"
+    DEFAULT_QUEUE_NAME = "archive_get_q"
     DEFAULT_ROUTING_KEY = (f"{BaseArchiveConsumer.RK_ROOT}."
                            f"{BaseArchiveConsumer.RK_TRANSFER_PUT}."
                            f"{BaseArchiveConsumer.RK_WILD}")
