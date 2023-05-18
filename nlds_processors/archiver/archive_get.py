@@ -86,7 +86,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     path_details, rk_failed, body_json, list_type="failed"
                 )
                 continue
-            elif len(path_details.object_name.split(':')) == 2:
+            
+            if len(path_details.object_name.split(':')) == 2:
                 bucket_name, object_name = path_details.object_name.split(':')
             # Otherwise, log error and queue for retry
             else:
@@ -99,11 +100,19 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     path_details, rk_failed, body_json, list_type="retry"
                 )
                 continue
-
-            # If bucket doesn't exist then pass for retry
-            if bucket_name and not client.bucket_exists(bucket_name):
-                reason = (f"transaction_id {transaction_id} doesn't match any "
-                           "buckets")
+            
+            try:
+                # Check that bucket exists, and create if not
+                if not client.bucket_exists(bucket_name):
+                    client.make_bucket(bucket_name)
+                    self.log(f"Creating bucket ({bucket_name}) for this"
+                            " transaction", self.RK_LOG_INFO)
+                else:
+                    self.log(f"Bucket for this transaction ({transaction_id}) "
+                            f"already exists", self.RK_LOG_INFO)
+            except HTTPError as e:   
+                # If bucket can't be created then pass for retry
+                reason = (f"bucket {bucket_name} could not be created")
                 self.log(f"{reason}. Adding {object_name} to retry list.", 
                          self.RK_LOG_ERROR)
                 path_details.retries.increment(reason=reason)
@@ -115,8 +124,19 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             # we're not concerned about permissions checking here.
 
             # Check bucket folder exists on tape
-            status, _ = fs_client.mkdir(f"{tape_base_dir}/{bucket_name}", 
-                                        MkDirFlags.MAKEPATH)
+            status, _ = fs_client.dirlist(f"{tape_base_dir}/{bucket_name}", 
+                                          DirListFlags.STAT)
+            if status.status != 0:
+                # If bucket tape-folder can't be found then pass for retry
+                reason = (f"bucket tape folder ({tape_base_dir}/{bucket_name}) "
+                          f"could not be found, cannot retrieve from archive")
+                self.log(f"{reason}. Adding {object_name} to retry list.", 
+                         self.RK_LOG_ERROR)
+                path_details.retries.increment(reason=reason)
+                self.append_and_send(
+                    path_details, rk_failed, body_json, list_type="retry"
+                )
+                continue
             
             self.log(f"Attempting to stream file {path_details.original_path} "
                      "directly from tape archive to object storage", 
@@ -124,7 +144,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             
             # NOTE: Do we want to use the object name or the original path here?
             tape_full_path = (f"root://{tape_server}//{tape_base_dir}/"
-                         f"{bucket_name}/{object_name}")
+                              f"{bucket_name}/{object_name}")
             
             # Attempt to stream the object directly into the File object            
             try:
@@ -135,7 +155,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 # round
                 
                 with client.File() as f:
-                    # Open the file as NEW, to avoid having to prepare it
+                    # Open the file with READ
                     status, _ = f.open(tape_full_path, OpenFlags.READ)
                     if status.status != 0:
                         raise ArchiveError("Failed to open file for reading")
@@ -143,9 +163,10 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     # Wrap the File handler so minio can use it 
                     fw = XRDFileWrapper(f)
 
-                    chunk_size = min(5*1024*1024, self.chunk_size)
+                    # Ensure minimum part_size is met
+                    chunk_size = max(5*1024*1024, self.chunk_size)
 
-                    s3_client.put_object(
+                    result = s3_client.put_object(
                         bucket_name, 
                         object_name, 
                         fw, 
@@ -170,6 +191,9 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 self.append_and_send(path_details, rk_complete, body_json, 
                                      list_type=FilelistType.archived)
             finally:
+                if result:
+                    result.close()
+                    result.release_conn()
                 continue
 
         self.log("Archive complete, passing lists back to worker for "
