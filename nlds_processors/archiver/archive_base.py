@@ -163,7 +163,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         return tape_url
     
 
-    def split_tape_url(self, tape_url: str) -> Tuple[str]:
+    @staticmethod
+    def split_tape_url(tape_url: str) -> Tuple[str]:
         # Verify tape url is valid
         tape_url_parts = tape_url.split("//")
         if not (len(tape_url_parts) == 3 and tape_url_parts[0] == "root:"):
