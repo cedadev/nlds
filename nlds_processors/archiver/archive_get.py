@@ -65,14 +65,15 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
         # Create the FileSystem client at this point to verify the tape_base_dir 
         fs_client = client.FileSystem(f"root://{tape_server}")
-        # Attempt to create it, should succeed if everything is working properly
-        # but otherwise will be passed for message-level retry. 
-        status, _ = fs_client.mkdir(tape_base_dir, MkDirFlags.MAKEPATH)
+        # Attempt to list the base-directory to ensure it exists, should succeed 
+        # if everything is working properly but otherwise will be passed for 
+        # message-level retry. 
+        status, _ = fs_client.dirlist(tape_base_dir, DirListFlags.STAT)
         if status.status != 0:
-            self.log(f"Status message: {status.message}", self.RK_LOG_INFO)
             self.log(f"Full status object: {status}", self.RK_LOG_DEBUG)
-            raise CallbackError(f"Base dir derived from tape_url ({tape_url}) "
-                                f"could not be created or verified.")
+            raise CallbackError(f"Base dir derived from tape_url "
+                                f"({tape_base_dir}) does not seem to exist. "
+                                f"Status message: {status.message}")
         
         # Declare useful variables
         bucket_name = None
