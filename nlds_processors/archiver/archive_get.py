@@ -143,7 +143,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             
             self.log(f"Attempting to stream file {path_details.original_path} "
                      "directly from tape archive to object storage", 
-                     self.RK_LOG_DEBUG)
+                     self.RK_LOG_INFO)
             
             # NOTE: Do we want to use the object name or the original path here?
             tape_full_path = (f"root://{tape_server}//{tape_base_dir}/"
@@ -188,6 +188,9 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     # Ensure minimum part_size is met
                     chunk_size = max(5*1024*1024, self.chunk_size)
 
+                    self.log(f"Starting stream of {path_details.original_path} "
+                             "to object store.", self.RK_LOG_DEBUG)
+
                     result = s3_client.put_object(
                         bucket_name, 
                         object_name, 
@@ -195,6 +198,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         -1, 
                         part_size=chunk_size, # This is the minimum part size.
                     )
+                    self.log(f"S3 Put Result: {result}", self.RK_LOG_DEBUG)
 
             except (HTTPError, ArchiveError) as e:
                 reason = f"Stream-time exception occurred: {e}"
@@ -213,9 +217,9 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 self.append_and_send(path_details, rk_complete, body_json, 
                                      list_type=FilelistType.archived)
             finally:
-                if result:
-                    result.close()
-                    result.release_conn()
+                # if result:
+                #     result.close()
+                #     result.release_conn()
                 continue
 
         self.log("Archive complete, passing lists back to worker for "
