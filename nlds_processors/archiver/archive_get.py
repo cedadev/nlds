@@ -111,7 +111,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     self.log(f"Creating bucket ({bucket_name}) for this"
                             " transaction", self.RK_LOG_INFO)
                 else:
-                    self.log(f"Bucket for this transaction ({transaction_id}) "
+                    self.log(f"Bucket for this transaction ({bucket_name}) "
                             f"already exists", self.RK_LOG_INFO)
             except HTTPError as e:   
                 # If bucket can't be created then pass for retry
@@ -162,8 +162,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 # into a list of byte strings
                 prepare_bytearray = (f"{tape_base_dir}/{bucket_name}/"
                                      f"{object_name}").encode("utf_8")
-                status = fs_client.prepare([prepare_bytearray], 
-                                           PrepareFlags.STAGE)
+                status, _ = fs_client.prepare([prepare_bytearray, ], 
+                                              PrepareFlags.STAGE)
                 if status.status != 0:
                     # If bucket tape-folder can't be found then pass for retry
                     reason = (f"File ({prepare_bytearray.decode()}) could not "
