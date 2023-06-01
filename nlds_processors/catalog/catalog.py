@@ -56,7 +56,7 @@ class Catalog(DBMixin):
 
             if holding_id:
                 holding_q = holding_q.filter(
-                    Holding.id == int(holding_id),
+                    Holding.id == holding_id,
                 )
 
             if transaction_id:
