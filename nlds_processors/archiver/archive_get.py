@@ -184,7 +184,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
                     # Wrap the File handler so minio can use it 
                     fw = XRDFileWrapper(f)
-
+                    
                     # Ensure minimum part_size is met
                     chunk_size = max(5*1024*1024, self.chunk_size)
 
@@ -216,11 +216,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                          self.RK_LOG_DEBUG)
                 self.append_and_send(path_details, rk_complete, body_json, 
                                      list_type=FilelistType.archived)
-            finally:
-                # if result:
-                #     result.close()
-                #     result.release_conn()
-                continue
+            # Finally not required for multi-part write to objectstore
 
         self.log("Archive complete, passing lists back to worker for "
                  "re-routing and cataloguing.", self.RK_LOG_INFO)
