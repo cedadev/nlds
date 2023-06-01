@@ -44,6 +44,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
+        print("Test print")
         super().__init__(queue=queue)
 
 
@@ -177,6 +178,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     continue
                 
                 with client.File() as f:
+                    print("###Print inside client.File() block###")
+
                     # Open the file with READ
                     status, _ = f.open(tape_full_path, OpenFlags.READ)
                     if status.status != 0:
@@ -184,6 +187,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
                     # Wrap the File handler so minio can use it 
                     fw = XRDFileWrapper(f)
+
+                    print("###Print after FileWrapper declaration###")
 
                     # Ensure minimum part_size is met
                     chunk_size = max(5*1024*1024, self.chunk_size)
