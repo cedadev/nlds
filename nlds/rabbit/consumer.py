@@ -240,8 +240,21 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 self.RK_LOG_ERROR
             )
             raise e
-
+        # de-duplicate the filelist
+        filelist = self.dedup_filelist(filelist)
         return filelist
+    
+    def dedup_filelist(self, filelist: List[PathDetails]) -> List[PathDetails]:
+        """De-duplicate filelist 
+        """
+        new_filelist = []
+        pathlist = []
+        for pd in filelist:
+            if not pd.original_path in pathlist:
+                new_filelist.append(pd)
+                pathlist.append(pd.original_path)
+
+        return new_filelist
 
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
                        body_json: Dict[str, str], state: State = None,
