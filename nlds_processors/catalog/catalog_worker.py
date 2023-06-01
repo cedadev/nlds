@@ -132,10 +132,15 @@ class CatalogConsumer(RMQC):
         # get the label from the metadata section of the message
         try:
             label = body[self.MSG_META][self.MSG_LABEL]
+            # if holding id not given then new_label used to create holding
+            new_label = label        
         except KeyError:
             # generate the label from the UUID - should loop here to make sure 
             # we get a unique label
-            label = transaction_id[0:8]
+            label = None
+            # no label given so if holding_id not given the subset of 
+            # transaction id is used as new label
+            new_label = transaction_id[0:8] 
 
         # get the holding_id from the metadata section of the message
         try:
@@ -152,24 +157,38 @@ class CatalogConsumer(RMQC):
         # start the database transactions
         self.catalog.start_session()
 
+        # determine the search label
+        if label:
+            search_label = label
+        elif holding_id:
+            search_label = ".*"     # match all labels if holding id given
+        else:
+            search_label = "^$"     # match nothing if no label or holding id
+                                    # this will produce a new holding
+
         # try to get the holding to see if it already exists and can be added to
         try:
+            # don't use tags to search - they are strictly for adding to the
+            # holding
             holding = self.catalog.get_holding(
-                user, group, label, holding_id, tag=tags
+                user, group, search_label, holding_id
             )
         except (KeyError, CatalogError):
             holding = None
+
         if holding is None:
             # if the holding_id is not None then raise an error as the user is
             # trying to add to a holding that doesn't exist, but creating a new
             # holding won't have a holding_id that matches the one they passed in
             if (holding_id is not None):
                 message = (f"Could not add files to holding with holding_id: "
-                            "{holding_id}.  holding_id does not exist.")
+                           f"{holding_id}.  holding_id does not exist.")
                 self.log(message, self.RK_LOG_DEBUG)
                 raise CallbackError(message)
             try:
-                holding = self.catalog.create_holding(user, group, label)
+                holding = self.catalog.create_holding(
+                    user, group, new_label
+                )
             except CatalogError as e:
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 return
@@ -203,15 +222,18 @@ class CatalogConsumer(RMQC):
             try:
                 # Search first for file existence within holding, retry/fail if 
                 # present
-                file = self.catalog.get_file(
-                    user, 
-                    group, 
-                    pd.original_path, 
-                    holding,
-                    missing_error_fl=False
-                )
-                if file:
+                try:
+                    files = self.catalog.get_files(
+                        user, 
+                        group, 
+                        holding_id=holding.id,
+                        original_path=pd.original_path, 
+                    )
+                except CatalogError:
+                    pass # should throw a catalog error if file(s) not found
+                else:
                     raise CatalogError("File already exists in holding")
+                
                 file = self.catalog.create_file(
                     transaction,
                     pd.user, 
@@ -222,6 +244,7 @@ class CatalogConsumer(RMQC):
                     pd.size, 
                     pd.permissions
                 )
+
                 # NOTE: This is an approximation/quick hack to get a value for 
                 # object_name before we have created the actual object. This is 
                 # fine as-is for now as the object name will always be 
@@ -343,7 +366,7 @@ class CatalogConsumer(RMQC):
 
         # get the holding_id from the metadata section of the message
         try:
-            holding_id = int(body[self.MSG_META][self.MSG_HOLDING_ID])
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
         except KeyError:
             holding_id = None
 
@@ -354,6 +377,12 @@ class CatalogConsumer(RMQC):
         except KeyError:
             holding_label = None
 
+        # get the transaction id from the details section of the message
+        try: 
+            transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
+        except KeyError:
+            transaction_id = None
+
         # get the holding tag from the details section of the message
         try:
             holding_tag = body[self.MSG_META][self.MSG_TAG]
@@ -362,79 +391,57 @@ class CatalogConsumer(RMQC):
 
         # start the database transactions
         self.catalog.start_session()
-
-        # get the holding from the database
-        if holding_label is None and holding_id is None and holding_tag is None:
-            holding = None
-        else:
-            try:
-                holding = self.catalog.get_holding(
-                    user, group, holding_label, holding_id, tag=holding_tag
-                )
-            except CatalogError as e:
-                self.log(e.message, RMQC.RK_LOG_ERROR)
-                message = (f"Could not find record of requested holding: ")
-                if holding_label:
-                    message += f"label: {holding_label}, "
-                if holding_id:
-                    message += f"id: {holding_id}, "
-                if holding_tag:
-                    message += f"tag: {holding_tag}, "
-                if holding_label or holding_id or holding_tag:
-                    message = message[:-2]
-                self.log(message, self.RK_LOG_DEBUG)
-                raise CallbackError(message)
-
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
-                # get the file first
-                file = self.catalog.get_file(
-                    user, group,
-                    file_details.original_path, holding
+                # get the files first
+                files = self.catalog.get_files(
+                    user, group, holding_label, holding_id, 
+                    transaction_id, file_details.original_path, holding_tag
                 )
-                if file is None:
+                if len(files) == 0:
                     raise CatalogError(
-                        f"Could not find file with original path "
+                        f"Could not find file(s) with original path "
                         f"{file_details.original_path}"
                     )
                 # now get the location so we can get where it is stored
-                try:
-                    location = self.catalog.get_location(
-                        file, Storage.OBJECT_STORAGE
-                    )
-                    if location is None:
-                        raise CatalogError(
-                            f"Could not find location for file with original path "
-                            f"{file_details.original_path}"
-                        )         
-                    object_name = ("nlds." +
-                                location.root + ":" + 
-                                location.path)
-                    access_time = location.access_time.timestamp()
-                    # create a new PathDetails with all the info from the DB
-                    new_file = PathDetails(
-                        original_path = file.original_path,
-                        object_name = object_name,
-                        size = file.size,
-                        user = file.user,
-                        group = file.group,
-                        permissions = file.file_permissions,                    
-                        access_time = access_time,
-                        path_type = file.path_type,
-                        link_path = file.link_path
-                    )
-                except CatalogError as e:
-                    if file_details.retries.count > self.max_retries:
-                        self.failedlist.append(file_details)
-                    else:
-                        self.retrylist.append(file_details)
-                        file_details.retries.increment(
-                            reason=f"{e.message}"
+                for file in files:
+                    try:
+                        location = self.catalog.get_location(
+                            file, Storage.OBJECT_STORAGE
                         )
-                    self.log(e.message, RMQC.RK_LOG_ERROR)
-                    continue
-                self.completelist.append(new_file)
+                        if location is None:
+                            raise CatalogError(
+                                f"Could not find location for file with original path "
+                                f"{file_details.original_path}"
+                            )         
+                        object_name = ("nlds." +
+                                    location.root + ":" + 
+                                    location.path)
+                        access_time = location.access_time.timestamp()
+                        # create a new PathDetails with all the info from the DB
+                        new_file = PathDetails(
+                            original_path = file.original_path,
+                            object_name = object_name,
+                            size = file.size,
+                            user = file.user,
+                            group = file.group,
+                            permissions = file.file_permissions,                    
+                            access_time = access_time,
+                            path_type = file.path_type,
+                            link_path = file.link_path
+                        )
+                    except CatalogError as e:
+                        if file_details.retries.count > self.max_retries:
+                            self.failedlist.append(file_details)
+                        else:
+                            self.retrylist.append(file_details)
+                            file_details.retries.increment(
+                                reason=f"{e.message}"
+                            )
+                        self.log(e.message, RMQC.RK_LOG_ERROR)
+                        continue
+                    self.completelist.append(new_file)
 
             except CatalogError as e:
                 if file_details.retries.count > self.max_retries:
@@ -520,7 +527,7 @@ class CatalogConsumer(RMQC):
 
         # get the holding_id from the metadata section of the message
         try:
-            holding_id = int(body[self.MSG_META][self.MSG_HOLDING_ID])
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
         except KeyError:
             holding_id = None
 

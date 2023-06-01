@@ -357,99 +357,6 @@ class TestCatalog:
         # Leaving this for now until it's a bit more fleshed out
         pass
 
-    def test_get_file(self, mock_catalog, mock_holding, mock_transaction, 
-                      mock_file):
-        test_uuid = str(uuid.uuid4())
-        catalog = mock_catalog
-
-        # Add mock holding and transaction to db so ids are populated.
-        catalog.session.add(mock_holding)
-        catalog.session.flush()
-        mock_transaction.holding_id = mock_holding.id
-        catalog.session.add(mock_transaction)
-        catalog.session.flush()
-
-        # Getting shouldn't work on an empty database
-        with pytest.raises(CatalogError):
-            file_ = catalog.get_file('test-user', 'test-group', '/test/path')
-        # Similarly shouldn't work if we specify a holding
-        with pytest.raises(CatalogError):
-            file_ = catalog.get_file('test-user', 'test-group', '/test/path',
-                                     holding=mock_holding)
-            
-        # But it will return without a fault if the flag is provided.
-        file_ = catalog.get_file('test-user', 'test-group', '/test/path', 
-                                 missing_error_fl=False)
-        assert file_ is None
-
-        # And, similarly, should return None if we do the same for a specific 
-        # holding
-        file_ = catalog.get_file('test-user', 'test-group', '/test/path', 
-                                 holding=mock_holding, missing_error_fl=False)
-        assert file_ is None
-            
-        # Make a file for us to get
-        new_file = mock_file
-        new_file.transaction_id = mock_transaction.id
-        catalog.session.add(new_file)
-        catalog.session.commit()
-
-        # Should now work
-        file_ = catalog.get_file('test-user', 'test-group', '/test/path')
-        # Should still work if we provide a holding
-        same_file = catalog.get_file('test-user', 'test-group', '/test/path',
-                                     mock_holding)
-        assert file_ == same_file
-        
-        # Now we can add another holding, transaction and file with the same 
-        # path to test which one is provided
-        holding_2 = Holding(    
-            label='test-label-2',
-            user='test-user',
-            group='test-group',
-        )
-        catalog.session.add(holding_2)
-        catalog.session.flush()
-
-        # Sleep so that the ingest time is different t
-        time.sleep(1)
-        transaction_2 = Transaction(
-            holding_id=holding_2.id, 
-            transaction_id=test_uuid,
-            ingest_time=func.now(),
-        )
-        catalog.session.add(transaction_2)
-        catalog.session.flush()
-        file_2 = File(
-            transaction_id=transaction_2.id,
-            original_path='/test/path',
-            path_type=PathType['FILE'],
-            link_path = None,
-            size=99999,
-            user='test-user',
-            group='test-group',
-            file_permissions='0o01577'
-        )
-        catalog.session.add(file_2)
-        catalog.session.commit()
-
-        # Verify that the ingest times are different else the test won't work
-        assert transaction_2.ingest_time > mock_transaction.ingest_time
-
-        # Should now get the most recently added file (with the large size)
-        g_file = catalog.get_file('test-user', 'test-group', '/test/path')
-        assert g_file.size == 99999
-
-        # Should still be able to get the first file if we provide a holding
-        first_file = catalog.get_file('test-user', 'test-group', '/test/path',
-                                      mock_holding)
-        assert first_file.size == 1050
-
-        # An invalid path should raise an error too
-        with pytest.raises(CatalogError):
-            files = catalog.get_file('test-user', 'test-group', 'invalidpath')
-
-
     def test_get_files(self, mock_catalog, mock_holding, mock_transaction, 
                        mock_file):
         test_uuid = str(uuid.uuid4())
@@ -469,7 +376,7 @@ class TestCatalog:
                 holding_label='test-label',
                 holding_id=1,
                 transaction_id=test_uuid,
-                path='/test/path',
+                original_path='/test/path',
                 tag={'key': 'val'},
             )
         # Try with garbage in all optional kwargs
@@ -480,7 +387,7 @@ class TestCatalog:
                 holding_label='ououg',
                 holding_id='asfasf',
                 transaction_id='adgouihoih',
-                path='oihosidhag',
+                original_path='oihosidhag',
                 tag={'aegaa': 'as'},
             )
 
@@ -505,7 +412,7 @@ class TestCatalog:
                 holding_label='test-label',
                 holding_id=1,
                 transaction_id=test_uuid,
-                path='/test/path',
+                original_path='/test/path',
                 tag={'key': 'val'},
             )
         # Try with garbage in all optional kwargs
@@ -516,7 +423,7 @@ class TestCatalog:
                 holding_label='ououg',
                 holding_id='asfasf',
                 transaction_id='adgouihoih',
-                path='oihosidhag',
+                original_path='oihosidhag',
                 tag={'aegaa': 'as'},
             )
         

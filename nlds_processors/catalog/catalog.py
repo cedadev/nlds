@@ -46,32 +46,29 @@ class Catalog(DBMixin):
                     tag: dict=None) -> Holding:
         """Get a holding from the database"""
         assert(self.session != None)
-        try:
-            if holding_id:
-                holding_q = self.session.query(Holding).filter(
-                    Holding.user == user,
-                    Holding.group == group,
-                    Holding.id == holding_id,
-                )
-            elif transaction_id:
-                holding_q = self.session.query(Holding).filter(
-                    Holding.user == user,
-                    Holding.group == group,
-                    Transaction.holding_id == Holding.id,
-                    Transaction.transaction_id == transaction_id
-                )
-            else:
-                # label == None is return all holdings
-                if label is None:
-                    search_label = ".*"
-                else:
-                    search_label = label
 
-                holding_q = self.session.query(Holding).filter(
+        try:
+            # build holding query bit by bit
+            holding_q = self.session.query(Holding).filter(
                     Holding.user == user,
-                    Holding.group == group,
-                    Holding.label.regexp_match(search_label),
+                    Holding.group == group
+            )
+
+            if holding_id:
+                holding_q = holding_q.filter(
+                    Holding.id == int(holding_id),
                 )
+
+            if transaction_id:
+                holding_q = holding_q.filter(
+                    Transaction.holding_id == Holding.id,
+                    Transaction.transaction_id == transaction_id,
+                )
+
+            # search label filtering
+            if label:
+                holding_q = holding_q.filter(Holding.label.regexp_match(label))
+                
             # filter the query on any tags
             if tag:
                 # get the holdings that have a key that matches one or more of
@@ -125,7 +122,6 @@ class Catalog(DBMixin):
                 f"Invalid regular expression:{label} when listing holding for "
                 f"user:{user} and group:{group}."
             )
-
         return holding
 
 
@@ -265,77 +261,13 @@ class Catalog(DBMixin):
         return permitted
 
 
-    def get_file(self, 
-                 user: str, 
-                 group: str,
-                 original_path: str, 
-                 holding: Holding = None, 
-                 missing_error_fl: bool = True) -> File:
-        """Get a single file details from the database, given the original path 
-        of the file.  
-        An optional holding can be supplied to get the file details from a
-        particular holding - e.g. with a holding label, or tags"""
-        assert(self.session != None)
-        try:
-            # holding is a list, but there should only be one
-            if holding:
-                try: 
-                    holding = holding[0]
-                except TypeError:
-                    pass
-                file = self.session.query(File).filter(
-                    Transaction.id == File.transaction_id,
-                    Transaction.holding_id == holding.id,
-                    File.original_path.regexp_match(original_path),
-                # this order_by->first is in case multiple copies of a file
-                # have been added to the holding.  This will be illegal at some
-                # point, but for now this is an easy fix
-                ).order_by(Transaction.ingest_time.desc()).first()
-                err_msg = (
-                    f"File:{original_path} not found in holding:"
-                    f"{holding.label} for user:{user} in group:{group}."
-                )
-            else:
-                # if no holding given then we want to return the most recent
-                # file with this original path
-                file = self.session.query(File).filter(
-                    Transaction.id == File.transaction_id,
-                    File.original_path.regexp_match(original_path)
-                ).order_by(Transaction.ingest_time.desc()).first()
-                err_msg = (
-                    f"File:{original_path} not found for user:{user} in "
-                    f"group:{group}."
-                )
-
-            # check the file was found
-            if not file and missing_error_fl: 
-                raise CatalogError(err_msg)
-
-            # check user has permission to access this file
-            if (file and not self._user_has_get_file_permission(user, group, 
-                                                                    file)):
-                raise CatalogError(
-                    f"User:{user} in group:{group} does not have permission to "
-                    f"access the file with original path:{original_path}."
-                )
-
-        except (IntegrityError, KeyError, OperationalError):
-            if holding:
-                err_msg = (f"File with original path:{original_path} not found "
-                           f"in holding:{holding[0].label}")
-            else:
-                err_msg = f"File with original path:{original_path} not found"
-            raise CatalogError(err_msg)
-        return file
-
-
     def get_files(self, 
                   user: str, 
                   group: str, 
                   holding_label: str=None, 
                   holding_id: int=None,
                   transaction_id: str=None,
-                  path: str=None, 
+                  original_path: str=None, 
                   tag: dict=None) -> list:
 
         """Get a multitue of file details from the database, given the user,
@@ -346,9 +278,8 @@ class Catalog(DBMixin):
         holding = self.get_holding(
             user, group, holding_label, holding_id, transaction_id, tag
         )
-
-        if path:
-            search_path = path
+        if original_path:
+            search_path = original_path
         else:
             search_path = ".*"
 
@@ -356,20 +287,21 @@ class Catalog(DBMixin):
         file_list = []
         try:
             for h in holding:
-                if transaction_id:
-                    file = self.session.query(File).filter(
-                        Transaction.id == File.transaction_id,
-                        Transaction.transaction_id == transaction_id,
-                        Transaction.holding_id == h.id,
-                        File.original_path.regexp_match(search_path)
-                    ).all()
-                else:
-                    file = self.session.query(File).filter(
-                        Transaction.id == File.transaction_id,
-                        Transaction.holding_id == h.id,
-                        File.original_path.regexp_match(search_path)
-                    ).all()
+                # build the file query bit by bit
+                file = self.session.query(File).filter(
+                    File.transaction_id == Transaction.id,
+                    Transaction.holding_id == h.id,
+                    File.original_path.regexp_match(search_path)
+                ).all()
                 for f in file:
+                    # check user has permission to access this file
+                    if (f and 
+                        not self._user_has_get_file_permission(user, group, f)
+                        ):
+                        raise CatalogError(
+                            f"User:{user} in group:{group} does not have permission to "
+                            f"access the file with original path:{f.original_path}."
+                        )
                     file_list.append(f)
             # no files found
             if len(file_list) == 0:
@@ -385,7 +317,7 @@ class Catalog(DBMixin):
             elif tag:
                 err_msg = f"File with tag:{tag} not found"
             else:
-                err_msg = f"File with original_path:{path} not found "
+                err_msg = f"File with original_path:{original_path} not found "
             raise CatalogError(err_msg)
         
         return file_list
