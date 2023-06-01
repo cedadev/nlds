@@ -10,6 +10,7 @@ from retry import retry
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
+from nlds.errors import CallbackError
 
 
 class GetTransferConsumer(BaseTransferConsumer):
@@ -36,11 +37,9 @@ class GetTransferConsumer(BaseTransferConsumer):
         if target:
             target_path = Path(target)
             if not self.check_path_access(target_path, access=os.W_OK):
-                # NOTE: should we retry here?
-                self.log("Unable to copy, given target path is inaccessible. "
-                        "Exiting callback", 
-                        self.RK_LOG_ERROR)
-                return
+                self.log(f"Full path: {target_path}", self.RK_LOG_DEBUG)
+                raise CallbackError("Unable to copy, given target path is "
+                                    "inaccessible. Passing for retry.")
 
         # Create client!
         client = minio.Minio(
