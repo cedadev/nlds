@@ -20,6 +20,7 @@ import uuid
 import json
 from json.decoder import JSONDecodeError
 from urllib3.exceptions import HTTPError
+import signal
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -99,6 +100,9 @@ class State(Enum):
 
     def to_json(self):
         return self.value
+    
+class SigTermError(Exception):
+    pass
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
@@ -114,6 +118,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
     def __init__(self, queue: str = None, setup_logging_fl=False):
         super().__init__(name=queue, setup_logging_fl=False)
+        self.loop = True
 
         # TODO: (2021-12-21) Only one queue can be specified at the moment, 
         # should be able to specify multiple queues to subscribe to but this 
@@ -161,6 +166,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         self.completelist = []
         self.retrylist = []
         self.failedlist = []
+        self.max_retries = 5
         
         # Controls default behaviour of logging when certain exceptions are 
         # caught in the callback. 
@@ -240,8 +246,21 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 self.RK_LOG_ERROR
             )
             raise e
-
+        # de-duplicate the filelist
+        filelist = self.dedup_filelist(filelist)
         return filelist
+    
+    def dedup_filelist(self, filelist: List[PathDetails]) -> List[PathDetails]:
+        """De-duplicate filelist 
+        """
+        new_filelist = []
+        pathlist = []
+        for pd in filelist:
+            if not pd.original_path in pathlist:
+                new_filelist.append(pd)
+                pathlist.append(pd.original_path)
+
+        return new_filelist
 
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
                        body_json: Dict[str, str], state: State = None,
@@ -585,6 +604,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         else:
             body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
         return body
+    
+    def exit(self, *args):
+        raise SigTermError
 
     def run(self):
         """
@@ -597,7 +619,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         :return:
         """
 
-        while True:
+        # set up SigTerm handler
+        signal.signal(signal.SIGTERM, self.exit)
+
+        while self.loop:
             self.get_connection()
 
             try:
@@ -606,7 +631,11 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 self.channel.start_consuming()
 
             except KeyboardInterrupt:
-                self.channel.stop_consuming()
+                self.loop = False
+                break
+            
+            except SigTermError:
+                self.loop = False
                 break
 
             except (StreamLostError, AMQPConnectionError) as e:
@@ -618,6 +647,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 # Catch all other exceptions and log them as critical. 
                 tb = traceback.format_exc()
                 self.log(tb, self.RK_LOG_CRITICAL, exc_info=e)
-
-                self.channel.stop_consuming()
+                self.loop = False
                 break
+
+        self.channel.stop_consuming()
+
