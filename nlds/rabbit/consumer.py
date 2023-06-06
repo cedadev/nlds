@@ -66,6 +66,7 @@ class FilelistType(Enum):
     indexed = 1
     transferred = 1
     catalogued = 1
+    archived = 1
 
 class State(Enum):
     INITIALISING = -1
@@ -79,6 +80,11 @@ class State(Enum):
     TRANSFER_GETTING = 7
     COMPLETE = 8
     FAILED = 9
+    CATALOG_BACKUP = 10     # This is essenitally the policy control step
+    ARCHIVE_PUTTING = 11
+    CATALOG_RESTORING = 12
+    ARCHIVE_GETTING = 13
+    CATALOG_UPDATING = 14
 
     @classmethod
     def has_value(cls, value):

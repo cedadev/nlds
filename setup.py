@@ -9,7 +9,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='nlds',
-    version='0.0.1',
+    version='0.0.2',
     packages=find_packages(),
     install_requires=[
         'fastapi',
@@ -52,7 +52,9 @@ setup(
             'monitor_q=nlds_processors.monitor.monitor_worker:main',
             'transfer_put_q=nlds_processors.transferers.put_transfer:main',
             'transfer_get_q=nlds_processors.transferers.get_transfer:main',
-            'logging_q=nlds_processors.logger:main'            
+            'logging_q=nlds_processors.logger:main',
+            'archive_put_q=nlds_processors.archiver.archive_put:main',
+            'archive_get_q=nlds_processors.archiver.archive_get:main',
         ],
     }
 )

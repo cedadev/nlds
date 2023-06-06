@@ -67,6 +67,9 @@ class RabbitMQPublisher():
     RK_TRANSFER = "transfer"
     RK_TRANSFER_PUT = "transfer-put"
     RK_TRANSFER_GET = "transfer-get"
+    RK_ARCHIVE = "archive"
+    RK_ARCHIVE_PUT = "archive-put"
+    RK_ARCHIVE_GET = "archive-get"
     RK_ROUTE = "route"
     RK_LOG = "log"
 
@@ -132,6 +135,8 @@ class RabbitMQPublisher():
     MSG_RETRY_COUNT_QUERY = "retry_count"
     MSG_RECORD_LIST = "records"
     MSG_WARNING = "warning"
+    MSG_TAPE_URL = "tape_url"
+    MSG_TAPE_POOL = "tape_pool"
 
     MSG_RETRIES = "retries"
     MSG_RETRIES_COUNT = "count"
