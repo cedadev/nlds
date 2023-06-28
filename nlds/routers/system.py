@@ -61,12 +61,13 @@ async def get(request: Request):
     logger_key = "logging_q"
     
     
+    time_limit = 5
     
     
     msg_dict["details"]["target_consumer"] = "monitor"
     
     try:
-        monitor = await asyncio.wait_for(rpc_publisher.call(msg_dict=msg_dict, routing_key=monitor_key), timeout=5)
+        monitor = await rpc_publisher.call(msg_dict=msg_dict, routing_key=monitor_key, time_limit=time_limit)
         if monitor:
             monitor = {"val": "Online", "colour": "GREEN"}
         else:
@@ -78,7 +79,7 @@ async def get(request: Request):
     msg_dict["details"]["target_consumer"] = "catalog"
     
     try:
-        catalog = await asyncio.wait_for(rpc_publisher.call(msg_dict=msg_dict, routing_key=catalog_key), timeout=5)
+        catalog = await rpc_publisher.call(msg_dict=msg_dict, routing_key=catalog_key, time_limit=time_limit)
         if catalog:
             catalog = {"val": "Online", "colour": "GREEN"}
         else:
@@ -90,7 +91,7 @@ async def get(request: Request):
     msg_dict["details"]["target_consumer"] = "nlds_worker"
     
     try:
-        nlds_worker = await asyncio.wait_for(rpc_publisher.call(msg_dict=msg_dict, routing_key=nlds_worker_key), timeout=5)
+        nlds_worker = await rpc_publisher.call(msg_dict=msg_dict, routing_key=nlds_worker_key, time_limit=time_limit)
         if nlds_worker:
             nlds_worker = {"val": "Online", "colour": "GREEN"}
         else:
@@ -102,7 +103,7 @@ async def get(request: Request):
     msg_dict["details"]["target_consumer"] = "index"
     
     try:
-        index = await asyncio.wait_for(rpc_publisher.call(msg_dict=msg_dict, routing_key=index_key), timeout=5)
+        index = await rpc_publisher.call(msg_dict=msg_dict, routing_key=index_key, time_limit=time_limit)
         if index:
             index = {"val": "Online", "colour": "GREEN"}
         else:
@@ -114,7 +115,7 @@ async def get(request: Request):
     msg_dict["details"]["target_consumer"] = "get_transfer"
     
     try:
-        get_transfer = await asyncio.wait_for(rpc_publisher.call(msg_dict=msg_dict, routing_key=get_transfer_key), timeout=5)
+        get_transfer = await rpc_publisher.call(msg_dict=msg_dict, routing_key=get_transfer_key, time_limit=time_limit)
         if get_transfer:
             get_transfer = {"val": "Online", "colour": "GREEN"}
         else:
@@ -126,7 +127,7 @@ async def get(request: Request):
     msg_dict["details"]["target_consumer"] = "put_transfer"
     
     try:
-        put_transfer = await asyncio.wait_for(rpc_publisher.call(msg_dict=msg_dict, routing_key=put_transfer_key), timeout=5)
+        put_transfer = await rpc_publisher.call(msg_dict=msg_dict, routing_key=put_transfer_key, time_limit=time_limit)
         if put_transfer:
             put_transfer = {"val": "Online", "colour": "GREEN"}
         else:
@@ -138,7 +139,7 @@ async def get(request: Request):
     msg_dict["details"]["target_consumer"] = "logger"
     
     try:
-        logger = await asyncio.wait_for(rpc_publisher.call(msg_dict=msg_dict, routing_key=logger_key), timeout=5)
+        logger = await rpc_publisher.call(msg_dict=msg_dict, routing_key=logger_key, time_limit=time_limit)
         if logger:
             logger = {"val": "Online", "colour": "GREEN"}
         else:

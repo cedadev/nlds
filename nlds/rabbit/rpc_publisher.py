@@ -81,7 +81,9 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
         if self.corr_id == properties.correlation_id:
             self.response = body
 
-    async def call(self, msg_dict: dict, routing_key: str = 'rpc_queue'):
+    async def call(self, msg_dict: dict, routing_key: str = 'rpc_queue', time_limit: int = None):
+        if time_limit is None:
+            time_limit = self.time_limit
         self.response = None
         # Create a unique correlation_id to recognise the correct message when 
         # it comes back
@@ -93,9 +95,9 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
-                expiration=f'{self.time_limit*1000}'
+                expiration=f'{time_limit*1000}'
             ),
             exchange={'name':''}
         )
-        self.connection.process_data_events(time_limit=self.time_limit)
+        self.connection.process_data_events(time_limit=time_limit)
         return self.response
