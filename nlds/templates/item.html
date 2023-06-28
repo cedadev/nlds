@@ -1,0 +1,49 @@
+<html>
+<style>
+    table, th, td {
+        border:1px solid black;
+    }
+</style>
+<head>
+    <title>System Status</title>
+    <link href="/static/styles.css" rel="stylesheet">
+</head>
+<body>
+    <h1>NLDS system status:</h1>
+
+    <table style="width:100%">
+        <tr>
+            <th>Service</th>
+            <th>Status</th>
+        </tr>
+        <tr>
+            <td>Monitor</td>
+            <td><FONT COLOR={{ stats.monitor.colour }}>{{ stats.monitor.val }}</FONT></td>
+        </tr>
+        <tr>
+            <td>Catalog</td>
+            <td><FONT COLOR={{ stats.catalog.colour }}>{{ stats.catalog.val }}</FONT></td>
+        </tr>
+        <tr>
+            <td>NLDS Worker</td>
+            <td><FONT COLOR={{ stats.nlds_worker.colour }}>{{ stats.nlds_worker.val }}</FONT></td>
+        </tr>
+        <tr>
+            <td>Index</td>
+            <td><FONT COLOR={{ stats.index.colour }}>{{ stats.index.val }}</FONT></td>
+        </tr>
+        <tr>
+            <td>Get Transfer</td>
+            <td><FONT COLOR={{ stats.get_transfer.colour }}>{{ stats.get_transfer.val }}</FONT></td>
+        </tr>
+        <tr>
+            <td>Put Transfer</td>
+            <td><FONT COLOR={{ stats.put_transfer.colour }}>{{ stats.put_transfer.val }}</FONT></td>
+        </tr>
+        <tr>
+            <td>Logger</td>
+            <td><FONT COLOR={{ stats.logger.colour }}>{{ stats.logger.val }}</FONT></td>
+        </tr>
+      </table>
+</body>
+</html>

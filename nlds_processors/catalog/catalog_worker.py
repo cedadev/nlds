@@ -1070,6 +1070,21 @@ class CatalogConsumer(RMQC):
                 return 
             if (rk_parts[2] == self.RK_START):
                 self._catalog_get(body, rk_parts[0])
+                
+                
+        
+            
+        # If recieved system test message, reply to it
+        elif api_method == "system_stat":
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={'name': ''},
+                correlation_id=properties.correlation_id
+            )
+            return
+            
+        
 
         elif (api_method == self.RK_PUTLIST) or (api_method == self.RK_PUT):
             # split the routing key

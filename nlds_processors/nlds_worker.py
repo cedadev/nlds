@@ -30,7 +30,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         super().__init__(queue=queue)
 
 
-    def _process_message(self, method: Method, body: bytes) -> tuple[list, dict]:
+    def _process_message(self, method: Method, body: bytes, properties: Header) -> tuple[list, dict]:
         """Process the message to get the routing key parts, message data
         and message details"""
         # Convert body from bytes to string for ease of manipulation
@@ -38,6 +38,26 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
         self.log(f"Received {json.dumps(body_json, indent=4)} \nwith " 
                  f"routing_key: {method.routing_key}", self.RK_LOG_INFO)
+        
+        
+        try:
+            api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
+        except KeyError:
+            self.log(f"Message did not contain api_method")
+            api_method = "empty"
+            pass
+           
+        
+        # If recieved system test message, reply to it
+        if api_method == "system_stat":
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body_json,         #body_json important here
+                exchange={'name': ''},
+                correlation_id=properties.correlation_id
+            )
+            return
+        
 
         self.log(f"Appending rerouting information to message: "
                  f"{self.DEFAULT_REROUTING_INFO} ", self.RK_LOG_DEBUG)
@@ -183,8 +203,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
-        rk_parts, body_json = self._process_message(method, body)
-
+        rk_parts, body_json = self._process_message(method, body, properties)
+        
         # If putting then first scan file/filelist
         if self.RK_PUT in rk_parts[2]:
             self._process_rk_put(body_json)

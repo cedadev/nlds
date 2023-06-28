@@ -470,6 +470,20 @@ class MonitorConsumer(RMQC):
         if (api_method == self.RK_STAT):
             self.log("Starting stat from monitoring db.", self.RK_LOG_INFO)
             self._monitor_get(body, properties)
+            
+        
+            
+        # If recieved system test message, reply to it
+        elif api_method == "system_stat":
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={'name': ''},
+                correlation_id=properties.correlation_id
+            )
+            return
+            
+            
         elif api_method in (self.RK_PUT, self.RK_PUTLIST, 
                             self.RK_GET, self.RK_GETLIST):
             # Verify routing key is appropriate

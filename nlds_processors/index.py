@@ -68,6 +68,23 @@ class IndexerConsumer(StattingConsumer):
             f"{self.queues[0].name} ({method.routing_key})",
             self.RK_LOG_DEBUG
         )
+        
+        try:
+            api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
+        except KeyError:
+            self.log(f"Message did not contain api_method")
+            api_method = "empty"
+            pass
+        
+        # If recieved system test message, reply to it
+        if api_method == "system_stat":
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body_json,
+                exchange={'name': ''},
+                correlation_id=properties.correlation_id
+            )
+            return
 
         # Verify routing key is appropriate
         try:
