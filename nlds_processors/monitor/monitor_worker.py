@@ -473,7 +473,7 @@ class MonitorConsumer(RMQC):
             
         
             
-        # If recieved system test message, reply to it
+        # If recieved system test message, reply to it (this is for system status check)
         elif api_method == "system_stat":
             self.publish_message(
                 properties.reply_to,

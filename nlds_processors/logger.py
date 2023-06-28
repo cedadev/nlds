@@ -34,14 +34,15 @@ class LoggingConsumer(RabbitMQConsumer):
         body_json = json.loads(body)
 
 
+        # This checks if the message was for a system status check
         try:
             api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
         except KeyError:
-            api_method = "empty"
-            pass
+            self.log(f"Message did not contain api_method", self.RK_LOG_INFO)
+            api_method = None
         
         
-        # If recieved system test message, reply to it
+        # If recieved system test message, reply to it (this is for system status check)
         if api_method == "system_stat":
             self.publish_message(
                 properties.reply_to,
