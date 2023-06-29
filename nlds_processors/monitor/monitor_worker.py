@@ -475,8 +475,8 @@ class MonitorConsumer(RMQC):
             
         # If recieved system test message, reply to it (this is for system status check)
         elif api_method == "system_stat":
-            if properties.correlation_id != self.channel.consumer_tags[0]:
-                self.channel.basic_nack(method.delivery_tag)
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
             else:
                 self.publish_message(
                     properties.reply_to,

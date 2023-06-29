@@ -14,7 +14,6 @@ import json
 
 from . import rpc_publisher
 from ..errors import ResponseError
-from ..rabbit.publisher import RabbitMQPublisher as RMQP
 
 
 router = APIRouter()
@@ -40,9 +39,12 @@ def get_consumer_number(host_ip, api_port, queue_name, login, password, vhost):
     res = requests.get(api_queues, auth=HTTPBasicAuth(login, password))
     res_json = res.json()
     # Number of consumers
-    num_consumers = len(res_json['consumer_details'])
+    consumers = (res_json['consumer_details'])
+    consumer_tags = []
+    for consumer in consumers:
+        consumer_tags.append(consumer["consumer_tag"])
     
-    return(res_json)
+    return(consumer_tags)
 
 
 @router.get("/stats/",
@@ -72,25 +74,45 @@ async def get(request: Request):
     
     time_limit = 1
     
-    rmqp = RMQP()
     
-    json_info = (get_consumer_number(rmqp.config["server"], "15672", "monitor_q", rmqp.config["user"], rmqp.config["password"], rmqp.config["vhost"]))
-    print(json.dumps(json_info, indent=4))
     
-    #consumer_tag        is the thing from the json bit
-    consumer_tag = json_info['consumer_details'][0]['consumer_tag']     #set to loop through each consumer and make so does all queues, do same thing you did in the monitor code
+    #print(json.dumps(json_info, indent=4))
     
+    
+    
+    #make into function
+    consumer_tags = (get_consumer_number(rpc_publisher.config["server"], "15672", monitor_key, rpc_publisher.config["user"], rpc_publisher.config["password"], rpc_publisher.config["vhost"]))
     
     msg_dict["details"]["target_consumer"] = "monitor"
     
-    try:
-        monitor = await rpc_publisher.call(msg_dict=msg_dict, routing_key=monitor_key, time_limit=time_limit, correlation_id=consumer_tag)
-        if monitor:
-            monitor = {"val": "Online", "colour": "GREEN"}
+    monitor_fail = []
+    consumer_count = len(consumer_tags)
+    monitor_count = 0
+    
+    for consumer_tag in consumer_tags:
+        try:
+            monitor = await rpc_publisher.call(msg_dict=msg_dict, routing_key=monitor_key, time_limit=time_limit, correlation_id=consumer_tag)
+            if monitor:
+                monitor_count += 1
+            else:
+                monitor_fail.append(consumer_tag)
+        except asyncio.TimeoutError:
+            monitor_fail.append(consumer_tag)
+    
+    if monitor_count == 0:
+        if consumer_count == 0:
+            monitor = {"val": "All Consumers Offline (None running)", "colour": "RED"}
         else:
-            monitor = {"val": "Offline", "colour": "RED"}
-    except asyncio.TimeoutError:
-        monitor = {"val": "Offline", "colour": "RED"}
+            monitor = {"val": "All Consumers Offline (0/"+ str(consumer_count) +")" , "colour": "RED", "failed": monitor_fail}
+        
+    elif monitor_count == consumer_count:
+        monitor = {"val": "All Consumers Online ("+ str(consumer_count) +"/"+ str(consumer_count) +")", "colour": "GREEN"}
+            
+    else:
+        monitor = {"val": ""+ str(monitor_count) +"/"+ str(consumer_count) +" Online", "colour": "ORANGE", "failed": monitor_fail}
+    
+    
+    
     
     
     msg_dict["details"]["target_consumer"] = "catalog"
