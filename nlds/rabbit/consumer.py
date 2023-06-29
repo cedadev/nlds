@@ -499,6 +499,18 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         logger.debug(f'Acknowledging message: {delivery_tag}')
         if channel.is_open:
             channel.basic_ack(delivery_tag)
+    
+    @staticmethod
+    def _nacknowledge_message(channel: Channel, delivery_tag: str) -> None:
+        """Nacknowledge a message with a basic nack.
+
+        :param channel:         Channel which message came from
+        :param delivery_tag:    Message id
+        """
+
+        logger.debug(f'Nacking message: {delivery_tag}')
+        if channel.is_open:
+            channel.basic_nack(delivery_tag=delivery_tag)
 
     def acknowledge_message(self, channel: Channel, delivery_tag: str, 
                             connection: Connection) -> None:
@@ -513,6 +525,22 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         :param connection:      Connection object from the callback param
         """
         cb = functools.partial(self._acknowledge_message, channel, delivery_tag)
+        connection.add_callback_threadsafe(cb)
+
+    def nack_message(self, channel: Channel, delivery_tag: str, 
+                     connection: Connection) -> None:
+        """Method for nacknowledging a message so that it can be requeued and 
+        the next can be fetched. This is called after a consumer callback if, 
+        and only if, it returns a False. As in the case of acking, in order to 
+        do this thread-safely it is done from within a connection object.  All 
+        of the required params come from the standard callback params.
+
+        :param channel:         Callback channel param
+        :param delivery_tag:    From the callback method param. eg. 
+                                method.delivery_tag
+        :param connection:      Connection object from the callback param
+        """
+        cb = functools.partial(self._nacknowledge_message, channel, delivery_tag)
         connection.add_callback_threadsafe(cb)
 
     @abstractmethod
@@ -539,9 +567,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         in child implementations.
         """
         # Wrap callback with a try-except catching a selection of common 
-        # errors which can be caught without stopping consumption. 
+        # errors which can be caught without stopping consumption.
+        ack_fl = None 
         try:
-            self.callback(ch, method, properties, body, connection)
+            ack_fl = self.callback(ch, method, properties, body, connection)
         except (
                 ValueError, 
                 TypeError, 
@@ -556,10 +585,12 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         except Exception as e:
             self._log_errored_transaction(body, e)
         finally:
-            # Ack message only if it has failed in the limited number of ways 
-            # above, otherwise the exception is reraised and breaks the 
-            # consumption
-            self.acknowledge_message(ch, method.delivery_tag, connection)
+            # Only ack message if the message has not been flagged for nacking 
+            # in the callback with a `return False`
+            if ack_fl is False:
+                self.nack_message(ch, method.delivery_tag, connection)
+            else:
+                self.acknowledge_message(ch, method.delivery_tag, connection)
 
             
     def declare_bindings(self) -> None:
