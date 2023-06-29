@@ -81,13 +81,20 @@ class RabbitMQRPCPublisher(RabbitMQPublisher):
         if self.corr_id == properties.correlation_id:
             self.response = body
 
-    async def call(self, msg_dict: dict, routing_key: str = 'rpc_queue', time_limit: int = None):
+    async def call(self, msg_dict: dict, routing_key: str = 'rpc_queue', time_limit: int = None, correlation_id: str = None):
         if time_limit is None:
             time_limit = self.time_limit
-        self.response = None
+            
         # Create a unique correlation_id to recognise the correct message when 
         # it comes back
-        self.corr_id = str(uuid.uuid4())
+        
+        if correlation_id is None:
+            self.corr_id = str(uuid.uuid4())
+        else:
+            self.corr_id = correlation_id
+            
+        self.response = None
+        
 
         self.publish_message(
             routing_key=routing_key,

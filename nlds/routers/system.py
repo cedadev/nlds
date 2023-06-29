@@ -5,23 +5,24 @@ from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.responses import FileResponse
+from requests.auth import HTTPBasicAuth
 
 import asyncio
+import requests
 import os
+import json
 
 from . import rpc_publisher
 from ..errors import ResponseError
+from ..rabbit.publisher import RabbitMQPublisher as RMQP
 
 
 router = APIRouter()
 
 
-static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../static/"))
-
-print(static_dir)
-
+static_dir = (os.path.join(os.path.dirname(__file__), "../static"))
+#print(static_dir)
 router.mount("/static", StaticFiles(directory=static_dir), name="static")
-
 
 template_dir = os.path.join(os.path.dirname(__file__), "../templates/")
 
@@ -34,6 +35,14 @@ class SystemResponse(BaseModel):
     status: str = ""
 
 
+def get_consumer_number(host_ip, api_port, queue_name, login, password, vhost):
+    api_queues = 'http://' + host_ip + ':' + api_port + '/api/queues/' + vhost + '/'+queue_name
+    res = requests.get(api_queues, auth=HTTPBasicAuth(login, password))
+    res_json = res.json()
+    # Number of consumers
+    num_consumers = len(res_json['consumer_details'])
+    
+    return(res_json)
 
 
 @router.get("/stats/",
@@ -61,13 +70,21 @@ async def get(request: Request):
     logger_key = "logging_q"
     
     
-    time_limit = 5
+    time_limit = 1
+    
+    rmqp = RMQP()
+    
+    json_info = (get_consumer_number(rmqp.config["server"], "15672", "monitor_q", rmqp.config["user"], rmqp.config["password"], rmqp.config["vhost"]))
+    print(json.dumps(json_info, indent=4))
+    
+    #consumer_tag        is the thing from the json bit
+    consumer_tag = json_info['consumer_details'][0]['consumer_tag']     #set to loop through each consumer and make so does all queues, do same thing you did in the monitor code
     
     
     msg_dict["details"]["target_consumer"] = "monitor"
     
     try:
-        monitor = await rpc_publisher.call(msg_dict=msg_dict, routing_key=monitor_key, time_limit=time_limit)
+        monitor = await rpc_publisher.call(msg_dict=msg_dict, routing_key=monitor_key, time_limit=time_limit, correlation_id=consumer_tag)
         if monitor:
             monitor = {"val": "Online", "colour": "GREEN"}
         else:
@@ -164,4 +181,4 @@ async def get(request: Request):
     #return response
     
     
-    return templates.TemplateResponse("item.html", context={"request": request, "stats": response})
+    return templates.TemplateResponse("index.html", context={"request": request, "stats": response})
