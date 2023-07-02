@@ -15,7 +15,7 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 from typing import Dict, List
 import pathlib
-import collections
+from collections.abc import Sequence
 
 import pika
 from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
@@ -78,6 +78,7 @@ class RabbitMQPublisher():
     RK_START = "start"
     RK_COMPLETE = "complete"
     RK_FAILED = "failed"
+    RK_REROUTE = "reroute"
 
     # Exchange routing key parts – monitoring levels
     RK_LOG_NONE = "none"
@@ -187,7 +188,7 @@ class RabbitMQPublisher():
         try:
             # Do some basic verification of the general retry delays. 
             self.retry_delays = self.general_config[self.RETRY_DELAYS]
-            assert (isinstance(self.retry_delays, collections.Sequence) 
+            assert (isinstance(self.retry_delays, Sequence) 
                     and not isinstance(self.retry_delays, str))
             assert len(self.retry_delays) > 0
             assert isinstance(self.retry_delays[0], int)
