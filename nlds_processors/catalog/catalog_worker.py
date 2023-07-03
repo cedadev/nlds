@@ -80,6 +80,7 @@ class CatalogConsumer(RMQC):
         )
 
         self.catalog = None
+        self.reroutelist = []
 
 
     def reset(self):
@@ -88,6 +89,8 @@ class CatalogConsumer(RMQC):
         self.completelist = []
         self.retrylist = []
         self.failedlist = []
+        # New list for rerouting to archive if not found on object store
+        self.reroutelist = []
 
 
     def _catalog_put(self, body: dict, rk_origin: str) -> None:
@@ -338,9 +341,11 @@ class CatalogConsumer(RMQC):
                                warning=warnings)
 
 
-    def _catalog_get(self, body: dict, rk_origin: str) -> None:
+    def _catalog_get(self, body: dict, rk_origin: str, api_method: str) -> None:
         """Get the details for each file in a filelist and send it to the 
-        exchange to be processed by the transfer processor"""
+        exchange to be processed by the transfer processor. If any file is only 
+        found on tape then it will be first rerouted to the archive processor 
+        for retrieval to object store cache."""
         # get the filelist from the data section of the message
         try:
             filelist = body[self.MSG_DATA][self.MSG_FILELIST]
@@ -377,6 +382,8 @@ class CatalogConsumer(RMQC):
         except KeyError:
             holding_label = None
 
+        # NOTE: This is never actually set for the get workflow is it?
+
         # get the transaction id from the details section of the message
         try: 
             transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
@@ -407,9 +414,21 @@ class CatalogConsumer(RMQC):
                 # now get the location so we can get where it is stored
                 for file in files:
                     try:
+                        # For files stored in object store
+                        object_store_fl = True
                         location = self.catalog.get_location(
                             file, Storage.OBJECT_STORAGE
                         )
+                        # If not in object store then look for it in tape 
+                        # instead, but only in the case of a get 
+                        if location is None and api_method == self.RK_GET:
+                            object_store_fl = False
+                            self.log("Searching for copy of file in archive", 
+                                     self.RK_LOG_INFO)
+                            location = self.catalog.get_location(
+                                file, Storage.TAPE
+                            )   
+                        # If still None then file doesn't exist within the NLDS
                         if location is None:
                             raise CatalogError(
                                 f"Could not find location for file with original path "
@@ -441,7 +460,40 @@ class CatalogConsumer(RMQC):
                             )
                         self.log(e.message, RMQC.RK_LOG_ERROR)
                         continue
-                    self.completelist.append(new_file)
+                    # Assign to the appropriate queue for retrieval from archive 
+                    # or object store.
+                    if object_store_fl:
+                        # Add the new tape location to the catalog now, to be 
+                        # removed in the event of tape write failure. 
+                        if api_method == self.RK_ARCHIVE:
+                            location = self.catalog.create_location(
+                                file,
+                                Storage.TAPE,
+                                # NOTE: These might need to be adjusted to 
+                                # include tape storage info
+                                location.root,
+                                location.path, 
+                                # access time is passed in the file details
+                                access_time = datetime.fromtimestamp(
+                                    new_file.access_time, tz=timezone.utc
+                                )
+                            )
+                        self.completelist.append(new_file)
+                            
+                    else:
+                        # Add the new location to the catalog now, to be removed 
+                        # in the event of a retrieval failure. 
+                        location = self.catalog.create_location(
+                            file,
+                            Storage.OBJECT_STORAGE,
+                            location.root,
+                            location.path, 
+                            # access time is passed in the file details
+                            access_time = datetime.fromtimestamp(
+                                new_file.access_time, tz=timezone.utc
+                            )
+                        )
+                        self.reroutelist.append(new_file)
 
             except CatalogError as e:
                 if file_details.retries.count > self.max_retries:
@@ -465,6 +517,17 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_GETTING)
+        # REROUTE
+        if len(self.reroutelist) > 0:
+            rk_reroute = ".".join([rk_origin,
+                                   self.RK_CATALOG_GET, 
+                                   self.RK_REROUTE])
+            self.log(
+                f"Rerouting PathList from CATALOG_GET for archive retrieval "
+                f"{self.reroutelist}", self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.reroutelist, rk_reroute, body, 
                                state=State.CATALOG_GETTING)
         # RETRY
         if len(self.retrylist) > 0:
@@ -612,6 +675,159 @@ class CatalogConsumer(RMQC):
         self.catalog.save()
         self.catalog.end_session() 
 
+
+    def _catalog_location_del(
+            self, 
+            body: dict, 
+            rk_origin: str, 
+            location_type: Storage = Storage.OBJECT_STORAGE
+        ) -> None:
+        """Remove a given list of locations from the catalog if the transfer, 
+        archive-put or archive-get fails."""
+        # get the filelist from the data section of the message
+        try:
+            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
+        except KeyError as e:
+            self.log(f"Invalid message contents, filelist should be in the data"
+                     f"section of the message body.",
+                     self.RK_LOG_ERROR)
+            return
+        
+        # check filelist is a list
+        try:
+            f = filelist[0]
+        except TypeError as e:
+            self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
+            return
+
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+
+        # get the group from the details section of the message
+        try:
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
+        except KeyError:
+            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            return
+        
+        # get the transaction id from the details section of the message
+        try: 
+            transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
+        except KeyError:
+            transaction_id = None
+
+        # get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
+        except KeyError:
+            holding_id = None
+
+        # get the holding label from the details section of the message
+        # could (legit) be None
+        try: 
+            holding_label = body[self.MSG_META][self.MSG_LABEL]
+        except KeyError:
+            holding_label = None
+
+        # get the tags from the details sections of the message
+        try:
+            tag = body[self.MSG_META][self.MSG_TAG]
+        except KeyError:
+            tag = None
+
+        # start the database transactions
+        self.catalog.start_session()
+
+        # get the holding from the database
+        if holding_label is None and holding_id is None and tag is None:
+            self.log("No method for identifying a holding or transaction "
+                     "provided, will continue without.",
+                     self.RK_LOG_WARNING)
+
+        for f in filelist:
+            file_details = PathDetails.from_dict(f)
+            try:
+                # get the files first
+                files = self.catalog.get_files(
+                    user, group, holding_label, holding_id, 
+                    transaction_id, file_details.original_path, tag
+                )
+                if len(files) == 0:
+                    raise CatalogError(
+                        f"Could not find file(s) with original path "
+                        f"{file_details.original_path}"
+                    )
+                # now get the location for the storage type requested so we can 
+                # delete it
+                for file in files:
+                    try:
+                        self.catalog.delete_location(
+                            file, Storage.OBJECT_STORAGE
+                        )
+                    except CatalogError as e:
+                        if file_details.retries.count > self.max_retries:
+                            self.failedlist.append(file_details)
+                        else:
+                            file_details.retries.increment(
+                                reason=f"{e.message}"
+                            )
+                            self.retrylist.append(file_details)
+                        self.log(e.message, RMQC.RK_LOG_ERROR)
+                        continue
+            except CatalogError as e:
+                if file_details.retries.count > self.max_retries:
+                    self.failedlist.append(file_details)
+                else:
+                    file_details.retries.increment(
+                        reason=f"{e.message}"
+                    )
+                    self.retrylist.append(file_details)
+                self.log(e.message, RMQC.RK_LOG_ERROR)
+                continue
+
+        # log the successful and non-successful catalog puts
+        # SUCCESS
+        if len(self.completelist) > 0:
+            rk_complete = ".".join([rk_origin,
+                                    self.RK_CATALOG_DEL, 
+                                    self.RK_COMPLETE])
+            self.log(
+                f"Sending completed PathList from CATALOG_DEL {self.completelist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_ROLLBACK)
+        # RETRY
+        if len(self.retrylist) > 0:
+            rk_retry = ".".join([rk_origin,
+                                 self.RK_CATALOG_DEL, 
+                                 self.RK_START])
+            self.log(
+                f"Sending retry PathList from CATALOG_DEL {self.retrylist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
+                               state=State.CATALOG_ROLLBACK)
+        # FAILED
+        if len(self.failedlist) > 0:
+            rk_failed = ".".join([rk_origin,
+                                  self.RK_CATALOG_DEL, 
+                                  self.RK_FAILED])
+            self.log(
+                f"Sending failed PathList from CATALOG_DEL {self.failedlist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.failedlist, rk_failed, body, 
+                               mode="failed")
+
+        # stop db transactions and commit
+        self.catalog.save()
+        self.catalog.end_session() 
+        
 
     def _catalog_list(self, body: dict, properties: Header) -> None:
         """List the users holdings"""
@@ -1068,8 +1284,14 @@ class CatalogConsumer(RMQC):
                 self.log("Routing key inappropriate length, exiting callback.",
                          self.RK_LOG_ERROR)
                 return 
-            if (rk_parts[2] == self.RK_START):
-                self._catalog_get(body, rk_parts[0])
+            if (rk_parts[1] == self.RK_CATALOG_GET):
+                self._catalog_get(body, rk_parts[0], api_method=self.RK_GET)
+            elif (rk_parts[1] == self.RK_CATALOG_DEL):
+                # If part of a GET transaction but received via the del topic 
+                # then delete the new object storage locations added to the 
+                # catalog.
+                self._catalog_location_del(body, rk_parts[0], 
+                                           location_type=Storage.OBJECT_STORAGE)
                 
                 
         
@@ -1107,6 +1329,21 @@ class CatalogConsumer(RMQC):
                     self._catalog_put(body, rk_parts[0])
                 elif (rk_parts[1] == self.RK_CATALOG_DEL):
                     self._catalog_del(body, rk_parts[0])
+
+        # Archive put requires getting from the catalog
+        elif (api_method == self.RK_ARCHIVE_PUT):
+            # split the routing key
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log("Routing key inappropriate length, exiting callback.",
+                         self.RK_LOG_ERROR)
+            
+            if (rk_parts[1] == self.RK_CATALOG_GET):
+                self._catalog_get(body, rk_parts[0], api_method=self.RK_ARCHIVE)
+            elif (rk_parts[1] == self.RK_CATALOG_DEL):
+                self._catalog_location_del(body, rk_parts[0], 
+                                           location_type=Storage.TAPE)
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method
