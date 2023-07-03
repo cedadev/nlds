@@ -1,3 +1,5 @@
+from typing import List
+
 # SQLalchemy imports
 from sqlalchemy import func, Enum
 from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
@@ -409,7 +411,7 @@ class Catalog(DBMixin):
                         root: str,
                         object_name: str, 
                         access_time: float) -> Location:
-        """Add the storage location for object storage"""
+        """Add the storage location for either object storage or tape"""
         assert(self.session != None)
         try:
             location = Location(
@@ -428,9 +430,25 @@ class Catalog(DBMixin):
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location with root {root}, path {file.original_path} and "
-                f"storage type {Storage.OBJECT_STORAGE} could not be added to "
+                f"storage type {storage_type} could not be added to "
                  "the database")
         return location
+    
+    
+    def delete_location(self,
+                        file: File, 
+                        storage_type: Location) -> None:
+        location = self.get_location(file, storage_type=storage_type)
+        checkpoint = self.session.begin_nested()
+        try:
+            self.session.delete(location)
+        except (IntegrityError, KeyError, OperationalError):
+            # This rollsback only to the checkpoint, so any successful deletes 
+            # done already will stay in the transaction.
+            checkpoint.rollback()
+            err_msg = (f"Location with file.id {file.id} and storage_type "
+                       f"{storage_type} could not be deleted.")
+            raise CatalogError(err_msg)
 
 
     def create_tag(self,
