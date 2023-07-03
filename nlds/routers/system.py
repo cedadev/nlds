@@ -34,7 +34,7 @@ class SystemResponse(BaseModel):
     status: str = ""
 
 
-def get_consumer_number(host_ip, api_port, queue_name, login, password, vhost):
+def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):                       #what happenes if the rabbit monitoring api is unavailable (make more defensive)
     api_queues = 'http://' + host_ip + ':' + api_port + '/api/queues/' + vhost + '/'+queue_name
     res = requests.get(api_queues, auth=HTTPBasicAuth(login, password))
     res_json = res.json()
@@ -45,6 +45,52 @@ def get_consumer_number(host_ip, api_port, queue_name, login, password, vhost):
         consumer_tags.append(consumer["consumer_tag"])
     
     return(consumer_tags)
+
+
+async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
+    consumer_tags = (get_consumer_info(rpc_publisher.config["server"], rpc_publisher.config["port"], key, rpc_publisher.config["user"], rpc_publisher.config["password"], rpc_publisher.config["vhost"]))
+    
+    msg_dict["details"]["target_consumer"] = target
+    
+    
+    #change monitor to consumer
+    
+    
+    monitor_fail = []
+    consumer_count = len(consumer_tags)
+    monitor_count = 0
+    
+    if len(consumer_tags) < skip_num:
+        skip_num = len(consumer_tags)
+    
+    for consumer_tag in consumer_tags:
+        if skip_num > 0:
+            msg_dict["details"]["ignore_message"] = True
+            skip_num = skip_num - 1
+            
+        try:
+            monitor = await rpc_publisher.call(msg_dict=msg_dict, routing_key=key, time_limit=time_limit, correlation_id=consumer_tag)
+            if monitor:
+                monitor_count += 1
+            else:
+                monitor_fail.append(consumer_tag)
+        except asyncio.TimeoutError:
+            monitor_fail.append(consumer_tag)
+        msg_dict["details"]["ignore_message"] = False
+    
+    if monitor_count == 0:
+        if consumer_count == 0:
+            monitor = {"val": "All Consumers Offline (None running)", "colour": "RED"}
+        else:
+            monitor = {"val": "All Consumers Offline (0/"+ str(consumer_count) +")" , "colour": "RED", "failed": monitor_fail}
+        
+    elif monitor_count == consumer_count:
+        monitor = {"val": "All Consumers Online ("+ str(consumer_count) +"/"+ str(consumer_count) +")", "colour": "GREEN"}
+            
+    else:
+        monitor = {"val": "Consumers Online ("+ str(monitor_count) +"/"+ str(consumer_count) +")", "colour": "ORANGE", "failed": monitor_fail}
+
+    return monitor
 
 
 @router.get("/stats/",
@@ -61,130 +107,21 @@ def get_consumer_number(host_ip, api_port, queue_name, login, password, vhost):
 async def get(request: Request):
     
     
-    msg_dict = {"details": {"api_action": "system_stat", "target_consumer": ""}}
-    
-    monitor_key = "monitor_q"
-    catalog_key = "catalog_q"
-    nlds_worker_key = "nlds_q"
-    index_key = "index_q"
-    get_transfer_key = "transfer_get_q"
-    put_transfer_key = "transfer_put_q"
-    logger_key = "logging_q"
+    msg_dict = {"details": {"api_action": "system_stat", "target_consumer": "", "ignore_message": False}}
     
     
-    time_limit = 1
+    time_limit = 5
     
     
     
-    #print(json.dumps(json_info, indent=4))
-    
-    
-    
-    #make into function
-    consumer_tags = (get_consumer_number(rpc_publisher.config["server"], "15672", monitor_key, rpc_publisher.config["user"], rpc_publisher.config["password"], rpc_publisher.config["vhost"]))
-    
-    msg_dict["details"]["target_consumer"] = "monitor"
-    
-    monitor_fail = []
-    consumer_count = len(consumer_tags)
-    monitor_count = 0
-    
-    for consumer_tag in consumer_tags:
-        try:
-            monitor = await rpc_publisher.call(msg_dict=msg_dict, routing_key=monitor_key, time_limit=time_limit, correlation_id=consumer_tag)
-            if monitor:
-                monitor_count += 1
-            else:
-                monitor_fail.append(consumer_tag)
-        except asyncio.TimeoutError:
-            monitor_fail.append(consumer_tag)
-    
-    if monitor_count == 0:
-        if consumer_count == 0:
-            monitor = {"val": "All Consumers Offline (None running)", "colour": "RED"}
-        else:
-            monitor = {"val": "All Consumers Offline (0/"+ str(consumer_count) +")" , "colour": "RED", "failed": monitor_fail}
-        
-    elif monitor_count == consumer_count:
-        monitor = {"val": "All Consumers Online ("+ str(consumer_count) +"/"+ str(consumer_count) +")", "colour": "GREEN"}
-            
-    else:
-        monitor = {"val": ""+ str(monitor_count) +"/"+ str(consumer_count) +" Online", "colour": "ORANGE", "failed": monitor_fail}
-    
-    
-    
-    
-    
-    msg_dict["details"]["target_consumer"] = "catalog"
-    
-    try:
-        catalog = await rpc_publisher.call(msg_dict=msg_dict, routing_key=catalog_key, time_limit=time_limit)
-        if catalog:
-            catalog = {"val": "Online", "colour": "GREEN"}
-        else:
-            catalog = {"val": "Offline", "colour": "RED"}
-    except asyncio.TimeoutError:
-        catalog = {"val": "Offline", "colour": "RED"}
-    
-    
-    msg_dict["details"]["target_consumer"] = "nlds_worker"
-    
-    try:
-        nlds_worker = await rpc_publisher.call(msg_dict=msg_dict, routing_key=nlds_worker_key, time_limit=time_limit)
-        if nlds_worker:
-            nlds_worker = {"val": "Online", "colour": "GREEN"}
-        else:
-            nlds_worker = {"val": "Offline", "colour": "RED"}
-    except asyncio.TimeoutError:
-        nlds_worker = {"val": "Offline", "colour": "RED"}
-    
-    
-    msg_dict["details"]["target_consumer"] = "index"
-    
-    try:
-        index = await rpc_publisher.call(msg_dict=msg_dict, routing_key=index_key, time_limit=time_limit)
-        if index:
-            index = {"val": "Online", "colour": "GREEN"}
-        else:
-            index = {"val": "Offline", "colour": "RED"}
-    except asyncio.TimeoutError:
-        index = {"val": "Offline", "colour": "RED"}
-    
-    
-    msg_dict["details"]["target_consumer"] = "get_transfer"
-    
-    try:
-        get_transfer = await rpc_publisher.call(msg_dict=msg_dict, routing_key=get_transfer_key, time_limit=time_limit)
-        if get_transfer:
-            get_transfer = {"val": "Online", "colour": "GREEN"}
-        else:
-            get_transfer = {"val": "Offline", "colour": "RED"}
-    except asyncio.TimeoutError:
-        get_transfer = {"val": "Offline", "colour": "RED"}
-    
-    
-    msg_dict["details"]["target_consumer"] = "put_transfer"
-    
-    try:
-        put_transfer = await rpc_publisher.call(msg_dict=msg_dict, routing_key=put_transfer_key, time_limit=time_limit)
-        if put_transfer:
-            put_transfer = {"val": "Online", "colour": "GREEN"}
-        else:
-            put_transfer = {"val": "Offline", "colour": "RED"}
-    except asyncio.TimeoutError:
-        put_transfer = {"val": "Offline", "colour": "RED"}
-    
-    
-    msg_dict["details"]["target_consumer"] = "logger"
-    
-    try:
-        logger = await rpc_publisher.call(msg_dict=msg_dict, routing_key=logger_key, time_limit=time_limit)
-        if logger:
-            logger = {"val": "Online", "colour": "GREEN"}
-        else:
-            logger = {"val": "Offline", "colour": "RED"}
-    except asyncio.TimeoutError:
-        logger = {"val": "Offline", "colour": "RED"}
+    #the numbers indicate how many consumers in a queue to skip
+    monitor = await get_consumer_status("monitor_q", "monitor", msg_dict, time_limit, 1)
+    catalog = await get_consumer_status("catalog_q", "catalog", msg_dict, time_limit, 0)
+    nlds_worker = await get_consumer_status("nlds_q", "nlds_worker", msg_dict, time_limit, 0)
+    index = await get_consumer_status("index_q", "index", msg_dict, time_limit, 1110)
+    get_transfer = await get_consumer_status("transfer_get_q", "get_transfer", msg_dict, time_limit, 0)
+    put_transfer = await get_consumer_status("transfer_put_q", "put_transfer", msg_dict, time_limit, 0)
+    logger = await get_consumer_status("logging_q", "logger", msg_dict, time_limit, 0)
     
     
     response = {
@@ -196,11 +133,6 @@ async def get(request: Request):
         "put_transfer": put_transfer,
         "logger": logger
     }
-    
-    #RED
-    #GREEN
-    
-    #return response
     
     
     return templates.TemplateResponse("index.html", context={"request": request, "stats": response})

@@ -32,32 +32,68 @@
         <tr>
             <td>Catalog</td>
             <td><FONT COLOR={{ stats.catalog.colour }}>{{ stats.catalog.val }}</FONT></td>
-            <td>{{ stats.catalog.failed }}</td>
+            <td id="nested">
+                <table>
+                    {% for id in stats.catalog.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
         </tr>
         <tr>
             <td>NLDS Worker</td>
             <td><FONT COLOR={{ stats.nlds_worker.colour }}>{{ stats.nlds_worker.val }}</FONT></td>
-            <td>{{ stats.nlds_worker.failed }}</td>
+            <td id="nested">
+                <table>
+                    {% for id in stats.nlds_worker.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
         </tr>
         <tr>
             <td>Index</td>
             <td><FONT COLOR={{ stats.index.colour }}>{{ stats.index.val }}</FONT></td>
-            <td>{{ stats.index.failed }}</td>
+            <td id="nested">
+                <table>
+                    {% for id in stats.index.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
         </tr>
         <tr>
             <td>Get Transfer</td>
             <td><FONT COLOR={{ stats.get_transfer.colour }}>{{ stats.get_transfer.val }}</FONT></td>
-            <td>{{ stats.get_transfer.failed }}</td>
+            <td id="nested">
+                <table>
+                    {% for id in stats.get_transfer.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
         </tr>
         <tr>
             <td>Put Transfer</td>
             <td><FONT COLOR={{ stats.put_transfer.colour }}>{{ stats.put_transfer.val }}</FONT></td>
-            <td>{{ stats.put_transfer.failed }}</td>
+            <td id="nested">
+                <table>
+                    {% for id in stats.put_transfer.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
         </tr>
         <tr>
             <td>Logger</td>
             <td><FONT COLOR={{ stats.logger.colour }}>{{ stats.logger.val }}</FONT></td>
-            <td>{{ stats.logger.failed }}</td>
+            <td id="nested">
+                <table>
+                    {% for id in stats.logger.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
         </tr>
       </table>
 </body>

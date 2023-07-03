@@ -477,6 +477,8 @@ class MonitorConsumer(RMQC):
         elif api_method == "system_stat":
             if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
                 return False
+            if (body["details"]["ignore_message"]) == True:
+                return
             else:
                 self.publish_message(
                     properties.reply_to,

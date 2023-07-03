@@ -84,12 +84,17 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         
         # If recieved system test message, reply to it (this is for system status check)
         if api_method == "system_stat":
-            self.publish_message(
-                properties.reply_to,
-                msg_dict=body_json,
-                exchange={'name': ''},
-                correlation_id=properties.correlation_id
-            )
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body_json["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body_json,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
             return
         
 
