@@ -1,6 +1,7 @@
 from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+
 from nlds_processors.catalog.catalog_models import CatalogBase
 
 class DBError(Exception):
@@ -9,9 +10,9 @@ class DBError(Exception):
         self.message = message
 
 class DBMixin:
+    """Mixin refactored from monitor and catalog classes"""
 
-    def _get_db_string(self):
-        """Mixin refactored from monitor and catalog classes"""
+    def get_db_string(self):
         # create the connection string with the engine
         db_connect = self.db_engine_str + "://"
         # add user if defined
@@ -27,10 +28,10 @@ class DBMixin:
         return db_connect
     
 
-    def connect(self):
+    def connect(self, create_db_fl: bool = True):
         # connect to the database using the information in the config
         # get the database connection string
-        db_connect = self._get_db_string()
+        db_connect = self.get_db_string()
 
         # indicate database not connected yet
         self.db_engine = None
@@ -45,11 +46,12 @@ class DBMixin:
         except ArgumentError as e:
             raise DBError("Could not create database engine")
 
-        # create the db if not already created
-        try:
-            self.base.metadata.create_all(self.db_engine)
-        except IntegrityError as e:
-            raise DBError("Could not create database tables")
+        # create the db if not already created and flag permits
+        if create_db_fl:
+            try:
+                self.base.metadata.create_all(self.db_engine)
+            except IntegrityError as e:
+                raise DBError("Could not create database tables")
         # return db_connect string to log
         return db_connect
 
