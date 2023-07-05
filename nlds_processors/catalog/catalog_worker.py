@@ -83,6 +83,11 @@ class CatalogConsumer(RMQC):
         self.reroutelist = []
 
 
+    @property
+    def database(self):
+        return self.catalog
+    
+
     def reset(self):
         super().reset()
 
@@ -1240,7 +1245,7 @@ class CatalogConsumer(RMQC):
         )       
 
 
-    def attach_catalog(self):
+    def attach_database(self, create_db_fl: bool = True):
         """Attach the Catalog to the consumer"""
         # Load config options or fall back to default values.
         db_engine = self.load_config_value(self._DB_ENGINE)
@@ -1248,10 +1253,26 @@ class CatalogConsumer(RMQC):
         self.catalog = Catalog(db_engine, db_options)
 
         try:
-            db_connect = self.catalog.connect()
-            self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
+            db_connect = self.catalog.connect(create_db_fl=create_db_fl)
+            if create_db_fl:
+                self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
         except DBError as e:
             self.log(e.message, RMQC.RK_LOG_CRITICAL)
+
+
+    def get_engine(self):
+        # Method for making the db_engine available to alembic
+        return self.database.db_engine
+    
+
+    def get_url(self):
+        """ Method for making the sqlalchemy url available to alembic"""
+        # Create a minimum version of the catalog to put together a url
+        if self.catalog is None:
+            db_engine = self.load_config_value(self._DB_ENGINE)
+            db_options = self.load_config_value(self._DB_OPTIONS)
+            self.catalog = Catalog(db_engine, db_options)
+        return self.catalog.get_db_string()
 
 
     def callback(self, ch: Channel, method: Method, properties: Header, 

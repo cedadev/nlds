@@ -65,8 +65,15 @@ class MonitorConsumer(RMQC):
         },
     }
 
+
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
+        self.monitor = None
+
+
+    @property
+    def database(self):
+        return self.monitor
 
 
     def _monitor_put(self, body: Dict[str, str]) -> None:
@@ -491,7 +498,7 @@ class MonitorConsumer(RMQC):
         self.log("Callback complete!", self.RK_LOG_INFO)
 
 
-    def attach_monitor(self):
+    def attach_database(self, create_db_fl: bool = True):
         """Attach the Monitor to the consumer"""
         # Load config options or fall back to default values.
         db_engine = self.load_config_value(self._DB_ENGINE)
@@ -499,10 +506,26 @@ class MonitorConsumer(RMQC):
         self.monitor = Monitor(db_engine, db_options)
 
         try:
-            db_connect = self.monitor.connect()
-            self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
+            db_connect = self.monitor.connect(create_db_fl=create_db_fl)
+            if create_db_fl:
+                self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
         except DBError as e:
             self.log(e.message, RMQC.RK_LOG_CRITICAL)
+
+
+    def get_engine(self):
+        # Method for making the db_engine available to alembic
+        return self.database.db_engine
+    
+
+    def get_url(self):
+        """ Method for making the sqlalchemy url available to alembic"""
+        # Create a minimum version of the catalog to put together a url
+        if self.monitor is None:
+            db_engine = self.load_config_value(self._DB_ENGINE)
+            db_options = self.load_config_value(self._DB_OPTIONS)
+            self.monitor = Monitor(db_engine, db_options)
+        return self.monitor.get_db_string()
 
 
 def main():
@@ -511,7 +534,7 @@ def main():
     # connecting to the database
     consumer.get_connection()
     # connect to the DB
-    consumer.attach_monitor()
+    consumer.attach_database()
     # run the loop
     consumer.run()
 
