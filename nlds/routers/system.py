@@ -33,11 +33,13 @@ templates = Jinja2Templates(directory=template_dir)
 class SystemResponse(BaseModel):
     status: str = ""
 
+def convert_json(val):
+    return(val.json())
 
 def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):                       #what happenes if the rabbit monitoring api is unavailable (make more defensive)
     api_queues = 'http://' + host_ip + ':' + api_port + '/api/queues/' + vhost + '/'+queue_name
     res = requests.get(api_queues, auth=HTTPBasicAuth(login, password))
-    res_json = res.json()
+    res_json = convert_json(res)
     # Number of consumers
     consumers = (res_json['consumer_details'])
     consumer_tags = []
@@ -53,12 +55,9 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
     msg_dict["details"]["target_consumer"] = target
     
     
-    #change monitor to consumer
-    
-    
-    monitor_fail = []
+    consumers_fail = []
     consumer_count = len(consumer_tags)
-    monitor_count = 0
+    consumers_count = 0
     
     if len(consumer_tags) < skip_num:
         skip_num = len(consumer_tags)
@@ -69,28 +68,28 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
             skip_num = skip_num - 1
             
         try:
-            monitor = await rpc_publisher.call(msg_dict=msg_dict, routing_key=key, time_limit=time_limit, correlation_id=consumer_tag)
-            if monitor:
-                monitor_count += 1
+            consumers = await rpc_publisher.call(msg_dict=msg_dict, routing_key=key, time_limit=time_limit, correlation_id=consumer_tag)
+            if consumers:
+                consumers_count += 1
             else:
-                monitor_fail.append(consumer_tag)
+                consumers_fail.append(consumer_tag)
         except asyncio.TimeoutError:
-            monitor_fail.append(consumer_tag)
+            consumers_fail.append(consumer_tag)
         msg_dict["details"]["ignore_message"] = False
     
-    if monitor_count == 0:
+    if consumers_count == 0:
         if consumer_count == 0:
-            monitor = {"val": "All Consumers Offline (None running)", "colour": "RED"}
+            consumers = {"val": "All Consumers Offline (None running)", "colour": "RED"}
         else:
-            monitor = {"val": "All Consumers Offline (0/"+ str(consumer_count) +")" , "colour": "RED", "failed": monitor_fail}
+            consumers = {"val": "All Consumers Offline (0/"+ str(consumer_count) +")" , "colour": "RED", "failed": consumers_fail}
         
-    elif monitor_count == consumer_count:
-        monitor = {"val": "All Consumers Online ("+ str(consumer_count) +"/"+ str(consumer_count) +")", "colour": "GREEN"}
+    elif consumers_count == consumer_count:
+        consumers = {"val": "All Consumers Online ("+ str(consumer_count) +"/"+ str(consumer_count) +")", "colour": "GREEN"}
             
     else:
-        monitor = {"val": "Consumers Online ("+ str(monitor_count) +"/"+ str(consumer_count) +")", "colour": "ORANGE", "failed": monitor_fail}
+        consumers = {"val": "Consumers Online ("+ str(consumers_count) +"/"+ str(consumer_count) +")", "colour": "ORANGE", "failed": consumers_fail}
 
-    return monitor
+    return consumers
 
 
 @router.get("/stats/",
@@ -110,15 +109,15 @@ async def get(request: Request):
     msg_dict = {"details": {"api_action": "system_stat", "target_consumer": "", "ignore_message": False}}
     
     
-    time_limit = 5
+    time_limit = 5      # x seconds for each broken consumer meaning if there are a lot you might want to decrease this number
     
     
     
     #the numbers indicate how many consumers in a queue to skip
-    monitor = await get_consumer_status("monitor_q", "monitor", msg_dict, time_limit, 1)
+    monitor = await get_consumer_status("monitor_q", "monitor", msg_dict, time_limit, 0)
     catalog = await get_consumer_status("catalog_q", "catalog", msg_dict, time_limit, 0)
     nlds_worker = await get_consumer_status("nlds_q", "nlds_worker", msg_dict, time_limit, 0)
-    index = await get_consumer_status("index_q", "index", msg_dict, time_limit, 1110)
+    index = await get_consumer_status("index_q", "index", msg_dict, time_limit, 0)
     get_transfer = await get_consumer_status("transfer_get_q", "get_transfer", msg_dict, time_limit, 0)
     put_transfer = await get_consumer_status("transfer_put_q", "put_transfer", msg_dict, time_limit, 0)
     logger = await get_consumer_status("logging_q", "logger", msg_dict, time_limit, 0)
