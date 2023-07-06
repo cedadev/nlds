@@ -1,0 +1,157 @@
+@startuml message_flow_archive_put
+
+skinparam participantFontSize 16
+skinparam participantFontName Futura
+
+skinparam queueFontSize 16
+skinparam queueFontName Futura
+
+skinparam actorFontSize 16
+skinparam actorFontName Futura
+
+skinparam collectionsFontSize 16
+skinparam collectionsFontName Futura
+
+skinparam DatabaseFontSize 16
+skinparam DatabaseFontName Futura
+
+database catalog_db as "Catalog DB" #springgreen
+collections catalog as "Catalog" #springgreen
+queue qc as "Catalog Q" #springgreen
+note over qc
+    topic = nlds-api.catalog-archive.*
+end note
+
+participant wex as "Exchange"
+
+queue aq as "Archive Q" #LightSteelBlue
+collections archy as "Archive\nWorker" #LightSteelBlue
+
+queue qap as "Archive Put Q" #MistyRose
+note over qap
+    topic = nlds-api.archive-put.*
+end note
+collections archive_puts as "Archive Put" #MistyRose
+
+participant obj as "Object\nStore" #GhostWhite
+
+participant tape as "Tape" #GhostWhite
+
+activate archy
+archy -> wex : key=""nlds-api.catalog-archive.next""
+deactivate archy
+
+activate wex
+wex->qc : key=""nlds-api.catalog-archive.next""
+deactivate wex
+
+activate qc
+qc -> catalog : key=""nlds-api.catalog-archive.next""
+deactivate qc
+
+activate catalog
+opt #lightblue
+    catalog -> catalog_db : get_unarchived_holdings()
+    catalog_db -> catalog : holding = unarchived_holdings[0]
+    loop #PaleTurquoise for file in holding
+        catalog -> catalog_db : is file archived?
+        catalog_db -> catalog
+        alt #lightcyan NO
+            catalog -> catalog_db : set file as archived
+            catalog -> catalog : add file record to\n//archive_list//
+        else YES
+            catalog -> catalog : continue
+        end
+    end
+end
+catalog -> wex : key=""nlds-api.catalog-archive.next-complete""
+deactivate catalog
+
+activate wex
+wex -> aq : key=""nlds-api.catalog-archive.next-complete""
+deactivate wex
+
+activate aq
+aq -> archy : key=""nlds-api.catalog-archive.next-complete""
+deactivate aq
+
+activate archy
+archy -> wex : key=""nlds-api.archive-put.start""
+deactivate archy
+
+activate wex
+wex -> qap : key=""nlds-api.archive-put.start""
+deactivate wex
+
+activate qap
+qap -> archive_puts : key=""nlds-api.archive-put.start""
+deactivate qap
+
+activate archive_puts
+loop #PaleTurquoise for file in //archive_list//
+    archive_puts -> obj : stream file
+    obj -> archive_puts 
+    alt #lightcyan the stream succeeded
+        archive_puts->archive_puts : 1. add file to aggregate\n2. add file record to //aggregate_list//
+    else else
+        archive_puts->archive_puts : add file record to //failed_list//
+    end
+end
+
+archive_puts -> tape : copy aggregate to tape
+tape -> archive_puts
+alt #PaleTurquoise the copy succeeded
+    archive_puts -> archive_puts : add file record to //completed_list//
+else else
+    loop #lightcyan for file in //aggregate_list//
+        archive_puts -> archive_puts : add file record to //failed_list//
+    end
+end
+archive_puts -> wex : key=""nlds-api.archive-put.complete""
+activate wex
+wex -> aq : key=""nlds-api.archive-put.complete""
+deactivate wex
+
+activate aq
+aq -> archy : key=""nlds-api.archive-put.complete""
+deactivate aq
+
+archive_puts -> wex : key=""nlds.api.archive.failed""
+deactivate archive_puts
+
+activate wex
+wex -> aq : key=""nlds-api.archive-put.failed""
+deactivate wex
+
+activate aq
+aq -> archy : key=""nlds-api.archive-put.failed""
+deactivate aq
+
+activate archy
+archy -> wex : key=""nlds-api.catalog-archive.failed""
+deactivate archy 
+
+activate wex
+wex -> qc : key=""nlds-api.catalog-archive.failed""
+deactivate wex
+
+activate qc
+qc -> catalog : key=""nlds-api.catalog-archive.failed""
+deactivate qc
+
+activate catalog
+loop #PaleTurquoise for file in failed_list
+catalog -> catalog_db : set file as unarchived
+end
+catalog -> wex : key=""nlds-api.catalog-archive.failed-complete""
+deactivate catalog
+
+activate wex
+wex -> aq : key=""nlds-api.catalog-archive.failed-complete""
+deactivate wex
+
+activate aq
+aq -> archy : key=""nlds-api.catalog-archive.failed-complete""
+deactivate aq
+
+@enduml
