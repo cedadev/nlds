@@ -53,11 +53,26 @@ class Transaction(CatalogBase):
     # date and time of ingest / adding to catalogue
     ingest_time = Column(DateTime)
     # relationship for files (One to many)
-    files = relationship("File", cascade="delete, delete-orphan")
+    aggregations = relationship("Aggregation", cascade="delete, delete-orphan")
     # holding id as ForeignKey "Parent"
     holding_id = Column(Integer, ForeignKey("holding.id"), 
                         index=True, nullable=False)
 
+class Aggregation(CatalogBase):
+    """Class containing details of an aggregation, equivalent to a sub-record in 
+    the monitor but without state information. Note that a transaction can 
+    consist of many aggregations, these exist as the appropriately sized 
+    groupings of files for tape writing."""
+    __tablename__ = "aggregation"
+    # primay key / integer id
+    id = Column(Integer, primary_key=True)
+    # aggregation id - this will be the String of the UUID
+    aggregation_id = Column(String, nullable=False, index=True)
+    # relationship for files (One to many)
+    files = relationship("File", cascade="delete, delete-orphan")
+    # transaction id as ForeignKey "Parent"
+    transaction_id = Column(Integer, ForeignKey("transaction.id"), 
+                            index=True, nullable=False)
 
 class Tag(CatalogBase):
     """Class containing the details of a Tag that can be assigned to a Holding"""
@@ -79,8 +94,8 @@ class File(CatalogBase):
     __tablename__ = "file"
     # primary key / integer id
     id = Column(Integer, primary_key=True)
-    # holding id as ForeignKey "Parent"
-    transaction_id = Column(Integer, ForeignKey("transaction.id"), 
+    # aggregation_id as ForeignKey "Parent"
+    aggregation_id = Column(Integer, ForeignKey("aggregation.id"), 
                             index=True, nullable=False)
     # original path on POSIX disk - this should be unique per holding
     original_path = Column(String)
