@@ -5,10 +5,19 @@
     <link rel="stylesheet" href="https://artefacts.ceda.ac.uk/themes/orgtheme_jasmin/0.6/theme/css/main.css" media="screen">
 </head>
 <body>
+    <br>
+    <div class="table-responsive container">
     <h1>NLDS system status:</h1>
-    <div class="table-responsive">
+    <hr>
+    <div class="alert {{ stats.failed.failed_colour }}">
+        {% if stats.failed.failed_num > 0 %}
+            <strong>Uh Oh:</strong> {{ stats.failed.failed_num }} consumers failed
+        {% else %}
+            <strong>SUCCESS:</strong> No consumers failed
+        {% endif %}
+    </div>
     <table class="table table-striped table-bordered table-hover">
-        <tr>
+        <tr class="table-dark">
             <th>Service</th>
             <th>Status</th>
             <th>Failed Consumer Tags (if any)</th>

@@ -122,6 +122,26 @@ async def get(request: Request):
     put_transfer = await get_consumer_status("transfer_put_q", "put_transfer", msg_dict, time_limit, 0)
     logger = await get_consumer_status("logging_q", "logger", msg_dict, time_limit, 0)
     
+    consumer_list = [monitor, catalog, nlds_worker, index, get_transfer, put_transfer, logger]
+    
+    num = 0
+    
+    for consumer in consumer_list:
+        try:
+            count = len(consumer["failed"])
+            num = num + count
+        except:
+            pass
+    
+    if num > 0:
+        colour = "alert-danger"
+    else:
+        colour = "alert-success"
+    
+    failed_info = {
+        "failed_num": num,
+        "failed_colour": colour
+    }
     
     response = {
         "monitor": monitor,
@@ -130,7 +150,8 @@ async def get(request: Request):
         "index": index,
         "get_transfer": get_transfer,
         "put_transfer": put_transfer,
-        "logger": logger
+        "logger": logger,
+        "failed": failed_info
     }
     
     

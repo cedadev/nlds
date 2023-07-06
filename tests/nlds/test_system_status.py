@@ -127,10 +127,7 @@ Testing the get() function in system.py
 
 async def mock_get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
     mock_consumer_tags = ["mock_tag_1", "mock_tag_2", "mock_tag_3", "mock_tag_4", "mock_tag_5"]
-    if skip_num > 0:
-        return
-    else:
-        return mock_consumer_tags
+    return mock_consumer_tags
 
 
 def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
@@ -142,7 +139,7 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     attrs.pop('body')
     attrs.pop('raw_headers')
     
-    assert str(attrs) == "{'template': <Template 'index.html'>, 'context': {'request': <class 'starlette.requests.Request'>, 'stats': {'monitor': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'catalog': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'nlds_worker': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'index': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'get_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'put_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'logger': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5']}}, 'status_code': 200}"
+    assert str(attrs) == "{'template': <Template 'index.html'>, 'context': {'request': <class 'starlette.requests.Request'>, 'stats': {'monitor': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'catalog': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'nlds_worker': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'index': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'get_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'put_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'logger': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'failed': {'failed_num': 0, 'failed_colour': 'alert-success'}}}, 'status_code': 200}"
 
 
 
