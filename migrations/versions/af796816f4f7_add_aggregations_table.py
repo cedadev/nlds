@@ -238,7 +238,7 @@ def upgrade_catalog() -> None:
     }
     with op.batch_alter_table("file", naming_convention=naming_conv) as bop:
         # Remove the server_default from the agg_id column. 
-        bop.alter_column("aggregation_id", existing_server_default=None, 
+        bop.alter_column("aggregation_id", server_default=None, 
                          existing_nullable=False, existing_type=sa.Integer())
         # Drop the fk constraint and remake it (don't need to drop it as we're 
         # dropping the column at the end anyway)
@@ -268,20 +268,7 @@ def downgrade_catalog() -> None:
     # Commit the changes
     session.commit()
 
-    # Carry on with the rest of the schema migration
-    naming_conv = {
-        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-    }
-    with op.batch_alter_table("file", naming_convention=naming_conv) as bop:
-        # Remove the server_default from the agg_id column. 
-        bop.alter_column("transaction_id", existing_server_default=None, 
-                         existing_nullable=False, existing_type=sa.Integer())
-        # Create a new foreign key constraint according to naming convention
-        bop.create_foreign_key("fk_files_transaction_ids_transactions", 
-                              'transaction', ['transaction_id'], ['id'])
-        bop.drop_column('aggregation_id')
-    
-    # Sort out indices and, finally, drop the aggregations table
+    # Carry on with the rest of the schema migration. Sort out indices first
     op.create_index('ix_file_transaction_id', 'file', ['transaction_id'], 
                     unique=False)
     op.drop_index(op.f('ix_file_aggregation_id'), table_name='file')
@@ -289,6 +276,19 @@ def downgrade_catalog() -> None:
                   table_name='aggregation')
     op.drop_index(op.f('ix_aggregation_aggregation_id'), 
                   table_name='aggregation')
+    # Abide by naming convention! 
+    naming_conv = {
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    }
+    with op.batch_alter_table("file", naming_convention=naming_conv) as bop:
+        # Remove the server_default from the agg_id column. 
+        bop.alter_column("transaction_id", server_default=None, 
+                         existing_nullable=False, existing_type=sa.Integer())
+        # Create a new foreign key constraint according to naming convention
+        bop.create_foreign_key("fk_files_transaction_ids_transactions", 
+                              'transaction', ['transaction_id'], ['id'])
+        bop.drop_column('aggregation_id')
+    # Finally drop the aggregations table
     op.drop_table('aggregation')
 
 
