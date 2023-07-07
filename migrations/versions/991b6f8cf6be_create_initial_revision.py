@@ -1,4 +1,4 @@
-"""Create initial revision
+"""create initial revision
 
 Revision ID: 991b6f8cf6be
 Revises: 
