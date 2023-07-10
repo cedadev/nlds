@@ -1,3 +1,4 @@
+alembic==1.11.1
 asgiref==3.4.1
 certifi==2021.5.30
 charset-normalizer==2.0.6
