@@ -132,6 +132,9 @@ class Location(CatalogBase):
     id = Column(Integer, primary_key=True)
     # storage type = OBJECT_STORAGE | TAPE
     storage_type = Column(Enum(Storage))
+    # The url associated with the location, i.e. the url of the tenancy on 
+    # object storage and the tape server url on tape. 
+    url = Column(String, nullable=False)
     # root of the file on the storage (bucket on object storage)
     root = Column(String, nullable=False)
     # path of the file on the storage

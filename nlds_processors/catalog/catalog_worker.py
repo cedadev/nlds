@@ -55,6 +55,8 @@ class CatalogConsumer(RMQC):
     _DB_OPTIONS_PASSWD = "db_passwd"
     _DB_ECHO = "echo"
     _MAX_RETRIES = "max_retries"
+    _DEFAULT_TENANCY = "default_tenancy"
+    _DEFAULT_TAPE_URL = "default_tape_url"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -65,7 +67,9 @@ class CatalogConsumer(RMQC):
             _DB_ECHO: True,
         },
         _MAX_RETRIES: 5,
-        RMQC.RETRY_DELAYS: RMQC.DEFAULT_RETRY_DELAYS
+        _DEFAULT_TENANCY: None,
+        _DEFAULT_TAPE_URL: None,
+        RMQC.RETRY_DELAYS: RMQC.DEFAULT_RETRY_DELAYS,
     }
 
 
@@ -77,6 +81,12 @@ class CatalogConsumer(RMQC):
         )
         self.retry_delays = self.load_config_value(
             self.RETRY_DELAYS
+        )
+        self.default_tape_url = self.load_config_value(
+            self._DEFAULT_TAPE_URL
+        )
+        self.default_tenancy = self.load_config_value(
+            self._DEFAULT_TENANCY
         )
 
         self.catalog = None
