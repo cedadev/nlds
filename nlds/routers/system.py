@@ -42,7 +42,6 @@ def convert_json(val):
 def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):
     
     api_queues = (f'http://{host_ip}:{api_port}/api/queues/{vhost}/{queue_name}')
-    print(api_queues)
     try:
         res = requests.get(api_queues, auth=HTTPBasicAuth(login, password))
     except:
@@ -171,7 +170,7 @@ async def get(request: Request):
                                         msg_dict, time_limit, 0)
     
     catalog = await get_consumer_status("catalog_q", "catalog", 
-                                        msg_dict, time_limit, 2)
+                                        msg_dict, time_limit, 0)
     
     nlds_worker = await get_consumer_status("nlds_q", "nlds_worker", 
                                             msg_dict, time_limit, 0)
@@ -192,18 +191,28 @@ async def get(request: Request):
                      get_transfer, put_transfer, logger]
     
     num = 0
+    offline_num = 0
+    service = "Online"
     
     for consumer in consumer_list:
         try:
             count = len(consumer["failed"])
             num = num + count
         except:
-            pass
+            if consumer["colour"] == "RED":
+                offline_num += 1
+            else:
+                pass
+    
+    if offline_num == 7:
+        service = "Offline"
     
     if num > 0:
         colour = "alert-danger"
     else:
         colour = "alert-success"
+    if service == "Offline":
+        colour = "alert-info"
     
     failed_info = {
         "failed_num": num,

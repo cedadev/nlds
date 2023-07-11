@@ -12,8 +12,10 @@
     <div class="alert {{ stats.failed.failed_colour }}">
         {% if stats.failed.failed_num > 0 %}
             <strong>INFO:</strong> {{ stats.failed.failed_num }} consumers failed
-        {% else %}
+        {% elif ( (stats.failed.failed_num == 0) and (stats.failed.failed_colour != "alert-info") ) %}
             <strong>INFO:</strong> No active consumers failed
+        {% else %}
+            <strong>INFO:</strong> No consumers online
         {% endif %}
     </div>
     <table class="table table-striped table-bordered table-hover">
