@@ -1,3 +1,8 @@
+import asyncio
+import requests
+import os
+import json
+
 from fastapi import Depends, APIRouter, status, Query, FastAPI, Request
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -7,11 +12,6 @@ from fastapi.templating import Jinja2Templates
 from starlette.responses import FileResponse
 from requests.auth import HTTPBasicAuth
 
-import asyncio
-import requests
-import os
-import json
-
 from . import rpc_publisher
 from ..errors import ResponseError
 
@@ -20,7 +20,6 @@ router = APIRouter()
 
 
 static_dir = (os.path.join(os.path.dirname(__file__), "../static"))
-#print(static_dir)
 router.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 template_dir = os.path.join(os.path.dirname(__file__), "../templates/")
@@ -31,15 +30,27 @@ templates = Jinja2Templates(directory=template_dir)
 
 
 class SystemResponse(BaseModel):
+    
     status: str = ""
 
+
 def convert_json(val):
+    
     return(val.json())
 
-def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):                       #what happenes if the rabbit monitoring api is unavailable (make more defensive)
-    api_queues = 'http://' + host_ip + ':' + api_port + '/api/queues/' + vhost + '/'+queue_name
-    res = requests.get(api_queues, auth=HTTPBasicAuth(login, password))
+
+def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):
+    
+    api_queues = (f'http://{host_ip}:{api_port}/api/queues/{vhost}/{queue_name}')
+    print(api_queues)
+    try:
+        res = requests.get(api_queues, auth=HTTPBasicAuth(login, password))
+    except:
+        return("request error")
+    
     res_json = convert_json(res)
+    if res_json == {'error': 'Object Not Found', 'reason': 'Not Found'}:
+        return []
     # Number of consumers
     consumers = (res_json['consumer_details'])
     consumer_tags = []
@@ -50,7 +61,25 @@ def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):   
 
 
 async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
-    consumer_tags = (get_consumer_info(rpc_publisher.config["server"], rpc_publisher.config["port"], key, rpc_publisher.config["user"], rpc_publisher.config["password"], rpc_publisher.config["vhost"]))
+    
+    try:
+        consumer_tags = (get_consumer_info(rpc_publisher.config["server"], 
+                                       rpc_publisher.config["port"], key, 
+                                       rpc_publisher.config["user"], 
+                                       rpc_publisher.config["password"], 
+                                       rpc_publisher.config["vhost"]))
+    except requests.exceptions.RequestException as e:
+        print("Something went wrong, returning a 403... ")
+        return{
+            "val": ("403 error"), 
+            "colour": "PURPLE"
+            }
+    
+    # if consumer_tags == "request error":
+    #     return{
+    #         "val": (f"Request Error"), 
+    #         "colour": "PURPLE"
+    #         }
     
     msg_dict["details"]["target_consumer"] = target
     
@@ -68,7 +97,10 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
             skip_num = skip_num - 1
             
         try:
-            consumers = await rpc_publisher.call(msg_dict=msg_dict, routing_key=key, time_limit=time_limit, correlation_id=consumer_tag)
+            consumers = await rpc_publisher.call(msg_dict=msg_dict, 
+                                                 routing_key=key, 
+                                                 time_limit=time_limit, 
+                                                 correlation_id=consumer_tag)
             if consumers:
                 consumers_count += 1
             else:
@@ -79,15 +111,28 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
     
     if consumers_count == 0:
         if consumer_count == 0:
-            consumers = {"val": "All Consumers Offline (None running)", "colour": "RED"}
+            consumers = {
+                "val": "All Consumers Offline (None running)", 
+                "colour": "RED"
+                }
         else:
-            consumers = {"val": "All Consumers Offline (0/"+ str(consumer_count) +")" , "colour": "RED", "failed": consumers_fail}
+            consumers = {
+                "val": (f"All Consumers Offline (0/{consumer_count})"), 
+                "colour": "RED", "failed": consumers_fail
+                }
         
     elif consumers_count == consumer_count:
-        consumers = {"val": "All Consumers Online ("+ str(consumer_count) +"/"+ str(consumer_count) +")", "colour": "GREEN"}
+        consumers = {
+            "val": (f"All Consumers Online ({consumer_count}/{consumer_count})"), 
+            "colour": "GREEN"
+            }
             
     else:
-        consumers = {"val": "Consumers Online ("+ str(consumers_count) +"/"+ str(consumer_count) +")", "colour": "ORANGE", "failed": consumers_fail}
+        consumers = {
+            "val": (f"Consumers Online ({consumers_count}/{consumer_count})"), 
+            "colour": "ORANGE", 
+            "failed": consumers_fail
+            }
 
     return consumers
 
@@ -106,23 +151,45 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
 async def get(request: Request):
     
     
-    msg_dict = {"details": {"api_action": "system_stat", "target_consumer": "", "ignore_message": False}}
+    msg_dict = {
+        "details": {
+            "api_action": "system_stat", 
+            "target_consumer": "", 
+            "ignore_message": False
+            }
+        }
     
     
-    time_limit = 5      # x seconds for each broken consumer meaning if there are a lot you might want to decrease this number
+    # x seconds for each broken consumer meaning if there are 
+    # a lot you might want to decrease this number
+    time_limit = 5
     
     
     
-    #the numbers indicate how many consumers in a queue to skip
-    monitor = await get_consumer_status("monitor_q", "monitor", msg_dict, time_limit, 0)
-    catalog = await get_consumer_status("catalog_q", "catalog", msg_dict, time_limit, 0)
-    nlds_worker = await get_consumer_status("nlds_q", "nlds_worker", msg_dict, time_limit, 0)
-    index = await get_consumer_status("index_q", "index", msg_dict, time_limit, 0)
-    get_transfer = await get_consumer_status("transfer_get_q", "get_transfer", msg_dict, time_limit, 0)
-    put_transfer = await get_consumer_status("transfer_put_q", "put_transfer", msg_dict, time_limit, 0)
-    logger = await get_consumer_status("logging_q", "logger", msg_dict, time_limit, 0)
+    # The numbers indicate how many consumers in a queue to skip
+    monitor = await get_consumer_status("monitor_q", "monitor", 
+                                        msg_dict, time_limit, 0)
     
-    consumer_list = [monitor, catalog, nlds_worker, index, get_transfer, put_transfer, logger]
+    catalog = await get_consumer_status("catalog_q", "catalog", 
+                                        msg_dict, time_limit, 2)
+    
+    nlds_worker = await get_consumer_status("nlds_q", "nlds_worker", 
+                                            msg_dict, time_limit, 0)
+    
+    index = await get_consumer_status("index_q", "index", 
+                                      msg_dict, time_limit, 0)
+    
+    get_transfer = await get_consumer_status("transfer_get_q", "get_transfer", 
+                                             msg_dict, time_limit, 0)
+    
+    put_transfer = await get_consumer_status("transfer_put_q", "put_transfer", 
+                                             msg_dict, time_limit, 0)
+    
+    logger = await get_consumer_status("logging_q", "logger", 
+                                       msg_dict, time_limit, 0)
+    
+    consumer_list = [monitor, catalog, nlds_worker, index, 
+                     get_transfer, put_transfer, logger]
     
     num = 0
     
@@ -155,4 +222,9 @@ async def get(request: Request):
     }
     
     
-    return templates.TemplateResponse("index.html", context={"request": request, "stats": response})
+    return templates.TemplateResponse("index.html", 
+                                      context={
+                                          "request": request, 
+                                          "stats": response
+                                          }
+                                      )

@@ -4,11 +4,23 @@ import time
 import requests
 import json
 
+import jinja2.environment
 from fastapi import Request
 from requests.auth import HTTPBasicAuth
+import abc
 
 from nlds.routers import system
 from nlds.rabbit import rpc_publisher
+
+
+
+@pytest.fixture
+def loop():
+    # allows the testing of asynchronus functions using an event loop
+    
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
 """
@@ -17,47 +29,59 @@ Testing the get_consumer_status() function in system.py
 
 
 def mock_callback(host_ip, api_port, queue_name, login, password, vhost):
-    mock_consumer_tags = ["mock_tag_1", "mock_tag_2", "mock_tag_3", "mock_tag_4", "mock_tag_5"]
+    
+    mock_consumer_tags = ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
+                          "mock_tag_4", "mock_tag_5"]
     return(mock_consumer_tags)
 
-def mock_callback_offline(host_ip, api_port, queue_name, login, password, vhost):
+
+def mock_callback_offline(host_ip, api_port, queue_name, 
+                          login, password, vhost):
+    
     mock_consumer_tags = []
     return(mock_consumer_tags)
 
+
 async def mock_consumer(*args, **kwargs):
+    
     saved_args = locals()
     
     if saved_args["kwargs"]["msg_dict"]["details"]["ignore_message"] == False:
         return("existance")
     else:
-        return
+        return None
+    
     
 async def mock_slow_consumer(*args, **kwargs):
+    
     saved_args = locals()
     time.sleep(2)
     if saved_args["kwargs"]["time_limit"] >= 2:
         return("existance")
     else:
-        return
-    
-
-@pytest.fixture
-def loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+        return None
 
 
 def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if the output for all consumers online is correct
     
     time_limit = 5
-    msg_dict = {"details": {"api_action": "system_stat", "target_consumer": "", "ignore_message": False}}
+    msg_dict = {
+        "details": {
+            "api_action": "system_stat", 
+            "target_consumer": "", 
+            "ignore_message": False
+            }
+        }
     
     monkeypatch.setattr(system, "get_consumer_info", mock_callback)
-    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, "call", mock_consumer)
+    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, 
+                        "call", mock_consumer)
     
-    consumer = loop.run_until_complete(system.get_consumer_status("consumer_q", "consumer", msg_dict, time_limit, 0))
+    consumer = loop.run_until_complete(
+        system.get_consumer_status(
+            "consumer_q", "consumer", msg_dict, time_limit, 0))
+    
     assert consumer == {"val": "All Consumers Online (5/5)", "colour": "GREEN"}
     
     
@@ -66,13 +90,28 @@ def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if the output for all consumers offline is correct
     
     time_limit = 5
-    msg_dict = {"details": {"api_action": "system_stat", "target_consumer": "", "ignore_message": False}}
+    msg_dict = {
+        "details": {
+            "api_action": "system_stat", 
+            "target_consumer": "", 
+            "ignore_message": False
+            }
+        }
     
     monkeypatch.setattr(system, "get_consumer_info", mock_callback)
-    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, "call", mock_consumer)
+    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, 
+                        "call", mock_consumer)
     
-    consumer = loop.run_until_complete(system.get_consumer_status("consumer_q", "consumer", msg_dict, time_limit, 9))
-    assert consumer == {"val": "All Consumers Offline (0/5)" , "colour": "RED", "failed": ["mock_tag_1", "mock_tag_2", "mock_tag_3", "mock_tag_4", "mock_tag_5"]}
+    consumer = loop.run_until_complete(
+        system.get_consumer_status(
+            "consumer_q", "consumer", msg_dict, time_limit, 9))
+    
+    assert consumer == {
+        "val": "All Consumers Offline (0/5)" , 
+        "colour": "RED", 
+        "failed": ["mock_tag_1", "mock_tag_2", 
+                   "mock_tag_3", "mock_tag_4", "mock_tag_5"]
+        }
     
     
     
@@ -80,13 +119,27 @@ def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if the output for some consumers online is correct
     
     time_limit = 5
-    msg_dict = {"details": {"api_action": "system_stat", "target_consumer": "", "ignore_message": False}}
+    msg_dict = {
+        "details": {
+            "api_action": "system_stat", 
+            "target_consumer": "", 
+            "ignore_message": False
+            }
+        }
     
     monkeypatch.setattr(system, "get_consumer_info", mock_callback)
-    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, "call", mock_consumer)
+    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, 
+                        "call", mock_consumer)
     
-    consumer = loop.run_until_complete(system.get_consumer_status("consumer_q", "consumer", msg_dict, time_limit, 2))
-    assert consumer == {"val": "Consumers Online (3/5)", "colour": "ORANGE", "failed": ["mock_tag_1", "mock_tag_2"]}
+    consumer = loop.run_until_complete(
+        system.get_consumer_status(
+            "consumer_q", "consumer", msg_dict, time_limit, 2))
+    
+    assert consumer == {
+        "val": "Consumers Online (3/5)", 
+        "colour": "ORANGE", 
+        "failed": ["mock_tag_1", "mock_tag_2"]
+        }
     
     
     
@@ -94,27 +147,55 @@ def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if the output for no consumers running is correct
     
     time_limit = 5
-    msg_dict = {"details": {"api_action": "system_stat", "target_consumer": "", "ignore_message": False}}
+    msg_dict = {
+        "details": {
+            "api_action": "system_stat", 
+            "target_consumer": "", 
+            "ignore_message": False
+            }
+        }
     
     monkeypatch.setattr(system, "get_consumer_info", mock_callback_offline)
-    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, "call", mock_consumer)
+    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, 
+                        "call", mock_consumer)
     
-    consumer = loop.run_until_complete(system.get_consumer_status("consumer_q", "consumer", msg_dict, time_limit, 0))
-    assert consumer == {"val": "All Consumers Offline (None running)", "colour": "RED"}
+    consumer = loop.run_until_complete(
+        system.get_consumer_status(
+            "consumer_q", "consumer", msg_dict, time_limit, 0))
+    
+    assert consumer == {
+        "val": "All Consumers Offline (None running)", 
+        "colour": "RED"
+        }
 
 
 
-def test_slow_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_slow_consumer_all_offline(monkeypatch, 
+                                   loop: asyncio.AbstractEventLoop):
     # test if the output for all slow consumers offline is correct
     
     time_limit = 1
-    msg_dict = {"details": {"api_action": "system_stat", "target_consumer": "", "ignore_message": False}}
+    msg_dict = {
+        "details": {
+            "api_action": "system_stat", 
+            "target_consumer": "", 
+            "ignore_message": False
+            }
+        }
     
     monkeypatch.setattr(system, "get_consumer_info", mock_callback)
-    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, "call", mock_slow_consumer)
+    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, 
+                        "call", mock_slow_consumer)
     
-    consumer = loop.run_until_complete(system.get_consumer_status("consumer_q", "consumer", msg_dict, time_limit, 9))
-    assert consumer == {"val": "All Consumers Offline (0/5)" , "colour": "RED", "failed": ["mock_tag_1", "mock_tag_2", "mock_tag_3", "mock_tag_4", "mock_tag_5"]}
+    consumer = loop.run_until_complete(
+        system.get_consumer_status(
+            "consumer_q", "consumer", msg_dict, time_limit, 9))
+    assert consumer == {
+        "val": "All Consumers Offline (0/5)", 
+        "colour": "RED", 
+        "failed": ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
+                   "mock_tag_4", "mock_tag_5"]
+        }
 
     
 
@@ -125,12 +206,17 @@ Testing the get() function in system.py
 """
 
 
-async def mock_get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
-    mock_consumer_tags = ["mock_tag_1", "mock_tag_2", "mock_tag_3", "mock_tag_4", "mock_tag_5"]
+async def mock_get_consumer_status(key, target, msg_dict, 
+                                   time_limit, skip_num=0):
+    
+    mock_consumer_tags = ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
+                          "mock_tag_4", "mock_tag_5"]
     return mock_consumer_tags
 
 
 def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
+    # test if get function correctly runs
+    
     monkeypatch.setattr(system, "get_consumer_status", mock_get_consumer_status)
     
     get = loop.run_until_complete(system.get(Request))
@@ -139,8 +225,42 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     attrs.pop('body')
     attrs.pop('raw_headers')
     
-    assert str(attrs) == "{'template': <Template 'index.html'>, 'context': {'request': <class 'starlette.requests.Request'>, 'stats': {'monitor': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'catalog': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'nlds_worker': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'index': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'get_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'put_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'logger': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'failed': {'failed_num': 0, 'failed_colour': 'alert-success'}}}, 'status_code': 200}"
+    to_assert = ("{'template': <Template 'index.html'>, "
+"'context': {'request': <class 'starlette.requests.Request'>, 'stats': "
+"{'monitor': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', "
+"'mock_tag_5'], 'catalog': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', "
+"'mock_tag_4', 'mock_tag_5'], 'nlds_worker': ['mock_tag_1', 'mock_tag_2', "
+"'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'index': ['mock_tag_1', "
+"'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'get_transfer': "
+"['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], "
+"'put_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', "
+"'mock_tag_5'], 'logger': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', "
+"'mock_tag_4', 'mock_tag_5'], 'failed': {'failed_num': 0, 'failed_colour': "
+"'alert-success'}}}, 'status_code': 200}")
+    
+    status = ("{'monitor': ['mock_tag_1', 'mock_tag_2', "
+"'mock_tag_3', 'mock_tag_4', "
+"'mock_tag_5'], 'catalog': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', "
+"'mock_tag_4', 'mock_tag_5'], 'nlds_worker': ['mock_tag_1', 'mock_tag_2', "
+"'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'index': ['mock_tag_1', "
+"'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'get_transfer': "
+"['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], "
+"'put_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', "
+"'mock_tag_5'], 'logger': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', "
+"'mock_tag_4', 'mock_tag_5'], 'failed': {'failed_num': 0, 'failed_colour': "
+"'alert-success'}}")
+    
+    assert str(attrs) == to_assert
+    
+    assert "template" in attrs
+    
+    assert isinstance(attrs["template"], jinja2.environment.Template)
 
+    assert attrs["status_code"] == 200
+    
+    assert isinstance(attrs["context"]["request"], abc.ABCMeta)
+    
+    assert str(attrs["context"]["stats"]) == status
 
 
 
@@ -149,21 +269,33 @@ Testing the get_consumer_info() function in system.py
 """
 
 def mock_ignore(ignore):
+    
     return ignore
 
+
 def mock_get_request(*args, **kwargs):
-    dict_value = ({"consumer_details": [{"consumer_tag": "mock_tag_1"}, {"consumer_tag": "mock_tag_2"}, {"consumer_tag": "mock_tag_3"}, {"consumer_tag": "mock_tag_4"}, {"consumer_tag": "mock_tag_5"}]})
+    
+    dict_value = ({"consumer_details": [{"consumer_tag": "mock_tag_1"}, 
+                                        {"consumer_tag": "mock_tag_2"}, 
+                                        {"consumer_tag": "mock_tag_3"}, 
+                                        {"consumer_tag": "mock_tag_4"}, 
+                                        {"consumer_tag": "mock_tag_5"}]})
     return(dict_value)
 
+
 def test_get_consumer_info_success(monkeypatch):
+    # test if get_consumer_info function correctly runs
+    
     monkeypatch.setattr(requests, "get", mock_get_request)
     monkeypatch.setattr(system, "convert_json", mock_ignore)
     
     key = "catalog_q"
     
-    info = system.get_consumer_info("server", "port", key, "user", "password", "vhost")
+    info = system.get_consumer_info("server", "port", key, "user", 
+                                    "password", "vhost")
     
-    assert info == ["mock_tag_1", "mock_tag_2", "mock_tag_3", "mock_tag_4", "mock_tag_5"]
+    assert info == ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
+                    "mock_tag_4", "mock_tag_5"]
 
 
     
