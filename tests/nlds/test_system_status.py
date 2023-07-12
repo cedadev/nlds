@@ -42,6 +42,18 @@ def mock_callback_offline(host_ip, api_port, queue_name,
     return(mock_consumer_tags)
 
 
+def mock_callback_rabbit(host_ip, api_port, queue_name, 
+                          login, password, vhost):
+    
+    return("RabbitError")
+
+
+def mock_callback_exception(host_ip, api_port, queue_name, 
+                          login, password, vhost):
+    
+    raise(requests.exceptions.RequestException)
+
+
 async def mock_consumer(*args, **kwargs):
     
     saved_args = locals()
@@ -60,6 +72,53 @@ async def mock_slow_consumer(*args, **kwargs):
         return("existance")
     else:
         return None
+
+
+
+def test_get_consumer_status_rabbits_offline(monkeypatch, 
+                                             loop: asyncio.AbstractEventLoop):
+    # test if it gives the correct response if the rabbit server is offline
+    
+    time_limit = 5
+    msg_dict = {
+        "details": {
+            "api_action": "system_stat", 
+            "target_consumer": "", 
+            "ignore_message": False
+            }
+        }
+    
+    monkeypatch.setattr(system, "get_consumer_info", mock_callback_rabbit)
+    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, 
+                        "call", mock_consumer)
+    
+    consumer = loop.run_until_complete(system.get_consumer_status(
+        "consumer_q", "consumer", msg_dict, time_limit, 0))
+    
+    assert consumer == {"val": ("Rabbit error"), "colour": "PURPLE"}
+
+
+def test_get_consumer_status_requests_failed(monkeypatch, 
+                                             loop: asyncio.AbstractEventLoop):
+    # test if it handels the error properly if requests is offline
+    
+    time_limit = 5
+    msg_dict = {
+        "details": {
+            "api_action": "system_stat", 
+            "target_consumer": "", 
+            "ignore_message": False
+            }
+        }
+    
+    monkeypatch.setattr(system, "get_consumer_info", mock_callback_exception)
+    monkeypatch.setattr(rpc_publisher.RabbitMQRPCPublisher, 
+                        "call", mock_consumer)
+    
+    consumer = loop.run_until_complete(system.get_consumer_status(
+        "consumer_q", "consumer", msg_dict, time_limit, 0))
+    
+    assert consumer == {'val': '403 error', 'colour': 'PURPLE'}
 
 
 def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop):
@@ -209,8 +268,38 @@ Testing the get() function in system.py
 async def mock_get_consumer_status(key, target, msg_dict, 
                                    time_limit, skip_num=0):
     
-    mock_consumer_tags = ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
-                          "mock_tag_4", "mock_tag_5"]
+    mock_consumer_tags = {
+            "val": ("All Consumers Online (5/5)"), 
+            "colour": "GREEN"
+            }
+    return mock_consumer_tags
+
+
+async def mock_green_consumer_status(key, target, msg_dict, 
+                                   time_limit, skip_num=0):
+    
+    mock_consumer_tags = {
+            "val": ("All Consumers Online (5/5)"), 
+            "colour": "GREEN"
+            }
+    return mock_consumer_tags
+
+
+async def mock_red_consumer_status(key, target, msg_dict, 
+                                   time_limit, skip_num=0):
+    
+    consumers_fail = ["mock_tag_1", "mock_tag_2"]
+    mock_consumer_tags = {"val": ("All Consumers Offline (0/5)"), 
+                          "colour": "RED", "failed": consumers_fail
+                }
+    return mock_consumer_tags
+
+
+async def mock_blue_consumer_status(key, target, msg_dict, 
+                                   time_limit, skip_num=0):
+    
+    mock_consumer_tags = {
+        "val": "All Consumers Offline (None running)", "colour": "RED"}
     return mock_consumer_tags
 
 
@@ -227,28 +316,25 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     to_assert = ("{'template': <Template 'index.html'>, "
 "'context': {'request': <class 'starlette.requests.Request'>, 'stats': "
-"{'monitor': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', "
-"'mock_tag_5'], 'catalog': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', "
-"'mock_tag_4', 'mock_tag_5'], 'nlds_worker': ['mock_tag_1', 'mock_tag_2', "
-"'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'index': ['mock_tag_1', "
-"'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'get_transfer': "
-"['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], "
-"'put_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', "
-"'mock_tag_5'], 'logger': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', "
-"'mock_tag_4', 'mock_tag_5'], 'failed': {'failed_num': 0, 'failed_colour': "
-"'alert-success'}}}, 'status_code': 200}")
+"{'monitor': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'catalog': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'nlds_worker': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'index': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'get_transfer': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'put_transfer': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'logger': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, 'failed': "
+"{'failed_num': 0, 'failed_colour': 'alert-success'}}}, 'status_code': 200}")
     
-    status = ("{'monitor': ['mock_tag_1', 'mock_tag_2', "
-"'mock_tag_3', 'mock_tag_4', "
-"'mock_tag_5'], 'catalog': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', "
-"'mock_tag_4', 'mock_tag_5'], 'nlds_worker': ['mock_tag_1', 'mock_tag_2', "
-"'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'index': ['mock_tag_1', "
-"'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], 'get_transfer': "
-"['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', 'mock_tag_5'], "
-"'put_transfer': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', 'mock_tag_4', "
-"'mock_tag_5'], 'logger': ['mock_tag_1', 'mock_tag_2', 'mock_tag_3', "
-"'mock_tag_4', 'mock_tag_5'], 'failed': {'failed_num': 0, 'failed_colour': "
-"'alert-success'}}")
+    
+    status = ("{'monitor': {'val': 'All Consumers Online (5/5)', "
+"'colour': 'GREEN'}, "
+"'catalog': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'nlds_worker': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'index': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'get_transfer': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'put_transfer': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'logger': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, 'failed': "
+"{'failed_num': 0, 'failed_colour': 'alert-success'}}")
     
     assert str(attrs) == to_assert
     
@@ -262,6 +348,45 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     assert str(attrs["context"]["stats"]) == status
 
+
+def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
+    # test if get function correctly returns a green alert
+    
+    monkeypatch.setattr(system, "get_consumer_status", 
+                        mock_green_consumer_status)
+    
+    get = loop.run_until_complete(system.get(Request))
+    attrs = (get.__dict__)
+    
+    failed = attrs["context"]["stats"]["failed"]
+    
+    assert failed == {'failed_num': 0, 'failed_colour': 'alert-success'}
+
+
+def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
+    # test if get function correctly returns a red alert
+    
+    monkeypatch.setattr(system, "get_consumer_status", mock_red_consumer_status)
+    
+    get = loop.run_until_complete(system.get(Request))
+    attrs = (get.__dict__)
+    
+    failed = attrs["context"]["stats"]["failed"]
+    
+    assert failed == {'failed_num': 14, 'failed_colour': 'alert-danger'}
+    
+
+def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
+    # test if get function correctly returns a blue alert
+    
+    monkeypatch.setattr(system, "get_consumer_status", mock_blue_consumer_status)
+    
+    get = loop.run_until_complete(system.get(Request))
+    attrs = (get.__dict__)
+    
+    failed = attrs["context"]["stats"]["failed"]
+    
+    assert failed == {'failed_num': 0, 'failed_colour': 'alert-info'}
 
 
 """

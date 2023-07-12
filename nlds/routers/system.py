@@ -49,7 +49,7 @@ def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):
     
     res_json = convert_json(res)
     if res_json == {'error': 'Object Not Found', 'reason': 'Not Found'}:
-        return []
+        return "RabbitError"
     # Number of consumers
     consumers = (res_json['consumer_details'])
     consumer_tags = []
@@ -71,6 +71,14 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
         print("Something went wrong, returning a 403... ")
         return{
             "val": ("403 error"), 
+            "colour": "PURPLE"
+            }
+    
+    if consumer_tags == "RabbitError":
+        print("The rabbit server may be offline... ")
+        print("Please try restart the consumers starting with logging_q ")
+        return{
+            "val": ("Rabbit error"), 
             "colour": "PURPLE"
             }
     
