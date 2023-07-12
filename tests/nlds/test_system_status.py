@@ -117,6 +117,10 @@ def test_get_consumer_status_rabbits_offline(monkeypatch,
         "consumer_q", "consumer", msg_dict, time_limit, 0))
     
     assert consumer == {"val": ("Rabbit error"), "colour": "PURPLE"}
+    
+    assert consumer["val"] == "Rabbit error"
+    
+    assert consumer["colour"] == "PURPLE"
 
 
 def test_get_consumer_status_requests_failed(monkeypatch, 
@@ -146,6 +150,10 @@ def test_get_consumer_status_requests_failed(monkeypatch,
     
     assert consumer == {'val': '403 error', 'colour': 'PURPLE'}
     
+    assert consumer["val"] == "403 error"
+    
+    assert consumer["colour"] == "PURPLE"
+    
     
 def test_get_consumer_status_requests_error(monkeypatch, 
                                              loop: asyncio.AbstractEventLoop):
@@ -173,6 +181,10 @@ def test_get_consumer_status_requests_error(monkeypatch,
         "consumer_q", "consumer", msg_dict, time_limit, 0))
     
     assert consumer == {'val': '403 error', 'colour': 'PURPLE'}
+    
+    assert consumer["val"] == "403 error"
+    
+    assert consumer["colour"] == "PURPLE"
 
 
 def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop):
@@ -202,6 +214,9 @@ def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     assert consumer == {"val": "All Consumers Online (5/5)", "colour": "GREEN"}
     
+    assert consumer["val"] == "All Consumers Online (5/5)"
+    
+    assert consumer["colour"] == "GREEN"
     
 
 def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop):
@@ -236,6 +251,13 @@ def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop):
                    "mock_tag_3", "mock_tag_4", "mock_tag_5"]
         }
     
+    assert consumer["val"] == "All Consumers Offline (0/5)"
+    
+    assert consumer["colour"] == "RED"
+    
+    assert consumer["failed"] == ["mock_tag_1", "mock_tag_2", 
+                   "mock_tag_3", "mock_tag_4", "mock_tag_5"]
+    
     
     
 def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop):
@@ -268,7 +290,12 @@ def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop):
         "colour": "ORANGE", 
         "failed": ["mock_tag_1", "mock_tag_2"]
         }
+        
+    assert consumer["val"] == "Consumers Online (3/5)"
     
+    assert consumer["colour"] == "ORANGE"
+    
+    assert consumer["failed"] == ["mock_tag_1", "mock_tag_2"]
     
     
 def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop):
@@ -300,7 +327,10 @@ def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop):
         "val": "All Consumers Offline (None running)", 
         "colour": "RED"
         }
-
+    
+    assert consumer["val"] == "All Consumers Offline (None running)"
+    
+    assert consumer["colour"] == "RED"
 
 
 def test_slow_consumer_all_offline(monkeypatch, 
@@ -334,8 +364,13 @@ def test_slow_consumer_all_offline(monkeypatch,
         "failed": ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
                    "mock_tag_4", "mock_tag_5"]
         }
-
     
+    assert consumer["val"] == "All Consumers Offline (0/5)"
+    
+    assert consumer["colour"] == "RED"
+
+    assert consumer["failed"] == ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
+                                  "mock_tag_4", "mock_tag_5"]
 
 
 
@@ -462,6 +497,10 @@ def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
     failed = attrs["context"]["stats"]["failed"]
     
     assert failed == {'failed_num': 0, 'failed_colour': 'alert-success'}
+    
+    assert failed["failed_num"] == 0
+    
+    assert failed["failed_colour"] == "alert-success"
 
 
 def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
@@ -483,6 +522,10 @@ def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     assert failed == {'failed_num': 14, 'failed_colour': 'alert-danger'}
     
+    assert failed["failed_num"] == 14
+    
+    assert failed["failed_colour"] == "alert-danger"
+    
 
 def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if get function correctly returns a blue alert
@@ -502,6 +545,10 @@ def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
     failed = attrs["context"]["stats"]["failed"]
     
     assert failed == {'failed_num': 0, 'failed_colour': 'alert-info'}
+    
+    assert failed["failed_num"] == 0
+    
+    assert failed["failed_colour"] == "alert-info"
 
 
 """
