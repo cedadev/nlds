@@ -1,4 +1,4 @@
-@startuml catalog_db_update
+@startuml catalog_db
 
 object "**Holding**" as holding {
     id [INT](unique)
@@ -23,6 +23,7 @@ object "**Aggregation**" as aggregation {
     id [INT](unique)
     tarname [STRING]
     checksum [STRING]
+    algorithm [STRING]
 }
 
 object "**File**" as file {
@@ -52,7 +53,7 @@ object "**Checksum**" as checksum {
     algorithm [STRING]
 }
 
-aggregation "1" *-- "many" location
+location "many"  *-- "1" aggregation
 'holding "1" *-- "many" aggregation
 transaction "1" *-- "many" file
 holding "1" *-- "many" transaction
