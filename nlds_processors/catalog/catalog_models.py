@@ -117,6 +117,10 @@ class Location(CatalogBase):
     id = Column(Integer, primary_key=True)
     # storage type = OBJECT_STORAGE | TAPE
     storage_type = Column(Enum(Storage))
+    # scheme / protocol from the url 
+    url_scheme = Column(String, nullable=False)
+    # network location from the url
+    url_netloc = Column(String, nullable=False)
     # root of the file on the storage (bucket on object storage)
     root = Column(String, nullable=False)
     # path of the file on the storage
