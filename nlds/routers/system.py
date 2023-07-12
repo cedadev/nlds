@@ -27,6 +27,14 @@ template_dir = os.path.join(os.path.dirname(__file__), "../templates/")
 templates = Jinja2Templates(directory=template_dir)
 
 
+class RabbitError(Exception):
+    "Rabbits may not be working"
+    pass
+
+
+class RequestError(Exception):
+    "Requests may not be working"
+    pass
 
 
 class SystemResponse(BaseModel):
@@ -45,11 +53,11 @@ def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):
     try:
         res = requests.get(api_queues, auth=HTTPBasicAuth(login, password))
     except:
-        return("request error")
+        raise RequestError
     
     res_json = convert_json(res)
     if res_json == {'error': 'Object Not Found', 'reason': 'Not Found'}:
-        return "RabbitError"
+        raise RabbitError
     # Number of consumers
     consumers = (res_json['consumer_details'])
     consumer_tags = []
@@ -73,8 +81,13 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
             "val": ("403 error"), 
             "colour": "PURPLE"
             }
-    
-    if consumer_tags == "RabbitError":
+    except RequestError as e:
+        print("Something went wrong, returning a 403... ")
+        return{
+            "val": ("403 error"), 
+            "colour": "PURPLE"
+            }
+    except RabbitError as e:
         print("The rabbit server may be offline... ")
         print("Please try restart the consumers starting with logging_q ")
         return{
