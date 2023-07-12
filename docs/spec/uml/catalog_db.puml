@@ -53,7 +53,7 @@ object "**Checksum**" as checksum {
     algorithm [STRING]
 }
 
-location "many"  *-- "1" aggregation
+aggregation "many"  *-- "1" location
 'holding "1" *-- "many" aggregation
 transaction "1" *-- "many" file
 holding "1" *-- "many" transaction
