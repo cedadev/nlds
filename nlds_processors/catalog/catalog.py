@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
     NoResultFound
 
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
-     Location, Transaction, Storage, Checksum, Tag
+     Location, Transaction, Aggregation, Storage, Checksum, Tag
 from nlds_processors.db_mixin import DBMixin
 
 class CatalogError(Exception):
@@ -408,22 +408,28 @@ class Catalog(DBMixin):
     def create_location(self, 
                         file: File,
                         storage_type: Enum,
+                        url_scheme: str,
+                        url_netloc: str,
                         root: str,
-                        object_name: str, 
-                        access_time: float) -> Location:
+                        path: str, 
+                        access_time: float,
+                        aggregation: Aggregation = None) -> Location:
         """Add the storage location for either object storage or tape"""
         assert(self.session != None)
         try:
             location = Location(
                 storage_type = storage_type,
+                url_scheme = url_scheme,
+                url_netloc = url_netloc,
                 # root is bucket for Object Storage which is the transaction id
                 # which is now stored in the Holding record
                 root = root,
                 # path is object_name for object storage
-                path = object_name,
+                path = path,
                 # access time is passed in the file details
                 access_time = access_time,
-                file_id = file.id
+                file_id = file.id,
+                aggregation_id = aggregation.id,
             )
             self.session.add(location)
             self.session.flush()           # flush to generate location.id
@@ -522,3 +528,64 @@ class Catalog(DBMixin):
                 f"Tag with key:{key} not found"
             )
         return None
+
+    def create_aggregation(self, 
+                           tarname: str, 
+                           checksum: str = None, 
+                           algorithm: str = None) -> None:
+        """Create an aggregation of files to write to tape as a tar file"""
+        assert self.session is not None
+        try:
+            aggregation = Aggregation(
+                tarname=tarname,
+                checksum=checksum,
+                algorithm=algorithm,
+            )
+            self.session.add(aggregation)
+            self.session.flush()           # flush to generate aggregation.id
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Aggregation with tarname:{tarname} could not be added to the "
+                f"database"
+            )
+        return aggregation
+    
+    def update_aggregation(self, 
+                           aggregation: Aggregation,
+                           checksum: str, 
+                           algorithm: str) -> None: 
+        """Add a missing checksum & algoithm to an aggregation after a 
+        successful write to tape."""
+        assert self.session is not None
+        try:
+            aggregation.checksum = checksum
+            aggregation.algorithm = algorithm
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Aggregation with id:{aggregation.id} and "
+                f"tarname:{aggregation.tarname} could not be updated with new "
+                f"checksum:{checksum} and algorithm:{algorithm}."
+            )
+        return aggregation
+    
+    def get_aggregation(self, 
+                        file_: File, 
+                        storage_type: Storage = Storage.TAPE):
+        """Get the aggregation associated with a particular file's location on 
+        tape. Storage type has been left as a kwarg in case future storage types 
+        are added which will utilise aggregations."""
+        assert self.session is not None
+        try:
+            # Get the aggregation for a particular file via it's tape location
+            aggregation = self.session.query(Aggregation).filter(
+                Aggregation.id == Location.aggregation_id,
+                Location.file_id == file_.id,
+                Location.storage_type == storage_type,
+            ).one_or_none() 
+            # There should only ever be one aggregation per tape location and 
+            # only one tape location per file
+        except (IntegrityError, KeyError) as e:
+            raise CatalogError(
+                f"Aggregation for file with id:{file_.id} and path:{file_.path}"
+            )
+        return aggregation
