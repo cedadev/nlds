@@ -529,6 +529,7 @@ class Catalog(DBMixin):
             )
         return None
 
+
     def create_aggregation(self, 
                            tarname: str, 
                            checksum: str = None, 
@@ -550,6 +551,7 @@ class Catalog(DBMixin):
             )
         return aggregation
     
+
     def update_aggregation(self, 
                            aggregation: Aggregation,
                            checksum: str, 
@@ -568,6 +570,7 @@ class Catalog(DBMixin):
             )
         return aggregation
     
+
     def get_aggregation(self, 
                         file_: File, 
                         storage_type: Storage = Storage.TAPE):
@@ -584,8 +587,52 @@ class Catalog(DBMixin):
             ).one_or_none() 
             # There should only ever be one aggregation per tape location and 
             # only one tape location per file
-        except (IntegrityError, KeyError) as e:
+        except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Aggregation for file with id:{file_.id} and path:{file_.path}"
             )
         return aggregation
+    
+    
+    def get_next_holding(self):
+        """The principal function for getting the next unarchived holding to 
+        archive aggregate."""
+        assert self.session is not None
+        try: 
+            all_holdings_q = self.session.query(Holding)
+            archived_holdings_q = all_holdings_q.filter(
+                Transaction.holding_id == Holding.id,
+                File.transaction_id == Transaction.id,
+                Location.file_id == File.id,
+                Location.storage_type == Storage.TAPE
+            )
+            next_holding = all_holdings_q.not_in(
+                archived_holdings_q
+            ).first_or_none()
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Couldn't get unarchived holdings"
+            )
+        return next_holding
+
+    
+    def get_unarchived_files(self, holding: Holding):
+        """The principal function for getting unarchived files to aggregate and 
+        send to archive put."""
+        assert self.session is not None
+        try: 
+            all_files = self.session.query(File).filter(
+                Transaction.holding_id == holding.id,
+                File.transaction_id == Transaction.id,
+            )
+            archived_files = all_files.filter(
+                Location.file_id == File.id,
+                Location.storage_type == Storage.TAPE,
+            )
+            unarchived_files = all_files.not_in(archived_files).all()
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Couldn't find unarchived files for holding with "
+                f"id:{holding.id}"
+            )
+        return unarchived_files
