@@ -1397,7 +1397,7 @@ def main():
     # connect to message queue early so that we can send logging messages about
     # connecting to the database
     consumer.get_connection()
-    consumer.attach_catalog()
+    consumer.attach_database()
     # run the loop
     consumer.run()
 
