@@ -132,6 +132,10 @@ class Location(CatalogBase):
                      index=True, nullable=False)
     aggregation_id = Column(Integer, ForeignKey("aggregation.id"), 
                             index=True, nullable=True)
+    
+    # storage_type must be unique per file_id, i.e. each file can only have one 
+    # each location
+    __table_args__ = (UniqueConstraint("storage_type", "file_id"), )
 
 
 class Checksum(CatalogBase):
