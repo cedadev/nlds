@@ -217,7 +217,7 @@ def upgrade_catalog() -> None:
     }
     with op.batch_alter_table("location", naming_convention=naming_conv) as bop:
         # Create a new foreign key constraint according to naming convention 
-        bop.create_foreign_key("fk_locations_aggregation_ids_aggregations", 
+        bop.create_foreign_key("fk_location_aggregation_id_aggregation", 
                                'aggregation', ['aggregation_id'], ['id'])
 
 
