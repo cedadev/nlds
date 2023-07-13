@@ -164,9 +164,9 @@ class Aggregation(Base):
     # The name of the tarfile on tape
     tarname = Column(String, nullable=False)
     # checksum
-    checksum = Column(String, nullable=False)
+    checksum = Column(String, nullable=True)
     # checksum method / algorithm
-    algorithm = Column(String, nullable=False)
+    algorithm = Column(String, nullable=True)
 
     # relationship for location (one to many)
     location = relationship("Location", cascade="delete, delete-orphan")
@@ -191,8 +191,8 @@ def upgrade_catalog() -> None:
         'aggregation',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('tarname', sa.String(), nullable=False),
-        sa.Column('checksum', sa.String(), nullable=False),
-        sa.Column('algorithm', sa.String(), nullable=False),
+        sa.Column('checksum', sa.String(), nullable=True),
+        sa.Column('algorithm', sa.String(), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
     op.add_column('location', sa.Column('aggregation_id', sa.Integer(), 
