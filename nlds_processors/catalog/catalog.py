@@ -599,16 +599,20 @@ class Catalog(DBMixin):
         archive aggregate."""
         assert self.session is not None
         try: 
+            # Get all holdings
             all_holdings_q = self.session.query(Holding)
-            archived_holdings_q = all_holdings_q.filter(
+            # Get all archived holdings
+            archived_holdings_q = self.session.query(Holding.id).filter(
                 Transaction.holding_id == Holding.id,
                 File.transaction_id == Transaction.id,
                 Location.file_id == File.id,
                 Location.storage_type == Storage.TAPE
             )
+            # Get the first of the holdings which are not in the archived 
+            # holdings query
             next_holding = all_holdings_q.not_in(
                 archived_holdings_q
-            ).first_or_none()
+            ).order_by(Holding.id).first()
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Couldn't get unarchived holdings"
@@ -621,15 +625,22 @@ class Catalog(DBMixin):
         send to archive put."""
         assert self.session is not None
         try: 
+            # Get all files for the given holding
             all_files = self.session.query(File).filter(
                 Transaction.holding_id == holding.id,
                 File.transaction_id == Transaction.id,
             )
-            archived_files = all_files.filter(
+            # Get the subset of files which are archived
+            archived_files = self.session.query(File.id).filter(
+                Transaction.holding_id == holding.id,
+                File.transaction_id == Transaction.id,
                 Location.file_id == File.id,
                 Location.storage_type == Storage.TAPE,
             )
-            unarchived_files = all_files.not_in(archived_files).all()
+            # Get the remainder of files which are unarchived
+            unarchived_files = all_files.filter(
+                Holding.id.not_in(archived_files)
+            ).all()
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Couldn't find unarchived files for holding with "
