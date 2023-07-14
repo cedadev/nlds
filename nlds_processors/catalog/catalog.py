@@ -406,7 +406,7 @@ class Catalog(DBMixin):
 
 
     def create_location(self, 
-                        file: File,
+                        file_: File,
                         storage_type: Enum,
                         url_scheme: str,
                         url_netloc: str,
@@ -416,6 +416,10 @@ class Catalog(DBMixin):
                         aggregation: Aggregation = None) -> Location:
         """Add the storage location for either object storage or tape"""
         assert(self.session != None)
+        if aggregation is None:
+            aggregation_id = None
+        else:
+            aggregation_id = aggregation.id
         try:
             location = Location(
                 storage_type = storage_type,
@@ -428,14 +432,14 @@ class Catalog(DBMixin):
                 path = path,
                 # access time is passed in the file details
                 access_time = access_time,
-                file_id = file.id,
-                aggregation_id = aggregation.id,
+                file_id = file_.id,
+                aggregation_id = aggregation_id,
             )
             self.session.add(location)
             self.session.flush()           # flush to generate location.id
         except (IntegrityError, KeyError):
             raise CatalogError(
-                f"Location with root {root}, path {file.original_path} and "
+                f"Location with root {root}, path {file_.original_path} and "
                 f"storage type {storage_type} could not be added to "
                  "the database")
         return location
