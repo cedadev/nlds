@@ -40,18 +40,18 @@ which (if any) have stoped working
 
 
 The table should look something like this (with examples of different status):
-    =============  =======================================  =========================================
-    Service        Status                                   Failed Consumer Tags (if any)
-    =============  =======================================  =========================================
+    =============  =========================================  =========================================
+    Service        Status                                     Failed Consumer Tags (if any)
+    =============  =========================================  =========================================
     Monitor        All Consumers Offline (None running)
     Catalog        All Consumers Online (3/3)
-    NLDS Worker    Consumers Online (1/2)                   ctag1.732d21f82b4c47dcbd7dabe12f95315c
+    NLDS Worker    Consumers Online (1/2)                     ctag1.732d21f82b4c47dcbd7dabe12f95315c
     Index          All Consumers Online (3/3)
     Get Transfer   403 error
     Put Transfer   Rabbit error
-    Logger         All Consumers Offline (0/2)              ctag1.732d21f82b4c47dcbd7dabe12f95315c
-    Logger         (this will be on the same line)          ctag1.040535d3708c4012a4d2e6b0e6884cf2
-    =============  =======================================  =========================================
+    Logger         All Consumers Offline (0/2)                ctag1.732d21f82b4c47dcbd7dabe12f95315c
+    Logger         (the ctag here will be on the row above)   ctag1.040535d3708c4012a4d2e6b0e6884cf2
+    =============  =========================================  =========================================
 
 the errors on this table will most likely cause the whole table to have the same
 error this is just a representation
