@@ -614,9 +614,9 @@ class Catalog(DBMixin):
             )
             # Get the first of the holdings which are not in the archived 
             # holdings query
-            next_holding = all_holdings_q.not_in(
+            next_holding = all_holdings_q.filter(Holding.id.not_in(
                 archived_holdings_q
-            ).order_by(Holding.id).first()
+            )).order_by(Holding.id).first()
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Couldn't get unarchived holdings"
@@ -643,7 +643,7 @@ class Catalog(DBMixin):
             )
             # Get the remainder of files which are unarchived
             unarchived_files = all_files.filter(
-                Holding.id.not_in(archived_files)
+                File.id.not_in(archived_files)
             ).all()
         except (NoResultFound, KeyError):
             raise CatalogError(
