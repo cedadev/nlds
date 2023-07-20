@@ -2,6 +2,7 @@ import asyncio
 import requests
 import os
 import json
+from typing import Annotated
 
 from fastapi import Depends, APIRouter, status, Query, FastAPI, Request
 from fastapi.exceptions import HTTPException
@@ -37,6 +38,16 @@ class RequestError(Exception):
     pass
 
 
+class LoginError(Exception):
+    "Your login information is incorrect or you are not authorised"
+    pass
+
+
+class Error(Exception):
+    def __init__(self, json):
+        self.json = json
+
+
 class SystemResponse(BaseModel):
     
     status: str = ""
@@ -58,6 +69,16 @@ def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):
     res_json = convert_json(res)
     if res_json == {'error': 'Object Not Found', 'reason': 'Not Found'}:
         raise RabbitError
+    
+    if res_json == {'error': 'not_authorized', 'reason': 'Login failed'}:
+        raise LoginError
+    
+    try:
+        res_json["error"]
+        raise Error(res_json)
+    except KeyError:
+        pass
+    
     # Number of consumers
     consumers = (res_json['consumer_details'])
     consumer_tags = []
@@ -92,6 +113,20 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
         print("Please try restart the consumers starting with logging_q ")
         return{
             "val": ("Rabbit error"), 
+            "colour": "PURPLE"
+            }
+    except LoginError as e:
+        print("Your RabbitMQ login information is incorrect or not authorised ")
+        print("Please enter valid login information in the JASMIN .server_config file ")
+        return{
+            "val": ("Login error"), 
+            "colour": "PURPLE"
+            }
+    except Error as e:
+        print("an unexpected error occurred: ")
+        print(e.json)
+        return{
+            "val": e.json, 
             "colour": "PURPLE"
             }
     
@@ -168,9 +203,25 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
             },
             response_class=HTMLResponse
         )
-async def get(request: Request):
+async def get(request: Request, q: Annotated[list[str], Query(alias="option")] = ["5", "all"]):
+    # http://127.0.0.1:8000/system/stats/?time-limit={time limit number here}
+    # max time limit is 30 seconds because the uvicorn server doesn't actually do
+    # anything until its finished with that number even if the page was closed
     
+    default = False
+    services = ["monitor", "catalog", "nlds worker", "index", "get transfer", "put transfer", "logger"]
+    gathered = []
     
+    try:
+        time=q[0]
+        time = int(time)
+        if time > 15 or time < 1:
+            time = 5
+    except:
+        time = 5
+        default = True
+
+
     msg_dict = {
         "details": {
             "api_action": "system_stat", 
@@ -182,8 +233,59 @@ async def get(request: Request):
     
     # x seconds for each broken consumer meaning if there are 
     # a lot you might want to decrease this number
-    time_limit = 5
+    time_limit = time
+
+
+    services_dict = {
+        "monitor": ["monitor_q", "monitor"],
+        "catalog": ["catalog_q", "catalog"],
+        "nlds worker": ["nlds_q", "nlds_worker"],
+        "index": ["index_q", "index"],
+        "get transfer": ["transfer_get_q", "get_transfer"],
+        "put transfer": ["transfer_put_q", "put_transfer"],
+        "logger": ["logging_q", "logger"],
+    }
     
+    partial_services = []
+    structure_dict = {
+        "service": "",
+        "info": ""
+    }
+
+    if default == False:
+        q.pop(0)
+    consumers = q
+    if consumers[0] != "all":
+        for consumer in consumers:
+            consumer = consumer.lower()
+            if consumer in services:
+                gathered.append(consumer)
+        gathered = list(dict.fromkeys(gathered))
+    
+        for service in gathered:
+            
+            name = services_dict[service][1]
+            key = services_dict[service][0]
+        
+            value = await get_consumer_status(key, name, 
+                                                msg_dict, time_limit, 0)
+            
+            structure_dict2 = structure_dict.copy()
+            
+            structure_dict2["service"] = name
+            structure_dict2["info"] = value
+            
+            partial_services.append(structure_dict2)
+    
+        return templates.TemplateResponse("selection.html", 
+                                          context={
+                                              "request": request, 
+                                              "stats": partial_services
+                                              }
+                                          )
+    
+    
+
     
     
     # The numbers indicate how many consumers in a queue to skip
