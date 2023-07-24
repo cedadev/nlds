@@ -24,6 +24,7 @@ Requires these settings in the /etc/nlds/server_config file:
 """
 
 import json
+from typing import Dict, Tuple
 
 # Typing imports
 from pika.channel import Channel
@@ -41,6 +42,44 @@ from nlds_processors.catalog.catalog import Catalog, CatalogError
 from nlds_processors.catalog.catalog_models import Storage
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
+
+
+class Metadata():
+    """Container class for the meta section of the message body."""
+    label: str
+    holding_id: int
+    transaction_id: str
+    tags: Dict
+
+    def __init__(self, body: Dict):
+        # Get the label from the metadata section of the message
+        try:
+            self.label = body[RMQC.MSG_META][RMQC.MSG_LABEL]    
+        except KeyError:
+            self.label = None
+
+        # Get the holding_id from the metadata section of the message
+        try:
+            self.holding_id = body[RMQC.MSG_META][RMQC.MSG_HOLDING_ID]
+        except KeyError:
+            self.holding_id = None
+
+        # Get any tags that exist
+        try:
+            self.tags = body[RMQC.MSG_META][RMQC.MSG_TAG]
+        except KeyError:
+            self.tags = None
+
+        # get the transaction id from the metadata section of the message
+        try: 
+            self.transaction_id = body[RMQC.MSG_META][RMQC.MSG_TRANSACT_ID]
+        except KeyError:
+            self.transaction_id = None
+
+    @property
+    def unpack(self) -> Tuple:
+        return self.label, self.holding_id, self.tags, self.transaction_id
+    
 
 class CatalogConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "catalog_q"
@@ -108,8 +147,12 @@ class CatalogConsumer(RMQC):
         self.reroutelist = []
 
 
-    def _catalog_put(self, body: dict, rk_origin: str) -> None:
-        """Put a file record into the catalog - end of a put transaction"""
+    def _parse_required_vars(self, body: Dict) -> Tuple:
+        """Refactored out of each catalog function, this is merely a collection 
+        of try-except statments to extract required variables from the message 
+        body. Returns a tuple of filelist (a list of PathDetails objects), user 
+        and group if successful, None if not.
+        """
         # get the filelist from the data section of the message
         try:
             filelist = body[self.MSG_DATA][self.MSG_FILELIST]
@@ -117,7 +160,7 @@ class CatalogConsumer(RMQC):
             self.log(f"Invalid message contents, filelist should be in the data "
                      f"section of the message body.",
                      self.RK_LOG_ERROR)
-            return
+            return 
 
         # check filelist is a list
         try:
@@ -126,53 +169,93 @@ class CatalogConsumer(RMQC):
             self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
             return
 
-        # get the transaction id from the details section of the message
-        try: 
-            transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
-        except KeyError:
-            self.log("Transaction id not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
         # get the user id from the details section of the message
         try:
             user = body[self.MSG_DETAILS][self.MSG_USER]
         except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+            self.log("User not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
             return
 
         # get the group from the details section of the message
         try:
             group = body[self.MSG_DETAILS][self.MSG_GROUP]
         except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
+            self.log("Group not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+        
+        return filelist, user, group
+    
+
+    def _parse_user_vars(self, body: Dict) -> Tuple:
+        # get the user id from the details section of the message
+        try:
+            user = body[self.MSG_DETAILS][self.MSG_USER]
+        except KeyError:
+            self.log("User not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
             return
 
-        # get the label from the metadata section of the message
+        # get the group from the details section of the message
         try:
-            label = body[self.MSG_META][self.MSG_LABEL]
-            # if holding id not given then new_label used to create holding
-            new_label = label        
+            group = body[self.MSG_DETAILS][self.MSG_GROUP]
         except KeyError:
-            # generate the label from the UUID - should loop here to make sure 
-            # we get a unique label
-            label = None
-            # no label given so if holding_id not given the subset of 
+            self.log("Group not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+        
+        return user, group
+    
+
+    def _parse_metadata_vars(self, body: Dict) -> Tuple:
+        """Convenience function to prevent unnecessary code replication for 
+        extraction of metadata variables from the message body. This is 
+        specifically for requesting particular holdings/transactions/labels/tags 
+        in a given catalog function. Returns a tuple of label, holding_id and 
+        tags, with each being None if not found.
+        """
+        md = Metadata(body)
+        return md.unpack
+
+
+    def _catalog_put(self, body: dict, rk_origin: str) -> None:
+        """Put a file record into the catalog - end of a put transaction"""
+        # Parse the message body for required variables
+        message_vars = self._parse_required_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
+            return
+        else:
+            # Unpack if no problems found in parsing
+            filelist, user, group = message_vars
+        
+        # get the transaction id from the details section of the message. It is 
+        # a mandatory variable for the PUT workflow
+        try: 
+            transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
+        except KeyError:
+            self.log("Transaction id not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        label, holding_id, tags, _ = md.unpack
+        if label is None:
+            # No label given so if holding_id not given the subset of 
             # transaction id is used as new label
+            # TODO: (2023-07-21) should loop here to make sure we get a unique 
+            # label
             new_label = transaction_id[0:8] 
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get any tags that exist
-        try:
-            tags = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            tags = None
-
-        # start the database transactions
+        else: 
+            # If holding id not given then new_label used to create holding
+            new_label = label    
+        
+        # Start the database transactions
         self.catalog.start_session()
 
         # determine the search label
@@ -361,55 +444,21 @@ class CatalogConsumer(RMQC):
         exchange to be processed by the transfer processor. If any file is only 
         found on tape then it will be first rerouted to the archive processor 
         for retrieval to object store cache."""
-        # get the filelist from the data section of the message
-        try:
-            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
-        except KeyError as e:
-            self.log(f"Invalid message contents, filelist should be in the data"
-                     f"section of the message body.",
-                     self.RK_LOG_ERROR)
+        # Parse the message body for required variables
+        message_vars = self._parse_required_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
             return
+        else:
+            # Unpack if no problems found in parsing
+            filelist, user, group = message_vars
 
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # NOTE: This is never actually set for the get workflow is it?
-
-        # get the transaction id from the details section of the message
-        try: 
-            transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
-        except KeyError:
-            transaction_id = None
-
-        # get the holding tag from the details section of the message
-        try:
-            holding_tag = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            holding_tag = None
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        holding_label, holding_id, holding_tag, transaction_id = md.unpack
 
         # start the database transactions
         self.catalog.start_session()
@@ -573,63 +622,31 @@ class CatalogConsumer(RMQC):
     def _catalog_del(self, body: dict, rk_origin: str) -> None:
         """Remove a given list of files from the catalog if the transfer 
         fails"""
-        # get the filelist from the data section of the message
-        try:
-            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
-        except KeyError as e:
-            self.log(f"Invalid message contents, filelist should be in the data"
-                     f"section of the message body.",
-                     self.RK_LOG_ERROR)
+        # Parse the message body for required variables
+        message_vars = self._parse_required_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
             return
-        
-        # check filelist is a list
-        try:
-            f = filelist[0]
-        except TypeError as e:
-            self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
-            return
+        else:
+            # Unpack if no problems found in parsing
+            filelist, user, group = message_vars
 
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # get the tags from the details sections of the message
-        try:
-            tag = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            tag = None
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        holding_label, holding_id, holding_tag, _ = md.unpack
 
         # start the database transactions
         self.catalog.start_session()
 
         # get the holding from the database
-        if holding_label is None and holding_id is None and tag is None:
+        if holding_label is None and holding_id is None and holding_tag is None:
             self.log("No method for identifying a holding or transaction "
                      "provided, will continue without.",
                      self.RK_LOG_WARNING)
+            # TODO: what happens in this event?
 
         for f in filelist:
             file_details = PathDetails.from_dict(f)
@@ -638,7 +655,7 @@ class CatalogConsumer(RMQC):
                 self.catalog.delete_files(
                     user, group, holding_label=holding_label, 
                     holding_id=holding_id, path=file_details.original_path,
-                    tag=tag
+                    tag=holding_tag
                 )
             except CatalogError as e:
                 if file_details.retries.count > self.max_retries:
@@ -699,60 +716,21 @@ class CatalogConsumer(RMQC):
         ) -> None:
         """Remove a given list of locations from the catalog if the transfer, 
         archive-put or archive-get fails."""
-        # get the filelist from the data section of the message
-        try:
-            filelist = body[self.MSG_DATA][self.MSG_FILELIST]
-        except KeyError as e:
-            self.log(f"Invalid message contents, filelist should be in the data"
-                     f"section of the message body.",
-                     self.RK_LOG_ERROR)
+        # Parse the message body for required variables
+        message_vars = self._parse_required_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
             return
-        
-        # check filelist is a list
-        try:
-            f = filelist[0]
-        except TypeError as e:
-            self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
-            return
+        else:
+            # Unpack if no problems found in parsing
+            filelist, user, group = message_vars
 
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-        
-        # get the transaction id from the details section of the message
-        try: 
-            transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
-        except KeyError:
-            transaction_id = None
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # get the tags from the details sections of the message
-        try:
-            tag = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            tag = None
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        holding_label, holding_id, tag, transaction_id = md.unpack
 
         # start the database transactions
         self.catalog.start_session()
@@ -846,44 +824,21 @@ class CatalogConsumer(RMQC):
 
     def _catalog_list(self, body: dict, properties: Header) -> None:
         """List the users holdings"""
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+        # Parse the message body for required variables
+        message_vars = self._parse_user_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
             return
+        else:
+            # Unpack if no problems found in parsing
+            user, group = message_vars
 
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get the transaction id if it exists
-        try:
-            transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
-        except KeyError:
-            transaction_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # get the tags from the details sections of the message
-        try:
-            tag = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            tag = None
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        holding_label, holding_id, tag, transaction_id = md.unpack
 
         self.catalog.start_session()
 
@@ -933,19 +888,17 @@ class CatalogConsumer(RMQC):
 
     def _catalog_stat(self, body: dict, properties: Header) -> None:
         """Get the labels for a list of transaction ids"""
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+        # Parse the message body for required variables
+        message_vars = self._parse_user_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
             return
-
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
+        else:
+            # Unpack if no problems found in parsing
+            user, group = message_vars
 
         # get the transaction_ids from the metadata section of the message
         try:
@@ -1012,50 +965,27 @@ class CatalogConsumer(RMQC):
 
     def _catalog_find(self, body: dict, properties: Header) -> None:
         """List the user's files"""
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+        # Parse the message body for required variables
+        message_vars = self._parse_user_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
             return
+        else:
+            # Unpack if no problems found in parsing
+            user, group = message_vars
 
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # get the transaction id from the details section of the message
-        try: 
-            transaction_id = body[self.MSG_META][self.MSG_TRANSACT_ID]
-        except KeyError:
-            transaction_id = None
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        holding_label, holding_id, tag, transaction_id = md.unpack
 
         # get the path from the detaisl section of the message
         try:
             path = body[self.MSG_META][self.MSG_PATH]
         except KeyError:
             path = None
-
-        # get the tags from the details sections of the message
-        try:
-            tag = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            tag = None
 
         self.catalog.start_session()
         ret_dict = {}
@@ -1142,38 +1072,21 @@ class CatalogConsumer(RMQC):
 
     def _catalog_meta(self, body: dict, properties: Header) -> None:
         """Change metadata for a user's holding"""
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", self.RK_LOG_ERROR)
+                # Parse the message body for required variables
+        message_vars = self._parse_user_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
             return
+        else:
+            # Unpack if no problems found in parsing
+            user, group = message_vars
 
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", self.RK_LOG_ERROR)
-            return
-
-        # get the holding_id from the metadata section of the message
-        try:
-            holding_id = body[self.MSG_META][self.MSG_HOLDING_ID]
-        except KeyError:
-            holding_id = None
-
-        # get the holding label from the details section of the message
-        # could (legit) be None
-        try: 
-            holding_label = body[self.MSG_META][self.MSG_LABEL]
-        except KeyError:
-            holding_label = None
-
-        # get the tags from the details sections of the message
-        try:
-            tag = body[self.MSG_META][self.MSG_TAG]
-        except KeyError:
-            tag = None
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        holding_label, holding_id, tag, _ = md.unpack
 
         # get the new label from the new meta section of the message
         try:
