@@ -484,7 +484,7 @@ class CatalogConsumer(RMQC):
                             file, Storage.OBJECT_STORAGE
                         )
                         # If not in object store then look for it in tape 
-                        # instead, but only in the case of a get 
+                        # instead, but only in the case of a regular get 
                         if location is None and api_method == self.RK_GET:
                             object_store_fl = False
                             self.log("Searching for copy of file in archive", 
@@ -495,12 +495,12 @@ class CatalogConsumer(RMQC):
                         # If still None then file doesn't exist within the NLDS
                         if location is None:
                             raise CatalogError(
-                                f"Could not find location for file with original path "
-                                f"{file_details.original_path}"
+                                f"Could not find location for file with "
+                                f"original path {file_details.original_path}."
                             )         
                         object_name = ("nlds." +
-                                    location.root + ":" + 
-                                    location.path)
+                                       location.root + ":" + 
+                                       location.path)
                         access_time = location.access_time.timestamp()
                         # create a new PathDetails with all the info from the DB
                         new_file = PathDetails(
@@ -546,7 +546,7 @@ class CatalogConsumer(RMQC):
                             
                     else:
                         # Add the new location to the catalog now, to be removed 
-                        # in the event of a retrieval failure. 
+                        # in the event of an s3 get failure. 
                         location = self.catalog.create_location(
                             file,
                             Storage.OBJECT_STORAGE,
