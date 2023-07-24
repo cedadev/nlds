@@ -759,7 +759,7 @@ class CatalogConsumer(RMQC):
                 for file in files:
                     try:
                         self.catalog.delete_location(
-                            file, Storage.OBJECT_STORAGE
+                            file, location_type
                         )
                     except CatalogError as e:
                         if file_details.retries.count > self.max_retries:
