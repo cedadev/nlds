@@ -560,7 +560,7 @@ class Catalog(DBMixin):
                            aggregation: Aggregation,
                            checksum: str, 
                            algorithm: str) -> None: 
-        """Add a missing checksum & algoithm to an aggregation after a 
+        """Add a missing checksum & algorithm to an aggregation after a 
         successful write to tape."""
         assert self.session is not None
         try:
@@ -598,7 +598,7 @@ class Catalog(DBMixin):
         return aggregation
     
     
-    def get_next_holding(self):
+    def get_next_holding(self) -> Holding:
         """The principal function for getting the next unarchived holding to 
         archive aggregate."""
         assert self.session is not None
@@ -624,7 +624,7 @@ class Catalog(DBMixin):
         return next_holding
 
     
-    def get_unarchived_files(self, holding: Holding):
+    def get_unarchived_files(self, holding: Holding) -> List[File]:
         """The principal function for getting unarchived files to aggregate and 
         send to archive put."""
         assert self.session is not None
