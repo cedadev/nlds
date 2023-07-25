@@ -447,7 +447,8 @@ class Catalog(DBMixin):
     
     def delete_location(self,
                         file: File, 
-                        storage_type: Location) -> None:
+                        storage_type: Enum) -> None:
+        """Delete the location for a given file and storage_type"""
         location = self.get_location(file, storage_type=storage_type)
         checkpoint = self.session.begin_nested()
         try:
@@ -597,6 +598,16 @@ class Catalog(DBMixin):
             )
         return aggregation
     
+
+    def delete_aggregation(self, aggregation: Aggregation) -> None:
+        """Delete a given aggregation"""
+        try:
+            self.session.delete(aggregation)
+        except (IntegrityError, KeyError, OperationalError):
+            err_msg = (f"Aggregation with aggregation.id {aggregation.id} could "
+                       f"not be deleted.")
+            raise CatalogError(err_msg)
+        
     
     def get_next_holding(self) -> Holding:
         """The principal function for getting the next unarchived holding to 
