@@ -220,7 +220,7 @@ class CatalogConsumer(RMQC):
         return md.unpack
 
 
-    def _catalog_put(self, body: dict, rk_origin: str) -> None:
+    def _catalog_put(self, body: Dict, rk_origin: str) -> None:
         """Put a file record into the catalog - end of a put transaction"""
         # Parse the message body for required variables
         message_vars = self._parse_required_vars(body)
@@ -440,7 +440,7 @@ class CatalogConsumer(RMQC):
                                warning=warnings)
 
 
-    def _catalog_get(self, body: dict, rk_origin: str, api_method: str) -> None:
+    def _catalog_get(self, body: Dict, rk_origin: str, api_method: str) -> None:
         """Get the details for each file in a filelist and send it to the 
         exchange to be processed by the transfer processor. If any file is only 
         found on tape then it will be first rerouted to the archive processor 
@@ -727,7 +727,11 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session()
 
 
-    def _catalog_del(self, body: dict, rk_origin: str) -> None:
+    def _catalog_archive_update(self, body: Dict, rk_origin: str) -> None:
+        pass
+
+
+    def _catalog_del(self, body: Dict, rk_origin: str) -> None:
         """Remove a given list of files from the catalog if the transfer 
         fails"""
         # Parse the message body for required variables
@@ -818,7 +822,7 @@ class CatalogConsumer(RMQC):
 
     def _catalog_location_del(
             self, 
-            body: dict, 
+            body: Dict, 
             rk_origin: str, 
             location_type: Storage = Storage.OBJECT_STORAGE
         ) -> None:
@@ -930,7 +934,7 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session() 
         
 
-    def _catalog_list(self, body: dict, properties: Header) -> None:
+    def _catalog_list(self, body: Dict, properties: Header) -> None:
         """List the users holdings"""
         # Parse the message body for required variables
         message_vars = self._parse_user_vars(body)
@@ -994,7 +998,7 @@ class CatalogConsumer(RMQC):
         )
     
 
-    def _catalog_stat(self, body: dict, properties: Header) -> None:
+    def _catalog_stat(self, body: Dict, properties: Header) -> None:
         """Get the labels for a list of transaction ids"""
         # Parse the message body for required variables
         message_vars = self._parse_user_vars(body)
@@ -1071,7 +1075,7 @@ class CatalogConsumer(RMQC):
         )
 
 
-    def _catalog_find(self, body: dict, properties: Header) -> None:
+    def _catalog_find(self, body: Dict, properties: Header) -> None:
         """List the user's files"""
         # Parse the message body for required variables
         message_vars = self._parse_user_vars(body)
@@ -1178,7 +1182,7 @@ class CatalogConsumer(RMQC):
         )
 
 
-    def _catalog_meta(self, body: dict, properties: Header) -> None:
+    def _catalog_meta(self, body: Dict, properties: Header) -> None:
         """Change metadata for a user's holding"""
                 # Parse the message body for required variables
         message_vars = self._parse_user_vars(body)
