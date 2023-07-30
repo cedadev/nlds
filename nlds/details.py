@@ -71,6 +71,7 @@ RetriesType = TypeVar('RetriesType', bound=Retries)
 class PathDetails(BaseModel):
     original_path: Optional[str]
     object_name: Optional[str]
+    tenancy: Optional[str]
     size: Optional[float]
     user: Optional[int]
     group: Optional[int]
@@ -91,6 +92,7 @@ class PathDetails(BaseModel):
             "file_details": {
                 "original_path": self.original_path,
                 "object_name": self.object_name,
+                "tenancy": self.tenancy,
                 "size": self.size,
                 "user": self.user,
                 "group": self.group,

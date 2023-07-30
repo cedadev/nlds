@@ -25,6 +25,7 @@ Requires these settings in the /etc/nlds/server_config file:
 
 import json
 from typing import Dict, Tuple
+from hashlib import shake_256
 
 # Typing imports
 from pika.channel import Channel
@@ -592,7 +593,7 @@ class CatalogConsumer(RMQC):
                 f"{self.reroutelist}", self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.reroutelist, rk_reroute, body, 
-                               state=State.CATALOG_GETTING)
+                               state=State.CATALOG_RESTORING)
         # RETRY
         if len(self.retrylist) > 0:
             rk_retry = ".".join([rk_origin,
@@ -618,6 +619,113 @@ class CatalogConsumer(RMQC):
 
         # stop db transistions and commit
         self.catalog.end_session()
+
+    def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
+        """Get the next holding for archiving, create a new location and 
+        aggregation for it and pass to for writing to tape."""
+        # start the database transactions
+        self.catalog.start_session()
+
+        next_holding = self.catalog.get_next_holding()
+        # We need a new root as we can't rely on the transaction_id any more. 
+        # NOTE: could just use the transaction_id of the current message? Might 
+        # be confusing and isn't retrievable from higher up the catalog. 
+        # Create a root from the uneditable holding information, this will be 
+        # the directory on the tape that contains each of the tar files. 
+        loc_root = (f"nlds.{next_holding.id}.{next_holding.user}"
+                    f".{next_holding.group}")
+        
+        filelist = self.catalog.get_unarchived_files(next_holding)
+        aggregates = self.catalog.aggregate_files(filelist)
+
+        # Create the aggragation and respective locations for each file in each 
+        # aggregate
+        for aggregate in aggregates:
+            self.reset()
+            # Generate a name for the tarfile by hashing the combined filelist. 
+            # Length of the hash will be 16
+            filenames = [f.original_path for f in aggregate]
+            filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8) 
+            tarname = f"{filelist_hash}.tar"
+            # Make the aggregation first
+            try:
+                aggregation = self.catalog.create_aggregation(tarname=tarname)
+            except CatalogError as e:
+                # If for some reason we fail to make the aggregation then 
+                # continue and the remaining unarchived files will get picked up 
+                # on the next call to get_next_holding()
+                self.log(e.message, RMQC.RK_LOG_ERROR)
+                continue
+            # Now create the tape locations and assign them to the aggregation
+            for f in aggregate:
+                try:
+                    # Get the object_store location so we can pass the object 
+                    # information easily to the archiver
+                    objstr_location = self.catalog.get_location(
+                        f, Storage.OBJECT_STORAGE
+                    )
+                    # We need to pass the tenancy too, which could be different 
+                    # for each location
+                    file_details = PathDetails(
+                        original_path = f.original_path,
+                        object_name = objstr_location.object_name,
+                        tenancy = objstr_location.url_netloc,
+                        size = f.size,
+                        user = f.user,
+                        group = f.group,
+                        permissions = f.file_permissions,                    
+                        access_time = f.access_time,
+                        path_type = f.path_type,
+                        link_path = f.link_path
+                    )
+                    self.catalog.create_location(
+                        file_=f, 
+                        storage_type=Storage.TAPE,
+                        url_scheme="root:",
+                        url_netloc=self.default_tape_url,
+                        root=loc_root,
+                        path=tarname, 
+                        # access time is passed in the file details
+                        access_time = datetime.fromtimestamp(
+                            f.access_time, tz=timezone.utc
+                        ),
+                        aggregation=aggregation
+                    )
+                except CatalogError as e:
+                    # In the case of failure, we can just carry on adding things 
+                    # to the aggregation and then the next call to 
+                    # get_next_holding() should handle the rest. 
+                    self.log(e.message, RMQC.RK_LOG_ERROR)
+                    # Keep note of the failure (we're not sending it anywhere)
+                    self.failedlist.append(file_details)
+                    continue
+
+                self.completelist.append(file_details)
+
+            if len(self.failedlist) == len(aggregate):
+                # In the unlikely event that all of the Locations failed to 
+                # create then delete the Aggregation
+                self.catalog.delete_aggregation(aggregation)
+                continue
+
+            # Forward successful file details to archiver for tape write
+            rk_complete = ".".join([rk_origin,
+                                    self.RK_CATALOG_ARCHIVE_PUT, 
+                                    self.RK_COMPLETE])
+            body[self.MSG_TAPE_TAR_PATH] = f"{loc_root}:{tarname}"
+                    # object_name = f"{loc_root}:{tarname}",
+            self.log(
+                f"Sending completed PathList from CATALOG_ARCHIVE_PUT "
+                f"{self.completelist}",
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_BACKUP)
+        
+        # stop db transactions and commit
+        self.catalog.save()
+        self.catalog.end_session()
+
 
     def _catalog_del(self, body: dict, rk_origin: str) -> None:
         """Remove a given list of files from the catalog if the transfer 
