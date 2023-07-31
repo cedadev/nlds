@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
-from typing import Dict, List
+from typing import Dict, List, Any
 import pathlib
 from collections.abc import Sequence
 
@@ -544,7 +544,7 @@ class RabbitMQPublisher():
 
     @classmethod
     def create_log_message(cls, message: str, target: str, 
-                           route: str = None) -> bytes:
+                           route: str = None) -> Dict[str, Any]:
         """
         Create logging message to send to rabbit exchange. Message is, as with 
         the standard message, in json format with metadata described in DETAILS 
