@@ -13,7 +13,7 @@ import functools
 from abc import ABC, abstractmethod
 import logging
 import traceback
-from typing import Dict, List
+from typing import Dict, List, Any
 import pathlib as pth
 from datetime import datetime, timedelta
 import uuid
@@ -110,7 +110,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_EXCHANGE_NAME = "test_exchange"
     DEFAULT_REROUTING_INFO = "->"
 
-    DEFAULT_CONSUMER_CONFIG = dict()
+    DEFAULT_CONSUMER_CONFIG : Dict[str, str] = dict()
 
     # The state associated with finishing the consumer, must be set but can be 
     # overridden
@@ -163,9 +163,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         # (re)Declare the pathlists here to make them available without having 
         # to pass them through every function call. 
-        self.completelist = []
-        self.retrylist = []
-        self.failedlist = []
+        self.completelist : List[PathDetails] = []
+        self.retrylist: List[PathDetails] = []
+        self.failedlist: List[PathDetails] = []
         self.max_retries = 5
         
         # Controls default behaviour of logging when certain exceptions are 
@@ -263,7 +263,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return new_filelist
 
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
-                       body_json: Dict[str, str], state: State = None,
+                       body_json: Dict[str, Any], state: State = None,
                        mode: FilelistType = FilelistType.processed, 
                        warning: List[str] = None
                        ) -> None:
@@ -392,7 +392,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.RK_LOG_DEBUG
         )
 
-    def _handle_expected_error(self, body, routing_key, original_error):
+    def _handle_expected_error(self, body: bytes, routing_key: str, 
+                               original_error: Any):
         """Handle the workflow of an expected error - attempt to retry the 
         transaction or fail it as apparopriate. Given we don't know exactly what 
         is wrong with the message we need to be quite defensive with error 
@@ -443,7 +444,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             # Fail the job
             self._fail_transaction(body_json, monitoring_rk)
 
-    def _fail_transaction(self, body_json, monitoring_rk):
+    def _fail_transaction(self, body_json: Dict[str, Any], monitoring_rk: str):
         """Attempt to mark transaction as failed in monitoring db"""
         try:                
             # Send message to monitoring to keep track of state
@@ -464,7 +465,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
     def _retry_transaction(
             self, 
-            body_json: Dict[str, str], 
+            body_json: Dict[str, Any], 
             retries: Retries, 
             original_rk: str, 
             monitoring_rk: str, 
@@ -627,7 +628,11 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return rk_parts
 
     @classmethod
-    def append_route_info(cls, body: Dict, route_info: str = None) -> Dict:
+    def append_route_info(
+            cls, 
+            body: Dict[str, Any], 
+            route_info: str = None
+        ) -> Dict:
         if route_info is None: 
             route_info = cls.DEFAULT_REROUTING_INFO
         if cls.MSG_ROUTE in body[cls.MSG_DETAILS]:

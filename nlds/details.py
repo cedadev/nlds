@@ -5,6 +5,7 @@ from json import JSONEncoder
 from pathlib import Path
 import stat
 import os
+from os import stat_result
 
 from pydantic import BaseModel
 
@@ -124,14 +125,17 @@ class PathDetails(BaseModel):
         return pd
 
     @classmethod
-    def from_stat_result(cls, path: str, stat_result: NamedTuple):
+    def from_stat_result(cls, path: str, stat_result: stat_result):
         pd = cls(original_path=path)
         pd.stat(stat_result=stat_result)
         return pd
 
-    def stat(self, stat_result: NamedTuple = None):
+    def stat(self, stat_result: stat_result = None):
         if not stat_result:
             stat_result = self.path.lstat()
+
+        # Include this assertion so mypy knows it's definitely a stat_result
+        assert stat_result is not None
 
         self.mode = stat_result.st_mode
 
