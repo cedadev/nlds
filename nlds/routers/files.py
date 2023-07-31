@@ -105,7 +105,7 @@ async def get(transaction_id: UUID,
             detail = response_error.json()
         )
     if job_label is None:
-        job_label = transaction_id[0:8]
+        job_label = str(transaction_id)[0:8]
     # return response, job label accepted for processing
     response = FileResponse(
         transaction_id = transaction_id,
@@ -183,7 +183,7 @@ async def put(transaction_id: UUID,
             detail = response_error.json()
         )
     if job_label is None:
-        job_label = transaction_id[0:8]
+        job_label = str(transaction_id)[0:8]
     # return response, transaction id accepted for processing
     response = FileResponse(
         transaction_id = transaction_id,
@@ -283,7 +283,7 @@ async def put(transaction_id: UUID,
     contents = filemodel.get_cleaned_list()
 
     if job_label is None:
-        job_label = transaction_id[0:8]
+        job_label = str(transaction_id)[0:8]
         
     # return response, transaction id accepted for processing
     response = FileResponse(
