@@ -1,5 +1,6 @@
 import os
-from typing import NamedTuple, List
+from typing import List
+from os import stat_result
 
 
 ACCESSES = (
@@ -9,7 +10,7 @@ ACCESSES = (
 )
 
 def check_permissions(uid: int, gids: List[int], access=os.R_OK, 
-                      path: str = None, stat_result: NamedTuple = None
+                      path: str = None, stat_result: stat_result = None
                       ) -> bool:
     if access not in ACCESSES:
         raise ValueError("Invalid access bit passed, must be one of "
@@ -23,6 +24,8 @@ def check_permissions(uid: int, gids: List[int], access=os.R_OK,
     elif stat_result is None and path is None:
         raise ValueError("Neither path nor a valid stat result of a path were "
                          "given so cannot continue. One is required.")
+    
+    assert stat_result is not None
     
     # Get file permissions mask from stat result
     mode = stat_result.st_mode & 0o777
