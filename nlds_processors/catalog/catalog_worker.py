@@ -24,7 +24,7 @@ Requires these settings in the /etc/nlds/server_config file:
 """
 
 import json
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from hashlib import shake_256
 
 # Typing imports
@@ -40,7 +40,7 @@ from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog, CatalogError
-from nlds_processors.catalog.catalog_models import Storage
+from nlds_processors.catalog.catalog_models import Storage, File
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
 
@@ -97,6 +97,7 @@ class CatalogConsumer(RMQC):
     _MAX_RETRIES = "max_retries"
     _DEFAULT_TENANCY = "default_tenancy"
     _DEFAULT_TAPE_URL = "default_tape_url"
+    _TARGET_AGGREGATION_SIZE = "target_aggregation_size"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -109,6 +110,7 @@ class CatalogConsumer(RMQC):
         _MAX_RETRIES: 5,
         _DEFAULT_TENANCY: None,
         _DEFAULT_TAPE_URL: None,
+        _TARGET_AGGREGATION_SIZE: 5 * (1024**3), # Default to 5 GB
         RMQC.RETRY_DELAYS: RMQC.DEFAULT_RETRY_DELAYS,
     }
 
@@ -127,6 +129,9 @@ class CatalogConsumer(RMQC):
         )
         self.default_tenancy = self.load_config_value(
             self._DEFAULT_TENANCY
+        )
+        self.target_aggregation_size = self.load_config_value(
+            self._TARGET_AGGREGATION_SIZE
         )
 
         self.catalog = None
@@ -154,6 +159,23 @@ class CatalogConsumer(RMQC):
         body. Returns a tuple of filelist (a list of PathDetails objects), user 
         and group if successful, None if not.
         """
+        filelist = self._parse_filelist(body)
+        if filelist is None:
+            # No need to log as it would have been logged in the parse function
+            return
+
+        user_vars = self._parse_user_vars(body)
+        if user_vars is None:
+            # No need to log as it would have been logged above
+            return 
+        else: 
+            # Unpack assuming nothing bad has happened
+            user, group = user_vars
+        
+        return filelist, user, group
+    
+
+    def _parse_filelist(self, body: Dict):
         # get the filelist from the data section of the message
         try:
             filelist = body[self.MSG_DATA][self.MSG_FILELIST]
@@ -163,31 +185,15 @@ class CatalogConsumer(RMQC):
                      self.RK_LOG_ERROR)
             return 
 
-        # check filelist is a list
+        # check filelist is indexable
         try:
-            f = filelist[0]
+            _ = filelist[0]
         except TypeError as e:
             self.log(f"filelist field must contain a list", self.RK_LOG_ERROR)
             return
 
-        # get the user id from the details section of the message
-        try:
-            user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", 
-                     self.RK_LOG_ERROR)
-            return
+        return filelist
 
-        # get the group from the details section of the message
-        try:
-            group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", 
-                     self.RK_LOG_ERROR)
-            return
-        
-        return filelist, user, group
-    
 
     def _parse_user_vars(self, body: Dict) -> Tuple:
         # get the user id from the details section of the message
@@ -620,12 +626,65 @@ class CatalogConsumer(RMQC):
         # stop db transistions and commit
         self.catalog.end_session()
 
+    def aggregate_files(
+            self, 
+            filelist: List[File], 
+            target_agg_count: int = None
+        ) -> List[List[File]]:
+        """Creates a list of suitable aggregations from a given list of files. A
+        few algorithms for this were explored, with some suiting different 
+        distributions of file sizes better, so the most generic solution is 
+        provided. This implementation calculates a target value for aggregation 
+        size, configurable through server-config, and then iterates through the 
+        Files and sorts each into the smallest aggregation available at that 
+        iteration. """
+        # Calculate a target aggregation count if one is not given
+        if target_agg_count is None:
+            filesizes = (f.size for f in filelist)
+            total_size = sum(filesizes)
+            count = len(filesizes)
+            mean_size = total_size / count
+            if total_size < self.target_aggregation_size:
+                # If it's less that a single target agg size then just do a single 
+                # aggregation
+                return [filelist, ]
+            # TODO: Need to think this conditional through a bit more. This is the 
+            # condition for if all the files are about the size of the 
+            # target_aggregation_size, in which case we could end up with 
+            # len(filelist) aggregations each with one file in them, which is 
+            # maximally inefficient for the tape? 
+            elif mean_size > self.target_aggregation_size:
+                # For now we'll just set it to 5 in this particular case.
+                target_agg_count = 5
+            else:
+                # Otherwise we're going for the number of target sizes that fit 
+                # into our total size. 
+                target_agg_count = total_size / self.target_aggregation_size
+
+        assert target_agg_count is not None
+
+        # Make 2 lists, one being a list of lists dictating the aggregates, the 
+        # other being their sizes, so we're not continually recalculating it
+        aggregates = [[] for _ in range(count)]
+        sizes = [0 for _ in range(count)]
+        filelist_sorted = sorted(filelist, reverse=True, key=lambda f: f.size)
+        for fs in filelist_sorted:
+            # Get the index of the smallest aggregate
+            agg_index = min(range(len(aggregates)), key=lambda i: sizes[i])
+            aggregates[agg_index].append(fs)
+            sizes[agg_index] += fs.size
+
+        return aggregates
+
+
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location and 
         aggregation for it and pass to for writing to tape."""
         # start the database transactions
         self.catalog.start_session()
 
+        # Get the next holding in the catalog, by id, which has any unarchived 
+        # Files, i.e. any files which don't have a tape location
         next_holding = self.catalog.get_next_holding()
         # We need a new root as we can't rely on the transaction_id any more. 
         # NOTE: could just use the transaction_id of the current message? Might 
@@ -635,6 +694,9 @@ class CatalogConsumer(RMQC):
         loc_root = (f"nlds.{next_holding.id}.{next_holding.user}"
                     f".{next_holding.group}")
         
+        # Get the unarchived files and make suitable aggregates of them. Here we
+        # make a distinction between aggregates, being just groups of files, and 
+        # aggregations, being the database object / table 
         filelist = self.catalog.get_unarchived_files(next_holding)
         aggregates = self.catalog.aggregate_files(filelist)
 
@@ -712,8 +774,11 @@ class CatalogConsumer(RMQC):
             rk_complete = ".".join([rk_origin,
                                     self.RK_CATALOG_ARCHIVE_PUT, 
                                     self.RK_COMPLETE])
-            body[self.MSG_TAPE_TAR_PATH] = f"{loc_root}:{tarname}"
-                    # object_name = f"{loc_root}:{tarname}",
+            body[self.MSG_DETAILS][self.MSG_TAPE_TAR_PATH] = (
+                f"{loc_root}:{tarname}"
+            )
+            body[self.MSG_META][self.MSG_HOLDING_ID] = next_holding.id
+            body[self.MSG_META][self.MSG_AGGREGATION_ID] = aggregation.id
             self.log(
                 f"Sending completed PathList from CATALOG_ARCHIVE_PUT "
                 f"{self.completelist}",
@@ -727,8 +792,71 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session()
 
 
-    def _catalog_archive_update(self, body: Dict, rk_origin: str) -> None:
-        pass
+    def _catalog_archive_update(self, body: Dict) -> None:
+        # Parse the message body for required variables
+        message_vars = self._parse_required_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
+            return
+        else:
+            # Unpack if no problems found in parsing
+            filelist, user, group = message_vars
+        
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        _, holding_id, _, _ = md.unpack
+
+        # Parse aggregation and checksum info from message.
+        try: 
+            aggregation_id = body[self.MSG_META][self.MSG_AGGREGATION_ID]
+        except KeyError:
+            self.log("Aggregation id not in message, continuing without.", 
+                     self.RK_LOG_WARNING)
+        try: 
+            checksum = body[self.MSG_DATA][self.MSG_CHECKSUM]
+        except KeyError:
+            self.log("Checksum not in message, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+        
+        if holding_id is None and aggregation_id is None:
+            self.log("No method for identifying an aggregation provided, forced"
+                     " to exit callback.", self.RK_LOG_ERROR)
+            return
+
+        self.catalog.start_session()
+
+        try:
+            if aggregation_id is not None:
+                aggregation = self.catalog.get_aggregation()
+            elif holding_id is not None:
+                # get first file in list, that is all we should need, and turn it 
+                # into a PathDetails object
+                f = filelist[0] 
+                file_details = PathDetails.from_dict(f)
+                # Using that and the holding_id, we can get the 
+                files = self.catalog.get_files(
+                    user, group, 
+                    holding_id=holding_id, 
+                    original_path=file_details.original_path
+                )
+                file_ = files[0]
+                aggregation = self.catalog.get_aggregation_by_file(file_)
+            
+            self.catalog.update_aggregation(aggregation, checksum=checksum, 
+                                            algorithm="ADLER32")
+        except CatalogError as e:
+            self.log(f"Error encountered during _catalog_archive_update(): {e}", 
+                     self.RK_LOG_ERROR)
+            raise CallbackError("Encountered error during aggregation update, "
+                                "submitting for retry")
+        
+        # stop db transactions and commit
+        self.catalog.save()
+        self.catalog.end_session() 
 
 
     def _catalog_del(self, body: Dict, rk_origin: str) -> None:

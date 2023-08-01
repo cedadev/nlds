@@ -576,9 +576,26 @@ class Catalog(DBMixin):
         return aggregation
     
 
-    def get_aggregation(self, 
-                        file_: File, 
-                        storage_type: Storage = Storage.TAPE):
+    def get_aggregation(self, aggregation_id: int) -> Aggregation:
+        """Simple function for getting of Aggregation from aggregation_id."""
+        assert self.session is not None
+        try:
+            # Get the aggregation for a particular file via it's tape location
+            aggregation = self.session.query(Aggregation).filter(
+                Aggregation.id == aggregation_id,
+            ).one_or_none() 
+            # There should only ever be one aggregation per tape location and 
+            # only one tape location per file
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Aggregation with id:{aggregation_id} not found."
+            )
+        return aggregation
+
+
+    def get_aggregation_by_file(self, 
+                                file_: File, 
+                                storage_type: Storage = Storage.TAPE):
         """Get the aggregation associated with a particular file's location on 
         tape. Storage type has been left as a kwarg in case future storage types 
         are added which will utilise aggregations."""
@@ -595,6 +612,7 @@ class Catalog(DBMixin):
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Aggregation for file with id:{file_.id} and path:{file_.path}"
+                f" could not be found. "
             )
         return aggregation
     
