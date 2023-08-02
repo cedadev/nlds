@@ -7,7 +7,7 @@ It requires the use of the NLDS client, either the command line or library:
 
 NLDS server is built upon [FastAPI](https://fastapi.tiangolo.com).
 
-NLDS requires Python 3.  It has been tested with Python 3.8 and Python 3.9.
+NLDS requires Python 3.  It has been tested with Python 3.9, 3.10 and Python 3.11.
 
 Installation
 ------------
