@@ -98,9 +98,9 @@ class File(CatalogBase):
     file_permissions = Column(Integer)
 
     # relationship for location (one to many)
-    location = relationship("Location", cascade="delete, delete-orphan")
+    locations = relationship("Location", cascade="delete, delete-orphan")
     # relationship for checksum (one to one)
-    checksum = relationship("Checksum", cascade="delete, delete-orphan")
+    checksums = relationship("Checksum", cascade="delete, delete-orphan")
 
 
 class Storage(enum.Enum):
@@ -168,7 +168,7 @@ class Aggregation(CatalogBase):
     algorithm = Column(String, nullable=True)
 
     # relationship for location (one to many)
-    location = relationship("Location", cascade="delete, delete-orphan")
+    locations = relationship("Location", cascade="delete, delete-orphan")
 
 
 if __name__ == "__main__":

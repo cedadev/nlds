@@ -138,7 +138,6 @@ class RabbitMQPublisher():
     MSG_WARNING = "warning"
     MSG_TAPE_URL = "tape_url"
     MSG_TAPE_POOL = "tape_pool"
-    MSG_TAPE_TAR_PATH = "tape_tar_path"
     MSG_AGGREGATION_ID = "aggregation_id"
     MSG_CHECKSUM = "checksum"
 
