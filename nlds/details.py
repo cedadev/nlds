@@ -73,6 +73,8 @@ class PathDetails(BaseModel):
     original_path: Optional[str]
     object_name: Optional[str]
     tenancy: Optional[str]
+    tape_path: Optional[str]
+    tape_url: Optional[str]
     size: Optional[float]
     user: Optional[int]
     group: Optional[int]
@@ -94,6 +96,8 @@ class PathDetails(BaseModel):
                 "original_path": self.original_path,
                 "object_name": self.object_name,
                 "tenancy": self.tenancy,
+                "tape_path": self.tape_path,
+                "tape_url": self.tape_url,
                 "size": self.size,
                 "user": self.user,
                 "group": self.group,
