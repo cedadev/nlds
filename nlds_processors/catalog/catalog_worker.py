@@ -669,6 +669,8 @@ class CatalogConsumer(RMQC):
             rk_reroute = ".".join([rk_origin,
                                    self.RK_CATALOG_GET, 
                                    self.RK_REROUTE])
+            # Ensure the holding_id is present as we'll need it during retrieval  
+            body[self.MSG_META][self.MSG_HOLDING_ID] = holding_id # Ensure this is actually populated
             self.log(
                 f"Rerouting PathList from CATALOG_GET for archive retrieval "
                 f"{self.reroutelist}", self.RK_LOG_DEBUG
@@ -867,6 +869,8 @@ class CatalogConsumer(RMQC):
                                     self.RK_CATALOG_ARCHIVE_PUT, 
                                     self.RK_COMPLETE])
             
+            body[self.MSG_DETAILS][self.MSG_USER] = next_holding.user
+            body[self.MSG_DETAILS][self.MSG_GROUP] = next_holding.group
             body[self.MSG_META][self.MSG_HOLDING_ID] = next_holding.id
             body[self.MSG_META][self.MSG_AGGREGATION_ID] = aggregation.id
             self.log(
