@@ -11,29 +11,12 @@ from XRootD.client.flags import (DirListFlags, PrepareFlags, DirListFlags,
                                  OpenFlags, MkDirFlags, QueryCode)
 
 from nlds_processors.archiver.archive_base import (BaseArchiveConsumer, 
-                                                   ArchiveError)
+                                                   ArchiveError,
+                                                   AdlerisingXRDFile)
 from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
 
-class XRDFileWrapper():
-    """Wrapper class around the XRootD.File object to make it act more like a 
-    regular python IO object, specifically a BytesIO, which allows the 
-    put_object() method from minio to be used.
-    """
-
-    def __init__(self, f: client.File, offset=0, length=0):
-        self.f = f
-        self.offset = offset
-        self.length = length
-        self.pointer = 0
-
-    def read(self, size):
-        status, result = self.f.read(offset=self.pointer, size=size)
-        if status.status != 0:
-            raise IOError(f"Unable to read from file f ({self.f})")
-        self.pointer += size
-        return result
     
 class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_QUEUE_NAME = "archive_get_q"
@@ -109,7 +92,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 if not s3_client.bucket_exists(bucket_name):
                     s3_client.make_bucket(bucket_name)
                     self.log(f"Creating bucket ({bucket_name}) for this"
-                            " transaction", self.RK_LOG_INFO)
+                             " transaction", self.RK_LOG_INFO)
                 else:
                     self.log(f"Bucket for this transaction ({bucket_name}) "
                             f"already exists", self.RK_LOG_INFO)
@@ -183,9 +166,9 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         raise ArchiveError("Failed to open file for reading")
 
                     # Wrap the File handler so minio can use it 
-                    fw = XRDFileWrapper(f)
+                    fw = AdlerisingXRDFile(f)
                     
-                    # Ensure minimum part_size is met
+                    # Ensure minimum part_size is met for put_object to function
                     chunk_size = max(5*1024*1024, self.chunk_size)
 
                     self.log(f"Starting stream of {path_details.original_path} "

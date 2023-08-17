@@ -2,7 +2,6 @@ from typing import List, Dict, Any
 from pathlib import Path
 import os
 import tarfile
-from zlib import adler32
 from hashlib import shake_256
 
 import minio
@@ -14,41 +13,11 @@ from XRootD.client.flags import (DirListFlags, PrepareFlags, DirListFlags,
                                  OpenFlags, MkDirFlags, QueryCode)
 
 from nlds_processors.archiver.archive_base import (BaseArchiveConsumer, 
-                                                   ArchiveError)
+                                                   ArchiveError, 
+                                                   AdlerisingXRDFile)
 from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
-
-
-class AdlerisingXRDFile():
-    """Wrapper class around the XRootD.File object to make it act more like a 
-    regular python file object. This means it can interface with packages made 
-    for python, e.g. tarfile, BytesIO, minio. This also auto-calculates the 
-    adler32 checksum for all written/read bytes from the file, making 
-    implentation of checksums within the catalog feasible. 
-    """
-
-    def __init__(self, f: client.File, offset=0, length=0, checksum=1):
-        self.f = f
-        self.offset = offset
-        self.length = length
-        self.pointer = 0
-        self.checksum = checksum
-
-    def read(self, size):
-        status, result = self.f.read(offset=self.pointer, size=size)
-        if status.status != 0:
-            raise IOError(f"Unable to read from file f ({self.f})")
-        self.checksum = adler32(result, self.checksum)
-        self.pointer += size
-        return result
-    
-    def write(self, b):
-        # Update the checksum before we actually do the writing
-        self.checksum = adler32(b, self.checksum)
-        to_write = len(b)
-        self.f.write(b, offset=self.pointer, size=to_write)
-        return to_write
 
 
 class PutArchiveConsumer(BaseArchiveConsumer):
