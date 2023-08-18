@@ -182,12 +182,16 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                         result = s3_client.get_object(
                             bucket_name, object_name,
                         )
+                        # Adds bytes to xrd.File from result, one chunk_size at 
+                        # a time
                         tar.addfile(tar_info, fileobj=result)
 
                     # NOTE: Need to think about error handling here, any failure 
                     # will result in a corrupted tar file so probably can't just 
                     # pick up where we left off, will need to start the whole 
-                    # thing again.
+                    # thing again. There is something to do with 
+                    # failed_write_recovery in the docs that maybe should be 
+                    # looked into.
                     except (HTTPError, ArchiveError) as e:
                         reason = f"Stream-time exception occurred: {e}"
                         self.log(reason, self.RK_LOG_DEBUG)
