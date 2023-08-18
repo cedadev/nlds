@@ -605,14 +605,9 @@ class CatalogConsumer(RMQC):
                 continue
         
         for aggregation, details_list in aggs_to_retrieve.items():
-            # NOTE: This should be in a try-catch but it's unclear what to do in
-            # the event of a failure. If a single location creation fails then 
-            # that file will need to be removed from the aggregation? There 
-            # shouldn't be any reason why this would fail other than database 
-            # disconnection but that is a real threat, so we need a solution 
-            # here. 
             # Make a session checkpoint here so we can rollback in the event of 
             # a failed Location creation
+            # TODO: We need a way to mark a file as being a problem
             checkpoint = self.catalog.session.begin_nested()
             try:
                 # Create a fake file class with just an id so we can pass it to 
