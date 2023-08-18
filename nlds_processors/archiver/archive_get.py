@@ -1,6 +1,7 @@
 from typing import List, Dict
 from pathlib import Path
 import os
+import tarfile
 
 import minio
 from minio.error import S3Error
@@ -64,15 +65,23 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         rk_retry = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_START])
         rk_failed = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_FAILED])
 
-        # Main loop, for each file. 
+        # Ensure minimum part_size is met for put_object to function
+        chunk_size = max(5*1024*1024, self.chunk_size)
+
+        # Main loop. 
+        # Each file_details will have an associated tar file which will need to 
+        # be prepared/staged and scanned to make sure the file in question is in 
+        # the tar file. Check for bucket existence too though as the file could 
+        # have been retrieved as part of an prior retrieval.
         for path_details in filelist:
+            item_path = path_details.path
+
             # First check whether index item has failed too many times
             if path_details.retries.count > self.max_retries:
-                self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="failed"
-                )
+                self.failedlist.append(path_details)
                 continue
             
+            # Get the bucket_name and path from the object_name 
             if len(path_details.object_name.split(':')) == 2:
                 bucket_name, object_name = path_details.object_name.split(':')
             # Otherwise, log error and queue for retry
@@ -82,9 +91,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                          f"{path_details.object_name} to retry list.", 
                          self.RK_LOG_INFO)
                 path_details.retries.increment(reason=reason)
-                self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="retry"
-                )
+                self.retrylist.append(path_details)
                 continue
             
             try:
@@ -95,111 +102,135 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                              " transaction", self.RK_LOG_INFO)
                 else:
                     self.log(f"Bucket for this transaction ({bucket_name}) "
-                            f"already exists", self.RK_LOG_INFO)
+                             f"already exists", self.RK_LOG_INFO)
+                    objects = list([obj.object_name for obj 
+                                    in s3_client.list_objects(bucket_name)])
+                    # Look for object in bucket, continue if not present
+                    assert object_name not in objects
             except HTTPError as e:   
-                # If bucket can't be created then pass for retry
-                reason = (f"bucket {bucket_name} could not be created")
+                # If bucket can't be created then pass for retry and continue
+                reason = (f"Bucket {bucket_name} could not be created due to "
+                          f"error connecting with tenancy {tenancy}")
                 self.log(f"{reason}. Adding {object_name} to retry list.", 
                          self.RK_LOG_ERROR)
                 path_details.retries.increment(reason=reason)
-                self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="retry"
+                self.retrylist.append(path_details)
+                continue
+            except AssertionError as e:
+                # If it exists in the bucket then our job is done, we can just 
+                # continue in the loop
+                self.log(
+                    f"Object {object_name} already exists in {bucket_name}. "
+                    f"Skipping to next archive retrieval.", self.RK_LOG_INFO
                 )
+                self.completelist.append(path_details)
                 continue
 
-            # we're not concerned about permissions checking here.
+            tape_path = path_details.tape_path
+            try:
+                # Split out the root and path, passed from the Location
+                tape_location_root, original_path = tape_path.split(":")
+                # Split further to get the holding_slug and the tar filename
+                holding_slug, filelist_hash = tape_location_root.split("_")
+            except ValueError as e:
+                reason = f"Could not unpack mandatory info from path_details"
+                self.log(f"{reason}. Adding {item_path} to retry list.", 
+                         self.RK_LOG_ERROR)
+                path_details.retries.increment(reason=reason)
+                self.retrylist.append(path_details)
+                continue
+
+            tar_filename = f"{filelist_hash}.tar"
+            holding_tape_path = (f"root://{tape_server}/{tape_base_dir}/"
+                                 f"{holding_slug}")
+            full_tape_path = (f"{holding_tape_path}/{tar_filename}")
 
             # Check bucket folder exists on tape
-            status, _ = fs_client.dirlist(f"{tape_base_dir}/{bucket_name}", 
+            status, _ = fs_client.dirlist(f"{tape_base_dir}/{holding_slug}", 
                                           DirListFlags.STAT)
             if status.status != 0:
                 # If bucket tape-folder can't be found then pass for retry
-                reason = (f"bucket tape folder ({tape_base_dir}/{bucket_name}) "
-                          f"could not be found, cannot retrieve from archive")
-                self.log(f"{reason}. Adding {object_name} to retry list.", 
+                reason = (f"Tape holding folder ({tape_base_dir}/{holding_slug})"
+                          f" could not be found, cannot retrieve from archive")
+                self.log(f"{reason}. Adding {item_path} to retry list.", 
                          self.RK_LOG_ERROR)
                 path_details.retries.increment(reason=reason)
-                self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="retry"
-                )
+                self.retrylist.append(path_details)
                 continue
             
-            self.log(f"Attempting to stream file {path_details.original_path} "
-                     "directly from tape archive to object storage", 
-                     self.RK_LOG_INFO)
+            self.log(f"Attempting to stream contents of tar file "
+                     f"{full_tape_path} directly from tape archive to object "
+                     "storage", self.RK_LOG_INFO)
             
-            # NOTE: Do we want to use the object name or the original path here?
-            tape_full_path = (f"root://{tape_server}//{tape_base_dir}/"
-                              f"{bucket_name}/{object_name}")
-            
-            # Attempt to stream the object directly into the File object            
+            # Attempt to stream directly from the tar file to object store            
             try:
-                # NOTE: Slightly unclear which way round to nest this, going to 
-                # keep it this way round for now but it may be that in the 
-                # future, if we decide that we should be pre-allocating chunks 
-                # to write at the policy level, we might decide to change it 
-                # round
                 result = None
-
-                # Prepare the file for reading. The filename must be encoded 
-                # into a list of byte strings
-                prepare_bytearray = (f"{tape_base_dir}/{bucket_name}/"
-                                     f"{object_name}").encode("utf_8")
-                status, _ = fs_client.prepare([prepare_bytearray, ], 
+                # Prepare the file for reading. The tar_filename must be encoded 
+                # into a list of byte strings for prepare, as of pyxrootd v5.5.3
+                prepare_bytes = (f"{tape_base_dir}/"
+                                 f"{holding_slug}/"
+                                 f"{tar_filename}").encode("utf_8")
+                # NOTE: This may take a while as it's being copied to a disk 
+                # cache, should benchmark.
+                status, _ = fs_client.prepare([prepare_bytes, ], 
                                               PrepareFlags.STAGE)
                 if status.status != 0:
-                    # If bucket tape-folder can't be found then pass for retry
-                    reason = (f"File ({prepare_bytearray.decode()}) could not "
-                              f"be prepared for reading.")
-                    self.log(f"{reason}. Adding {object_name} to retry list.", 
-                            self.RK_LOG_ERROR)
-                    path_details.retries.increment(reason=reason)
-                    self.append_and_send(
-                        path_details, rk_failed, body_json, list_type="retry"
-                    )
-                    continue
+                    # If tarfile can't be staged then pass for retry
+                    raise ArchiveError(f"Tar file ({prepare_bytes.decode()}) "
+                                       f"could not be prepared.")
                 
                 with client.File() as f:
-                    # Open the file with READ
-                    status, _ = f.open(tape_full_path, OpenFlags.READ)
+                    # Open the tar file with READ
+                    status, _ = f.open(full_tape_path, OpenFlags.READ)
                     if status.status != 0:
                         raise ArchiveError("Failed to open file for reading")
 
-                    # Wrap the File handler so minio can use it 
+                    # Wrap the xrootd File handler so minio can use it 
                     fw = AdlerisingXRDFile(f)
-                    
-                    # Ensure minimum part_size is met for put_object to function
-                    chunk_size = max(5*1024*1024, self.chunk_size)
 
-                    self.log(f"Starting stream of {path_details.original_path} "
-                             "to object store.", self.RK_LOG_DEBUG)
-
-                    result = s3_client.put_object(
-                        bucket_name, 
-                        object_name, 
-                        fw, 
-                        -1, 
-                        part_size=chunk_size, # This is the minimum part size.
-                    )
-                    self.log(f"S3 Put Result: {result}", self.RK_LOG_DEBUG)
+                    self.log(f"Opening tar file {tar_filename}", self.RK_LOG_INFO)
+                    with tarfile.open(mode='r:', copybufsize=chunk_size, 
+                                      fileobj=fw) as tar:
+                        members = tar.getmembers()
+                        if original_path not in [ti.name for ti in members]:
+                            # Something has gone wrong if the file is not 
+                            # actually in the tar
+                            continue
+                        for tarinfo in members:
+                            self.log(f"Starting stream of {tarinfo.name} to "
+                                     f"object store.", self.RK_LOG_DEBUG)
+                            # Extract the file as a file object, this makes a 
+                            # thin wrapper around the filewrapper we're already 
+                            # using and maintains chunked reading
+                            f = tar.extractfile(tarinfo)
+                            result = s3_client.put_object(
+                                bucket_name, 
+                                tarinfo.name, 
+                                f, 
+                                -1, 
+                                part_size=chunk_size,
+                            )
+                            self.log(f"Minio put result: {result}", 
+                                     self.RK_LOG_DEBUG)
 
             except (HTTPError, ArchiveError) as e:
                 reason = f"Stream-time exception occurred: {e}"
                 self.log(reason, self.RK_LOG_DEBUG)
                 self.log(f"Exception encountered during stream, adding "
-                         f"{object_name} to retry-list.", self.RK_LOG_INFO)
-                path_details.retries.increment(reason=reason)
-                self.append_and_send(path_details, rk_retry, body_json, 
-                                     list_type=FilelistType.retry)
-            # TODO: Another error here for CTA exceptions? It just seems to 
-            # return a non-zero status object, not explicit exceptions. 
+                         f"{object_name} to retry-list.", self.RK_LOG_ERROR)
+                path_details.retries.increment(reason=str(e))
+                self.retrylist.append(path_details)
             else:
                 # Log successful 
                 self.log(f"Successfully got {path_details.original_path}", 
                          self.RK_LOG_DEBUG)
-                self.append_and_send(path_details, rk_complete, body_json, 
-                                     list_type=FilelistType.archived)
-            # Finally not required for multi-part write to objectstore
+                self.completelist.append(path_details)
+            finally:
+                # NOTE: This block may be redundant, but could also be why the 
+                # writes were failing
+                result.close()
+                result.release_conn()
+                continue
 
         self.log("Archive complete, passing lists back to worker for "
                  "re-routing and cataloguing.", self.RK_LOG_INFO)
