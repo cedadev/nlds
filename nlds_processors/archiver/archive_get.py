@@ -8,8 +8,7 @@ from minio.error import S3Error
 from retry import retry
 from urllib3.exceptions import HTTPError
 from XRootD import client
-from XRootD.client.flags import (DirListFlags, PrepareFlags, DirListFlags, 
-                                 OpenFlags, MkDirFlags, QueryCode)
+from XRootD.client.flags import (DirListFlags, PrepareFlags, OpenFlags)
 
 from nlds_processors.archiver.archive_base import (BaseArchiveConsumer, 
                                                    ArchiveError,
@@ -212,6 +211,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                             )
                             self.log(f"Minio put result: {result}", 
                                      self.RK_LOG_DEBUG)
+                            result.close()
+                            result.release_conn()
 
             except (HTTPError, ArchiveError) as e:
                 reason = f"Stream-time exception occurred: {e}"
@@ -228,8 +229,12 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             finally:
                 # NOTE: This block may be redundant, but could also be why the 
                 # writes were failing
-                result.close()
-                result.release_conn()
+                try:
+                    result.close()
+                    result.release_conn()
+                except AttributeError:
+                    # If can't be closed then it's already been closed.
+                    pass
                 continue
 
         self.log("Archive complete, passing lists back to worker for "
