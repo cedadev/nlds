@@ -1,8 +1,8 @@
 import pytest
+pyxrootd = pytest.importorskip("pyxrootd")
 from nlds_processors.archiver.archive_base import ArchiveError, BaseArchiveConsumer
 
 
-@pytest.importorskip("pyxrootd")
 class TestSplitTapeUrl:
 
     def setup_method(self):
