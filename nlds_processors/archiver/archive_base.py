@@ -13,7 +13,10 @@ import json
 from typing import Tuple, List, Dict
 from zlib import adler32
 
-from pyxrootd import client
+try:
+    from pyxrootd import client
+except ModuleNotFoundError:
+    client = None
 
 from nlds_processors.transferers.base_transfer import (BaseTransferConsumer, 
                                                        TransferError)
