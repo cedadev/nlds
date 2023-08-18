@@ -9,8 +9,7 @@ from minio.error import S3Error
 from retry import retry
 from urllib3.exceptions import HTTPError
 from XRootD import client
-from XRootD.client.flags import (DirListFlags, PrepareFlags, DirListFlags, 
-                                 OpenFlags, MkDirFlags, QueryCode)
+from XRootD.client.flags import (OpenFlags, MkDirFlags, QueryCode)
 
 from nlds_processors.archiver.archive_base import (BaseArchiveConsumer, 
                                                    ArchiveError, 
@@ -186,12 +185,13 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                         # a time
                         tar.addfile(tar_info, fileobj=result)
 
-                    # NOTE: Need to think about error handling here, any failure 
+                    # TODO: Need to think about error handling here, any failure 
                     # will result in a corrupted tar file so probably can't just 
                     # pick up where we left off, will need to start the whole 
                     # thing again. There is something to do with 
                     # failed_write_recovery in the docs that maybe should be 
-                    # looked into.
+                    # looked into. This is related to the checksum issue, i.e. 
+                    # what to do on a failed write. 
                     except (HTTPError, ArchiveError) as e:
                         reason = f"Stream-time exception occurred: {e}"
                         self.log(reason, self.RK_LOG_DEBUG)
@@ -214,6 +214,32 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             # the catalog 
             body_json[self.MSG_DETAILS][self.MSG_CHECKSUM] = \
                 file_wrapper.checksum
+            
+            status, result = fs_client.query(
+                QueryCode.CHECKSUM, 
+                f"{tape_base_dir}/{holding_slug}/{tar_filename}"
+            )
+            if status.status != 0:
+                self.log(f"Could not query xrootd's checksum for tar file "
+                         f"{tar_filename}.", self.RK_LOG_WARNING)
+                # TODO: Schedule another for later?
+            else:
+                try:
+                    checksum = int(result.decode()[8:16], 16)
+                    assert checksum == file_wrapper.checksum
+                except ValueError as e:
+                    self.log(f"Exception {e} when attempting to parse tarfile "
+                            "checksum from xrootd", self.RK_LOG_ERROR)
+                except AssertionError as e:
+                    # TODO: what do we actually want to do here? Failing means 
+                    # we have to make a brand new tar file. Not failing means we 
+                    # have corrupt data and are doing nothing about it. Raising 
+                    # a callback error like this means a retry is triggered but
+                    # will fail on second write because the tar file already 
+                    # exists. Can we delete the write before it's made to tape?
+                    # One for the SCD team methinks. At least it's unlikely. 
+                    raise CallbackError(f"XRootD checksum differs from that "
+                                        f"calculated block-wise.")
 
         self.log("Archive complete, passing lists back to worker for "
                  "re-routing and cataloguing.", self.RK_LOG_INFO)
