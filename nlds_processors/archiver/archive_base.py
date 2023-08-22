@@ -74,12 +74,14 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     _TAPE_POOL = 'tape_pool'
     _TAPE_URL = 'tape_url'
     _CHUNK_SIZE = 'chunk_size'
+    _QUERY_CHECKSUM = 'query_checksum_fl'
     _MAX_RETRIES = 'max_retries'
     _PRINT_TRACEBACKS = 'print_tracebacks_fl'
     ARCHIVE_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
         _TAPE_URL: None,
         _CHUNK_SIZE: 5 * (1024**2), # Default to 5 MiB
+        _QUERY_CHECKSUM: True,
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
@@ -90,13 +92,10 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-        self.tape_pool = self.load_config_value(
-            self._TAPE_POOL)
-        self.tape_url = self.load_config_value(
-            self._TAPE_URL)
-        self.chunk_size = self.load_config_value(
-            self._CHUNK_SIZE
-        )
+        self.tape_pool = self.load_config_value(self._TAPE_POOL)
+        self.tape_url = self.load_config_value(self._TAPE_URL)
+        self.chunk_size = self.load_config_value(self._CHUNK_SIZE)
+        self.query_checksum_fl = self.load_config_value(self._QUERY_CHECKSUM)
         
         # Verify the tape_url is valid, if it exists
         if self.tape_url is not None:
