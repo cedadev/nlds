@@ -30,6 +30,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
+        
+
 
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
@@ -215,31 +217,40 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             body_json[self.MSG_DETAILS][self.MSG_CHECKSUM] = \
                 file_wrapper.checksum
             
-            status, result = fs_client.query(
-                QueryCode.CHECKSUM, 
-                f"{tape_base_dir}/{holding_slug}/{tar_filename}"
-            )
-            if status.status != 0:
-                self.log(f"Could not query xrootd's checksum for tar file "
-                         f"{tar_filename}.", self.RK_LOG_WARNING)
-                # TODO: Schedule another for later?
-            else:
-                try:
-                    checksum = int(result.decode()[8:16], 16)
-                    assert checksum == file_wrapper.checksum
-                except ValueError as e:
-                    self.log(f"Exception {e} when attempting to parse tarfile "
-                            "checksum from xrootd", self.RK_LOG_ERROR)
-                except AssertionError as e:
-                    # TODO: what do we actually want to do here? Failing means 
-                    # we have to make a brand new tar file. Not failing means we 
-                    # have corrupt data and are doing nothing about it. Raising 
-                    # a callback error like this means a retry is triggered but
-                    # will fail on second write because the tar file already 
-                    # exists. Can we delete the write before it's made to tape?
-                    # One for the SCD team methinks. At least it's unlikely. 
-                    raise CallbackError(f"XRootD checksum differs from that "
-                                        f"calculated block-wise.")
+            if self.query_checksum_fl:
+                status, result = fs_client.query(
+                    QueryCode.CHECKSUM, 
+                    f"{tape_base_dir}/{holding_slug}/{tar_filename}"
+                    f"?cks.type=adler32" # Specify the type of checksum to query
+                )
+                if status.status != 0:
+                    self.log(f"Could not query xrootd's checksum for tar file "
+                            f"{tar_filename}.", self.RK_LOG_WARNING)
+                    # TODO: Schedule another for later?
+                else:
+                    try:
+                        method, value = result.decode().split()
+                        assert method == 'adler32'
+                        # Convert checksum from from hex to int for comparison
+                        checksum = int(value[:8], 16)
+                        assert checksum == file_wrapper.checksum
+                    except ValueError as e:
+                        self.log(f"Exception {e} when attempting to parse "
+                                 f"tarfile checksum from xrootd", 
+                                 self.RK_LOG_ERROR)
+                    except AssertionError as e:
+                        # TODO: what do we actually want to do here? Failing 
+                        # means we have to make a brand new tar file. Not 
+                        # failing means we have corrupt data and are doing 
+                        # nothing about it. Raising a callback error like this 
+                        # means a retry is triggered but will fail on second 
+                        # write because the tar file already exists. Can we 
+                        # delete the write before it's made to tape? One for the 
+                        # SCD team methinks. At least it's unlikely. 
+                        raise CallbackError(
+                            f"XRootD checksum differs from that calculated "
+                            f"block-wise."
+                        )
 
         self.log("Archive complete, passing lists back to worker for "
                  "re-routing and cataloguing.", self.RK_LOG_INFO)
