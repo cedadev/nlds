@@ -616,7 +616,7 @@ class CatalogConsumer(RMQC):
                     id: int
                 # Add the new objectstore location to the catalog now, 
                 # to be removed in the event of an s3 get failure. 
-                for tape_location in aggregation.locations():
+                for tape_location in aggregation.locations:
                     objstr_location = self.catalog.create_location(
                         FakeFile(id=tape_location.file_id),
                         storage_type=Storage.OBJECT_STORAGE,
@@ -1357,7 +1357,7 @@ class CatalogConsumer(RMQC):
                     ret_dict[h.label][self.MSG_TRANSACTIONS][t.transaction_id] = t_rec
                 # get the locations
                 locations = []
-                for l in f.location:
+                for l in f.locations:
                     l_rec = {
                         "storage_type" : l.storage_type,
                         "root": l.root,
