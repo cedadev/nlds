@@ -214,6 +214,15 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                             result.close()
                             result.release_conn()
 
+                # Evict the file at the end to ensure the EOS cache doesn't fill 
+                # up. NOTE: This is not implementation agnostic, but probably 
+                # good practice.
+                status, _ = fs_client.prepare([prepare_bytes, ], 
+                                              PrepareFlags.EVICT)
+                if status.status != 0:
+                    self.log(f"Could not evict file from tape cache.", 
+                             self.RK_LOG_WARNING)
+
             except (HTTPError, ArchiveError) as e:
                 reason = f"Stream-time exception occurred: {e}"
                 self.log(reason, self.RK_LOG_DEBUG)
