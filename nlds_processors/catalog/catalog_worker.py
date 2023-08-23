@@ -815,13 +815,14 @@ class CatalogConsumer(RMQC):
                     )
                     object_name = (f"nlds.{objstr_location.root}:"
                                    f"{objstr_location.path}")
+                    tape_path = (f"nlds.{tape_root}:{f.original_path}")
                     # We need to pass the tenancy too, which could be different 
                     # for each location
                     file_details = PathDetails(
                         original_path = f.original_path,
                         object_name = object_name,
                         tenancy = objstr_location.url_netloc,
-                        tape_path = tape_root,
+                        tape_path = tape_path,
                         tape_url = tape_url,
                         size = f.size,
                         user = f.user,
