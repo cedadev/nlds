@@ -624,7 +624,7 @@ class CatalogConsumer(RMQC):
                         url_netloc=tenancy,
                         root=tape_location.root,
                         path=tape_location.path, 
-                        access_time = tape_location.access_time.timestamp()
+                        access_time = tape_location.access_time
                     )
                 # Also need to make locations for each of the files 
                 # within the same aggregation
@@ -713,7 +713,7 @@ class CatalogConsumer(RMQC):
         iteration. """
         # Calculate a target aggregation count if one is not given
         if target_agg_count is None:
-            filesizes = (f.size for f in filelist)
+            filesizes = [f.size for f in filelist]
             total_size = sum(filesizes)
             count = len(filesizes)
             mean_size = total_size / count
@@ -813,11 +813,13 @@ class CatalogConsumer(RMQC):
                     objstr_location = self.catalog.get_location(
                         f, Storage.OBJECT_STORAGE
                     )
+                    object_name = (f"nlds.{objstr_location.root}:"
+                                   f"{objstr_location.path}")
                     # We need to pass the tenancy too, which could be different 
                     # for each location
                     file_details = PathDetails(
                         original_path = f.original_path,
-                        object_name = objstr_location.object_name,
+                        object_name = object_name,
                         tenancy = objstr_location.url_netloc,
                         tape_path = tape_root,
                         tape_url = tape_url,
@@ -825,7 +827,7 @@ class CatalogConsumer(RMQC):
                         user = f.user,
                         group = f.group,
                         permissions = f.file_permissions,                    
-                        access_time = f.access_time,
+                        access_time = objstr_location.access_time.timestamp(),
                         path_type = f.path_type,
                         link_path = f.link_path
                     )
@@ -836,10 +838,7 @@ class CatalogConsumer(RMQC):
                         url_netloc=tape_url,
                         root=tape_root,
                         path=f.original_path, 
-                        # access time is passed in the file details
-                        access_time = datetime.fromtimestamp(
-                            f.access_time, tz=timezone.utc
-                        ),
+                        access_time = objstr_location.access_time,
                         aggregation=aggregation
                     )
                 except CatalogError as e:
