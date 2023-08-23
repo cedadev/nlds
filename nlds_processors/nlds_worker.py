@@ -204,10 +204,10 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
 
     def _process_rk_archive_get_failed(self, body_json: Dict) -> None:
-        self.log(f"Archive retrieval unsuccessful, sending failed files back to"
-                 " catalog for location deletion", self.RK_LOG_INFO)
+        self.log("Archive retrieval unsuccessful, sending failed files back to "
+                 "catalog for objectstore-location deletion", self.RK_LOG_INFO)
 
-        queue = f"{self.RK_CATALOG_DEL}"
+        queue = f"{self.RK_CATALOG_ARCHIVE_DEL}"
         new_routing_key = ".".join([self.RK_ROOT, 
                                     queue, 
                                     self.RK_START])
@@ -216,29 +216,34 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.publish_and_log_message(new_routing_key, body_json)
 
 
-    def _process_rk_archive_put(self, rk_parts: List, body_json: Dict) -> None:
-        # forward to catalog_get
-        queue = f"{self.RK_CATALOG_GET}"
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    queue, 
-                                    self.RK_START])
-        self.log(f"Sending  message to {queue} queue with routing "
-                 f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, body_json)
+    # def _process_rk_archive_put(self, rk_parts: List, body_json: Dict) -> None:
+    #     # forward to catalog_get
+    #     queue = f"{self.RK_CATALOG_GET}"
+    #     new_routing_key = ".".join([self.RK_ROOT, 
+    #                                 queue, 
+    #                                 self.RK_START])
+    #     self.log(f"Sending  message to {queue} queue with routing "
+    #              f"key {new_routing_key}", self.RK_LOG_INFO)
+    #     self.publish_and_log_message(new_routing_key, body_json)
 
-        # Do initial monitoring update to ensure that a subrecord at ROUTING is 
-        # created before the first job 
-        self.log(f"Updating monitor", self.RK_LOG_INFO)
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR_PUT, 
-                                    self.RK_START])
-        body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
-        self.publish_and_log_message(new_routing_key, body_json)
+    #     # Do initial monitoring update to ensure that a subrecord at ROUTING is 
+    #     # created before the first job 
+    #     self.log(f"Updating monitor", self.RK_LOG_INFO)
+    #     new_routing_key = ".".join([self.RK_ROOT, 
+    #                                 self.RK_MONITOR_PUT, 
+    #                                 self.RK_START])
+    #     body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
+    #     self.publish_and_log_message(new_routing_key, body_json)
 
 
-    def _process_rk_archive_put_post_catalog(self, rk_parts: List, 
-                                             body_json: Dict) -> None:
-        # forward confirmation to monitor
+    def _process_rk_catalog_archive_next_complete(self, rk_parts: List, 
+                                                  body_json: Dict) -> None:
+        self.log(f"Next archivable holding aggregated, sending aggregations "
+                 f"for archive", self.RK_LOG_INFO)
+        
+        # Do initial monitoring update. NOTE: unclear whether this is necessary 
+        # as the entry point for the next message hasn't been decided yet, so 
+        # the monitoring entry may be created earlier
         self.log(f"Sending message to {self.RK_MONITOR} queue", 
                  self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 
@@ -246,7 +251,6 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     rk_parts[2]])
         self.publish_and_log_message(new_routing_key, body_json)
 
-        # forward to archive_put
         queue = f"{self.RK_ARCHIVE_PUT}"
         new_routing_key = ".".join([self.RK_ROOT, 
                                     queue, 
@@ -258,6 +262,24 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
     
     def _process_rk_archive_put_complete(self, rk_parts: List, 
                                          body_json: Dict) -> None:
+        self.log("Aggregation successfully written to tape, sending checksum "
+                 "info back to catalog", self.RK_LOG_INFO)
+
+        # forward to catalog to update the checksum on the location
+        queue = f"{self.RK_CATALOG_ARCHIVE_UPDATE}"
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    queue, 
+                                    self.RK_START])
+        self.log(f"Sending  message to {queue} queue with routing key "
+                 f"{new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
+
+
+    def _process_rk_catalog_archive_update_complete(self, rk_parts: List, 
+                                                    body_json: Dict) -> None:
+        self.log("Checksum successfully updated for aggregation, archive-put "
+                 "is now complete.", self.RK_LOG_INFO)
+
         # forward confirmation to monitor
         self.log(f"Sending message to {self.RK_MONITOR} queue", 
                  self.RK_LOG_INFO)
@@ -266,21 +288,12 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                                     rk_parts[2]])
         self.publish_and_log_message(new_routing_key, body_json)
 
-        # forward to archive_put
-        queue = f"{self.RK_CATALOG_PUT}"
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    queue, 
-                                    self.RK_START])
-        self.log(f"Sending  message to {queue} queue with routing "
-                 f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, body_json)
-
 
     def _process_rk_archive_put_failed(self, body_json: Dict) -> None:
-        self.log(f"Archive put unsuccessful, sending failed files back to "
-                 f"catalog for location deletion", self.RK_LOG_INFO)
+        self.log(f"Archive-put unsuccessful, sending failed files back to "
+                 f"catalog for tape-location deletion", self.RK_LOG_INFO)
 
-        queue = f"{self.RK_CATALOG_DEL}"
+        queue = f"{self.RK_CATALOG_ARCHIVE_DEL}"
         new_routing_key = ".".join([self.RK_ROOT, 
                                     queue, 
                                     self.RK_START])
@@ -331,9 +344,6 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         elif rk_parts[2] in (self.RK_GET, self.RK_GETLIST):
             self._process_rk_get(body_json)
 
-        elif rk_parts[2] in (self.RK_ARCHIVE_PUT):
-            self._process_rk_archive_put(rk_parts, body_json)
-
         # If a task has completed, initiate new tasks
         elif rk_parts[2] == f"{self.RK_COMPLETE}":
             # If index completed then pass file list cataloguing before transfer
@@ -351,20 +361,21 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             # if catalog_get completed then we need to decide whether it was 
             # part of a regular get or an archive_put workflow
             elif (rk_parts[1] == f"{self.RK_CATALOG_GET}"):
-                if api_method in (self.RK_GET, self.RK_GETLIST):
-                    self._process_rk_catalog_get_complete(rk_parts, body_json)
-                elif api_method == self.RK_ARCHIVE_PUT:
-                    self._process_rk_archive_put()
-                else:
-                    self.log("Found a completed catalog-get which isn't "
-                             "either a get, getlist, or archive-put, so "
-                             "something has gone wrong somewhere.",
-                             self.RK_LOG_ERROR)
+                self._process_rk_catalog_get_complete(rk_parts, body_json)
 
             # If finished with archive retrieval then pass for transfer-get
             elif (rk_parts[1] == f"{self.RK_ARCHIVE_GET}"):
                 self._process_rk_archive_get_complete(rk_parts, body_json)
-        
+
+            # If finished with aggregation of unarchived holding, then send for 
+            # archive write
+            elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_NEXT):
+                self._process_rk_catalog_archive_next_complete(rk_parts, 
+                                                               body_json)
+            # If finished with archive write, then pass checksum info to catalog
+            elif (rk_parts[1] == f"{self.RK_ARCHIVE_PUT}"):
+                self._process_rk_archive_put_complete(rk_parts, body_json)
+
         # If a reroute has happened from the catalog then we need to get from 
         # archive before we can do the transfer from object store.
         elif rk_parts[2] == f"{self.RK_REROUTE}":
@@ -380,12 +391,12 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             
             # If archive_put failed then we need to remove the TAPE locations 
             # from the catalog
-            if rk_parts[1] == f"{self.RK_TRANSFER_PUT}":
+            if rk_parts[1] == f"{self.RK_ARCHIVE_PUT}":
                 self._process_rk_archive_put_failed(body_json)
 
-            # If archive_put failed then we need to remove the OBJECT_STORAGE 
+            # If archive_get failed then we need to remove the OBJECT_STORAGE 
             # locations from the catalog
-            if rk_parts[1] == f"{self.RK_TRANSFER_PUT}":
+            if rk_parts[1] == f"{self.RK_ARCHIVE_GET}":
                 self._process_rk_archive_get_failed(body_json)
             
         self.log(f"Worker callback complete!", self.RK_LOG_INFO)
