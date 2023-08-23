@@ -70,6 +70,9 @@ class RabbitMQPublisher():
     RK_ARCHIVE = "archive"
     RK_ARCHIVE_PUT = "archive-put"
     RK_ARCHIVE_GET = "archive-get"
+    RK_CATALOG_ARCHIVE_NEXT = "catalog-archive-next"
+    RK_CATALOG_ARCHIVE_DEL = "catalog-archive-del"
+    RK_CATALOG_ARCHIVE_UPDATE = "catalog-archive-update"
     RK_ROUTE = "route"
     RK_LOG = "log"
 
@@ -79,6 +82,7 @@ class RabbitMQPublisher():
     RK_COMPLETE = "complete"
     RK_FAILED = "failed"
     RK_REROUTE = "reroute"
+    RK_NEXT = "next"
 
     # Exchange routing key parts – monitoring levels
     RK_LOG_NONE = "none"

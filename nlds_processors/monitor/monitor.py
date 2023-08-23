@@ -198,7 +198,7 @@ class Monitor(DBMixin):
         parameters"""
 
         try:
-            query = self.session.query(SubRecord).join(TransactionRecord).filter(
+            query = self.session.query(SubRecord).filter(
                 SubRecord.transaction_record_id == transaction_record.id
             )
 

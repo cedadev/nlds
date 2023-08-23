@@ -861,7 +861,7 @@ class CatalogConsumer(RMQC):
 
             # Forward successful file details to archiver for tape write
             rk_complete = ".".join([rk_origin,
-                                    self.RK_CATALOG_ARCHIVE_PUT, 
+                                    self.RK_CATALOG_ARCHIVE_NEXT, 
                                     self.RK_COMPLETE])
             
             body[self.MSG_DETAILS][self.MSG_USER] = next_holding.user
@@ -1117,7 +1117,7 @@ class CatalogConsumer(RMQC):
         # SUCCESS
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin,
-                                    self.RK_CATALOG_DEL, 
+                                    self.RK_CATALOG_ARCHIVE_DEL, 
                                     self.RK_COMPLETE])
             self.log(
                 f"Sending completed PathList from CATALOG_DEL {self.completelist}",
@@ -1128,7 +1128,7 @@ class CatalogConsumer(RMQC):
         # RETRY
         if len(self.retrylist) > 0:
             rk_retry = ".".join([rk_origin,
-                                 self.RK_CATALOG_DEL, 
+                                 self.RK_CATALOG_ARCHIVE_DEL, 
                                  self.RK_START])
             self.log(
                 f"Sending retry PathList from CATALOG_DEL {self.retrylist}",
@@ -1139,7 +1139,7 @@ class CatalogConsumer(RMQC):
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin,
-                                  self.RK_CATALOG_DEL, 
+                                  self.RK_CATALOG_ARCHIVE_DEL, 
                                   self.RK_FAILED])
             self.log(
                 f"Sending failed PathList from CATALOG_DEL {self.failedlist}",
@@ -1560,7 +1560,7 @@ class CatalogConsumer(RMQC):
                          self.RK_LOG_ERROR)
                 return 
             if (rk_parts[1] == self.RK_CATALOG_GET):
-                self._catalog_get(body, rk_parts[0], api_method=self.RK_GET)
+                self._catalog_get(body, rk_parts[0])
             elif (rk_parts[1] == self.RK_CATALOG_DEL):
                 # If part of a GET transaction but received via the del topic 
                 # then delete the new object storage locations added to the 
@@ -1587,6 +1587,7 @@ class CatalogConsumer(RMQC):
 
         # Archive put requires getting from the catalog
         elif (api_method == self.RK_ARCHIVE_PUT):
+            self.log("Starting an archive-put workflow", self.RK_LOG_DEBUG)
             # split the routing key
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
@@ -1594,9 +1595,13 @@ class CatalogConsumer(RMQC):
                 self.log("Routing key inappropriate length, exiting callback.",
                          self.RK_LOG_ERROR)
             
-            if (rk_parts[1] == self.RK_CATALOG_GET):
-                self._catalog_get(body, rk_parts[0], api_method=self.RK_ARCHIVE)
-            elif (rk_parts[1] == self.RK_CATALOG_DEL):
+            if (rk_parts[1] == self.RK_CATALOG_ARCHIVE_NEXT):
+                self.log("Beginning preparation of next archive aggregation", 
+                         self.RK_LOG_DEBUG)
+                self._catalog_archive_put(body, rk_parts[0])    
+            elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_UPDATE):
+                self._catalog_archive_update(body, rk_parts[0])
+            elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_DEL):
                 self._catalog_location_del(body, rk_parts[0], 
                                            location_type=Storage.TAPE)
 
