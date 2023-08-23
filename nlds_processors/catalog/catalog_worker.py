@@ -835,7 +835,7 @@ class CatalogConsumer(RMQC):
                     self.catalog.create_location(
                         file_=f, 
                         storage_type=Storage.TAPE,
-                        url_scheme="root:",
+                        url_scheme="root",
                         url_netloc=tape_url,
                         root=tape_root,
                         path=f.original_path, 
