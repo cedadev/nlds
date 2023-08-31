@@ -26,7 +26,7 @@ package Exchange{
     queue tgq as "Transfer Get Q" #gold
     queue aq as "Archive Q" #LightSteelBlue
     queue qap as "Archive Put Q" #MistyRose
-    queue qag as "Archive Put Q" #MistyRose
+    queue qag as "Archive Get Q" #MistyRose
     queue wq as "NLDS Q" #lightgrey
     queue cq as "Catalog Q" #SpringGreen
     queue lq as "Logging Q" #hotpink
