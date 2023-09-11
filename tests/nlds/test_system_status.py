@@ -211,6 +211,7 @@ def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop):
     consumer = loop.run_until_complete(
         system.get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 0))
+    consumer = consumer[0]
     
     assert consumer == {"val": "All Consumers Online (5/5)", "colour": "GREEN"}
     
@@ -243,6 +244,7 @@ def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop):
     consumer = loop.run_until_complete(
         system.get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 9))
+    consumer = consumer[0]
     
     assert consumer == {
         "val": "All Consumers Offline (0/5)" , 
@@ -284,6 +286,7 @@ def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop):
     consumer = loop.run_until_complete(
         system.get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 2))
+    consumer = consumer[0]
     
     assert consumer == {
         "val": "Consumers Online (3/5)", 
@@ -322,6 +325,7 @@ def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop):
     consumer = loop.run_until_complete(
         system.get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 0))
+    consumer = consumer[0]
     
     assert consumer == {
         "val": "All Consumers Offline (None running)", 
@@ -358,6 +362,7 @@ def test_slow_consumer_all_offline(monkeypatch,
     consumer = loop.run_until_complete(
         system.get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 9))
+    consumer = consumer[0]
     assert consumer == {
         "val": "All Consumers Offline (0/5)", 
         "colour": "RED", 
@@ -383,10 +388,10 @@ async def mock_get_consumer_status(key, target, msg_dict,
                                    time_limit, skip_num=0):
     # returns a dictionary value for get_consumer_status as a simple mock function
     
-    mock_consumer_tags = {
+    mock_consumer_tags = ({
             "val": ("All Consumers Online (5/5)"), 
             "colour": "GREEN"
-            }
+            }, 5, 5)
     return mock_consumer_tags
 
 
@@ -394,10 +399,10 @@ async def mock_green_consumer_status(key, target, msg_dict,
                                    time_limit, skip_num=0):
     # returns a dictionary value for get_consumer_status as a simple mock function
     
-    mock_consumer_tags = {
+    mock_consumer_tags = ({
             "val": ("All Consumers Online (5/5)"), 
             "colour": "GREEN"
-            }
+            }, 1, 1)
     return mock_consumer_tags
 
 
@@ -407,9 +412,9 @@ async def mock_red_consumer_status(key, target, msg_dict,
     # used to test if all consumers have failed
     
     consumers_fail = ["mock_tag_1", "mock_tag_2"]
-    mock_consumer_tags = {"val": ("All Consumers Offline (0/5)"), 
+    mock_consumer_tags = ({"val": ("All Consumers Offline (0/5)"), 
                           "colour": "RED", "failed": consumers_fail
-                }
+                }, 1, 1)
     return mock_consumer_tags
 
 
@@ -418,8 +423,8 @@ async def mock_blue_consumer_status(key, target, msg_dict,
     # returns a dictionary value for get_consumer_status as a simple mock function
     # used to test no consumers running
     
-    mock_consumer_tags = {
-        "val": "All Consumers Offline (None running)", "colour": "RED"}
+    mock_consumer_tags = ({
+        "val": "All Consumers Offline (None running)", "colour": "RED"}, 1, 1)
     return mock_consumer_tags
 
 
@@ -590,3 +595,29 @@ def test_get_consumer_info_success(monkeypatch):
     assert info == ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
                     "mock_tag_4", "mock_tag_5"]
 
+
+"""
+this tests the get_service_json function
+"""
+
+
+def test_get_service_json_success(monkeypatch, loop: asyncio.AbstractEventLoop):
+    # test if get function correctly runs
+    
+    # replaces certain functions with mock functions that are a lot less 
+    # complicated and return a simple value for what is being tested
+    monkeypatch.setattr(system, "get_consumer_status", mock_get_consumer_status)
+    
+    # uses a pytest fixture to make an event loop that will run the asyncronus
+    # function that is being called and store its output
+    get = loop.run_until_complete(system.get_service_json(Request, "monitor", 3))
+    
+    del get["pid"]
+    del get["hostname"]
+    
+    assert {"microservice_name":"monitor",
+            "total_num":5,
+            "num_failed":0,
+            "num_success":5,
+            "failed_list":[]} == get
+    

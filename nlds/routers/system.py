@@ -1,12 +1,13 @@
 import asyncio
 import requests
+import socket
 import os
 import json
 from typing import Annotated
 
 from fastapi import Depends, APIRouter, status, Query, FastAPI, Request
 from fastapi.exceptions import HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -189,7 +190,7 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
             "failed": consumers_fail
             }
 
-    return consumers
+    return consumers, consumer_count, consumers_count
 
 
 @router.get("/stats/",
@@ -203,23 +204,29 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
             },
             response_class=HTMLResponse
         )
-async def get(request: Request, q: Annotated[list[str], Query(alias="option")] = ["5", "all"]):
-    # http://127.0.0.1:8000/system/stats/?time-limit={time limit number here}
+#async def get(request: Request, q: Annotated[list[str], 
+#                                    Query(alias=['time-limit', 'option'])] = ["5", "all"]):
+
+async def get(request: Request, time_limit: str = Query("5", alias='time-limit'), 
+              option: list[str] = Query(["all"], alias='option')):
+
+
+    # http://127.0.0.1:8000/system/stats/?option={time limit number here}
     # max time limit is 30 seconds because the uvicorn server doesn't actually do
     # anything until its finished with that number even if the page was closed
     
+    
     default = False
-    services = ["monitor", "catalog", "nlds worker", "index", "get transfer", "put transfer", "logger"]
+    services = ["monitor", "catalog", "nlds worker", "index", "get transfer", 
+                "put transfer", "logger"]
     gathered = []
     
     try:
-        time=q[0]
-        time = int(time)
+        time = int(time_limit)
         if time > 15 or time < 1:
             time = 5
     except:
         time = 5
-        default = True
 
 
     msg_dict = {
@@ -252,37 +259,37 @@ async def get(request: Request, q: Annotated[list[str], Query(alias="option")] =
         "info": ""
     }
 
-    if default == False:
-        q.pop(0)
-    consumers = q
-    if consumers[0] != "all":
-        for consumer in consumers:
-            consumer = consumer.lower()
-            if consumer in services:
-                gathered.append(consumer)
-        gathered = list(dict.fromkeys(gathered))
-    
-        for service in gathered:
-            
-            name = services_dict[service][1]
-            key = services_dict[service][0]
+    consumers = option
+    if consumers:
+        if consumers[0] != "all":
+            for consumer in consumers:
+                consumer = consumer.lower()
+                if consumer in services:
+                    gathered.append(consumer)
+            gathered = list(dict.fromkeys(gathered))
         
-            value = await get_consumer_status(key, name, 
-                                                msg_dict, time_limit, 0)
+            for service in gathered:
+                
+                name = services_dict[service][1]
+                key = services_dict[service][0]
             
-            structure_dict2 = structure_dict.copy()
-            
-            structure_dict2["service"] = name
-            structure_dict2["info"] = value
-            
-            partial_services.append(structure_dict2)
-    
-        return templates.TemplateResponse("selection.html", 
-                                          context={
-                                              "request": request, 
-                                              "stats": partial_services
-                                              }
-                                          )
+                value = await get_consumer_status(key, name, 
+                                                    msg_dict, time_limit, 0)
+                value = value[0]
+                
+                structure_dict2 = structure_dict.copy()
+                
+                structure_dict2["service"] = name
+                structure_dict2["info"] = value
+                
+                partial_services.append(structure_dict2)
+            if len(partial_services) != 0:
+                return templates.TemplateResponse("selection.html", 
+                                                context={
+                                                    "request": request, 
+                                                    "stats": partial_services
+                                                    }
+                                                )
     
     
 
@@ -291,24 +298,31 @@ async def get(request: Request, q: Annotated[list[str], Query(alias="option")] =
     # The numbers indicate how many consumers in a queue to skip
     monitor = await get_consumer_status("monitor_q", "monitor", 
                                         msg_dict, time_limit, 0)
+    monitor = monitor[0]
     
     catalog = await get_consumer_status("catalog_q", "catalog", 
                                         msg_dict, time_limit, 0)
+    catalog = catalog[0]
     
     nlds_worker = await get_consumer_status("nlds_q", "nlds_worker", 
                                             msg_dict, time_limit, 0)
+    nlds_worker = nlds_worker[0]
     
     index = await get_consumer_status("index_q", "index", 
                                       msg_dict, time_limit, 0)
+    index = index[0]
     
     get_transfer = await get_consumer_status("transfer_get_q", "get_transfer", 
                                              msg_dict, time_limit, 0)
+    get_transfer = get_transfer[0]
     
     put_transfer = await get_consumer_status("transfer_put_q", "put_transfer", 
                                              msg_dict, time_limit, 0)
+    put_transfer = put_transfer[0]
     
     logger = await get_consumer_status("logging_q", "logger", 
                                        msg_dict, time_limit, 0)
+    logger = logger[0]
     
     consumer_list = [monitor, catalog, nlds_worker, index, 
                      get_transfer, put_transfer, logger]
@@ -360,3 +374,88 @@ async def get(request: Request, q: Annotated[list[str], Query(alias="option")] =
                                           "stats": response
                                           }
                                       )
+    
+@router.get("/stats/{service}",
+            status_code = status.HTTP_202_ACCEPTED,
+            responses = {
+                status.HTTP_202_ACCEPTED: {"model" : SystemResponse},
+                status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
+                status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
+                status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
+                status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
+            }
+        )
+async def get_service_json(request: Request, service, 
+                           time_limit: str = Query("5", alias='time-limit')):
+    
+    
+    try:
+        time = int(time_limit)
+        if time > 15 or time < 1:
+            time = 5
+    except ValueError:
+        time = 5
+            
+    
+    services_dict = {
+        "monitor": "monitor_q",
+        "catalog": "catalog_q",
+        "nlds_worker": "nlds_q",
+        "index": "index_q",
+        "get_transfer": "transfer_get_q",
+        "put_transfer": "transfer_put_q",
+        "logger": "logging_q",
+    }
+    
+    services = ["monitor", "catalog", "nlds_worker", "index", "get_transfer", 
+                "put_transfer", "logger"]
+    if service not in services:
+        target_route_url = "/system/stats/"
+        if time_limit:
+            target_route_url += f"?time-limit={time}&option=all"
+        return RedirectResponse(url=target_route_url)
+    else:
+        
+        
+        time_limit = time
+
+        msg_dict = {
+            "details": {
+                "api_action": "system_stat", 
+                "target_consumer": "", 
+                "ignore_message": False
+                }
+            }
+        
+        info_list = await get_consumer_status(services_dict[service], service, 
+                                             msg_dict, time_limit, 0)
+        info = info_list[0]
+        
+        final_dict = {
+            "microservice_name": service,
+            "total_num": 0,
+            "num_failed": 0,
+            "num_success": 0,
+            "failed_list": [],
+            "pid": os.getpid(),
+            "hostname": socket.gethostname()
+        }
+        
+        if info["val"] != "All Consumers Offline (None running)":
+            try:
+                failed_list = info["failed"]
+            except KeyError:
+                failed_list = []
+            
+            total_consumers = info_list[1]
+            success_consumers = info_list[2]
+            failed_consumers = total_consumers - success_consumers
+            
+            final_dict["total_num"] = total_consumers
+            final_dict["num_success"] = success_consumers
+            final_dict["num_failed"] = failed_consumers
+            final_dict["failed_list"] = failed_list
+        
+        else:
+            pass
+        return(final_dict)
