@@ -69,22 +69,29 @@ class FilelistType(Enum):
     archived = 1
 
 class State(Enum):
+    # Generic states
     INITIALISING = -1
     ROUTING = 0
+    COMPLETE = 100
+    FAILED = 101
+    # PUT workflow states
     SPLITTING = 1
     INDEXING = 2
     CATALOG_PUTTING = 3
     TRANSFER_PUTTING = 4
     CATALOG_ROLLBACK = 5
-    CATALOG_GETTING = 6
-    TRANSFER_GETTING = 7
-    COMPLETE = 8
-    FAILED = 9
-    CATALOG_BACKUP = 10     # This is essenitally the policy control step
-    ARCHIVE_PUTTING = 11
-    CATALOG_RESTORING = 12
-    ARCHIVE_GETTING = 13
-    CATALOG_UPDATING = 14
+    # GET workflow states
+    CATALOG_GETTING = 10
+    TRANSFER_GETTING = 11
+    # ARCHIVE_PUT workflow states
+    ARCHIVE_INIT = 20
+    CATALOG_ARCHIVE_AGGREGATING = 21
+    ARCHIVE_PUTTING = 22
+    CATALOG_ARCHIVE_UPDATING = 23
+    # ARCHIVE_GET workflow states
+    ARCHIVE_GETTING = 31
+    # Shared ARCHIVE states
+    CATALOG_ARCHIVE_ROLLBACK = 40
 
     @classmethod
     def has_value(cls, value):
@@ -96,7 +103,13 @@ class State(Enum):
 
     @classmethod
     def get_final_states(cls):
-        return cls.TRANSFER_GETTING, cls.TRANSFER_PUTTING, cls.FAILED
+        final_states = (
+            cls.TRANSFER_GETTING,
+            cls.TRANSFER_PUTTING,
+            cls.CATALOG_ARCHIVE_UPDATING,
+            cls.FAILED,
+        )
+        return final_states
 
     def to_json(self):
         return self.value
