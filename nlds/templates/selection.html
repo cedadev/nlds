@@ -15,7 +15,7 @@
             <th>Status</th>
             <th>Failed Consumer Tags (if any)</th>
         </tr>
-        {% for row in stats %}
+        {% for row in status %}
             <tr>
                 <td>{{ row.service }}</td>
                 <td><FONT COLOR={{ row.info.colour }}>{{ row.info.val }}</FONT></td>

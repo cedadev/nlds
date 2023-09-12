@@ -9,10 +9,10 @@
     <div class="table-responsive container">
     <h1>NLDS system status:</h1>
     <hr>
-    <div class="alert {{ stats.failed.failed_colour }}">
-        {% if stats.failed.failed_num > 0 %}
-            <strong>INFO:</strong> {{ stats.failed.failed_num }} consumers failed
-        {% elif ( (stats.failed.failed_num == 0) and (stats.failed.failed_colour != "alert-info") ) %}
+    <div class="alert {{ status.failed.failed_colour }}">
+        {% if status.failed.failed_num > 0 %}
+            <strong>INFO:</strong> {{ status.failed.failed_num }} consumers failed
+        {% elif ( (status.failed.failed_num == 0) and (status.failed.failed_colour != "alert-info") ) %}
             <strong>INFO:</strong> No active consumers failed
         {% else %}
             <strong>INFO:</strong> No consumers online
@@ -26,10 +26,10 @@
         </tr>
         <tr>
             <td>Monitor</td>
-            <td><FONT COLOR={{ stats.monitor.colour }}>{{ stats.monitor.val }}</FONT></td>
+            <td><FONT COLOR={{ status.monitor.colour }}>{{ status.monitor.val }}</FONT></td>
             <td id="nested">
                 <table>
-                    {% for id in stats.monitor.failed %}
+                    {% for id in status.monitor.failed %}
                         <tr><td>{{ id }}</td></tr>
                     {% endfor %}
                 </table>
@@ -37,10 +37,10 @@
         </tr>
         <tr>
             <td>Catalog</td>
-            <td><FONT COLOR={{ stats.catalog.colour }}>{{ stats.catalog.val }}</FONT></td>
+            <td><FONT COLOR={{ status.catalog.colour }}>{{ status.catalog.val }}</FONT></td>
             <td id="nested">
                 <table>
-                    {% for id in stats.catalog.failed %}
+                    {% for id in status.catalog.failed %}
                         <tr><td>{{ id }}</td></tr>
                     {% endfor %}
                 </table>
@@ -48,10 +48,10 @@
         </tr>
         <tr>
             <td>NLDS Worker</td>
-            <td><FONT COLOR={{ stats.nlds_worker.colour }}>{{ stats.nlds_worker.val }}</FONT></td>
+            <td><FONT COLOR={{ status.nlds_worker.colour }}>{{ status.nlds_worker.val }}</FONT></td>
             <td id="nested">
                 <table>
-                    {% for id in stats.nlds_worker.failed %}
+                    {% for id in status.nlds_worker.failed %}
                         <tr><td>{{ id }}</td></tr>
                     {% endfor %}
                 </table>
@@ -59,10 +59,10 @@
         </tr>
         <tr>
             <td>Index</td>
-            <td><FONT COLOR={{ stats.index.colour }}>{{ stats.index.val }}</FONT></td>
+            <td><FONT COLOR={{ status.index.colour }}>{{ status.index.val }}</FONT></td>
             <td id="nested">
                 <table>
-                    {% for id in stats.index.failed %}
+                    {% for id in status.index.failed %}
                         <tr><td>{{ id }}</td></tr>
                     {% endfor %}
                 </table>
@@ -70,10 +70,10 @@
         </tr>
         <tr>
             <td>Get Transfer</td>
-            <td><FONT COLOR={{ stats.get_transfer.colour }}>{{ stats.get_transfer.val }}</FONT></td>
+            <td><FONT COLOR={{ status.get_transfer.colour }}>{{ status.get_transfer.val }}</FONT></td>
             <td id="nested">
                 <table>
-                    {% for id in stats.get_transfer.failed %}
+                    {% for id in status.get_transfer.failed %}
                         <tr><td>{{ id }}</td></tr>
                     {% endfor %}
                 </table>
@@ -81,10 +81,10 @@
         </tr>
         <tr>
             <td>Put Transfer</td>
-            <td><FONT COLOR={{ stats.put_transfer.colour }}>{{ stats.put_transfer.val }}</FONT></td>
+            <td><FONT COLOR={{ status.put_transfer.colour }}>{{ status.put_transfer.val }}</FONT></td>
             <td id="nested">
                 <table>
-                    {% for id in stats.put_transfer.failed %}
+                    {% for id in status.put_transfer.failed %}
                         <tr><td>{{ id }}</td></tr>
                     {% endfor %}
                 </table>
@@ -92,10 +92,10 @@
         </tr>
         <tr>
             <td>Logger</td>
-            <td><FONT COLOR={{ stats.logger.colour }}>{{ stats.logger.val }}</FONT></td>
+            <td><FONT COLOR={{ status.logger.colour }}>{{ status.logger.val }}</FONT></td>
             <td id="nested">
                 <table>
-                    {% for id in stats.logger.failed %}
+                    {% for id in status.logger.failed %}
                         <tr><td>{{ id }}</td></tr>
                     {% endfor %}
                 </table>

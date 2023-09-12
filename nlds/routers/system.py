@@ -193,7 +193,7 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
     return consumers, consumer_count, consumers_count
 
 
-@router.get("/stats/",
+@router.get("/status/",
             status_code = status.HTTP_202_ACCEPTED,
             responses = {
                 status.HTTP_202_ACCEPTED: {"model" : SystemResponse},
@@ -211,7 +211,7 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
               option: list[str] = Query(["all"], alias='option')):
 
 
-    # http://127.0.0.1:8000/system/stats/?option={time limit number here}
+    # http://127.0.0.1:8000/system/status/?option={time limit number here}
     # max time limit is 30 seconds because the uvicorn server doesn't actually do
     # anything until its finished with that number even if the page was closed
     
@@ -287,7 +287,7 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
                 return templates.TemplateResponse("selection.html", 
                                                 context={
                                                     "request": request, 
-                                                    "stats": partial_services
+                                                    "status": partial_services
                                                     }
                                                 )
     
@@ -371,11 +371,11 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
     return templates.TemplateResponse("index.html", 
                                       context={
                                           "request": request, 
-                                          "stats": response
+                                          "status": response
                                           }
                                       )
     
-@router.get("/stats/{service}",
+@router.get("/status/{service}",
             status_code = status.HTTP_202_ACCEPTED,
             responses = {
                 status.HTTP_202_ACCEPTED: {"model" : SystemResponse},
@@ -410,7 +410,7 @@ async def get_service_json(request: Request, service,
     services = ["monitor", "catalog", "nlds_worker", "index", "get_transfer", 
                 "put_transfer", "logger"]
     if service not in services:
-        target_route_url = "/system/stats/"
+        target_route_url = "/system/status/"
         if time_limit:
             target_route_url += f"?time-limit={time}&option=all"
         return RedirectResponse(url=target_route_url)

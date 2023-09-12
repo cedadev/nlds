@@ -449,7 +449,7 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     attrs.pop('raw_headers')
     
     to_assert = ("{'template': <Template 'index.html'>, "
-"'context': {'request': <class 'starlette.requests.Request'>, 'stats': "
+"'context': {'request': <class 'starlette.requests.Request'>, 'status': "
 "{'monitor': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
 "'catalog': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
 "'nlds_worker': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
@@ -480,7 +480,7 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     assert isinstance(attrs["context"]["request"], abc.ABCMeta)
     
-    assert str(attrs["context"]["stats"]) == status
+    assert str(attrs["context"]["status"]) == status
 
 
 def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
@@ -499,7 +499,7 @@ def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
     attrs = (get.__dict__)
     
     # retrieves the specific item to be tested from the dictionary
-    failed = attrs["context"]["stats"]["failed"]
+    failed = attrs["context"]["status"]["failed"]
     
     assert failed == {'failed_num': 0, 'failed_colour': 'alert-success'}
     
@@ -523,7 +523,7 @@ def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
     attrs = (get.__dict__)
     
     # retrieves the specific item to be tested from the dictionary
-    failed = attrs["context"]["stats"]["failed"]
+    failed = attrs["context"]["status"]["failed"]
     
     assert failed == {'failed_num': 14, 'failed_colour': 'alert-danger'}
     
@@ -547,7 +547,7 @@ def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
     attrs = (get.__dict__)
     
     # retrieves the specific item to be tested from the dictionary
-    failed = attrs["context"]["stats"]["failed"]
+    failed = attrs["context"]["status"]["failed"]
     
     assert failed == {'failed_num': 0, 'failed_colour': 'alert-info'}
     

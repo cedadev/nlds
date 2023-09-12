@@ -59,8 +59,8 @@ Running
 -------
 
 
-After the uvicorn server is running go to ```/system/stats/``` on a search engine
-e.g: <http://127.0.0.1:8000/system/stats/>
+After the uvicorn server is running go to ```/system/status/``` on a search engine
+e.g: <http://127.0.0.1:8000/system/status/>
 
 This is the way of getting the table in a simple way.
 
@@ -70,17 +70,17 @@ as an API to directly get this information instead of using the web link.
 
 adding ?option={number} to the end of the URL will change the time limit 
 (more on that below) e.g:
-<http://127.0.0.1:8000/system/stats/?option=2>
+<http://127.0.0.1:8000/system/status/?option=2>
 
 you can also add ?option={microservice} to the end of the url to get a table with only
 those microservices in. e.g (shows a table with only the monitor row):
-<http://127.0.0.1:8000/system/stats/?option=monitor>
+<http://127.0.0.1:8000/system/status/?option=monitor>
 
 you can string together options by doing this: 
 ?option=2&option=Catalog&option=Monitor
 
 e.g:
-<http://127.0.0.1:8000/system/stats/?option=2&option=Catalog&option=MonITor&option=2&option=INdeX&option=catalog&option=2&option=2&option=logger&>
+<http://127.0.0.1:8000/system/status/?option=2&option=Catalog&option=MonITor&option=2&option=INdeX&option=catalog&option=2&option=2&option=logger&>
 (this link works and will set the time limit to 2 and open a table with catalog, monitor, index and logger rows)
 and would look like this:
 
@@ -111,10 +111,10 @@ and if you accidentally have a duplicate it will ignore it. you can also do
 
 you are also able to select specific microservices and get a JSON response from them 
 helpful for an API. To do this add the microservice you want at the end of the URL
-<http://127.0.0.1:8000/system/stats/catalog>
+<http://127.0.0.1:8000/system/status/catalog>
 this will give information as a JSON response for the catalog microservice
 you can also add time limit to this like the others:
-<http://127.0.0.1:8000/system/stats/catalog?option=6>
+<http://127.0.0.1:8000/system/status/catalog?option=6>
 (shows catalog JSON information with a time limit as 6). This uses the same rules as 
 the other time limit (not below 0 or above 15). If you spell the microservice wrong then
 it will take you to the main table.
@@ -275,6 +275,6 @@ TLDR
 ----
 
 
-going to ```/system/stats/``` on a search engine or <http://127.0.0.1:8000/system/stats/>
+going to ```/system/status/``` on a search engine or <http://127.0.0.1:8000/system/status/>
 will show you a table of what microservices are currently running and the tags of any consumers 
 that have failed
