@@ -68,19 +68,19 @@ To get the dictionary that is used to fill the table, it is possible to use requ
 as an API to directly get this information instead of using the web link.
 
 
-adding ?option={number} to the end of the URL will change the time limit 
+adding ?time_limit={number} to the end of the URL will change the time limit 
 (more on that below) e.g:
-<http://127.0.0.1:8000/system/status/?option=2>
+<http://127.0.0.1:8000/system/status/?time_limit=2>
 
-you can also add ?option={microservice} to the end of the url to get a table with only
+you can also add ?consumer={microservice} to the end of the url to get a table with only
 those microservices in. e.g (shows a table with only the monitor row):
-<http://127.0.0.1:8000/system/status/?option=monitor>
+<http://127.0.0.1:8000/system/status/?consumer=monitor>
 
-you can string together options by doing this: 
-?option=2&option=Catalog&option=Monitor
+you can string both together by doing this: 
+?time_limit=2&consumer=Catalog&consumer=Monitor
 
 e.g:
-<http://127.0.0.1:8000/system/status/?option=2&option=Catalog&option=MonITor&option=2&option=INdeX&option=catalog&option=2&option=2&option=logger&>
+<http://127.0.0.1:8000/system/status/?time_limit=2&consumer=Catalog&consumer=MonITor&consumer=2&consumer=INdeX&consumer=catalog&time_limit=2&time_limit=2&consumer=logger&>
 (this link works and will set the time limit to 2 and open a table with catalog, monitor, index and logger rows)
 and would look like this:
 
@@ -100,21 +100,20 @@ Understanding the table
 When opening the page it will load quickly unless some consumers have failed. 
 This is because the system will wait the duration of the time limit set in system.py
 the default for this is 5 seconds but can be changed by changing the value of time_limit. 
-it can also be changed by adding ?option={number} at the end of the URL. This 
+it can also be changed by adding ?time_limit={number} at the end of the URL. This 
 number cannot go below 0 or above 15 otherwise it defaults to 5 seconds.
 
 You also have the choice to select which microservices you want to see specifically 
-by adding ?option={microservice} at the end of the URL. you can string as many of these as
-you want and it will show your options. If you spell it wrong it will not break but ignore that
-and if you accidentally have a duplicate it will ignore it. you can also do 
-?option=all which will show the regular table.
+by adding ?consumer={microservice} at the end of the URL. you can string as many of these as
+you want and it will show your options. If you spell it wrong it will not break but ignore it
+and if you accidentally have a duplicate it will ignore that also. Doing ?consumer=all which will show the regular table.
 
 you are also able to select specific microservices and get a JSON response from them 
 helpful for an API. To do this add the microservice you want at the end of the URL
 <http://127.0.0.1:8000/system/status/catalog>
 this will give information as a JSON response for the catalog microservice
 you can also add time limit to this like the others:
-<http://127.0.0.1:8000/system/status/catalog?option=6>
+<http://127.0.0.1:8000/system/status/catalog?time_limit=6>
 (shows catalog JSON information with a time limit as 6). This uses the same rules as 
 the other time limit (not below 0 or above 15). If you spell the microservice wrong then
 it will take you to the main table.
@@ -260,6 +259,7 @@ This can include but is not limited to:
     (the Status says ```Login error```)
 5.  If there is an unexpected error with the requests return then the code will
     catch it and show the json value of what was returned under the Status
+6.  Wrong port in config file (rabbitMQ admin_port should be the same as the admin interface)
 
 
 If the RabbitMQ server is down, after it is back up then ```logging_q``` needs to be ran 
