@@ -204,14 +204,12 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
             },
             response_class=HTMLResponse
         )
-#async def get(request: Request, q: Annotated[list[str], 
-#                                    Query(alias=['time-limit', 'option'])] = ["5", "all"]):
 
 async def get(request: Request, time_limit: str = Query("5", alias='time-limit'), 
-              option: list[str] = Query(["all"], alias='option')):
+              consumer: list[str] = Query(["all"], alias='consumer')):
 
 
-    # http://127.0.0.1:8000/system/status/?option={time limit number here}
+    # http://127.0.0.1:8000/system/status/?consumer={consumer name here}&time_limit={time limit here}
     # max time limit is 30 seconds because the uvicorn server doesn't actually do
     # anything until its finished with that number even if the page was closed
     
@@ -259,7 +257,7 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
         "info": ""
     }
 
-    consumers = option
+    consumers = consumer
     if consumers:
         if consumers[0] != "all":
             for consumer in consumers:
@@ -412,7 +410,7 @@ async def get_service_json(request: Request, service,
     if service not in services:
         target_route_url = "/system/status/"
         if time_limit:
-            target_route_url += f"?time-limit={time}&option=all"
+            target_route_url += f"?time-limit={time}&consumer=all"
         return RedirectResponse(url=target_route_url)
     else:
         
