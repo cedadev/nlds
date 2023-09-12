@@ -37,7 +37,7 @@ GENERAL_CONFIG_SECTION = "general"
 # Defines the compulsory server config file sections
 CONFIG_SCHEMA = (
     (AUTH_CONFIG_SECTION, ("authenticator_backend", )),
-    (RABBIT_CONFIG_SECTION, ("user", "password", "server", "port", "vhost", "exchange", 
+    (RABBIT_CONFIG_SECTION, ("user", "password", "server", "admin_port", "vhost", "exchange", 
                              "queues"))
 )
 

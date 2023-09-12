@@ -90,10 +90,9 @@ def get_consumer_info(host_ip, api_port, queue_name, login, password, vhost):
 
 
 async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
-    
     try:
         consumer_tags = (get_consumer_info(rpc_publisher.config["server"], 
-                                       rpc_publisher.config["port"], key, 
+                                       rpc_publisher.config["admin_port"], key, 
                                        rpc_publisher.config["user"], 
                                        rpc_publisher.config["password"], 
                                        rpc_publisher.config["vhost"]))
@@ -102,34 +101,34 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
         return{
             "val": ("403 error"), 
             "colour": "PURPLE"
-            }
+            }, 0, 0
     except RequestError as e:
         print("Something went wrong, returning a 403... ")
         return{
             "val": ("403 error"), 
             "colour": "PURPLE"
-            }
+            }, 0, 0
     except RabbitError as e:
         print("The rabbit server may be offline... ")
         print("Please try restart the consumers starting with logging_q ")
         return{
             "val": ("Rabbit error"), 
             "colour": "PURPLE"
-            }
+            }, 0, 0
     except LoginError as e:
         print("Your RabbitMQ login information is incorrect or not authorised ")
         print("Please enter valid login information in the JASMIN .server_config file ")
         return{
             "val": ("Login error"), 
             "colour": "PURPLE"
-            }
+            }, 0, 0
     except Error as e:
         print("an unexpected error occurred: ")
         print(e.json)
         return{
             "val": e.json, 
             "colour": "PURPLE"
-            }
+            }, 0, 0
     
     # if consumer_tags == "request error":
     #     return{

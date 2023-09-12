@@ -115,6 +115,7 @@ def test_get_consumer_status_rabbits_offline(monkeypatch,
     # function that is being called and store its output
     consumer = loop.run_until_complete(system.get_consumer_status(
         "consumer_q", "consumer", msg_dict, time_limit, 0))
+    consumer = consumer[0]
     
     assert consumer == {"val": ("Rabbit error"), "colour": "PURPLE"}
     
@@ -147,6 +148,7 @@ def test_get_consumer_status_requests_failed(monkeypatch,
     # function that is being called and store its output
     consumer = loop.run_until_complete(system.get_consumer_status(
         "consumer_q", "consumer", msg_dict, time_limit, 0))
+    consumer = consumer[0]
     
     assert consumer == {'val': '403 error', 'colour': 'PURPLE'}
     
@@ -179,6 +181,7 @@ def test_get_consumer_status_requests_error(monkeypatch,
     # function that is being called and store its output
     consumer = loop.run_until_complete(system.get_consumer_status(
         "consumer_q", "consumer", msg_dict, time_limit, 0))
+    consumer = consumer[0]
     
     assert consumer == {'val': '403 error', 'colour': 'PURPLE'}
     
@@ -437,7 +440,7 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get(Request))
+    get = loop.run_until_complete(system.get(Request, time_limit=5 ,consumer="all"))
     
     # gets the output as a dict to be easily manipulated
     attrs = (get.__dict__)
@@ -493,7 +496,7 @@ def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get(Request))
+    get = loop.run_until_complete(system.get(Request, time_limit=5 ,consumer="all"))
     
     # gets the output as a dict to be easily manipulated
     attrs = (get.__dict__)
@@ -517,7 +520,7 @@ def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get(Request))
+    get = loop.run_until_complete(system.get(Request, time_limit=5 ,consumer="all"))
     
     # gets the output as a dict to be easily manipulated
     attrs = (get.__dict__)
@@ -541,7 +544,7 @@ def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get(Request))
+    get = loop.run_until_complete(system.get(Request, time_limit=5 ,consumer="all"))
     
     # gets the output as a dict to be easily manipulated
     attrs = (get.__dict__)

@@ -254,12 +254,12 @@ This can include but is not limited to:
 
 1.  The uvicorn server is not running (page will not load)
 2.  The RabbitMQ server is down (the Status says ```Rabbit error```)
-3.  The requests API has failed (the Status says ```403 error```)
+3.  The requests API has failed (the Status says ```403 error```) or you have the wrong
+    port in the admin port section of the config file
 4.  If you have put in invalid login information into .server_config
     (the Status says ```Login error```)
 5.  If there is an unexpected error with the requests return then the code will
     catch it and show the json value of what was returned under the Status
-6.  Wrong port in config file (rabbitMQ admin_port should be the same as the admin interface)
 
 
 If the RabbitMQ server is down, after it is back up then ```logging_q``` needs to be ran 
