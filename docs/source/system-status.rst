@@ -34,10 +34,10 @@ This distinction is inside the msg_dict dictionary that is passed in the message
 * api_action contains "system_stat" which is the identifier that tells the consumer that 
   it is a test message
 * target_consumer starts as empty and is filled with the target microservice's name e.g: monitor
-* ignore_message is by default False, this is used to test what happens if one of the consumers broke 
-  it is automatically changed in the code if it is being tested
+* ignore_message is by default False, this is used to mock what happens if one of the consumers did not respond. 
+  It is automatically changed in the code if it is being tested
 
-What is returned by the consumer is what is returned when a non system stat message is sent::
+What is returned by the consumer is what is returned when a regular, non- `system_stat` message is sent::
 
     {
         'details': {
@@ -48,9 +48,8 @@ What is returned by the consumer is what is returned when a non system stat mess
         'timestamp': '2023-08-01-09:25:12.968165'
     }
 
-The only difference between this published message and a normal one is the meg_body 
-this is because the body contains the details dictionary above distinguishing it from 
-other messages
+The only difference between this published message and a normal one is the msg_body, 
+which contains the details dictionary distinguishing it from other messages
 
 
 |
@@ -59,24 +58,25 @@ Running
 -------
 
 
-After the uvicorn server is running go to ```/system/status/``` on a search engine
-e.g: <http://127.0.0.1:8000/system/status/>
+After the uvicorn server is running go to ```/system/stats/``` on a web browser
+e.g: <http://127.0.0.1:8000/system/stats/> if running a local server.
 
-This is the way of getting the table in a simple way.
+This simply returns the whole table with information about each consumer. The 
+contents of this table and web page are also available as a json document, through 
+the API. To get the more specific information about a particular consumer, it is 
+possible to make individual requests to the API server (e.g. using `requests.get` 
+from a python script).
 
-To get the dictionary that is used to fill the table, it is possible to use requests.get 
-as an API to directly get this information instead of using the web link.
 
-
-adding ?time_limit={number} to the end of the URL will change the time limit 
+Adding ?time_limit={number} to the end of the URL will change the time limit 
 (more on that below) e.g:
 <http://127.0.0.1:8000/system/status/?time_limit=2>
 
-you can also add ?consumer={microservice} to the end of the url to get a table with only
+You can also add ?consumer={microservice} to the end of the url to get a table with only
 those microservices in. e.g (shows a table with only the monitor row):
 <http://127.0.0.1:8000/system/status/?consumer=monitor>
 
-you can string both together by doing this: 
+You can string both together by doing this: 
 ?time_limit=2&consumer=Catalog&consumer=Monitor
 
 e.g:
@@ -98,9 +98,9 @@ Understanding the table
 
 
 When opening the page it will load quickly unless some consumers have failed. 
-This is because the system will wait the duration of the time limit set in system.py
+This is because the system will wait the duration of the time limit set in system.py, 
 the default for this is 5 seconds but can be changed by changing the value of time_limit. 
-it can also be changed by adding ?time_limit={number} at the end of the URL. This 
+It can also be changed by adding ?time_limit={number} at the end of the URL. This 
 number cannot go below 0 or above 15 otherwise it defaults to 5 seconds.
 
 You also have the choice to select which microservices you want to see specifically 
@@ -108,7 +108,7 @@ by adding ?consumer={microservice} at the end of the URL. you can string as many
 you want and it will show your options. If you spell it wrong it will not break but ignore it
 and if you accidentally have a duplicate it will ignore that also. Doing ?consumer=all which will show the regular table.
 
-you are also able to select specific microservices and get a JSON response from them 
+You are also able to select specific microservices and get a JSON response from them 
 helpful for an API. To do this add the microservice you want at the end of the URL
 <http://127.0.0.1:8000/system/status/catalog>
 this will give information as a JSON response for the catalog microservice
@@ -271,8 +271,8 @@ the object and therefore a Rabbit error will occur. This is because it will retu
 
 |
 
-TLDR
-----
+TL;DR
+-----
 
 
 going to ```/system/status/``` on a search engine or <http://127.0.0.1:8000/system/status/>
