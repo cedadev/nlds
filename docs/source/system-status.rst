@@ -196,7 +196,7 @@ All consumers online. Green info bar nothing in failed consumer column. all text
 
 |
 
-We get the number of consumers that should be online by using the requests.get API 
+We get the number of consumers that should be online by using the requests python package
 which returns a response containing a dictionary of all consumers in a specific microservice 
 this is counted and used as the total consumers. 
 
@@ -254,7 +254,7 @@ This can include but is not limited to:
 
 1.  The uvicorn server is not running (page will not load)
 2.  The RabbitMQ server is down (the Status says ```Rabbit error```)
-3.  The requests API has failed (the Status says ```403 error```) or you have the wrong
+3.  The requests package HTTP request has failed (the Status says ```403 error```) or you have the wrong
     port in the admin port section of the config file
 4.  If you have put in invalid login information into .server_config
     (the Status says ```Login error```)
@@ -264,7 +264,7 @@ This can include but is not limited to:
 
 If the RabbitMQ server is down, after it is back up then ```logging_q``` needs to be ran 
 first in order for other microservices to work. Even if most of the RabbitMQ server is down, 
-if only api_queues is down then the requests.get function will not be able to find 
+if only api_queues is down then the python requests package will not be able to find 
 the object and therefore a Rabbit error will occur. This is because it will return::
     
     {'error': 'Object Not Found', 'reason': 'Not Found'}
