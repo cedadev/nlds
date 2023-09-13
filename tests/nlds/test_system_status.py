@@ -150,9 +150,9 @@ def test_get_consumer_status_requests_failed(monkeypatch,
         "consumer_q", "consumer", msg_dict, time_limit, 0))
     consumer = consumer[0]
     
-    assert consumer == {'val': '403 error', 'colour': 'PURPLE'}
+    assert consumer == {'val': '404 error', 'colour': 'PURPLE'}
     
-    assert consumer["val"] == "403 error"
+    assert consumer["val"] == "404 error"
     
     assert consumer["colour"] == "PURPLE"
     
@@ -183,9 +183,9 @@ def test_get_consumer_status_requests_error(monkeypatch,
         "consumer_q", "consumer", msg_dict, time_limit, 0))
     consumer = consumer[0]
     
-    assert consumer == {'val': '403 error', 'colour': 'PURPLE'}
+    assert consumer == {'val': '404 error', 'colour': 'PURPLE'}
     
-    assert consumer["val"] == "403 error"
+    assert consumer["val"] == "404 error"
     
     assert consumer["colour"] == "PURPLE"
 

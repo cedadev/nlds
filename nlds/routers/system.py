@@ -97,15 +97,15 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
                                        rpc_publisher.config["password"], 
                                        rpc_publisher.config["vhost"]))
     except requests.exceptions.RequestException as e:
-        print("Something went wrong, returning a 403... ")
+        print("Something went wrong, returning a 404... ")
         return{
-            "val": ("403 error"), 
+            "val": ("404 error"), 
             "colour": "PURPLE"
             }, 0, 0
     except RequestError as e:
-        print("Something went wrong, returning a 403... ")
+        print("Something went wrong, returning a 404... ")
         return{
-            "val": ("403 error"), 
+            "val": ("404 error"), 
             "colour": "PURPLE"
             }, 0, 0
     except RabbitError as e:

@@ -254,7 +254,7 @@ This can include but is not limited to:
 
 1.  The uvicorn server is not running (page will not load)
 2.  The RabbitMQ server is down (the Status says ```Rabbit error```)
-3.  The requests package HTTP request has failed (the Status says ```403 error```) or you have the wrong
+3.  The requests package HTTP request has failed (the Status says ```404 error```) or you have the wrong
     port in the admin port section of the config file
 4.  If you have put in invalid login information into .server_config
     (the Status says ```Login error```)
