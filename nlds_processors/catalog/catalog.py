@@ -373,7 +373,8 @@ class Catalog(DBMixin):
         assert(self.session != None)
 
         files = self.get_files(user, group, holding_label=holding_label, 
-                               holding_id=holding_id, path=path, tag=tag)
+                               holding_id=holding_id, original_path=path, 
+                               tag=tag)
         checkpoint = self.session.begin_nested()
         try:
             for f in files:

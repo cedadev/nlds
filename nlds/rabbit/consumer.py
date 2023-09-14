@@ -29,6 +29,7 @@ from pika.frame import Method, Header
 from pika.amqp_object import Method
 from pika.spec import Channel
 from pydantic import BaseModel
+from minio.error import S3Error
 
 from .publisher import RabbitMQPublisher
 from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, 
@@ -106,9 +107,19 @@ class State(Enum):
             cls.TRANSFER_GETTING,
             cls.TRANSFER_PUTTING,
             cls.CATALOG_ARCHIVE_UPDATING,
+            cls.CATALOG_ROLLBACK,
+            cls.CATALOG_ARCHIVE_ROLLBACK,
             cls.FAILED,
         )
         return final_states
+    
+    @classmethod
+    def get_failed_states(cls):
+        return (
+            cls.CATALOG_ROLLBACK,
+            cls.CATALOG_ARCHIVE_ROLLBACK,
+            cls.FAILED
+        )
 
     def to_json(self):
         return self.value
@@ -352,6 +363,20 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         self.publish_message(monitoring_rk, body_json)
         self.sent_message_count += 1
 
+    def get_retries(self, body: Dict) -> Retries:
+        """Retrieve the retries from a message. If no present or inaccessible 
+        then add new ones. """
+        try: 
+            retries = Retries.from_dict(body)
+        except KeyError as e:
+            self.log(f"Could not retrieve message retry information ({e}). "
+                     f"Inserting a new Retries dict back into the message.", 
+                     self.RK_LOG_INFO)
+            retries = Retries()
+            body |= retries.to_dict()
+        return retries
+    
+
     def setup_logging(self, enable=False, log_level: str = None, 
                       log_format: str = None, add_stdout_fl: bool = False, 
                       stdout_log_level: str = None, log_files: List[str]=None,
@@ -389,6 +414,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return super().setup_logging(enable, log_level, log_format, 
                                      add_stdout_fl, stdout_log_level, log_files,
                                      log_rollover)
+    
+    #######
+    # Callback wrappers
+    
     def _log_errored_transaction(self, body, exception):
         """Log message which has failed at some point in its callback"""
         if self.print_tracebacks_fl:
@@ -569,6 +598,18 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         """
         NotImplementedError
     
+    EXPECTED_EXCEPTIONS = (
+        ValueError, 
+        TypeError, 
+        KeyError, 
+        PermissionError,
+        RabbitRetryError,
+        CallbackError,
+        JSONDecodeError,
+        HTTPError,
+        S3Error,
+    )
+
     def _wrapped_callback(self, ch: Channel, method: Method, properties: Header, 
                           body: bytes, connection: Connection) -> None:
         """Wrapper around standard callback function which adds error handling 
@@ -584,19 +625,19 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         ack_fl = None 
         try:
             ack_fl = self.callback(ch, method, properties, body, connection)
-        except (
-                ValueError, 
-                TypeError, 
-                KeyError, 
-                PermissionError,
-                RabbitRetryError,
-                CallbackError,
-                JSONDecodeError,
-                HTTPError,
-            ) as original_error:
+        except self.EXPECTED_EXCEPTIONS as original_error:
             self._handle_expected_error(body, method.routing_key, original_error)
         except Exception as e:
-            self._log_errored_transaction(body, e)
+            # NOTE: why are we making this distinction? We can attempt to retry 
+            # any message that fails and the worst that can happen is what 
+            # already happens now
+            self.log(f"Unexpected exception encountered! The current list of "
+                     f"expected exceptions is: {self.EXPECTED_EXCEPTIONS}. "
+                     f"Consider adding this exception ({e}) to the list and "
+                     f"accounting for it more specifically. Now attempting to "
+                     f"handle message with retry/fail mechanism.", 
+                     self.RK_LOG_WARNING)
+            self._handle_expected_error(body, method.routing_key, e)
         finally:
             # Only ack message if the message has not been flagged for nacking 
             # in the callback with a `return False`

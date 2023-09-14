@@ -38,6 +38,21 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         # Can call this with impunity as the url has been verified previously
         tape_server, tape_base_dir = self.split_tape_url(tape_url)
 
+        # Declare useful variables
+        bucket_name = None
+        rk_complete = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_COMPLETE])
+        rk_retry = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_START])
+        rk_failed = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_FAILED])
+
+        # First check for transaction-level message failure and boot back to 
+        # catalog if necessary.
+        retries = self.get_retries(body_json)
+        if retries is not None and retries.count > self.max_retries:
+            # Mark the message as 'processed' so it can be failed more safely.
+            self.send_pathlist(filelist, rk_failed, body_json, 
+                               state=State.CATALOG_ARCHIVE_ROLLBACK)
+            return
+
         # Create minio client
         s3_client = minio.Minio(
             tenancy,
@@ -58,12 +73,6 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                 f"({tape_base_dir}) does not seem to exist. "
                                 f"Status message: {status.message}")
         
-        # Declare useful variables
-        bucket_name = None
-        rk_complete = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_COMPLETE])
-        rk_retry = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_START])
-        rk_failed = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_FAILED])
-
         # Ensure minimum part_size is met for put_object to function
         chunk_size = max(5*1024*1024, self.chunk_size)
 
@@ -106,7 +115,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                     in s3_client.list_objects(bucket_name)])
                     # Look for object in bucket, continue if not present
                     assert object_name not in objects
-            except HTTPError as e:   
+            except (HTTPError, S3Error) as e:   
                 # If bucket can't be created then pass for retry and continue
                 reason = (f"Bucket {bucket_name} could not be created due to "
                           f"error connecting with tenancy {tenancy}")
