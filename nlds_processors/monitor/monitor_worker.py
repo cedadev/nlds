@@ -478,13 +478,14 @@ class MonitorConsumer(RMQC):
             self.log("Starting stat from monitoring db.", self.RK_LOG_INFO)
             self._monitor_get(body, properties)
         elif api_method in (self.RK_PUT, self.RK_PUTLIST, 
-                            self.RK_GET, self.RK_GETLIST):
+                            self.RK_GET, self.RK_GETLIST, 
+                            self.RK_ARCHIVE_PUT, self.RK_ARCHIVE_GET):
             # Verify routing key is appropriate
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
             except ValueError as e:
                 self.log("Routing key inappropriate length, exiting callback.", 
-                        self.RK_LOG_ERROR)
+                         self.RK_LOG_ERROR)
                 return
             # NOTE: Could check that rk_parts[2] is 'start' here? No particular 
             # need as the exchange does that for us and merely having three 
