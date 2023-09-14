@@ -155,7 +155,7 @@ The table should look something like this (with examples of different status):
     Catalog        All Consumers Online (3/3)
     NLDS Worker    Consumers Online (1/2)                     ctag1.732d21f82b4c47dcbd7dabe12f95315c
     Index          Login error
-    Get Transfer   403 error
+    Get Transfer   404 error
     Put Transfer   Rabbit error
     Logger         All Consumers Offline (0/2)                ctag1.732d21f82b4c47dcbd7dabe12f95315c
     Logger         (the ctag here will be on the row above)   ctag1.040535d3708c4012a4d2e6b0e6884cf2
