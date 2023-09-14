@@ -41,6 +41,19 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         msg_details = body_json[self.MSG_DETAILS]
         msg_meta = body_json[self.MSG_META]
 
+        rk_complete = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_COMPLETE])
+        rk_retry = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_START])
+        rk_failed = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_FAILED])
+
+        # First check for transaction-level message failure and boot back to 
+        # catalog if necessary.
+        retries = self.get_retries(body_json)
+        if retries is not None and retries.count > self.max_retries:
+            # Mark the message as 'processed' so it can be failed more safely.
+            self.send_pathlist(filelist, rk_failed, body_json, 
+                               state=State.CATALOG_ARCHIVE_ROLLBACK)
+            return
+
         # Can call this with impunity as the url has been verified previously
         tape_server, tape_base_dir = self.split_tape_url(tape_url)
         holding_slug = self.get_holding_slug(body_json)
@@ -64,10 +77,6 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             raise CallbackError(f"Base dir {tape_base_dir} derived from "
                                 f"tape_url ({tape_url}) could not be created or"
                                 f" verified.")
-
-        rk_complete = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_COMPLETE])
-        rk_retry = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_START])
-        rk_failed = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_FAILED])
 
         # Generate a name for the tarfile by hashing the combined filelist. 
         # Length of the hash will be 16
@@ -263,8 +272,11 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 self.retrylist, rk_retry, body_json, mode="retry"
             )
         if len(self.failedlist) > 0:
+            # Send message back to worker so catalog can be scrubbed of failed 
+            # puts
             self.send_pathlist(
-                self.failedlist, rk_failed, body_json, mode="failed"
+                self.failedlist, rk_failed, body_json, 
+                state=State.CATALOG_ARCHIVE_ROLLBACK
             )
 
     @classmethod

@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Any
 
 import minio
 from minio.error import S3Error
@@ -23,7 +23,7 @@ class PutTransferConsumer(BaseTransferConsumer):
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
                  secret_key: str, filelist: List[PathDetails], rk_origin: str,
-                 body_json: Dict[str, str]):
+                 body_json: Dict[str, Any]):
         client = minio.Minio(
             tenancy,
             access_key=access_key,
@@ -35,9 +35,20 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_retry = ".".join([rk_origin, self.RK_TRANSFER_PUT, self.RK_START])
         rk_failed = ".".join([rk_origin, self.RK_TRANSFER_PUT, self.RK_FAILED])
 
+        # First check for transaction-level message failure and boot back to 
+        # catalog if necessary.
+        retries = self.get_retries(body_json)
+        if retries is not None and retries.count > self.max_retries:
+            # Mark the message as 'processed' so it can be failed more safely.
+            self.send_pathlist(filelist, rk_failed, body_json, 
+                               state=State.CATALOG_ROLLBACK)
+            return
+
         bucket_name = f"nlds.{transaction_id}"
 
-        # Check that bucket exists, and create if not
+        # Check that bucket exists, and create if not 
+        # TODO: Does this create a failure mode whereby if a transaction fails 
+        # at the transaction level then no failure message is sent. 
         if not client.bucket_exists(bucket_name):
             client.make_bucket(bucket_name)
             self.log(f"Creating bucket ({bucket_name}) for this"
