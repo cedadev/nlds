@@ -97,15 +97,15 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
                                        rpc_publisher.config["password"], 
                                        rpc_publisher.config["vhost"]))
     except requests.exceptions.RequestException as e:
-        print("Something went wrong, returning a 404... ")
+        print("Failed to make request... ")
         return{
-            "val": ("404 error"), 
+            "val": ("Failed to make request"), 
             "colour": "PURPLE"
             }, 0, 0
     except RequestError as e:
-        print("Something went wrong, returning a 404... ")
+        print("Failed to make request... ")
         return{
-            "val": ("404 error"), 
+            "val": ("Failed to make request"), 
             "colour": "PURPLE"
             }, 0, 0
     except RabbitError as e:
@@ -205,10 +205,10 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
         )
 
 async def get(request: Request, time_limit: str = Query("5", alias='time-limit'), 
-              consumer: list[str] = Query(["all"], alias='consumer')):
+              microservice: list[str] = Query(["all"], alias='microservice')):
 
 
-    # http://127.0.0.1:8000/system/status/?consumer={consumer name here}&time_limit={time limit here}
+    # http://127.0.0.1:8000/system/status/?microservice={microservice name here}&time_limit={time limit here}
     # max time limit is 30 seconds because the uvicorn server doesn't actually do
     # anything until its finished with that number even if the page was closed
     
@@ -256,13 +256,13 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
         "info": ""
     }
 
-    consumers = consumer
+    consumers = microservice
     if consumers:
         if consumers[0] != "all":
-            for consumer in consumers:
-                consumer = consumer.lower()
-                if consumer in services:
-                    gathered.append(consumer)
+            for microservice in consumers:
+                microservice = microservice.lower()
+                if microservice in services:
+                    gathered.append(microservice)
             gathered = list(dict.fromkeys(gathered))
         
             for service in gathered:
@@ -328,12 +328,12 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
     offline_num = 0
     service = "Online"
     
-    for consumer in consumer_list:
+    for microservice in consumer_list:
         try:
-            count = len(consumer["failed"])
+            count = len(microservice["failed"])
             num = num + count
         except:
-            if consumer["colour"] == "RED":
+            if microservice["colour"] == "RED":
                 offline_num += 1
             else:
                 pass
@@ -409,7 +409,7 @@ async def get_service_json(request: Request, service,
     if service not in services:
         target_route_url = "/system/status/"
         if time_limit:
-            target_route_url += f"?time-limit={time}&consumer=all"
+            target_route_url += f"?time-limit={time}&microservice=all"
         return RedirectResponse(url=target_route_url)
     else:
         
