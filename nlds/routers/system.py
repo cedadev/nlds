@@ -214,8 +214,8 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
     
     
     default = False
-    services = ["monitor", "catalog", "nlds worker", "index", "get transfer", 
-                "put transfer", "logger"]
+    services = ["monitor", "catalog", "nlds_worker", "index", "get_transfer", 
+                "put_transfer", "logger"]
     gathered = []
     
     try:
@@ -243,10 +243,10 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
     services_dict = {
         "monitor": ["monitor_q", "monitor"],
         "catalog": ["catalog_q", "catalog"],
-        "nlds worker": ["nlds_q", "nlds_worker"],
+        "nlds_worker": ["nlds_q", "nlds_worker"],
         "index": ["index_q", "index"],
-        "get transfer": ["transfer_get_q", "get_transfer"],
-        "put transfer": ["transfer_put_q", "put_transfer"],
+        "get_transfer": ["transfer_get_q", "get_transfer"],
+        "put_transfer": ["transfer_put_q", "put_transfer"],
         "logger": ["logging_q", "logger"],
     }
     

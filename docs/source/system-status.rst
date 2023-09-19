@@ -1,27 +1,16 @@
-Using System Status
-===================
+The System Status Monitor
+==========================
 
 
-This is a way of checking which parts of the NLDS are currently online
-and which are offline as well as the IDs of any offline consumers.
+This is a feature used to check the general health of the various parts of the NLDS, telling you which parts, if any, of the NLDS are currently offline as well as the IDs of any offline consumers. First, some definitions:
 
-* A microservice is a part of the NLDS queues e.g: Monitor, Catalog, Index, etc..
-* A consumer is part of the microservice there can be many consumers per microservice
+* A microservice is a distinct part of the NLDS structure e.g.: Monitor, Catalog, Index, etc. It will have a single queue.
+* A consumer is a part of a microservice, which takes messages off the queue and processes them. There can be many consumers per microservice.
 
-This was created because there wasn't originally an easy way to view if any part of the NLDS was
-offline.
-
-This was made by using the RabbitMQ messaging system to send messages to individual
-microservice consumers to check if they reply or not. These messages only contain a distinction 
-that it is being used for a test. If the consumer detects this distinction they will reply
-and then stop so it doesn't confuse the consumer with a test message.
-
-If they reply they will be marked as online, if they don't or are too slow they are 
-considered to be offline and their unique tag is recorded and displayed on the table 
-to easily determine what is working and what isn't.
+This utilises the RabbitMQ messaging system, and specifically its capacity for remote procedure calls, to send messages to individual microservice consumers and check whether they reply. If they don't reply within a given time limit they are considered to be offline and their unique tag is recorded and displayed on the table to easily determine what is working and what isn't. 
 
 
-This distinction is inside the msg_dict dictionary that is passed in the message::
+Given these messages are merely sent for monitoring purposes, they are made distinct from regular NLDS rabbit messages with the below changes. This distinction is made in the  dictionary content that is passed as part of the message::
 
     {
         "details": {
@@ -34,10 +23,10 @@ This distinction is inside the msg_dict dictionary that is passed in the message
 * api_action contains "system_stat" which is the identifier that tells the consumer that 
   it is a test message
 * target_consumer starts as empty and is filled with the target microservice's name e.g: monitor
-* ignore_message is by default False, this is used to mock what happens if one of the consumers did not respond. 
-  It is automatically changed in the code if it is being tested
+* ignore_message is by default False, and is used within unit tests to mock what happens if one of the consumers does not respond. 
+  
 
-What is returned by the consumer is what is returned when a regular, non- `system_stat` message is sent::
+The consumer will, as a first step in consumption, filter all incoming messages for this distinction and send it back to the system status monitor. The message returned by the consumer is as follows::
 
     {
         'details': {
@@ -48,9 +37,6 @@ What is returned by the consumer is what is returned when a regular, non- `syste
         'timestamp': '2023-08-01-09:25:12.968165'
     }
 
-The only difference between this published message and a normal one is the msg_body, 
-which contains the details dictionary distinguishing it from other messages
-
 
 |
 
@@ -58,37 +44,28 @@ Running
 -------
 
 
-After the uvicorn server is running go to ```/system/stats/``` on a web browser
-e.g: <http://127.0.0.1:8000/system/stats/> if running a local server.
-
-This simply returns the whole table with information about each consumer. The 
-contents of this table and web page are also available as a json document, through 
-the API. To get the more specific information about a particular consumer, it is 
-possible to make individual requests to the API server (e.g. using `requests.get` 
-from a python script).
+After starting the uvicorn server, going to ```/system/stats/``` on a web browser e.g.: <nlds.ceda.ac.uk/system/stats/> will simply return the whole table with information about each consumer. The contents of this table and web page are also available as a JSON document, through the API. To get the more specific information about a particular consumer, it is possible to make individual requests to the API server (e.g. using `requests.get()` from a python script).
 
 
-Adding ?time_limit={number} to the end of the URL will change the time limit 
-(more on that below) e.g:
-<http://127.0.0.1:8000/system/status/?time_limit=2>
+Query parameters can be used to alter behaviour. Adding ?time_limit={number} to the end of the URL will change the time limit the consumer has to reply (more on that below) e.g.:
+<nlds.ceda.ac.uk/system/status/?time_limit=2>
 
-You can also add ?consumer={microservice} to the end of the url to get a table with only
-those microservices in. e.g (shows a table with only the monitor row):
-<http://127.0.0.1:8000/system/status/?consumer=monitor>
+You can also add ?microservice={microservice} to the end of the URL to get a table with only
+those microservices in. e.g. (shows a table with only the monitor row):
+<nlds.ceda.ac.uk/system/status/?microservice=monitor>
 
-You can string both together by doing this: 
-?time_limit=2&consumer=Catalog&consumer=Monitor
-
-e.g:
-<http://127.0.0.1:8000/system/status/?time_limit=2&consumer=Catalog&consumer=MonITor&consumer=2&consumer=INdeX&consumer=catalog&time_limit=2&time_limit=2&consumer=logger&>
-(this link works and will set the time limit to 2 and open a table with catalog, monitor, index and logger rows)
+These 
+?time_limit=2&consumer=Catalog&consumer=Monitor 
+e.g.:
+<nlds.ceda.ac.uk/system/status/?time_limit=2&consumer=Catalog&consumer=MonITor&consumer=2&consumer=INdeX&consumer=catalog&time_limit=2&time_limit=2&consumer=logger&>
+this link does actually work even though it looks very confusing it will set the time limit to 2 and open a table with catalog, monitor, index and logger rows
 and would look like this:
 
 .. image:: status_images/short_table.png
     :width: 400
     :alt: short table
 
-This is not necessary for the web page to work but it adds customisability.
+Adding these options is not necessary for the web page to work but it adds customisability.
 
 
 |
@@ -97,41 +74,49 @@ Understanding the table
 -----------------------
 
 
-When opening the page it will load quickly unless some consumers have failed. 
-This is because the system will wait the duration of the time limit set in system.py, 
-the default for this is 5 seconds but can be changed by changing the value of time_limit. 
-It can also be changed by adding ?time_limit={number} at the end of the URL. This 
+When you open the webpage, it will load quickly unless some consumers have failed. 
+This is because the system will wait the duration of the time limit (hard coded in the files), 
+the default for this is 5 seconds but it can be changed by adding ?time_limit={number} at the end of the URL. This 
 number cannot go below 0 or above 15 otherwise it defaults to 5 seconds.
-
-You also have the choice to select which microservices you want to see specifically 
-by adding ?consumer={microservice} at the end of the URL. you can string as many of these as
-you want and it will show your options. If you spell it wrong it will not break but ignore it
-and if you accidentally have a duplicate it will ignore that also. Doing ?consumer=all which will show the regular table.
 
 You are also able to select specific microservices and get a JSON response from them 
 helpful for an API. To do this add the microservice you want at the end of the URL
-<http://127.0.0.1:8000/system/status/catalog>
-this will give information as a JSON response for the catalog microservice
-you can also add time limit to this like the others:
-<http://127.0.0.1:8000/system/status/catalog?time_limit=6>
-(shows catalog JSON information with a time limit as 6). This uses the same rules as 
-the other time limit (not below 0 or above 15). If you spell the microservice wrong then
+<nlds.ceda.ac.uk/system/status/catalog>
+this will give information as a JSON response for the catalog microservice you can also add time limit to this like the others:
+<nlds.ceda.ac.uk/system/status/catalog?time_limit=6>
+(this shows catalog JSON information with a time limit as 6). This uses the same rules as 
+the other time limit (not below 0 or above 15). If you spell the microservice wrong, then
 it will take you to the main table.
 
-an example JSON response if the microservice consumers weren't running would be::
+an example template JSON response would be::
     
     {
-        "microservice_name":"catalog",
+        "microservice_name":{microservice name},
+        "total_num":{number of consumers},
+        "num_failed":{number of failed consumers},
+        "num_success":{number of successful consumers},
+        "failed_list":[],
+        "pid": {process ID},
+        "hostname": {microservice host name}
+    }
+
+and an example of a full JSON response would be::
+
+    {
+        "microservice_name":”monitor”,
         "total_num":0,
         "num_failed":0,
         "num_success":0,
         "failed_list":[],
-        "pid":process ID,
-        "hostname":microservice host name
+        "pid": 3873,
+        "hostname": “RSMLWC01”
     }
 
-You will see a table with 3 columns as well as an info bar above
-the info bar will give you a summary of the tables information.
+
+|
+
+On the main table you will see 3 columns as well as an info bar above,
+the info bar will give you a summary of the table's information.
 
 
 1.  the left most table column holds all 7 NLDS microservices
@@ -140,11 +125,7 @@ the info bar will give you a summary of the tables information.
 3.  the right most column will display the tag of any or all consumers that failed
     to be ran
 
-
-One consumer tag links to an individual consumer for a microservice for example if you 
-run ```nlds_q``` on 3 different terminals then you will have 3 consumers for the NLDS Worker
-microservice each of these consumers will have their own tag that can be used to determine 
-which (if any) have stopped working.
+There's one tag for each consumer running on a given microservice. This tag can be used to determine which (if any) have stopped working.
 
 
 The table should look something like this (with examples of different status):
@@ -166,29 +147,28 @@ representations of what the whole table will look like.
 
 |
 
-**possible examples of how the system status table can look:**
+**System status example tables:**
 
-No consumers are running. Blue info bar. All text is red.
+When no consumers are running, the info bar is blue, and the status text is red.
 
 .. image:: status_images/all_off.png
   :width: 400
   :alt: All consumers off
 |
-All consumers inside a microservice are offline. Red info bar and all failed tags in the row. 
-the failed text is red, the rest is green.
+When all consumers inside a microservice are offline the info bar is red as well as the status column text for the offline microservice. The working microservices status text is green.
 
 .. image:: status_images/failed.png
   :width: 400
   :alt: A consumer failed
 |
-Some consumers inside a microservice are offline. Red info bar and all failed tags in the row. 
-the partially failed microservice is in orange.
+When some consumers inside a microservice are offline the info bar is red 
+the partially failed microservice's status text is orange.
 
 .. image:: status_images/part_failed.png
   :width: 400
   :alt: some consumers failed
 |
-All consumers online. Green info bar nothing in failed consumer column. all text in green.
+When all consumers online the info bar is green, there is nothing in failed consumer column and all status text is green.
 
 .. image:: status_images/success.png
   :width: 400
@@ -196,13 +176,21 @@ All consumers online. Green info bar nothing in failed consumer column. all text
 
 |
 
-We get the number of consumers that should be online by using the requests python package
-which returns a response containing a dictionary of all consumers in a specific microservice 
-this is counted and used as the total consumers. 
+We get the number of consumers that should be online by an HTTP request to the management API which returns a response containing a dictionary of all consumers in a specific microservice this is counted and used as the total consumers. 
+
+Using this URL format:
+http://{host_ip}:{api_port}/api/queues/{vhost}/{queue_name}
+
+* host_ip = the ```server``` variable from the RabbitMQ section of the config file
+* api_port = the ```admin_port``` variable from the RabbitMQ section of the config file
+* vhost = the ```vhost``` variable  from the RabbitMQ section of the config file
+* queue_name = the name of the microservice to get information for
+
+For more information go to https://www.rabbitmq.com/management.html#http-api
 
 |
 
-responses
+Responses
 ---------
 
 
@@ -220,20 +208,20 @@ API. This is its structure::
         "failed": failed_info
     }
 
-Where the variables for the microservices will be::
+Where the variables for each of the microservices, which gives information to the table on the webpage, would be::
 
     {
-        "val": "Consumers Online 2/3", 
-        "colour": "ORANGE", 
-        "failed": consumers_fail
+        "val": {number of consumers online}, 
+        "colour": {string colour}, 
+        "failed": {failed consumer tags}
     }
 
-* val = a string with how many consumers there are and how many are online
-* colour = the colour that is used to colour the text in the HTML
-* failed = a list of failed consumer tags (only exists if at least one consumer has failed)
+* val = a string with how many consumers there are and how many are online (e.g.: 2/3)
+* colour = the colour that is used to colour the text in the HTML (e.g.: ORANGE)
+* failed = a list of failed consumer tags populated only if at least one consumer has failed (e.g.: ctag1.87eb99d764be459d88f673cd8eb438da)
 
 
-Where the value of failed_info is::
+And the value of failed_info, which gives information to the INFO bar on the webpage, would be::
     
     {
         "failed_num": num,
@@ -241,7 +229,7 @@ Where the value of failed_info is::
     }
 
 * num = the total number of failed consumers across all microservices
-* colour = HTML string used to colour the INFO box
+* colour = HTML code string used to colour the INFO box e.g.: alert-info (turns the INFO box blue)
 
 |
 
@@ -249,25 +237,15 @@ Errors
 ------
 
 
-There may be some times when this page doesn't work properly.
+The page may not always work properly.
 This can include but is not limited to:
 
 1.  The uvicorn server is not running (page will not load)
 2.  The RabbitMQ server is down (the Status says ```Rabbit error```)
-3.  The requests package HTTP request has failed (the Status says ```404 error```) or you have the wrong
-    port in the admin port section of the config file :doc:`server-config/server-config`
-4.  If you have put in invalid login information into .server_config
+3.  The HTTP request has failed (the Status says ```Failed to make request```) or you have the wrong port in the ```admin_port``` section of the config file :doc:'server-config/server-config'
+4.  If the RabbitMQ login information in the .server_config file is incorrect
     (the Status says ```Login error```)
-5.  If there is an unexpected error with the requests return then the code will
-    catch it and show the json value of what was returned under the Status
-
-
-If the RabbitMQ server is down, after it is back up then ```logging_q``` needs to be ran 
-first in order for other microservices to work. Even if most of the RabbitMQ server is down, 
-if only api_queues is down then the python requests package will not be able to find 
-the object and therefore a Rabbit error will occur. This is because it will return::
-    
-    {'error': 'Object Not Found', 'reason': 'Not Found'}
+5.  If there was an error that didn't get caught in the code then the request.get response is displayed on the table in JSON format, for example it could display {'error': 'Object Not Found', 'reason': 'Not Found'}
 
 |
 
@@ -275,6 +253,5 @@ TL;DR
 -----
 
 
-going to ```/system/status/``` on a search engine or <http://127.0.0.1:8000/system/status/>
-will show you a table of what microservices are currently running and the tags of any consumers 
-that have failed
+going to ```/system/status/``` on a search engine or <nlds.ceda.ac.uk/system/status/>
+will show you a table of what microservices are currently running and the tags of any consumers that have failed.
