@@ -32,7 +32,7 @@ Running - Dec 2021
 2. To run the processors, you have two options:
     1. In unique terminals start each processor individually, after 
     activating the virtual env, for example:
-        ```source ~/nlds-venv/bin/activate; python nlds_processors/index.py```
+       ```source ~/nlds-venv/bin/activate; python nlds_processors/index.py```
        This will send the output to the terminal.
 
     2. Use the script `test_run_processor.sh`.  This will run all five processors
