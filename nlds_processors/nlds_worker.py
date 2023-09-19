@@ -316,8 +316,9 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         try:
             api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
         except KeyError:
-            self.log(f"Message did not contain api_method", self.RK_LOG_INFO)
+            self.log(f"Message did not contain api_method", self.RK_LOG_ERROR)
             api_method = None
+            return
            
         
         # If received system test message, reply to it (this is for system status check)
