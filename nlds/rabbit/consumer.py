@@ -13,7 +13,7 @@ import functools
 from abc import ABC, abstractmethod
 import logging
 import traceback
-from typing import Dict, List
+from typing import Dict, List, Any
 import pathlib as pth
 from datetime import datetime, timedelta
 import uuid
@@ -29,6 +29,7 @@ from pika.frame import Method, Header
 from pika.amqp_object import Method
 from pika.spec import Channel
 from pydantic import BaseModel
+from minio.error import S3Error
 
 from .publisher import RabbitMQPublisher
 from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, 
@@ -69,22 +70,28 @@ class FilelistType(Enum):
     archived = 1
 
 class State(Enum):
+    # Generic states
     INITIALISING = -1
     ROUTING = 0
+    COMPLETE = 100
+    FAILED = 101
+    # PUT workflow states
     SPLITTING = 1
     INDEXING = 2
     CATALOG_PUTTING = 3
     TRANSFER_PUTTING = 4
     CATALOG_ROLLBACK = 5
-    CATALOG_GETTING = 6
-    TRANSFER_GETTING = 7
-    COMPLETE = 8
-    FAILED = 9
-    CATALOG_BACKUP = 10     # This is essenitally the policy control step
-    ARCHIVE_PUTTING = 11
-    CATALOG_RESTORING = 12
-    ARCHIVE_GETTING = 13
-    CATALOG_UPDATING = 14
+    # GET workflow states
+    CATALOG_GETTING = 10
+    ARCHIVE_GETTING = 11
+    TRANSFER_GETTING = 12
+    # ARCHIVE_PUT workflow states
+    ARCHIVE_INIT = 20
+    CATALOG_ARCHIVE_AGGREGATING = 21
+    ARCHIVE_PUTTING = 22
+    CATALOG_ARCHIVE_UPDATING = 23
+    # Shared ARCHIVE states
+    CATALOG_ARCHIVE_ROLLBACK = 40
 
     @classmethod
     def has_value(cls, value):
@@ -96,7 +103,23 @@ class State(Enum):
 
     @classmethod
     def get_final_states(cls):
-        return cls.TRANSFER_GETTING, cls.TRANSFER_PUTTING, cls.FAILED
+        final_states = (
+            cls.TRANSFER_GETTING,
+            cls.TRANSFER_PUTTING,
+            cls.CATALOG_ARCHIVE_UPDATING,
+            cls.CATALOG_ROLLBACK,
+            cls.CATALOG_ARCHIVE_ROLLBACK,
+            cls.FAILED,
+        )
+        return final_states
+    
+    @classmethod
+    def get_failed_states(cls):
+        return (
+            cls.CATALOG_ROLLBACK,
+            cls.CATALOG_ARCHIVE_ROLLBACK,
+            cls.FAILED
+        )
 
     def to_json(self):
         return self.value
@@ -110,7 +133,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_EXCHANGE_NAME = "test_exchange"
     DEFAULT_REROUTING_INFO = "->"
 
-    DEFAULT_CONSUMER_CONFIG = dict()
+    DEFAULT_CONSUMER_CONFIG : Dict[str, str] = dict()
 
     # The state associated with finishing the consumer, must be set but can be 
     # overridden
@@ -163,9 +186,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         # (re)Declare the pathlists here to make them available without having 
         # to pass them through every function call. 
-        self.completelist = []
-        self.retrylist = []
-        self.failedlist = []
+        self.completelist : List[PathDetails] = []
+        self.retrylist: List[PathDetails] = []
+        self.failedlist: List[PathDetails] = []
         self.max_retries = 5
         
         # Controls default behaviour of logging when certain exceptions are 
@@ -263,7 +286,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return new_filelist
 
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
-                       body_json: Dict[str, str], state: State = None,
+                       body_json: Dict[str, Any], state: State = None,
                        mode: FilelistType = FilelistType.processed, 
                        warning: List[str] = None
                        ) -> None:
@@ -340,6 +363,20 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         self.publish_message(monitoring_rk, body_json)
         self.sent_message_count += 1
 
+    def get_retries(self, body: Dict) -> Retries:
+        """Retrieve the retries from a message. If no present or inaccessible 
+        then add new ones. """
+        try: 
+            retries = Retries.from_dict(body)
+        except KeyError as e:
+            self.log(f"Could not retrieve message retry information ({e}). "
+                     f"Inserting a new Retries dict back into the message.", 
+                     self.RK_LOG_INFO)
+            retries = Retries()
+            body |= retries.to_dict()
+        return retries
+    
+
     def setup_logging(self, enable=False, log_level: str = None, 
                       log_format: str = None, add_stdout_fl: bool = False, 
                       stdout_log_level: str = None, log_files: List[str]=None,
@@ -377,6 +414,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return super().setup_logging(enable, log_level, log_format, 
                                      add_stdout_fl, stdout_log_level, log_files,
                                      log_rollover)
+    
+    #######
+    # Callback wrappers
+    
     def _log_errored_transaction(self, body, exception):
         """Log message which has failed at some point in its callback"""
         if self.print_tracebacks_fl:
@@ -392,7 +433,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             self.RK_LOG_DEBUG
         )
 
-    def _handle_expected_error(self, body, routing_key, original_error):
+    def _handle_expected_error(self, body: bytes, routing_key: str, 
+                               original_error: Any):
         """Handle the workflow of an expected error - attempt to retry the 
         transaction or fail it as apparopriate. Given we don't know exactly what 
         is wrong with the message we need to be quite defensive with error 
@@ -443,7 +485,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             # Fail the job
             self._fail_transaction(body_json, monitoring_rk)
 
-    def _fail_transaction(self, body_json, monitoring_rk):
+    def _fail_transaction(self, body_json: Dict[str, Any], monitoring_rk: str):
         """Attempt to mark transaction as failed in monitoring db"""
         try:                
             # Send message to monitoring to keep track of state
@@ -464,7 +506,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
     def _retry_transaction(
             self, 
-            body_json: Dict[str, str], 
+            body_json: Dict[str, Any], 
             retries: Retries, 
             original_rk: str, 
             monitoring_rk: str, 
@@ -556,6 +598,18 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         """
         NotImplementedError
     
+    EXPECTED_EXCEPTIONS = (
+        ValueError, 
+        TypeError, 
+        KeyError, 
+        PermissionError,
+        RabbitRetryError,
+        CallbackError,
+        JSONDecodeError,
+        HTTPError,
+        S3Error,
+    )
+
     def _wrapped_callback(self, ch: Channel, method: Method, properties: Header, 
                           body: bytes, connection: Connection) -> None:
         """Wrapper around standard callback function which adds error handling 
@@ -571,19 +625,19 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         ack_fl = None 
         try:
             ack_fl = self.callback(ch, method, properties, body, connection)
-        except (
-                ValueError, 
-                TypeError, 
-                KeyError, 
-                PermissionError,
-                RabbitRetryError,
-                CallbackError,
-                JSONDecodeError,
-                HTTPError,
-            ) as original_error:
+        except self.EXPECTED_EXCEPTIONS as original_error:
             self._handle_expected_error(body, method.routing_key, original_error)
         except Exception as e:
-            self._log_errored_transaction(body, e)
+            # NOTE: why are we making this distinction? We can attempt to retry 
+            # any message that fails and the worst that can happen is what 
+            # already happens now
+            self.log(f"Unexpected exception encountered! The current list of "
+                     f"expected exceptions is: {self.EXPECTED_EXCEPTIONS}. "
+                     f"Consider adding this exception ({e}) to the list and "
+                     f"accounting for it more specifically. Now attempting to "
+                     f"handle message with retry/fail mechanism.", 
+                     self.RK_LOG_WARNING)
+            self._handle_expected_error(body, method.routing_key, e)
         finally:
             # Only ack message if the message has not been flagged for nacking 
             # in the callback with a `return False`
@@ -627,7 +681,11 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return rk_parts
 
     @classmethod
-    def append_route_info(cls, body: Dict, route_info: str = None) -> Dict:
+    def append_route_info(
+            cls, 
+            body: Dict[str, Any], 
+            route_info: str = None
+        ) -> Dict:
         if route_info is None: 
             route_info = cls.DEFAULT_REROUTING_INFO
         if cls.MSG_ROUTE in body[cls.MSG_DETAILS]:

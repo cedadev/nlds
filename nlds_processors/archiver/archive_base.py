@@ -11,6 +11,9 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 from abc import ABC, abstractmethod
 import json
 from typing import Tuple, List, Dict
+from zlib import adler32
+
+from pyxrootd import client
 
 from nlds_processors.transferers.base_transfer import (BaseTransferConsumer, 
                                                        TransferError)
@@ -22,6 +25,47 @@ class ArchiveError(Exception):
     pass
 
 
+class AdlerisingXRDFile():
+    """Wrapper class around the XRootD.File object to make it act more like a 
+    regular python file object. This means it can interface with packages made 
+    for python, e.g. tarfile, BytesIO, minio. This also auto-calculates the 
+    adler32 checksum for all written/read bytes from the file, making 
+    implentation of checksums within the catalog feasible. 
+    """
+
+    def __init__(self, f: client.File, offset=0, length=0, checksum=1):
+        self.f = f
+        self.offset = offset
+        self.length = length
+        self.pointer = 0
+        self.checksum = checksum
+
+    def read(self, size):
+        """Read some number of bytes (size) from the file, offset by the current 
+        pointer position. Note this is wrapped by the adler checksumming but if 
+        used within a tarfile read this will not be done purely sequentially so 
+        will be essentially meaningless."""
+        status, result = self.f.read(offset=self.pointer, size=size)
+        if status.status != 0:
+            raise IOError(f"Unable to read from file f ({self.f})")
+        self.checksum = adler32(result, self.checksum)
+        self.pointer += size
+        return result
+    
+    def write(self, b):
+        # Update the checksum before we actually do the writing
+        self.checksum = adler32(b, self.checksum)
+        to_write = len(b)
+        self.f.write(b, offset=self.pointer, size=to_write)
+        return to_write
+    
+    def seek(self, whence: int) -> None:
+        self.pointer = whence
+    
+    def tell(self) -> int:
+        return self.pointer
+
+
 class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     DEFAULT_QUEUE_NAME = "archive_q"
     DEFAULT_ROUTING_KEY = (f"{RMQP.RK_ROOT}.{RMQP.RK_ARCHIVE}.{RMQP.RK_WILD}")
@@ -30,12 +74,14 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     _TAPE_POOL = 'tape_pool'
     _TAPE_URL = 'tape_url'
     _CHUNK_SIZE = 'chunk_size'
+    _QUERY_CHECKSUM = 'query_checksum_fl'
     _MAX_RETRIES = 'max_retries'
     _PRINT_TRACEBACKS = 'print_tracebacks_fl'
     ARCHIVE_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
         _TAPE_URL: None,
         _CHUNK_SIZE: 5 * (1024**2), # Default to 5 MiB
+        _QUERY_CHECKSUM: True,
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
@@ -46,13 +92,10 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-        self.tape_pool = self.load_config_value(
-            self._TAPE_POOL)
-        self.tape_url = self.load_config_value(
-            self._TAPE_URL)
-        self.chunk_size = self.load_config_value(
-            self._CHUNK_SIZE
-        )
+        self.tape_pool = self.load_config_value(self._TAPE_POOL)
+        self.tape_url = self.load_config_value(self._TAPE_URL)
+        self.chunk_size = self.load_config_value(self._CHUNK_SIZE)
+        self.query_checksum_fl = self.load_config_value(self._QUERY_CHECKSUM)
         
         # Verify the tape_url is valid, if it exists
         if self.tape_url is not None:

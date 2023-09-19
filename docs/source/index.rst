@@ -14,6 +14,7 @@ Welcome to Near-line Data Store's documentation!
    Specification <specification>
    NLDS Server API <nlds-server>
    NLDS Processors API <nlds-processors>
+   Database Migrations with Alembic <alembic-migrations>
 
 
 .. toctree::

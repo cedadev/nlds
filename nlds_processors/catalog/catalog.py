@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
     NoResultFound
 
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
-     Location, Transaction, Storage, Checksum, Tag
+     Location, Transaction, Aggregation, Storage, Checksum, Tag
 from nlds_processors.db_mixin import DBMixin
 
 class CatalogError(Exception):
@@ -373,7 +373,8 @@ class Catalog(DBMixin):
         assert(self.session != None)
 
         files = self.get_files(user, group, holding_label=holding_label, 
-                               holding_id=holding_id, path=path, tag=tag)
+                               holding_id=holding_id, original_path=path, 
+                               tag=tag)
         checkpoint = self.session.begin_nested()
         try:
             for f in files:
@@ -406,30 +407,40 @@ class Catalog(DBMixin):
 
 
     def create_location(self, 
-                        file: File,
+                        file_: File,
                         storage_type: Enum,
+                        url_scheme: str,
+                        url_netloc: str,
                         root: str,
-                        object_name: str, 
-                        access_time: float) -> Location:
+                        path: str, 
+                        access_time: float,
+                        aggregation: Aggregation = None) -> Location:
         """Add the storage location for either object storage or tape"""
         assert(self.session != None)
+        if aggregation is None:
+            aggregation_id = None
+        else:
+            aggregation_id = aggregation.id
         try:
             location = Location(
                 storage_type = storage_type,
+                url_scheme = url_scheme,
+                url_netloc = url_netloc,
                 # root is bucket for Object Storage which is the transaction id
                 # which is now stored in the Holding record
                 root = root,
                 # path is object_name for object storage
-                path = object_name,
+                path = path,
                 # access time is passed in the file details
                 access_time = access_time,
-                file_id = file.id
+                file_id = file_.id,
+                aggregation_id = aggregation_id,
             )
             self.session.add(location)
             self.session.flush()           # flush to generate location.id
         except (IntegrityError, KeyError):
             raise CatalogError(
-                f"Location with root {root}, path {file.original_path} and "
+                f"Location with root {root}, path {file_.original_path} and "
                 f"storage type {storage_type} could not be added to "
                  "the database")
         return location
@@ -437,7 +448,8 @@ class Catalog(DBMixin):
     
     def delete_location(self,
                         file: File, 
-                        storage_type: Location) -> None:
+                        storage_type: Enum) -> None:
+        """Delete the location for a given file and storage_type"""
         location = self.get_location(file, storage_type=storage_type)
         checkpoint = self.session.begin_nested()
         try:
@@ -522,3 +534,150 @@ class Catalog(DBMixin):
                 f"Tag with key:{key} not found"
             )
         return None
+
+
+    def create_aggregation(self, 
+                           tarname: str, 
+                           checksum: str = None, 
+                           algorithm: str = None) -> None:
+        """Create an aggregation of files to write to tape as a tar file"""
+        assert self.session is not None
+        try:
+            aggregation = Aggregation(
+                tarname=tarname,
+                checksum=checksum,
+                algorithm=algorithm,
+            )
+            self.session.add(aggregation)
+            self.session.flush()           # flush to generate aggregation.id
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Aggregation with tarname:{tarname} could not be added to the "
+                f"database"
+            )
+        return aggregation
+    
+
+    def update_aggregation(self, 
+                           aggregation: Aggregation,
+                           checksum: str, 
+                           algorithm: str) -> None: 
+        """Add a missing checksum & algorithm to an aggregation after a 
+        successful write to tape."""
+        assert self.session is not None
+        try:
+            aggregation.checksum = checksum
+            aggregation.algorithm = algorithm
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Aggregation with id:{aggregation.id} and "
+                f"tarname:{aggregation.tarname} could not be updated with new "
+                f"checksum:{checksum} and algorithm:{algorithm}."
+            )
+        return aggregation
+    
+
+    def get_aggregation(self, aggregation_id: int) -> Aggregation:
+        """Simple function for getting of Aggregation from aggregation_id."""
+        assert self.session is not None
+        try:
+            # Get the aggregation for a particular file via it's tape location
+            aggregation = self.session.query(Aggregation).filter(
+                Aggregation.id == aggregation_id,
+            ).one_or_none() 
+            # There should only ever be one aggregation per tape location and 
+            # only one tape location per file
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Aggregation with id:{aggregation_id} not found."
+            )
+        return aggregation
+
+
+    def get_aggregation_by_file(self, 
+                                file_: File, 
+                                storage_type: Storage = Storage.TAPE):
+        """Get the aggregation associated with a particular file's location on 
+        tape. Storage type has been left as a kwarg in case future storage types 
+        are added which will utilise aggregations."""
+        assert self.session is not None
+        try:
+            # Get the aggregation for a particular file via it's tape location
+            aggregation = self.session.query(Aggregation).filter(
+                Aggregation.id == Location.aggregation_id,
+                Location.file_id == file_.id,
+                Location.storage_type == storage_type,
+            ).one_or_none() 
+            # There should only ever be one aggregation per tape location and 
+            # only one tape location per file
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Aggregation for file with id:{file_.id} and path:{file_.path}"
+                f" could not be found. "
+            )
+        return aggregation
+    
+
+    def delete_aggregation(self, aggregation: Aggregation) -> None:
+        """Delete a given aggregation"""
+        try:
+            self.session.delete(aggregation)
+        except (IntegrityError, KeyError, OperationalError):
+            err_msg = (f"Aggregation with aggregation.id {aggregation.id} could "
+                       f"not be deleted.")
+            raise CatalogError(err_msg)
+        
+    
+    def get_next_holding(self) -> Holding:
+        """The principal function for getting the next unarchived holding to 
+        archive aggregate."""
+        assert self.session is not None
+        try: 
+            # Get all holdings
+            all_holdings_q = self.session.query(Holding)
+            # Get all archived holdings
+            archived_holdings_q = self.session.query(Holding.id).filter(
+                Transaction.holding_id == Holding.id,
+                File.transaction_id == Transaction.id,
+                Location.file_id == File.id,
+                Location.storage_type == Storage.TAPE
+            )
+            # Get the first of the holdings which are not in the archived 
+            # holdings query
+            next_holding = all_holdings_q.filter(Holding.id.not_in(
+                archived_holdings_q
+            )).order_by(Holding.id).first()
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Couldn't get unarchived holdings"
+            )
+        return next_holding
+
+    
+    def get_unarchived_files(self, holding: Holding) -> List[File]:
+        """The principal function for getting unarchived files to aggregate and 
+        send to archive put."""
+        assert self.session is not None
+        try: 
+            # Get all files for the given holding
+            all_files = self.session.query(File).filter(
+                Transaction.holding_id == holding.id,
+                File.transaction_id == Transaction.id,
+            )
+            # Get the subset of files which are archived
+            archived_files = self.session.query(File.id).filter(
+                Transaction.holding_id == holding.id,
+                File.transaction_id == Transaction.id,
+                Location.file_id == File.id,
+                Location.storage_type == Storage.TAPE,
+            )
+            # Get the remainder of files which are unarchived
+            unarchived_files = all_files.filter(
+                File.id.not_in(archived_files)
+            ).all()
+        except (NoResultFound, KeyError):
+            raise CatalogError(
+                f"Couldn't find unarchived files for holding with "
+                f"id:{holding.id}"
+            )
+        return unarchived_files

@@ -5,6 +5,7 @@ from json import JSONEncoder
 from pathlib import Path
 import stat
 import os
+from os import stat_result
 
 from pydantic import BaseModel
 
@@ -71,6 +72,9 @@ RetriesType = TypeVar('RetriesType', bound=Retries)
 class PathDetails(BaseModel):
     original_path: Optional[str]
     object_name: Optional[str]
+    tenancy: Optional[str]
+    tape_path: Optional[str]
+    tape_url: Optional[str]
     size: Optional[float]
     user: Optional[int]
     group: Optional[int]
@@ -91,6 +95,9 @@ class PathDetails(BaseModel):
             "file_details": {
                 "original_path": self.original_path,
                 "object_name": self.object_name,
+                "tenancy": self.tenancy,
+                "tape_path": self.tape_path,
+                "tape_url": self.tape_url,
                 "size": self.size,
                 "user": self.user,
                 "group": self.group,
@@ -122,14 +129,17 @@ class PathDetails(BaseModel):
         return pd
 
     @classmethod
-    def from_stat_result(cls, path: str, stat_result: NamedTuple):
+    def from_stat_result(cls, path: str, stat_result: stat_result):
         pd = cls(original_path=path)
         pd.stat(stat_result=stat_result)
         return pd
 
-    def stat(self, stat_result: NamedTuple = None):
+    def stat(self, stat_result: stat_result = None):
         if not stat_result:
             stat_result = self.path.lstat()
+
+        # Include this assertion so mypy knows it's definitely a stat_result
+        assert stat_result is not None
 
         self.mode = stat_result.st_mode
 

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
-from typing import Dict, List
+from typing import Dict, List, Any
 import pathlib
 from collections.abc import Sequence
 
@@ -70,6 +70,9 @@ class RabbitMQPublisher():
     RK_ARCHIVE = "archive"
     RK_ARCHIVE_PUT = "archive-put"
     RK_ARCHIVE_GET = "archive-get"
+    RK_CATALOG_ARCHIVE_NEXT = "catalog-archive-next"
+    RK_CATALOG_ARCHIVE_DEL = "catalog-archive-del"
+    RK_CATALOG_ARCHIVE_UPDATE = "catalog-archive-update"
     RK_ROUTE = "route"
     RK_LOG = "log"
 
@@ -79,6 +82,7 @@ class RabbitMQPublisher():
     RK_COMPLETE = "complete"
     RK_FAILED = "failed"
     RK_REROUTE = "reroute"
+    RK_NEXT = "next"
 
     # Exchange routing key parts – monitoring levels
     RK_LOG_NONE = "none"
@@ -138,6 +142,8 @@ class RabbitMQPublisher():
     MSG_WARNING = "warning"
     MSG_TAPE_URL = "tape_url"
     MSG_TAPE_POOL = "tape_pool"
+    MSG_AGGREGATION_ID = "aggregation_id"
+    MSG_CHECKSUM = "checksum"
 
     MSG_RETRIES = "retries"
     MSG_RETRIES_COUNT = "count"
@@ -543,7 +549,7 @@ class RabbitMQPublisher():
 
     @classmethod
     def create_log_message(cls, message: str, target: str, 
-                           route: str = None) -> bytes:
+                           route: str = None) -> Dict[str, Any]:
         """
         Create logging message to send to rabbit exchange. Message is, as with 
         the standard message, in json format with metadata described in DETAILS 
