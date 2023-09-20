@@ -215,7 +215,7 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
     
     default = False
     services = ["monitor", "catalog", "nlds_worker", "index", "get_transfer", 
-                "put_transfer", "logger"]
+                "put_transfer", "logger", "archive_get", "archive_put"]
     gathered = []
     
     try:
@@ -248,6 +248,8 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
         "get_transfer": ["transfer_get_q", "get_transfer"],
         "put_transfer": ["transfer_put_q", "put_transfer"],
         "logger": ["logging_q", "logger"],
+        "archive_get": ["archive_get_q", "archive_get"], 
+        "archive_put": ["archive_put_q", "archive_put"],
     }
     
     partial_services = []
@@ -321,8 +323,17 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
                                        msg_dict, time_limit, 0)
     logger = logger[0]
     
+    archive_get = await get_consumer_status("archive_get_q", "archive_get", 
+                                             msg_dict, time_limit, 0)
+    archive_get = archive_get[0]
+    
+    archive_put = await get_consumer_status("archive_put_q", "archive_put", 
+                                             msg_dict, time_limit, 0)
+    archive_put = archive_put[0]
+    
+    
     consumer_list = [monitor, catalog, nlds_worker, index, 
-                     get_transfer, put_transfer, logger]
+                     get_transfer, put_transfer, logger, archive_get, archive_put]
     
     num = 0
     offline_num = 0
@@ -338,7 +349,7 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
             else:
                 pass
     
-    if offline_num == 7:
+    if offline_num == 9:
         service = "Offline"
     
     if num > 0:
@@ -361,7 +372,9 @@ async def get(request: Request, time_limit: str = Query("5", alias='time-limit')
         "get_transfer": get_transfer,
         "put_transfer": put_transfer,
         "logger": logger,
-        "failed": failed_info
+        "archive_get": archive_get,
+        "archive_put": archive_put,
+        "failed": failed_info,
     }
     
     
@@ -402,10 +415,12 @@ async def get_service_json(request: Request, service,
         "get_transfer": "transfer_get_q",
         "put_transfer": "transfer_put_q",
         "logger": "logging_q",
+        "archive_get": "archive_get_q",
+        "archive_put": "archive_put_q",
     }
     
     services = ["monitor", "catalog", "nlds_worker", "index", "get_transfer", 
-                "put_transfer", "logger"]
+                "put_transfer", "logger", "archive_get", "archive_put"]
     if service not in services:
         target_route_url = "/system/status/"
         if time_limit:

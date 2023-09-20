@@ -44,20 +44,20 @@ Running
 -------
 
 
-After starting the uvicorn server, going to ```/system/stats/``` on a web browser e.g.: <nlds.ceda.ac.uk/system/stats/> will simply return the whole table with information about each consumer. The contents of this table and web page are also available as a JSON document, through the API. To get the more specific information about a particular consumer, it is possible to make individual requests to the API server (e.g. using `requests.get()` from a python script).
+After starting the uvicorn server, going to ```/system/stats/``` on a web browser e.g.: <http://nlds.ceda.ac.uk/system/stats/> will simply return the whole table with information about each consumer. The contents of this table and web page are also available as a JSON document, through the API. To get the more specific information about a particular consumer, it is possible to make individual requests to the API server (e.g. using `requests.get()` from a python script).
 
 
 Query parameters can be used to alter behaviour. Adding ?time_limit={number} to the end of the URL will change the time limit the consumer has to reply (more on that below) e.g.:
-<nlds.ceda.ac.uk/system/status/?time_limit=2>
+<http://nlds.ceda.ac.uk/system/status/?time_limit=2>
 
 You can also add ?microservice={microservice} to the end of the URL to get a table with only
 those microservices in. e.g. (shows a table with only the monitor row):
-<nlds.ceda.ac.uk/system/status/?microservice=monitor>
+<http://nlds.ceda.ac.uk/system/status/?microservice=monitor>
 
 These 
 ?time_limit=2&consumer=Catalog&consumer=Monitor 
 e.g.:
-<nlds.ceda.ac.uk/system/status/?time_limit=2&consumer=Catalog&consumer=MonITor&consumer=2&consumer=INdeX&consumer=catalog&time_limit=2&time_limit=2&consumer=logger&>
+<http://nlds.ceda.ac.uk/system/status/?time_limit=2&consumer=Catalog&consumer=MonITor&consumer=2&consumer=INdeX&consumer=catalog&time_limit=2&time_limit=2&consumer=logger&>
 this link does actually work even though it looks very confusing it will set the time limit to 2 and open a table with catalog, monitor, index and logger rows
 and would look like this:
 
@@ -81,9 +81,9 @@ number cannot go below 0 or above 15 otherwise it defaults to 5 seconds.
 
 You are also able to select specific microservices and get a JSON response from them 
 helpful for an API. To do this add the microservice you want at the end of the URL
-<nlds.ceda.ac.uk/system/status/catalog>
+<http://nlds.ceda.ac.uk/system/status/catalog>
 this will give information as a JSON response for the catalog microservice you can also add time limit to this like the others:
-<nlds.ceda.ac.uk/system/status/catalog?time_limit=6>
+<http://nlds.ceda.ac.uk/system/status/catalog?time_limit=6>
 (this shows catalog JSON information with a time limit as 6). This uses the same rules as 
 the other time limit (not below 0 or above 15). If you spell the microservice wrong, then
 it will take you to the main table.
@@ -140,6 +140,8 @@ The table should look something like this (with examples of different status):
     Put Transfer   Rabbit error
     Logger         All Consumers Offline (0/2)                ctag1.732d21f82b4c47dcbd7dabe12f95315c
     Logger         (the ctag here will be on the row above)   ctag1.040535d3708c4012a4d2e6b0e6884cf2
+    Archive Get    All Consumers Online (1/1)
+    Archive Put    All Consumers Online (4/4)
     =============  =========================================  =========================================
 
 The errors on Index, Get Transfer and Put Transfer are for illustrative purposes and are not accurate 
@@ -152,26 +154,26 @@ representations of what the whole table will look like.
 When no consumers are running, the info bar is blue, and the status text is red.
 
 .. image:: status_images/all_off.png
-  :width: 400
+  :width: 600
   :alt: All consumers off
 |
 When all consumers inside a microservice are offline the info bar is red as well as the status column text for the offline microservice. The working microservices status text is green.
 
 .. image:: status_images/failed.png
-  :width: 400
+  :width: 600
   :alt: A consumer failed
 |
 When some consumers inside a microservice are offline the info bar is red 
 the partially failed microservice's status text is orange.
 
 .. image:: status_images/part_failed.png
-  :width: 400
+  :width: 600
   :alt: some consumers failed
 |
 When all consumers online the info bar is green, there is nothing in failed consumer column and all status text is green.
 
 .. image:: status_images/success.png
-  :width: 400
+  :width: 600
   :alt: All consumers on
 
 |
@@ -205,6 +207,8 @@ API. This is its structure::
         "get_transfer": get_transfer,
         "put_transfer": put_transfer,
         "logger": logger,
+        "archive_get": archive_get,
+        "archive_put": archive_put,
         "failed": failed_info
     }
 
@@ -253,5 +257,5 @@ TL;DR
 -----
 
 
-going to ```/system/status/``` on a search engine or <nlds.ceda.ac.uk/system/status/>
+going to ```/system/status/``` on a search engine or <http://nlds.ceda.ac.uk/system/status/>
 will show you a table of what microservices are currently running and the tags of any consumers that have failed.

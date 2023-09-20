@@ -101,6 +101,28 @@
                 </table>
             </td>
         </tr>
+        <tr>
+            <td>Archive Get</td>
+            <td><FONT COLOR={{ status.archive_get.colour }}>{{ status.archive_get.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.archive_get.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>Archive Put</td>
+            <td><FONT COLOR={{ status.archive_put.colour }}>{{ status.archive_put.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.archive_put.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
     </table>
     </div>
 </body>

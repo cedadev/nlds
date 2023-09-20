@@ -116,6 +116,31 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         # a dict 
         body = body.decode("utf-8")
         body_dict = json.loads(body)
+        
+        
+        # This checks if the message was for a system status check
+        try:
+            api_method = body_dict[self.MSG_DETAILS][self.MSG_API_ACTION]
+        except KeyError:
+            self.log(f"Message did not contain api_method", self.RK_LOG_INFO)
+            api_method = None
+        
+        
+        # If received system test message, reply to it (this is for system status check)
+        if api_method == "system_stat":
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body_dict["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body_dict,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
+        
 
         self.log(f"Received {json.dumps(body_dict, indent=4)} from "
                  f"{self.queues[0].name} ({method.routing_key})", 
