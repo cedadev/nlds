@@ -1,6 +1,7 @@
 # encoding: utf-8
 """
-
+NOTE: This module is imported into a revision, and so should be very defensive 
+with how it imports external modules (like xrootd). 
 """
 __author__ = 'Jack Leland and Neil Massey'
 __date__ = '30 Nov 2021'
@@ -10,10 +11,13 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 from abc import ABC, abstractmethod
 import json
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, TypeVar
 from zlib import adler32
 
-from pyxrootd import client
+try:
+    from pyxrootd.client import File
+except ModuleNotFoundError:
+    File = TypeVar('File')
 
 from nlds_processors.transferers.base_transfer import (BaseTransferConsumer, 
                                                        TransferError)
@@ -33,7 +37,7 @@ class AdlerisingXRDFile():
     implentation of checksums within the catalog feasible. 
     """
 
-    def __init__(self, f: client.File, offset=0, length=0, checksum=1):
+    def __init__(self, f: File, offset=0, length=0, checksum=1):
         self.f = f
         self.offset = offset
         self.length = length
