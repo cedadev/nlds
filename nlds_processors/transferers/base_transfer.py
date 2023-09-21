@@ -116,7 +116,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         retries = self.get_retries(body_json)
         if retries is not None and retries.count > self.max_retries:
             # Mark the message as 'processed' so it can be failed more safely.
-            rk_failed = ".".join(rk_parts[0], rk_parts[1], self.RK_FAILED)
+            rk_failed = ".".join([rk_parts[0], rk_parts[1], self.RK_FAILED])
             self.send_pathlist(filelist, rk_failed, body_json, 
                                state=State.CATALOG_ROLLBACK)
             return
