@@ -35,15 +35,6 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_retry = ".".join([rk_origin, self.RK_TRANSFER_PUT, self.RK_START])
         rk_failed = ".".join([rk_origin, self.RK_TRANSFER_PUT, self.RK_FAILED])
 
-        # First check for transaction-level message failure and boot back to 
-        # catalog if necessary.
-        retries = self.get_retries(body_json)
-        if retries is not None and retries.count > self.max_retries:
-            # Mark the message as 'processed' so it can be failed more safely.
-            self.send_pathlist(filelist, rk_failed, body_json, 
-                               state=State.CATALOG_ROLLBACK)
-            return
-
         bucket_name = f"nlds.{transaction_id}"
 
         # Check that bucket exists, and create if not 
