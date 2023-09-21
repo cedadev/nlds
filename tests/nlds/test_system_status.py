@@ -13,6 +13,9 @@ from nlds.routers import system
 from nlds.rabbit import rpc_publisher
 
 
+def mock_load_config(template_config):
+    return template_config
+
 
 @pytest.fixture
 def loop():
@@ -92,8 +95,11 @@ async def mock_slow_consumer(*args, **kwargs):
 
 
 def test_get_consumer_status_rabbits_offline(monkeypatch, 
-                                             loop: asyncio.AbstractEventLoop):
+                                             loop: asyncio.AbstractEventLoop, template_config):
     # test if it gives the correct response if the rabbit server is offline
+    
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -125,8 +131,11 @@ def test_get_consumer_status_rabbits_offline(monkeypatch,
 
 
 def test_get_consumer_status_requests_failed(monkeypatch, 
-                                             loop: asyncio.AbstractEventLoop):
+                                             loop: asyncio.AbstractEventLoop, template_config):
     # test if it handels the error properly if requests is offline
+    
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -158,8 +167,11 @@ def test_get_consumer_status_requests_failed(monkeypatch,
     
     
 def test_get_consumer_status_requests_error(monkeypatch, 
-                                             loop: asyncio.AbstractEventLoop):
+                                             loop: asyncio.AbstractEventLoop, template_config):
     # test if it handels the error properly if requests is offline
+    
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -190,8 +202,11 @@ def test_get_consumer_status_requests_error(monkeypatch,
     assert consumer["colour"] == "PURPLE"
 
 
-def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop, template_config):
     # test if the output for all consumers online is correct
+    
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -223,8 +238,11 @@ def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop):
     assert consumer["colour"] == "GREEN"
     
 
-def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop, template_config):
     # test if the output for all consumers offline is correct
+    
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -265,8 +283,11 @@ def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     
     
-def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop, template_config):
     # test if the output for some consumers online is correct
+    
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -304,8 +325,11 @@ def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop):
     assert consumer["failed"] == ["mock_tag_1", "mock_tag_2"]
     
     
-def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop, template_config):
     # test if the output for no consumers running is correct
+    
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -341,8 +365,11 @@ def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop):
 
 
 def test_slow_consumer_all_offline(monkeypatch, 
-                                   loop: asyncio.AbstractEventLoop):
+                                   loop: asyncio.AbstractEventLoop, template_config):
     # test if the output for all slow consumers offline is correct
+    
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 1
