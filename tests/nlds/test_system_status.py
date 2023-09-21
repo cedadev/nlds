@@ -459,7 +459,10 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
 "'index': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
 "'get_transfer': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
 "'put_transfer': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
-"'logger': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, 'failed': "
+"'logger': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'archive_get': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'archive_put': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'failed': "
 "{'failed_num': 0, 'failed_colour': 'alert-success'}}}, 'status_code': 200}")
     
     
@@ -470,8 +473,10 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
 "'index': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
 "'get_transfer': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
 "'put_transfer': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
-"'logger': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, 'failed': "
-"{'failed_num': 0, 'failed_colour': 'alert-success'}}")
+"'logger': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'archive_get': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'archive_put': {'val': 'All Consumers Online (5/5)', 'colour': 'GREEN'}, "
+"'failed': {'failed_num': 0, 'failed_colour': 'alert-success'}}")
     
     assert str(attrs) == to_assert
     
@@ -528,9 +533,9 @@ def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
     # retrieves the specific item to be tested from the dictionary
     failed = attrs["context"]["status"]["failed"]
     
-    assert failed == {'failed_num': 14, 'failed_colour': 'alert-danger'}
+    assert failed == {'failed_num': 18, 'failed_colour': 'alert-danger'}
     
-    assert failed["failed_num"] == 14
+    assert failed["failed_num"] == 18
     
     assert failed["failed_colour"] == "alert-danger"
     
@@ -623,4 +628,8 @@ def test_get_service_json_success(monkeypatch, loop: asyncio.AbstractEventLoop):
             "num_failed":0,
             "num_success":5,
             "failed_list":[]} == get
-    
+
+
+
+
+# to test run python -m pytest tests/nlds/test_system_status.py in the top nlds directory
