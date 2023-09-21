@@ -78,8 +78,7 @@ class GetTransferConsumer(BaseTransferConsumer):
 
             if bucket_name and not client.bucket_exists(bucket_name):
                 # If bucket doesn't exist then pass for retry
-                reason = (f"transaction_id {transaction_id} doesn't match any "
-                           "buckets")
+                reason = (f"Bucket {bucket_name} doesn't seem to exist")
                 self.log(f"{reason}. Adding {object_name} to retry list.", 
                          self.RK_LOG_ERROR)
                 path_details.retries.increment(reason=reason)
