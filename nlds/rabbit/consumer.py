@@ -357,7 +357,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         if warning and len(warning) > 0:
             body_json[self.MSG_DETAILS][self.MSG_WARNING] = warning
 
-        monitoring_rk = ".".join([routing_key[0], 
+        monitoring_rk = ".".join([routing_key.split('.')[0], 
                                   self.RK_MONITOR_PUT, 
                                   self.RK_START])
         self.publish_message(monitoring_rk, body_json)
