@@ -51,6 +51,7 @@ class Metadata():
     holding_id: int
     transaction_id: str
     tags: Dict
+    groupall: bool
 
     def __init__(self, body: Dict):
         # Get the label from the metadata section of the message
@@ -77,9 +78,16 @@ class Metadata():
         except KeyError:
             self.transaction_id = None
 
+        # get the groupall from the metadata section of the message
+        try:
+            self.groupall = body[RMQC.MSG_META][RMQC.MSG_GROUPALL]
+        except KeyError:
+            self.groupall = False
+
     @property
     def unpack(self) -> Tuple:
-        return self.label, self.holding_id, self.tags, self.transaction_id
+        return (self.groupall, self.label, self.holding_id, self.tags, 
+                self.transaction_id)
     
 
 class CatalogConsumer(RMQC):
@@ -261,7 +269,7 @@ class CatalogConsumer(RMQC):
 
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        label, holding_id, tags, _ = md.unpack
+        _, label, holding_id, tags, _ = md.unpack
         if label is None:
             # No label given so if holding_id not given the subset of 
             # transaction id is used as new label
@@ -289,7 +297,7 @@ class CatalogConsumer(RMQC):
             # don't use tags to search - they are strictly for adding to the
             # holding
             holding = self.catalog.get_holding(
-                user, group, search_label, holding_id
+                user, group, label=search_label, holding_id=holding_id
             )
         except (KeyError, CatalogError):
             holding = None
@@ -487,7 +495,8 @@ class CatalogConsumer(RMQC):
 
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        holding_label, holding_id, holding_tag, transaction_id = md.unpack
+        (groupall, holding_label, holding_id, holding_tag, 
+         transaction_id) = md.unpack
 
         # Start a set of the aggregations we need to retrieve
         aggs_to_retrieve: Dict[int, List] = dict()
@@ -898,7 +907,7 @@ class CatalogConsumer(RMQC):
         
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        _, holding_id, _, _ = md.unpack
+        _, _, holding_id, _, _ = md.unpack
 
         # Parse aggregation and checksum info from message.
         try: 
@@ -967,7 +976,7 @@ class CatalogConsumer(RMQC):
 
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        holding_label, holding_id, holding_tag, _ = md.unpack
+        _, holding_label, holding_id, holding_tag, _ = md.unpack
 
         # start the database transactions
         self.catalog.start_session()
@@ -1061,7 +1070,7 @@ class CatalogConsumer(RMQC):
 
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        holding_label, holding_id, tag, transaction_id = md.unpack
+        _, holding_label, holding_id, tag, transaction_id = md.unpack
 
         # start the database transactions
         self.catalog.start_session()
@@ -1169,7 +1178,7 @@ class CatalogConsumer(RMQC):
 
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        holding_label, holding_id, tag, transaction_id = md.unpack
+        groupall, holding_label, holding_id, tag, transaction_id = md.unpack
 
         self.catalog.start_session()
 
@@ -1177,7 +1186,8 @@ class CatalogConsumer(RMQC):
         # holding wil be returned
         try:
             holdings = self.catalog.get_holding(
-                user, group, holding_label, holding_id, transaction_id, tag
+                user, group, groupall=groupall, label=holding_label, 
+                holding_id=holding_id, transaction_id=transaction_id, tag=tag
             )
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
@@ -1310,7 +1320,7 @@ class CatalogConsumer(RMQC):
 
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        holding_label, holding_id, tag, transaction_id = md.unpack
+        groupall, holding_label, holding_id, tag, transaction_id = md.unpack
 
         # get the path from the detaisl section of the message
         try:
@@ -1322,8 +1332,9 @@ class CatalogConsumer(RMQC):
         ret_dict = {}
         try:
             files = self.catalog.get_files(
-                user, group, holding_label, holding_id, 
-                transaction_id, path, tag
+                user, group, groupall=groupall, holding_label=holding_label, 
+                holding_id=holding_id, transaction_id=transaction_id, 
+                original_path=path, tag=tag
             )
             for f in files:
                 # get the transaction and the holding:
@@ -1331,7 +1342,7 @@ class CatalogConsumer(RMQC):
                     id = f.transaction_id
                 ) # should only be one!
                 h = self.catalog.get_holding(
-                    user, group, holding_id=t.holding_id
+                    user, group, groupall=groupall, holding_id=t.holding_id
                 )[0] # should only be one!
                 # create a holding dictionary if it doesn't exists
                 if h.label in ret_dict:
@@ -1417,7 +1428,7 @@ class CatalogConsumer(RMQC):
 
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        holding_label, holding_id, tag, _ = md.unpack
+        _, holding_label, holding_id, tag, _ = md.unpack
 
         # get the new label from the new meta section of the message
         try:

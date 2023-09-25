@@ -56,6 +56,7 @@ class Monitor(DBMixin):
     def get_transaction_record(self, 
                                user: str,
                                group: str,
+                               groupall: bool = False,
                                idd: int = None,
                                transaction_id: str = None,
                                job_label: str = None) -> list:
@@ -69,24 +70,24 @@ class Monitor(DBMixin):
         try:
             if idd:
                 trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.user == user,
                     TransactionRecord.group == group,
                     TransactionRecord.id == idd
                 )
             elif job_label:
                 trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.user == user,
                     TransactionRecord.group == group,
                     TransactionRecord.job_label.regexp_match(job_label)
                 )
             else:
                 trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.user == user,
                     TransactionRecord.group == group,
                     TransactionRecord.transaction_id.regexp_match(
                         transaction_search
                     )
                 )
+            # user filter
+            if not groupall:
+                trec = trec.filter(TransactionRecord.user == user)
             trecs = trec.all()
 
         except (IntegrityError, KeyError, OperationalError):

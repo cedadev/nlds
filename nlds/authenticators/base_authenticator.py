@@ -26,6 +26,3 @@ class BaseAuthenticator(ABC):
     def authenticate_group(self, oauth_token: str, group: str):
         """Validate whether the Bearer of the token belongs to the group."""
         return NotImplementedError
-
-    def authenticate_collection(self, oauth_token: str, collection: str):
-        return NotImplementedError

@@ -189,7 +189,7 @@ class MonitorConsumer(RMQC):
         #     a split)
         try:
             trec = self.monitor.get_transaction_record(
-                user, group, None, transaction_id
+                user, group, idd=None, transaction_id=transaction_id
             )
         except MonitorError:
             # fine to pass here as if transaction_record is not returned then it
@@ -298,6 +298,11 @@ class MonitorConsumer(RMQC):
                      self.RK_LOG_ERROR)
             return
         
+        try:
+            groupall = body[self.MSG_DETAILS][self.MSG_GROUPALL]
+        except KeyError:
+            groupall = False
+
         # get the api-action from the details section of the message
         try:
             api_action = body[self.MSG_DETAILS][self.MSG_API_ACTION]
@@ -393,7 +398,8 @@ class MonitorConsumer(RMQC):
 
         try:
             trecs = self.monitor.get_transaction_record(
-                user, group, idd, transaction_id, job_label
+                user, group, groupall=groupall, idd=idd, 
+                transaction_id=transaction_id, job_label=job_label
             )
         except MonitorError:
             trecs = []

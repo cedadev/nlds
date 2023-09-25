@@ -176,7 +176,3 @@ class JasminAuthenticator(BaseAuthenticator):
                 )
         else:
             return False
-
-
-    def authenticate_collection(self, oauth_token: str, collection: str):
-        return NotImplementedError

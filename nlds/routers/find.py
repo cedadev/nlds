@@ -44,6 +44,7 @@ class FindResponse(BaseModel):
 async def get(token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
+              groupall: Optional[bool] = False,
               label: Optional[str] = None,
               holding_id: Optional[int] = None,
               transaction_id: Optional[str] = None,
@@ -65,6 +66,8 @@ async def get(token: str = Depends(authenticate_token),
     }
     # add the metadata
     meta_dict = {}
+    # groupall is true or false
+    meta_dict[RMQP.MSG_GROUPALL] = groupall
     if (label):
         meta_dict[RMQP.MSG_LABEL] = label
     if (holding_id):
