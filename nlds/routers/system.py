@@ -9,7 +9,7 @@ from fastapi import Depends, APIRouter, status, Query, FastAPI, Request
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel
-from fastapi.staticfiles import StaticFiles
+#from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.responses import FileResponse
 from requests.auth import HTTPBasicAuth
@@ -21,8 +21,8 @@ from ..errors import ResponseError
 router = APIRouter()
 
 
-static_dir = (os.path.join(os.path.dirname(__file__), "../static"))
-router.mount("/static", StaticFiles(directory=static_dir), name="static")
+#static_dir = (os.path.join(os.path.dirname(__file__), "../static"))
+#router.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 template_dir = os.path.join(os.path.dirname(__file__), "../templates/")
 
