@@ -11,8 +11,19 @@ from requests.auth import HTTPBasicAuth
 import abc
 
 from nlds.rabbit import publisher as publ
-from nlds.routers import system
 from nlds.rabbit import rpc_publisher
+import sys
+print("")
+print(sys.path)
+print("")
+import importlib.util
+
+spec = importlib.util.spec_from_file_location("system", "nlds/routers/system.py")
+system = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(system)
+
+system = system.get_system_info()
+
 
 
 def mock_load_config(template_config):
