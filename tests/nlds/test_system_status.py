@@ -11,7 +11,7 @@ from requests.auth import HTTPBasicAuth
 import abc
 
 from nlds.rabbit import publisher as publ
-from nlds.routers import system
+from nlds.routers.system import RabbitError, RequestError, get_consumer_status, get, get_consumer_info, get_service_json
 from nlds.rabbit import rpc_publisher
 
 
@@ -54,7 +54,7 @@ def mock_callback_rabbit(host_ip, api_port, queue_name,
                           login, password, vhost):
     # throws a custom error summulating what happens if rabbits is offline
     
-    raise system.RabbitError
+    raise RabbitError
 
 
 def mock_callback_exception(host_ip, api_port, queue_name, 
@@ -68,7 +68,7 @@ def mock_callback_request(host_ip, api_port, queue_name,
                           login, password, vhost):
     # throws a custom error simmulating what happens if requests is offline
     
-    raise(system.RequestError)
+    raise(RequestError)
 
 
 async def mock_consumer(*args, **kwargs):
@@ -121,7 +121,7 @@ def test_get_consumer_status_rabbits_offline(monkeypatch,
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    consumer = loop.run_until_complete(system.get_consumer_status(
+    consumer = loop.run_until_complete(get_consumer_status(
         "consumer_q", "consumer", msg_dict, time_limit, 0))
     consumer = consumer[0]
     
@@ -157,7 +157,7 @@ def test_get_consumer_status_requests_failed(monkeypatch,
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    consumer = loop.run_until_complete(system.get_consumer_status(
+    consumer = loop.run_until_complete(get_consumer_status(
         "consumer_q", "consumer", msg_dict, time_limit, 0))
     consumer = consumer[0]
     
@@ -193,7 +193,7 @@ def test_get_consumer_status_requests_error(monkeypatch,
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    consumer = loop.run_until_complete(system.get_consumer_status(
+    consumer = loop.run_until_complete(get_consumer_status(
         "consumer_q", "consumer", msg_dict, time_limit, 0))
     consumer = consumer[0]
     
@@ -229,7 +229,7 @@ def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop, templ
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
     consumer = loop.run_until_complete(
-        system.get_consumer_status(
+        get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 0))
     consumer = consumer[0]
     
@@ -265,7 +265,7 @@ def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop, temp
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
     consumer = loop.run_until_complete(
-        system.get_consumer_status(
+        get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 9))
     consumer = consumer[0]
     
@@ -310,7 +310,7 @@ def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop, temp
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
     consumer = loop.run_until_complete(
-        system.get_consumer_status(
+        get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 2))
     consumer = consumer[0]
     
@@ -352,7 +352,7 @@ def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop, tem
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
     consumer = loop.run_until_complete(
-        system.get_consumer_status(
+        get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 0))
     consumer = consumer[0]
     
@@ -392,7 +392,7 @@ def test_slow_consumer_all_offline(monkeypatch,
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
     consumer = loop.run_until_complete(
-        system.get_consumer_status(
+        get_consumer_status(
             "consumer_q", "consumer", msg_dict, time_limit, 9))
     consumer = consumer[0]
     assert consumer == {
@@ -469,7 +469,7 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get(Request, time_limit=5 ,microservice="all"))
+    get = loop.run_until_complete(get(Request, time_limit=5 ,microservice="all"))
     
     # gets the output as a dict to be easily manipulated
     attrs = (get.__dict__)
@@ -530,7 +530,7 @@ def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get(Request, time_limit=5 ,microservice="all"))
+    get = loop.run_until_complete(get(Request, time_limit=5 ,microservice="all"))
     
     # gets the output as a dict to be easily manipulated
     attrs = (get.__dict__)
@@ -554,7 +554,7 @@ def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get(Request, time_limit=5 ,microservice="all"))
+    get = loop.run_until_complete(get(Request, time_limit=5 ,microservice="all"))
     
     # gets the output as a dict to be easily manipulated
     attrs = (get.__dict__)
@@ -578,7 +578,7 @@ def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get(Request, time_limit=5 ,microservice="all"))
+    get = loop.run_until_complete(get(Request, time_limit=5 ,microservice="all"))
     
     # gets the output as a dict to be easily manipulated
     attrs = (get.__dict__)
@@ -626,7 +626,7 @@ def test_get_consumer_info_success(monkeypatch):
     key = "catalog_q"
     
     # gets the output from get_consumer_info to be tested on
-    info = system.get_consumer_info("server", "port", key, "user", 
+    info = get_consumer_info("server", "port", key, "user", 
                                     "password", "vhost")
     
     assert info == ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
@@ -647,7 +647,7 @@ def test_get_service_json_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
-    get = loop.run_until_complete(system.get_service_json(Request, "monitor", 3))
+    get = loop.run_until_complete(get_service_json(Request, "monitor", 3))
     
     del get["pid"]
     del get["hostname"]
