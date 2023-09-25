@@ -47,6 +47,7 @@ class RabbitQEBinding(BaseModel):
     exchange: str
     routing_key: str
 
+
 class RabbitQueue(BaseModel):
     name: str
     bindings: List[RabbitQEBinding]
@@ -58,6 +59,7 @@ class RabbitQueue(BaseModel):
             bindings=[RabbitQEBinding(exchange=exchange, 
                                       routing_key=routing_key)]
         )
+
 
 class FilelistType(Enum):
     raw = 0
@@ -124,8 +126,10 @@ class State(Enum):
     def to_json(self):
         return self.value
     
+
 class SigTermError(Exception):
     pass
+
 
 class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_QUEUE_NAME = "test_q"
@@ -198,12 +202,14 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # Set up the logging and pass through constructor parameter
         self.setup_logging(enable=setup_logging_fl)
 
+
     def reset(self) -> None:
         self.sent_message_count = 0
         self.completelist = []
         self.retrylist = []
         self.failedlist = []
     
+
     def load_config_value(self, config_option: str,
                           path_listify_fl: bool = False):
         """
@@ -255,6 +261,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         return return_val
     
+
     def parse_filelist(self, body_json: dict) -> List[PathDetails]:
         """Convert flat list from message json into list of PathDetails objects 
         and the check it is, in fact, a list
@@ -273,6 +280,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         filelist = self.dedup_filelist(filelist)
         return filelist
     
+
     def dedup_filelist(self, filelist: List[PathDetails]) -> List[PathDetails]:
         """De-duplicate filelist 
         """
@@ -284,6 +292,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 pathlist.append(pd.original_path)
 
         return new_filelist
+
 
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
                        body_json: Dict[str, Any], state: State = None,
@@ -314,6 +323,16 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
 
         self.log(f"Sending list back to exchange (routing_key = {routing_key})",
                  self.RK_LOG_INFO)
+        
+        # Get the current state to use in case of retrying with no state set
+        try: 
+            current_state = State(body_json[self.MSG_DETAILS][self.MSG_STATE])
+        except (ValueError, KeyError) as e:
+            self.log("Couldn't retrieve current state from message, continuing "
+                     "with default state.", self.RK_LOG_ERROR)
+            self.log(f"Exception raised during state retrieval: {e}", 
+                     self.RK_LOG_DEBUG)
+            current_state = self.DEFAULT_STATE
 
         delay = 0
         body_json[self.MSG_DETAILS][self.MSG_RETRY] = False
@@ -325,6 +344,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             body_json.update(trans_retries.to_dict())
             for path_details in pathlist:
                 path_details.retries.reset()
+            if state is None: 
+                state = self.DEFAULT_STATE
         elif mode == FilelistType.retry:
             # Delay the retry message depending on how many retries have been 
             # accumulated. All retries in a retry list _should_ be the same so 
@@ -334,11 +355,14 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                      f" {datetime.now() + timedelta(milliseconds=delay)}", 
                      self.RK_LOG_DEBUG)
             body_json[self.MSG_DETAILS][self.MSG_RETRY] = True
+            if state is None:
+                state = current_state
         elif mode == FilelistType.failed:
             state = State.FAILED
         
         # If state not set at this point then revert to the default value for 
-        # the consumer.
+        # the consumer. It _should_ always be set though so this is probably 
+        # redundant
         if state is None:
             state = self.DEFAULT_STATE
 
@@ -357,11 +381,12 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         if warning and len(warning) > 0:
             body_json[self.MSG_DETAILS][self.MSG_WARNING] = warning
 
-        monitoring_rk = ".".join([routing_key[0], 
+        monitoring_rk = ".".join([routing_key.split('.')[0], 
                                   self.RK_MONITOR_PUT, 
                                   self.RK_START])
         self.publish_message(monitoring_rk, body_json)
         self.sent_message_count += 1
+
 
     def get_retries(self, body: Dict) -> Retries:
         """Retrieve the retries from a message. If no present or inaccessible 

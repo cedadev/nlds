@@ -47,7 +47,7 @@ class Catalog(DBMixin):
                     label: str=None, 
                     holding_id: int=None,
                     transaction_id: str=None,
-                    tag: dict=None) -> Holding:
+                    tag: dict=None) -> List[Holding]:
         """Get a holding from the database"""
         assert(self.session != None)
 
@@ -387,7 +387,15 @@ class Catalog(DBMixin):
         checkpoint = self.session.begin_nested()
         try:
             for f in files:
+                # First get parent transaction and holding
+                transaction = self.get_transaction(f.transaction_id)
+                holding = self.get_holding(user, group, 
+                                           holding_id=transaction.holding_id)[0]
                 self.session.delete(f)
+                if len(transaction.files) == 0:
+                    self.session.delete(transaction)
+                if len(holding.transactions) == 0:
+                    self.session.delete(holding)
         except (IntegrityError, KeyError, OperationalError):
             # This rollsback only to the checkpoint, so any successful deletes 
             # done already will stay in the transaction.

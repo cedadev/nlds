@@ -93,6 +93,7 @@ class Metadata():
 class CatalogConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "catalog_q"
     DEFAULT_ROUTING_KEY = (f"{RMQC.RK_ROOT}.{RMQC.RK_CATALOG}.{RMQC.RK_WILD}")
+    DEFAULT_REROUTING_INFO = "->CATALOG_Q"
     DEFAULT_STATE = State.CATALOG_PUTTING
 
     # Possible options to set in config file
@@ -1552,6 +1553,10 @@ class CatalogConsumer(RMQC):
         self.log(f"Received {json.dumps(body, indent=4)} from "
                  f"{self.queues[0].name} ({method.routing_key})", 
                  self.RK_LOG_INFO)
+
+        self.log(f"Appending rerouting information to message: "
+                 f"{self.DEFAULT_REROUTING_INFO} ", self.RK_LOG_DEBUG)
+        body = self.append_route_info(body)
 
         # Get the API method and decide what to do with it
         try:
