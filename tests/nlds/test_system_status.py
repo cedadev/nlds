@@ -682,7 +682,7 @@ def test_get_consumer_info_success(monkeypatch, load_config, load_connection):
     key = "catalog_q"
     
     # gets the output from get_consumer_info to be tested on
-    info = system.get_consumer_info("server", "port", key, "user", 
+    info = system.get_consumer_info("server", "admin_port", key, "user", 
                                     "password", "vhost")
     
     assert info == ["mock_tag_1", "mock_tag_2", "mock_tag_3", 
