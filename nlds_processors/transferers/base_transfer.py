@@ -17,7 +17,7 @@ import pathlib as pth
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
-from nlds.rabbit.consumer import FilelistType 
+from nlds.rabbit.consumer import FilelistType, State
 
 
 class TransferError(Exception):
@@ -137,16 +137,22 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             return
         
         # First check for transaction-level message failure and boot back to 
-        # catalog if necessary.
+        # catalog if necessary. We do this here so that errors in set_ids() can
+        # still be caught at the transaction-level
         retries = self.get_retries(body_json)
         if retries is not None and retries.count > self.max_retries:
-            # Mark the message as 'processed' so it can be failed more safely.
             rk_failed = ".".join([rk_parts[0], rk_parts[1], self.RK_FAILED])
             if rk_parts[1] == self.RK_TRANSFER_PUT:
+                # For transfer-put, mark the message as 'processed' so it can be
+                # failed more safely.
                 mode = FilelistType.processed
+                state = State.CATALOG_ROLLBACK
             else:
+                # Otherwise fail it regularly
                 mode = FilelistType.failed
-            self.send_pathlist(filelist, rk_failed, body_json, mode=mode)
+                state = None
+            self.send_pathlist(filelist, rk_failed, body_json, mode=mode, 
+                               state=state)
             return
 
         # Set uid and gid from message contents if configured to check 
