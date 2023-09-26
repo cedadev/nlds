@@ -68,7 +68,7 @@ def mock_callback_rabbit(host_ip, api_port, queue_name,
     # throws a custom error summulating what happens if rabbits is offline
     
     # Ensure template is loaded instead of .server_config
-    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     from nlds.routers import system
     
@@ -500,11 +500,11 @@ async def mock_blue_consumer_status(key, target, msg_dict,
 def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if get function correctly runs
     
+    from nlds.routers import system
+    
     # replaces certain functions with mock functions that are a lot less 
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", mock_get_consumer_status)
-    
-    from nlds.routers import system
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
@@ -562,12 +562,12 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
 def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if get function correctly returns a green alert
     
+    from nlds.routers import system
+    
     # replaces certain functions with mock functions that are a lot less 
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", 
                         mock_green_consumer_status)
-    
-    from nlds.routers import system
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
@@ -589,11 +589,11 @@ def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
 def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if get function correctly returns a red alert
     
+    from nlds.routers import system
+    
     # replaces certain functions with mock functions that are a lot less 
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", mock_red_consumer_status)
-    
-    from nlds.routers import system
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
@@ -615,11 +615,11 @@ def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
 def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if get function correctly returns a blue alert
     
+    from nlds.routers import system
+    
     # replaces certain functions with mock functions that are a lot less 
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", mock_blue_consumer_status)
-    
-    from nlds.routers import system
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
@@ -663,12 +663,12 @@ def mock_get_request(*args, **kwargs):
 def test_get_consumer_info_success(monkeypatch):
     # test if get_consumer_info function correctly runs
     
+    from nlds.routers import system
+    
     # replaces certain functions with mock functions that are a lot less 
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(requests, "get", mock_get_request)
     monkeypatch.setattr(system, "convert_json", mock_ignore)
-    
-    from nlds.routers import system
     
     key = "catalog_q"
     
@@ -688,11 +688,11 @@ this tests the get_service_json function
 def test_get_service_json_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     # test if get function correctly runs
     
+    from nlds.routers import system
+    
     # replaces certain functions with mock functions that are a lot less 
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", mock_get_consumer_status)
-    
-    from nlds.routers import system
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
