@@ -117,9 +117,11 @@ class Catalog(DBMixin):
             elif transaction_id:
                 msg = (f"Holding containing transaction_id:{transaction_id} not "
                        f"found for user:{user} and group:{group}")
-            else:
+            elif label:
                 msg = (f"Holding with label:{label} not found for "
                        f"user:{user} and group:{group}")
+            else:
+                msg = (f"No holdings found for users:{user} and group:{group}")
             if tag:
                 msg += f" with tags:{tag}."
             else:
