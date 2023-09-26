@@ -331,7 +331,7 @@ class MonitorConsumer(RMQC):
         # future with the inclusion of ROLES. Leave this here for completeness 
         # and ease of insertion of the appropriate logic in the future.
         # groupall allows users to query other groups
-        if groupall and query_group is not None and query_group != group:
+        if query_group is not None and query_group != group:
             self.log("Attempting to query a group that does not match current "
                      "group, exiting callback", self.RK_LOG_ERROR)
             return
@@ -414,6 +414,9 @@ class MonitorConsumer(RMQC):
         # we want a list of transaction_records, each transaction_record
         # contains a list of sub_records
         trecs_dict = {}
+        # allo groupall to get all the sub records by setting query_user to None
+        if groupall:
+            query_user = None
         for tr in trecs:
             srecs = self.monitor.get_sub_records(
                 tr, sub_id, query_user, query_group, state, 
