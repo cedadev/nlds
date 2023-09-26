@@ -26,18 +26,17 @@ def load_config(monkeypatch, template_config):
         )
     )
 
+@pytest.fixture
+def load_connection(monkeypatch):
+    def mock_get_connection(self):
+        return None
 
-def mock_get_connection(template_connection):
-    return template_connection
+    monkeypatch.setattr(publ.RabbitMQPublisher, "get_connection", mock_get_connection)
 
-@pytest.fixture()
-def load_connection(monkeypatch, template_connection):
-    # Ensure template is loaded instead of .server_config
-    monkeypatch.setattr(publ, "get_connection", functools.partial(
-        mock_get_connection, 
-        template_connection
-        )
-    )
+
+#@pytest.fixture()
+#def load_connection(monkeypatch):
+#    monkeypatch.setattr(publ.RabbitMQPublisher, "get_connection", None)
 
 
 #from nlds.routers import system
