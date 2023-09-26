@@ -194,11 +194,11 @@ def test_get_consumer_status_requests_failed(monkeypatch,
     
     
 def test_get_consumer_status_requests_error(monkeypatch, 
-                                             loop: asyncio.AbstractEventLoop, template_config):
+                                             loop: asyncio.AbstractEventLoop, template_config, load_config):
     # test if it handels the error properly if requests is offline
     
     # Ensure template is loaded instead of .server_config
-    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     from nlds.routers import system
     
