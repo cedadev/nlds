@@ -26,10 +26,22 @@ def load_config(monkeypatch, template_config):
         )
     )
 
+
+def mock_get_connection(template_connection):
+    return template_connection
+
+@pytest.fixture()
+def load_connection(monkeypatch, template_connection):
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "get_connection", functools.partial(
+        mock_get_connection, 
+        template_connection
+        )
+    )
+
+
 #from nlds.routers import system
 
-#def mock_load_config(template_config):
-#    return template_config
 
 
 @pytest.fixture
@@ -117,7 +129,7 @@ async def mock_slow_consumer(*args, **kwargs):
 
 
 def test_get_consumer_status_rabbits_offline(monkeypatch, 
-                                             loop: asyncio.AbstractEventLoop, template_config):
+                                             loop: asyncio.AbstractEventLoop, template_config, load_config, load_connection):
     # test if it gives the correct response if the rabbit server is offline
     
     # Ensure template is loaded instead of .server_config
@@ -155,7 +167,7 @@ def test_get_consumer_status_rabbits_offline(monkeypatch,
 
 
 def test_get_consumer_status_requests_failed(monkeypatch, 
-                                             loop: asyncio.AbstractEventLoop, template_config):
+                                             loop: asyncio.AbstractEventLoop, template_config, load_config, load_connection):
     # test if it handels the error properly if requests is offline
     
     # Ensure template is loaded instead of .server_config
@@ -194,11 +206,9 @@ def test_get_consumer_status_requests_failed(monkeypatch,
     
     
 def test_get_consumer_status_requests_error(monkeypatch, 
-                                             loop: asyncio.AbstractEventLoop, template_config, load_config):
+                                             loop: asyncio.AbstractEventLoop, template_config, load_config, load_connection):
     # test if it handels the error properly if requests is offline
     
-    # Ensure template is loaded instead of .server_config
-    #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     from nlds.routers import system
     
@@ -231,7 +241,7 @@ def test_get_consumer_status_requests_error(monkeypatch,
     assert consumer["colour"] == "PURPLE"
 
 
-def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop, template_config):
+def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop, template_config, load_config, load_connection):
     # test if the output for all consumers online is correct
     
     # Ensure template is loaded instead of .server_config
@@ -269,7 +279,7 @@ def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop, templ
     assert consumer["colour"] == "GREEN"
     
 
-def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop, template_config):
+def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop, template_config, load_config, load_connection):
     # test if the output for all consumers offline is correct
     
     # Ensure template is loaded instead of .server_config
@@ -316,7 +326,7 @@ def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop, temp
     
     
     
-def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop, template_config):
+def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop, template_config, load_config, load_connection):
     # test if the output for some consumers online is correct
     
     # Ensure template is loaded instead of .server_config
@@ -360,7 +370,7 @@ def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop, temp
     assert consumer["failed"] == ["mock_tag_1", "mock_tag_2"]
     
     
-def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop, template_config):
+def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop, template_config, load_config, load_connection):
     # test if the output for no consumers running is correct
     
     # Ensure template is loaded instead of .server_config
@@ -402,7 +412,7 @@ def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop, tem
 
 
 def test_slow_consumer_all_offline(monkeypatch, 
-                                   loop: asyncio.AbstractEventLoop, template_config):
+                                   loop: asyncio.AbstractEventLoop, template_config, load_config, load_connection):
     # test if the output for all slow consumers offline is correct
     
     # Ensure template is loaded instead of .server_config
@@ -497,7 +507,7 @@ async def mock_blue_consumer_status(key, target, msg_dict,
     return mock_consumer_tags
 
 
-def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop, load_config, load_connection):
     # test if get function correctly runs
     
     from nlds.routers import system
@@ -559,7 +569,7 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     assert str(attrs["context"]["status"]) == status
 
 
-def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop, load_config, load_connection):
     # test if get function correctly returns a green alert
     
     from nlds.routers import system
@@ -586,7 +596,7 @@ def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
     assert failed["failed_colour"] == "alert-success"
 
 
-def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop, load_config, load_connection):
     # test if get function correctly returns a red alert
     
     from nlds.routers import system
@@ -612,7 +622,7 @@ def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
     assert failed["failed_colour"] == "alert-danger"
     
 
-def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop, load_config, load_connection):
     # test if get function correctly returns a blue alert
     
     from nlds.routers import system
@@ -660,7 +670,7 @@ def mock_get_request(*args, **kwargs):
     return(dict_value)
 
 
-def test_get_consumer_info_success(monkeypatch):
+def test_get_consumer_info_success(monkeypatch, load_config, load_connection):
     # test if get_consumer_info function correctly runs
     
     from nlds.routers import system
@@ -685,7 +695,7 @@ this tests the get_service_json function
 """
 
 
-def test_get_service_json_success(monkeypatch, loop: asyncio.AbstractEventLoop):
+def test_get_service_json_success(monkeypatch, loop: asyncio.AbstractEventLoop, load_config, load_connection):
     # test if get function correctly runs
     
     from nlds.routers import system
