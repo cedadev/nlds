@@ -198,7 +198,7 @@ def test_get_consumer_status_requests_error(monkeypatch,
     # test if it handels the error properly if requests is offline
     
     # Ensure template is loaded instead of .server_config
-    #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     from nlds.routers import system
     
