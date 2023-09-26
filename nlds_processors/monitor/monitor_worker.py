@@ -330,7 +330,13 @@ class MonitorConsumer(RMQC):
         # For now we're not allowing users to query other users, but will in the 
         # future with the inclusion of ROLES. Leave this here for completeness 
         # and ease of insertion of the appropriate logic in the future.
-        if query_user is not None and user != query_user:
+        # groupall allows users to query other groups
+        if groupall and query_group is not None and query_group != group:
+            self.log("Attempting to query a group that does not match current "
+                     "group, exiting callback", self.RK_LOG_ERROR)
+            return
+
+        elif query_user is not None and user != query_user:
             self.log("Attempting to query a user that does not match current "
                      "user, exiting callback", self.RK_LOG_ERROR)
             return

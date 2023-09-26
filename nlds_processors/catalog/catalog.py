@@ -280,7 +280,7 @@ class Catalog(DBMixin):
                   original_path: str=None, 
                   tag: dict=None) -> list:
 
-        """Get a multitue of file details from the database, given the user,
+        """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
         assert(self.session != None)
         # Nones are set to .* in the regexp matching

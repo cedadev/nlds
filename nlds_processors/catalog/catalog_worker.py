@@ -494,9 +494,14 @@ class CatalogConsumer(RMQC):
         if tenancy is None:
             tenancy = self.default_tenancy
 
+        try:
+            groupall = body[self.MSG_DETAILS][self.MSG_GROUPALL]
+        except:
+            groupall = False
+
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        (groupall, holding_label, holding_id, holding_tag, 
+        (_, holding_label, holding_id, holding_tag, 
          transaction_id) = md.unpack
 
         # Start a set of the aggregations we need to retrieve
@@ -504,12 +509,13 @@ class CatalogConsumer(RMQC):
 
         # start the database transactions
         self.catalog.start_session()
+        
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
                 # get the files first
                 files = self.catalog.get_files(
-                    user, group, holding_label, holding_id, 
+                    user, group, groupall, holding_label, holding_id, 
                     transaction_id, file_details.original_path, holding_tag
                 )
                 if len(files) == 0:
@@ -1256,6 +1262,13 @@ class CatalogConsumer(RMQC):
                      "contents. Exiting callback", self.RK_LOG_ERROR)
             return
 
+        # Extract the groupall variable from the metadata section of the 
+        # message body
+        try:
+            groupall = body[self.MSG_DETAILS][self.MSG_GROUPALL]
+        except KeyError:
+            groupall = False
+
         self.catalog.start_session()
 
         # Get transactions from catalog using transaction_ids from monitoring
@@ -1274,7 +1287,7 @@ class CatalogConsumer(RMQC):
                     label = ""
                 else:
                     h = self.catalog.get_holding(
-                        user, group, holding_id=t.holding_id
+                        user, group, groupall=groupall, holding_id=t.holding_id
                     )[0] # should only be one!
                     label = h.label
                     ret_dict[t.transaction_id] = label
