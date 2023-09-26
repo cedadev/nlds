@@ -14,14 +14,17 @@ from _pytest.monkeypatch import MonkeyPatch
 from nlds.rabbit import publisher as publ
 from nlds.rabbit import rpc_publisher
 
+def mock_load_config(template_config):
+    return template_config
 
-@pytest.fixture(scope="session", autouse=True)
-def mock_load_config():
-    template_config = {}
-
-
-    monkeypatch = MonkeyPatch()
-    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+@pytest.fixture()
+def mock_config(monkeypatch, template_config):
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(
+        mock_load_config, 
+        template_config
+        )
+    )
 
 from nlds.routers import system
 
