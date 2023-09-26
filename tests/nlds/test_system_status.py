@@ -18,7 +18,7 @@ def mock_load_config(template_config):
     return template_config
 
 @pytest.fixture()
-def mock_config(monkeypatch, template_config):
+def load_config(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
     monkeypatch.setattr(publ, "load_config", functools.partial(
         mock_load_config, 
@@ -26,7 +26,7 @@ def mock_config(monkeypatch, template_config):
         )
     )
 
-from nlds.routers import system
+#from nlds.routers import system
 
 #def mock_load_config(template_config):
 #    return template_config
@@ -67,6 +67,11 @@ def mock_callback_rabbit(host_ip, api_port, queue_name,
                           login, password, vhost):
     # throws a custom error summulating what happens if rabbits is offline
     
+    # Ensure template is loaded instead of .server_config
+    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    
+    from nlds.routers import system
+    
     raise system.RabbitError
 
 
@@ -80,6 +85,8 @@ def mock_callback_exception(host_ip, api_port, queue_name,
 def mock_callback_request(host_ip, api_port, queue_name, 
                           login, password, vhost):
     # throws a custom error simmulating what happens if requests is offline
+    
+    from nlds.routers import system
     
     raise(system.RequestError)
 
@@ -115,6 +122,8 @@ def test_get_consumer_status_rabbits_offline(monkeypatch,
     
     # Ensure template is loaded instead of .server_config
     #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    
+    from nlds.routers import system
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -152,6 +161,9 @@ def test_get_consumer_status_requests_failed(monkeypatch,
     # Ensure template is loaded instead of .server_config
     #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
+    from nlds.routers import system
+    
+    
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
     msg_dict = {
@@ -188,6 +200,8 @@ def test_get_consumer_status_requests_error(monkeypatch,
     # Ensure template is loaded instead of .server_config
     #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
+    from nlds.routers import system
+    
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
     msg_dict = {
@@ -222,6 +236,8 @@ def test_consumer_all_online(monkeypatch, loop: asyncio.AbstractEventLoop, templ
     
     # Ensure template is loaded instead of .server_config
     #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    
+    from nlds.routers import system
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -258,6 +274,8 @@ def test_consumer_all_offline(monkeypatch, loop: asyncio.AbstractEventLoop, temp
     
     # Ensure template is loaded instead of .server_config
     #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    
+    from nlds.routers import system
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
@@ -304,6 +322,8 @@ def test_consumer_some_online(monkeypatch, loop: asyncio.AbstractEventLoop, temp
     # Ensure template is loaded instead of .server_config
     #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
+    from nlds.routers import system
+    
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
     msg_dict = {
@@ -346,6 +366,8 @@ def test_consumer_none_running(monkeypatch, loop: asyncio.AbstractEventLoop, tem
     # Ensure template is loaded instead of .server_config
     #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
+    from nlds.routers import system
+    
     # the 2 variables required to run the get_consumer_status function
     time_limit = 5
     msg_dict = {
@@ -385,6 +407,8 @@ def test_slow_consumer_all_offline(monkeypatch,
     
     # Ensure template is loaded instead of .server_config
     #monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    
+    from nlds.routers import system
     
     # the 2 variables required to run the get_consumer_status function
     time_limit = 1
@@ -480,6 +504,8 @@ def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", mock_get_consumer_status)
     
+    from nlds.routers import system
+    
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
     get = loop.run_until_complete(system.get(Request, time_limit=5 ,microservice="all"))
@@ -541,6 +567,8 @@ def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop):
     monkeypatch.setattr(system, "get_consumer_status", 
                         mock_green_consumer_status)
     
+    from nlds.routers import system
+    
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
     get = loop.run_until_complete(system.get(Request, time_limit=5 ,microservice="all"))
@@ -565,6 +593,8 @@ def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop):
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", mock_red_consumer_status)
     
+    from nlds.routers import system
+    
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
     get = loop.run_until_complete(system.get(Request, time_limit=5 ,microservice="all"))
@@ -588,6 +618,8 @@ def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop):
     # replaces certain functions with mock functions that are a lot less 
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", mock_blue_consumer_status)
+    
+    from nlds.routers import system
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
@@ -636,6 +668,8 @@ def test_get_consumer_info_success(monkeypatch):
     monkeypatch.setattr(requests, "get", mock_get_request)
     monkeypatch.setattr(system, "convert_json", mock_ignore)
     
+    from nlds.routers import system
+    
     key = "catalog_q"
     
     # gets the output from get_consumer_info to be tested on
@@ -657,6 +691,8 @@ def test_get_service_json_success(monkeypatch, loop: asyncio.AbstractEventLoop):
     # replaces certain functions with mock functions that are a lot less 
     # complicated and return a simple value for what is being tested
     monkeypatch.setattr(system, "get_consumer_status", mock_get_consumer_status)
+    
+    from nlds.routers import system
     
     # uses a pytest fixture to make an event loop that will run the asyncronus
     # function that is being called and store its output
