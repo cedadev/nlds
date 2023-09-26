@@ -12,7 +12,7 @@ from ..rabbit.publisher import RabbitMQPublisher
 from ..rabbit.rpc_publisher import RabbitMQRPCPublisher
 
 # Create a publisher and start its connection
-#rabbit_publisher = RabbitMQPublisher()
+rabbit_publisher = RabbitMQPublisher()
 rabbit_publisher.get_connection()
 
 # Create a RPC publisher and start its connection
