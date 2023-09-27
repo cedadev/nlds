@@ -10,7 +10,7 @@ idna==3.2
 Jinja2==3.0.3
 minio==7.1.10
 pika==1.2.0
-pydantic==1.8.2
+pydantic==1.10.0
 requests==2.26.0
 retry==0.9.2
 starlette==0.14.2
