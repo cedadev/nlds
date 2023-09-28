@@ -1572,6 +1572,26 @@ class CatalogConsumer(RMQC):
                 # catalog.
                 self._catalog_location_del(body, rk_parts[0], 
                                            location_type=Storage.OBJECT_STORAGE)
+                
+                
+        
+            
+        # If received system test message, reply to it (this is for system status check)
+        elif api_method == "system_stat":
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
+            
+        
 
         elif (api_method == self.RK_PUTLIST) or (api_method == self.RK_PUT):
             # split the routing key

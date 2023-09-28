@@ -31,14 +31,12 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         super().__init__(queue=queue)
 
 
-    def _process_message(self, method: Method, body: bytes) -> Tuple[List, Dict]:
+    def _process_message(self, method: Method, body: bytes, properties: Header) -> Tuple[List, Dict]:
         """Process the message to get the routing key parts, message data
         and message details"""
-        # Convert body from bytes to string for ease of manipulation
+        
         body_json = json.loads(body)
-
-        self.log(f"Received {json.dumps(body_json, indent=4)} \nwith " 
-                 f"routing_key: {method.routing_key}", self.RK_LOG_INFO)
+        
 
         self.log(f"Appending rerouting information to message: "
                  f"{self.DEFAULT_REROUTING_INFO} ", self.RK_LOG_DEBUG)
@@ -306,16 +304,40 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
-        rk_parts, body_json = self._process_message(method, body)
+        
+        # Convert body from bytes to string for ease of manipulation
+        body_json = json.loads(body)
 
-        # Get the API method and decide what to do with it
+        self.log(f"Received {json.dumps(body_json, indent=4)} \nwith " 
+                 f"routing_key: {method.routing_key}", self.RK_LOG_INFO)
+        
+        
+        # This checks if the message was for a system status check
         try:
             api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
         except KeyError:
-            self.log(f"Message did not contain appropriate API method", 
-                     self.RK_LOG_ERROR)
+            self.log(f"Message did not contain api_method", self.RK_LOG_ERROR)
+            api_method = None
             return
-
+           
+        
+        # If received system test message, reply to it (this is for system status check)
+        if api_method == "system_stat":
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body_json["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body_json,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
+        
+        rk_parts, body_json = self._process_message(method, body, properties)
+        
         # If putting then first scan file/filelist
         if rk_parts[2] in (self.RK_PUT, self.RK_PUTLIST):
             self._process_rk_put(body_json)

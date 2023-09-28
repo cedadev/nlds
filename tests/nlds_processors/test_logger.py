@@ -66,7 +66,7 @@ def test_callback(debug_root_logger, caplog, default_logger, default_rmq_method,
     custom_method = copy.deepcopy(default_rmq_method)
     custom_method.routing_key = f"nlds.test.{rk_log_level}"
     default_logger.callback(None, custom_method, None, routed_body, None)
-    assert len(caplog.records) == 3
+    assert len(caplog.records) == 4
 
     # Check that the proper message type was logged
     # The final should be a confirmation info message
