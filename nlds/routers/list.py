@@ -107,7 +107,7 @@ async def get(token: str = Depends(authenticate_token),
     else:
         response_error = ResponseError(
             loc = ["status", "get"],
-            msg = "Monitoring service could not be reached in time.",
+            msg = "Catalog service could not be reached in time.",
             type = "Incomplete request."
         )
         raise HTTPException(

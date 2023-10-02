@@ -27,6 +27,8 @@ import json
 from typing import Dict, Tuple, List
 from hashlib import shake_256
 
+from urllib.parse import urlunsplit, urljoin
+
 # Typing imports
 from pika.channel import Channel
 from pika.connection import Connection
@@ -1385,11 +1387,25 @@ class CatalogConsumer(RMQC):
                 # get the locations
                 locations = []
                 for l in f.locations:
+                    # build the url for object storage
+                    if l.storage_type == Storage.OBJECT_STORAGE:
+                        url = urlunsplit(
+                            (l.url_scheme, 
+                             l.url_netloc, 
+                             f"nlds.{l.root}/{l.path}", 
+                             "", 
+                             ""
+                            )
+                        )
+                    else:
+                        url = None
+
                     l_rec = {
                         "storage_type" : l.storage_type,
                         "root": l.root,
                         "path": l.path,
                         "access_time": l.access_time.isoformat(),
+                        "url": url
                     }
                     locations.append(l_rec)
                 # build the file record
