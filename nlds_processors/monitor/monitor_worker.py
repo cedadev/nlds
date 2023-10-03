@@ -492,6 +492,25 @@ class MonitorConsumer(RMQC):
         if (api_method == self.RK_STAT):
             self.log("Starting stat from monitoring db.", self.RK_LOG_INFO)
             self._monitor_get(body, properties)
+            
+        
+            
+        # If received system test message, reply to it (this is for system status check)
+        elif api_method == "system_stat":
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
+            
+            
         elif api_method in (self.RK_PUT, self.RK_PUTLIST, 
                             self.RK_GET, self.RK_GETLIST, 
                             self.RK_ARCHIVE_PUT, self.RK_ARCHIVE_GET):

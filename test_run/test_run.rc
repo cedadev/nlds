@@ -1,7 +1,7 @@
 # screen RC config file
 
-setenv PYTHON_DIR "$HOME/python-venvs/nlds-venv/bin"
-setenv NLDS "$HOME/Coding/nlds"
+setenv PYTHON_DIR "$HOME/nlds-venv/bin"
+setenv NLDS "$HOME/NLDS/nlds-server/nlds"
 setenv NLDS_PROC "$NLDS/nlds_processors"
 
 # titles at the top

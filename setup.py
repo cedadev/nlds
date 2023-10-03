@@ -22,7 +22,7 @@ setup(
     ],
     include_package_data=True,
     package_data={
-        'nlds': ['templates/*.j2'],
+        'nlds': ['templates/*'],
         'nlds_processors': ['templates/*.j2']
     },
     license='LICENSE.txt',  # example license
