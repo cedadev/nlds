@@ -32,6 +32,10 @@ class TarMemberError(Exception):
     pass
 
 
+class XRootDError(Exception):
+    pass
+
+
 class FileAlreadyRetrieved(Exception):
     """Exception class to distinguish the specific situation where a file has
     already been retrieved and exists on the object store"""
@@ -180,7 +184,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                                    PrepareFlags.STAGE)
         if status.status != 0:
             # If tarfiles can't be staged then pass for transaction-level 
-            # retry
+            # retry. TODO: Probably need to figure out which files have failed 
+            # this step as it won't necessarily be all of them.
             raise CallbackError(f"Tar files ({prepare_list}) could not be "
                                 "prepared.")
         
@@ -227,7 +232,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     # Open the tar file with READ
                     status, _ = f.open(full_tape_path, OpenFlags.READ)
                     if status.status != 0:
-                        raise TarError("Failed to open file for reading")
+                        raise XRootDError(f"Failed to open file {full_tape_path}"
+                                          f" for reading. Status: {status}")
 
                     # Wrap the xrootd File handler so minio can use it 
                     fw = AdlerisingXRDFile(f)
@@ -294,6 +300,13 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 self.log(f"Tar-level error raised: {e}, failing whole tar and "
                          "continuing to next.", self.RK_LOG_ERROR)
                 self.failedlist.extend(tar_filelist)
+            except XRootDError as e:
+                # Handle xrootd error, where file failed to be read. Retry the 
+                # whole tar.
+                reason = "Failed to open file with XRootD"
+                self.log(f"{e}. Passing for retry.", self.RK_LOG_ERROR)
+                for pd in tar_filelist:
+                    self.process_retry(reason, pd)
             else:
                 # Log successful retrieval
                 self.log(f"Successfully streamed tar file {tarname}", 
