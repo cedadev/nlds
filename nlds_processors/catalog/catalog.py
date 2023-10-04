@@ -222,6 +222,39 @@ class Catalog(DBMixin):
         return transaction
 
 
+    def get_location_transaction(self, location: Location) -> Transaction:
+        """Get a transaction but from the other end of the database tree, from a
+        location's file_id. 
+        """
+        assert self.session != None
+        try: 
+            transaction = self.session.query(Transaction).filter(
+                Transaction.id == File.transaction_id,
+                File.id == location.file_id
+            ).one_or_none()
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Transaction for location:{location.id} not retrievable."
+            )
+        return transaction
+
+    
+    def get_location_file(self, location: Location) -> File:
+        """Get a File but from the other end of the database tree, starting from
+        a location. 
+        """
+        assert self.session != None
+        try: 
+            file_ = self.session.query(File).filter(
+                File.id == location.file_id
+            ).one_or_none()
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"File for location:{location.id} not retrievable."
+            )
+        return file_
+
+
     def create_transaction(self, 
                            holding: Holding, 
                            transaction_id: str) -> Transaction:
