@@ -137,7 +137,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_EXCHANGE_NAME = "test_exchange"
     DEFAULT_REROUTING_INFO = "->"
 
-    DEFAULT_CONSUMER_CONFIG : Dict[str, str] = dict()
+    DEFAULT_CONSUMER_CONFIG : Dict[str, Any] = dict()
 
     # The state associated with finishing the consumer, must be set but can be 
     # overridden
