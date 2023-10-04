@@ -28,17 +28,22 @@ class TarError(Exception):
 
 class TarMemberError(Exception):
     """Exception class to distinguish problems with individual tar members (i.e. 
-    broken bucket, ) from larger tar-related problems"""
+    broken bucket, ) from larger tar-related problems
+    """
     pass
 
 
 class XRootDError(Exception):
+    """Exception class to distinguish the specific problem of a prepared file 
+    not being able to be read by xrootd
+    """
     pass
 
 
 class FileAlreadyRetrieved(Exception):
     """Exception class to distinguish the specific situation where a file has
-    already been retrieved and exists on the object store"""
+    already been retrieved and exists on the object store
+    """
     pass
 
     
@@ -49,15 +54,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                            f"{BaseArchiveConsumer.RK_WILD}")
     DEFAULT_STATE = State.ARCHIVE_GETTING
 
-    _FULLY_UNPACK_TAR = "fully_unpack_tar_fl"
-    DEFAULT_CONSUMER_CONFIG = BaseArchiveConsumer.DEFAULT_CONSUMER_CONFIG | {
-        _FULLY_UNPACK_TAR: False,
-    }
-
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
-
-        self.fully_unpack_tar_fl = self.load_config_value(self._FULLY_UNPACK_TAR)
 
 
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
