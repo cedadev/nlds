@@ -656,12 +656,14 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             # NOTE: why are we making this distinction? We can attempt to retry 
             # any message that fails and the worst that can happen is what 
             # already happens now
-            self.log(f"Unexpected exception encountered! The current list of "
-                     f"expected exceptions is: {self.EXPECTED_EXCEPTIONS}. "
-                     f"Consider adding this exception ({e}) to the list and "
-                     f"accounting for it more specifically. Now attempting to "
-                     f"handle message with retry/fail mechanism.", 
-                     self.RK_LOG_WARNING)
+            self.log(
+                f"Unexpected exception encountered! The current list of "
+                f"expected exceptions is: {self.EXPECTED_EXCEPTIONS}. Consider "
+                f"adding this exception type ({type(e).__name__}) to the list "
+                f"and accounting for it more specifically. Now attempting to "
+                f"handle message with standard retry/fail mechanism.", 
+                self.RK_LOG_WARNING
+            )
             self._handle_expected_error(body, method.routing_key, e)
         finally:
             # Only ack message if the message has not been flagged for nacking 
