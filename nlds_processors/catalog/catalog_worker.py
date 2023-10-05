@@ -40,7 +40,7 @@ from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog, CatalogError
-from nlds_processors.catalog.catalog_models import Storage, Location
+from nlds_processors.catalog.catalog_models import Storage, Location, File
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
 
@@ -742,7 +742,7 @@ class CatalogConsumer(RMQC):
             storage_type=Storage.OBJECT_STORAGE,
             url_scheme="http",
             url_netloc=tenancy,
-            root=f"nlds.{transaction.transaction_id}",
+            root=transaction.transaction_id,
             path=file_.original_path, 
             access_time = tape_location.access_time
         )
