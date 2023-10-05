@@ -599,24 +599,36 @@ class Catalog(DBMixin):
         return aggregation
     
 
-    def update_aggregation(self, 
-                           aggregation: Aggregation,
-                           checksum: str, 
-                           algorithm: str) -> None: 
+    def update_aggregation(
+            self, 
+            aggregation: Aggregation,
+            checksum: str, 
+            algorithm: str,
+            tarname: str = None,
+        ) -> Aggregation: 
         """Add a missing checksum & algorithm to an aggregation after a 
-        successful write to tape."""
+        successful write to tape. Can also optionally rename the tarname, at 
+        which point the """
         assert self.session is not None
         try:
             aggregation.checksum = checksum
             aggregation.algorithm = algorithm
+            if tarname:
+                # Change the tarname and then edit all locations so their 
+                # root is correct.
+                current_tarname = aggregation.tarname
+                aggregation.tarname = tarname
+                for location in aggregation.locations:
+                    new_root = location.root.replace(current_tarname, tarname)
+                    location.root = new_root
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Aggregation with id:{aggregation.id} and "
                 f"tarname:{aggregation.tarname} could not be updated with new "
-                f"checksum:{checksum} and algorithm:{algorithm}."
+                f"checksum:{checksum}, algorithm:{algorithm} and "
+                f"tarname:{tarname}."
             )
         return aggregation
-    
 
     def get_aggregation(self, aggregation_id: int) -> Aggregation:
         """Simple function for getting of Aggregation from aggregation_id."""
@@ -635,9 +647,11 @@ class Catalog(DBMixin):
         return aggregation
 
 
-    def get_aggregation_by_file(self, 
-                                file_: File, 
-                                storage_type: Storage = Storage.TAPE):
+    def get_aggregation_by_file(
+            self, 
+            file_: File, 
+            storage_type: Storage = Storage.TAPE
+        ) -> Aggregation:
         """Get the aggregation associated with a particular file's location on 
         tape. Storage type has been left as a kwarg in case future storage types 
         are added which will utilise aggregations."""

@@ -988,6 +988,13 @@ class CatalogConsumer(RMQC):
             self.log("No method for identifying an aggregation provided, forced"
                      " to exit callback.", self.RK_LOG_ERROR)
             return
+        
+        try:
+            new_tarname = body[self.MSG_DATA][self.MSG_NEW_TARNAME]
+        except KeyError as e:
+            self.log("Optional parameter new_tarname not found, continuing "
+                     "without", self.RK_LOG_INFO) 
+            new_tarname = None
 
         self.catalog.start_session()
 
@@ -1008,8 +1015,12 @@ class CatalogConsumer(RMQC):
                 file_ = files[0]
                 aggregation = self.catalog.get_aggregation_by_file(file_)
             
-            self.catalog.update_aggregation(aggregation, checksum=checksum, 
-                                            algorithm="ADLER32")
+            self.catalog.update_aggregation(
+                aggregation, 
+                checksum=checksum, 
+                algorithm="ADLER32", 
+                tarname=new_tarname,
+            )
         except CatalogError as e:
             self.log(f"Error encountered during _catalog_archive_update(): {e}", 
                      self.RK_LOG_ERROR)

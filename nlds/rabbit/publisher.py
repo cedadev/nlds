@@ -143,6 +143,7 @@ class RabbitMQPublisher():
     MSG_TAPE_POOL = "tape_pool"
     MSG_AGGREGATION_ID = "aggregation_id"
     MSG_CHECKSUM = "checksum"
+    MSG_NEW_TARNAME = "new_tarname"
 
     MSG_RETRIES = "retries"
     MSG_RETRIES_COUNT = "count"
