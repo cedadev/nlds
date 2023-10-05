@@ -27,6 +27,8 @@ import json
 from typing import Dict, Tuple, List
 from hashlib import shake_256
 
+from urllib.parse import urlunsplit, urljoin
+
 # Typing imports
 from pika.channel import Channel
 from pika.connection import Connection
@@ -51,6 +53,7 @@ class Metadata():
     holding_id: int
     transaction_id: str
     tags: Dict
+    groupall: bool
 
     def __init__(self, body: Dict):
         # Get the label from the metadata section of the message
@@ -79,7 +82,7 @@ class Metadata():
 
     @property
     def unpack(self) -> Tuple:
-        return self.label, self.holding_id, self.tags, self.transaction_id
+        return (self.label, self.holding_id, self.tags, self.transaction_id)
     
 
 class CatalogConsumer(RMQC):
@@ -297,7 +300,7 @@ class CatalogConsumer(RMQC):
             # don't use tags to search - they are strictly for adding to the
             # holding
             holding = self.catalog.get_holding(
-                user, group, search_label, holding_id
+                user, group, label=search_label, holding_id=holding_id
             )
         except (KeyError, CatalogError):
             holding = None
@@ -493,21 +496,27 @@ class CatalogConsumer(RMQC):
         if tenancy is None:
             tenancy = self.default_tenancy
 
+        try:
+            groupall = body[self.MSG_DETAILS][self.MSG_GROUPALL]
+        except:
+            groupall = False
+
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
-        holding_label, holding_id, holding_tag, transaction_id = md.unpack
+        (holding_label, holding_id, holding_tag, transaction_id) = md.unpack
 
         # Start a set of the aggregations we need to retrieve
         aggs_to_retrieve: Dict[int, List] = dict()
 
         # start the database transactions
         self.catalog.start_session()
+        
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
                 # get the files first
                 files = self.catalog.get_files(
-                    user, group, holding_label, holding_id, 
+                    user, group, groupall, holding_label, holding_id, 
                     transaction_id, file_details.original_path, holding_tag
                 )
                 if len(files) == 0:
@@ -1249,6 +1258,11 @@ class CatalogConsumer(RMQC):
             # Unpack if no problems found in parsing
             user, group = message_vars
 
+        try:
+            groupall = body[self.MSG_DETAILS][self.MSG_GROUPALL]
+        except KeyError:
+            groupall = False
+
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
         holding_label, holding_id, tag, transaction_id = md.unpack
@@ -1259,7 +1273,8 @@ class CatalogConsumer(RMQC):
         # holding wil be returned
         try:
             holdings = self.catalog.get_holding(
-                user, group, holding_label, holding_id, transaction_id, tag
+                user, group, groupall=groupall, label=holding_label, 
+                holding_id=holding_id, transaction_id=transaction_id, tag=tag
             )
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
@@ -1327,6 +1342,13 @@ class CatalogConsumer(RMQC):
                      "contents. Exiting callback", self.RK_LOG_ERROR)
             return
 
+        # Extract the groupall variable from the metadata section of the 
+        # message body
+        try:
+            groupall = body[self.MSG_DETAILS][self.MSG_GROUPALL]
+        except KeyError:
+            groupall = False
+
         self.catalog.start_session()
 
         # Get transactions from catalog using transaction_ids from monitoring
@@ -1345,7 +1367,7 @@ class CatalogConsumer(RMQC):
                     label = ""
                 else:
                     h = self.catalog.get_holding(
-                        user, group, holding_id=t.holding_id
+                        user, group, groupall=groupall, holding_id=t.holding_id
                     )[0] # should only be one!
                     label = h.label
                     ret_dict[t.transaction_id] = label
@@ -1390,6 +1412,11 @@ class CatalogConsumer(RMQC):
             # Unpack if no problems found in parsing
             user, group = message_vars
 
+        try:
+            groupall = body[self.MSG_DETAILS][self.MSG_GROUPALL]
+        except KeyError:
+            groupall = False
+
         # Extract variables from the metadata section of the message body
         md = Metadata(body)
         holding_label, holding_id, tag, transaction_id = md.unpack
@@ -1404,8 +1431,9 @@ class CatalogConsumer(RMQC):
         ret_dict = {}
         try:
             files = self.catalog.get_files(
-                user, group, holding_label, holding_id, 
-                transaction_id, path, tag
+                user, group, groupall=groupall, holding_label=holding_label, 
+                holding_id=holding_id, transaction_id=transaction_id, 
+                original_path=path, tag=tag
             )
             for f in files:
                 # get the transaction and the holding:
@@ -1413,7 +1441,7 @@ class CatalogConsumer(RMQC):
                     id = f.transaction_id
                 ) # should only be one!
                 h = self.catalog.get_holding(
-                    user, group, holding_id=t.holding_id
+                    user, group, groupall=groupall, holding_id=t.holding_id
                 )[0] # should only be one!
                 # create a holding dictionary if it doesn't exists
                 if h.label in ret_dict:
@@ -1440,11 +1468,25 @@ class CatalogConsumer(RMQC):
                 # get the locations
                 locations = []
                 for l in f.locations:
+                    # build the url for object storage
+                    if l.storage_type == Storage.OBJECT_STORAGE:
+                        url = urlunsplit(
+                            (l.url_scheme, 
+                             l.url_netloc, 
+                             f"nlds.{l.root}/{l.path}", 
+                             "", 
+                             ""
+                            )
+                        )
+                    else:
+                        url = None
+
                     l_rec = {
                         "storage_type" : l.storage_type,
                         "root": l.root,
                         "path": l.path,
                         "access_time": l.access_time.isoformat(),
+                        "url": url
                     }
                     locations.append(l_rec)
                 # build the file record

@@ -169,11 +169,3 @@ class Aggregation(CatalogBase):
 
     # relationship for location (one to many)
     locations = relationship("Location", cascade="delete, delete-orphan")
-
-
-if __name__ == "__main__":
-    # render the schema if run from command line
-    # needs fixed version of eralchemy from:
-    # https://github.com/maurerle/eralchemy2.git
-    from eralchemy2 import render_er 
-    render_er(CatalogBase, 'catalog_schema.png')

@@ -43,6 +43,7 @@ class HoldingResponse(BaseModel):
 async def get(token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
+              groupall: Optional[bool] = False,
               label: Optional[str] = None,
               holding_id: Optional[int] = None,
               transaction_id: Optional[str] = None,
@@ -55,7 +56,8 @@ async def get(token: str = Depends(authenticate_token),
     msg_dict = {
         RMQP.MSG_DETAILS: {
             RMQP.MSG_USER: user,
-            RMQP.MSG_GROUP: group,        
+            RMQP.MSG_GROUP: group,
+            RMQP.MSG_GROUPALL: groupall,
             RMQP.MSG_API_ACTION: api_action
         },
         RMQP.MSG_DATA: {},
@@ -105,7 +107,7 @@ async def get(token: str = Depends(authenticate_token),
     else:
         response_error = ResponseError(
             loc = ["status", "get"],
-            msg = "Monitoring service could not be reached in time.",
+            msg = "Catalog service could not be reached in time.",
             type = "Incomplete request."
         )
         raise HTTPException(

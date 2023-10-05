@@ -34,7 +34,8 @@ class Catalog(DBMixin):
         """Check whether a user has permission to view this holding.
         When we implement ROLES this will be more complicated."""
         permitted = True
-        permitted &= holding.user == user
+        #Users can view / get all holdings in their group
+        #permitted &= holding.user == user
         permitted &= holding.group == group
         return permitted
 
@@ -42,6 +43,7 @@ class Catalog(DBMixin):
     def get_holding(self, 
                     user: str, 
                     group: str, 
+                    groupall: bool=False,
                     label: str=None, 
                     holding_id: int=None,
                     transaction_id: str=None,
@@ -52,9 +54,13 @@ class Catalog(DBMixin):
         try:
             # build holding query bit by bit
             holding_q = self.session.query(Holding).filter(
-                    Holding.user == user,
-                    Holding.group == group
+                Holding.group == group
             )
+            # if the groupall flag is set then don't filter on user
+            if not groupall:
+                holding_q = holding_q.filter(
+                    Holding.user == user,
+                )
 
             if holding_id:
                 holding_q = holding_q.filter(
@@ -111,9 +117,11 @@ class Catalog(DBMixin):
             elif transaction_id:
                 msg = (f"Holding containing transaction_id:{transaction_id} not "
                        f"found for user:{user} and group:{group}")
-            else:
+            elif label:
                 msg = (f"Holding with label:{label} not found for "
                        f"user:{user} and group:{group}")
+            else:
+                msg = (f"No holdings found for users:{user} and group:{group}")
             if tag:
                 msg += f" with tags:{tag}."
             else:
@@ -290,7 +298,8 @@ class Catalog(DBMixin):
         ).all()
         permitted = True
         for h in holding:
-            permitted &= h.user == user
+            # users have get file permission if in group
+            # permitted &= h.user == user
             permitted &= h.group == group
 
         return permitted
@@ -299,19 +308,21 @@ class Catalog(DBMixin):
     def get_files(self, 
                   user: str, 
                   group: str, 
+                  groupall: bool=False,
                   holding_label: str=None, 
                   holding_id: int=None,
                   transaction_id: str=None,
                   original_path: str=None, 
                   tag: dict=None) -> list:
 
-        """Get a multitue of file details from the database, given the user,
+        """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
         assert(self.session != None)
         # Nones are set to .* in the regexp matching
         # get the matching holdings first, these match all but the path
         holding = self.get_holding(
-            user, group, holding_label, holding_id, transaction_id, tag
+            user, group, groupall=groupall, label=holding_label, 
+            holding_id=holding_id, transaction_id=transaction_id, tag=tag
         )
         if original_path:
             search_path = original_path

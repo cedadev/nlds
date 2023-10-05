@@ -1,5 +1,4 @@
 @startuml message_flow_get_full
-
 skinparam participantFontSize 16
 skinparam participantFontName Futura
 
@@ -85,13 +84,13 @@ note right of qc
 end note
 
 activate catalog_get
-loop #lightgrey for file in //filelist//
+loop #LightPink for file in //filelist//
     catalog_get -> catalog_db : get file record from catalog holding
     catalog_db -> catalog_get
-    alt #Gainsboro the file exists on the object storage
+    alt #MistyRose the file exists on the object storage
         catalog_get->catalog_get : add file record to //transfer_list//
     else else
-        alt #WhiteSmoke the file exists on the tape
+        alt #FFF8F8 the file exists on the tape
             catalog_get->catalog_get : add file record to //archive_list//
         else else
             catalog_get->catalog_get : add file record to //failed_list//
@@ -115,14 +114,30 @@ qag -> archive_gets : key=""nlds-api.archive-get.start""
 deactivate qag
 
 activate archive_gets
-loop #lightgrey for file in //archive_list//
-    archive_gets -> tape : get file from tape
-    tape -> obj
-    obj -> archive_gets
-    alt #gainsboro tape retrieval succeeded
-        archive_gets->archive_gets : add file record to //transfer_list//
+loop #LightPink for file in //archive_list//
+    alt #MistyRose the //aggregate_list// exists
+        archive_gets->archive_gets: get the //aggregate_list//
     else else
-        archive_gets->archive_gets : add file record to //failed_list//
+        archive_gets->archive_gets: create the //aggregate_list//
+    end
+    archive_gets->archive_gets: add file record to //aggregate_list//
+end
+
+loop #LightPink for aggregate in //aggregate_list//
+    archive_gets -> tape : get aggregate from tape
+    tape -> archive_gets
+    alt #MistyRose tape retrieval succeeded
+        loop #FFF8F8 for file in aggregate
+            archive_gets->obj : extract file from aggregate
+            obj->archive_gets
+            alt #FFFDFD extract succeeded
+                archive_gets->archive_gets : add file record to //transferred_list//
+            else
+                archive_gets->archive_gets : add file record to //failed_list//
+            end
+        end
+    else else
+        archive_gets->archive_gets : add aggregate to //failed_list//
     end
 end
 
@@ -181,14 +196,10 @@ qt -> transfer_get : key=""nlds-api.transfer-get.start""
 deactivate qt
 activate transfer_get
 
-loop #lightgrey for file in //transfer_list//
+loop #LightPink for file in //transferred_list//
     transfer_get -> obj : copy file to target
     obj -> transfer_get : 
-    alt #Gainsboro the copy succeeded
-        transfer_get->transfer_get : add file record to //completed_list//
-    else else
-        transfer_get->transfer_get : add file record to //failed_list//
-    end
+    transfer_get->transfer_get : add file record to //completed_list//
 end
 transfer_get -> wex : key=""nlds-api.transfer-get.complete""
 activate wex
@@ -197,6 +208,10 @@ deactivate wex
 activate qw
 qw -> work : key=""nlds-api.transfer-get.complete""
 deactivate qw
+
+loop #LightPink for file, aggregation in //failed_list//
+    transfer_get->transfer_get : add file record(s) to //failed_list//
+end
 
 transfer_get -> wex : key=""nlds-api.transfer-get.failed""
 deactivate transfer_get
