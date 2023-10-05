@@ -167,7 +167,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             # Create the tar_originals_map, which maps from tar file to the
             # path_details in the original filelist (i.e. the files in the 
             # original request) for easy retry/failure if something goes wrong.
-            if filelist_hash not in tar_originals_map:
+            if tar_filename not in tar_originals_map:
                 tar_originals_map[tar_filename] = [path_details, ]
             else:
                 tar_originals_map[tar_filename].append(path_details)
@@ -178,6 +178,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         # Prepare all the tar files at once.     
         # NOTE: This may take a while as it's being copied to a disk cache, 
         # should benchmark.
+        # TODO: Utilise the prepare result for eviction later. 
         status, prepare_result = fs_client.prepare(prepare_list, 
                                                    PrepareFlags.STAGE)
         if status.status != 0:
@@ -186,20 +187,11 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             # this step as it won't necessarily be all of them.
             raise CallbackError(f"Tar files ({prepare_list}) could not be "
                                 "prepared.")
-        
-        # Choose the appropriate object to loop over, depending on config. 
-        # Default is to only unpack the requested files. 
-        if self.fully_unpack_tar_fl:
-            main_loop_obj = retrieval_dict
-        else:
-            self.log("Only retrieving originally requested files from tars.", 
-                     self.RK_LOG_DEBUG)
-            main_loop_obj = tar_originals_map
 
         # Main loop:
         # Loop through retrieval dict and put the contents of each tar file into 
         # it's appropriate bucket on the objectstore.
-        for tarname, tar_filelist in main_loop_obj:
+        for tarname, tar_filelist in retrieval_dict:
             original_filelist = tar_originals_map[tarname]
             
             # Get the holding_slug from the first path_details in the 
@@ -341,26 +333,28 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 mode=FilelistType.archived,
             )
         if len(self.retrylist) > 0:
+            # This will return to here, so we need to make sure the retrieval 
+            # dict that's passed back is set correctly. Make a list of the 
+            # originals that need retrying 
             originals_to_retry = [pd for pd in self.retrylist if pd in filelist]
-            # This will return to here, so we may need to make sure 
-            # MSG_RETRIEVAL_FILELIST is set correctly. 
-            if self.fully_unpack_tar_fl:
-                # Make a list of the originals that need retrying as well as 
-                # everything that has either completed or failed, which 
-                # shouldn't be retried. 
-                retry_retrieval_dict = {}
-                not_to_retry = self.completelist + self.failedlist
-                # Horrible nested bastard to rebuild the minimum version of the 
-                # retrieval_dict. TODO: Re-look at this if we end up using it, 
-                # could probably be more efficient
-                for tarname, tar_filelist in retrieval_dict:
-                    for pd in originals_to_retry:
-                        if pd in tar_filelist:
-                            trimmed_tarlist = [pd for pd in tar_filelist 
-                                               if pd not in not_to_retry]
-                            retry_retrieval_dict[tarname] = trimmed_tarlist
-                body_json[self.MSG_DATA][self.MSG_RETRIEVAL_FILELIST] = retry_retrieval_dict
-                    
+            
+            # Combine everything that has either completed or failed, i.e. which 
+            # shouldn't be retried. 
+            retry_retrieval_dict = {}
+            not_to_retry = self.completelist + self.failedlist
+            # Horrible nested bastard to rebuild the minimum version of the 
+            # retrieval_dict. TODO: Re-look at this if we end up using it, 
+            # could probably be more efficient
+            for tarname, tar_filelist in retrieval_dict:
+                for pd in originals_to_retry:
+                    if pd in tar_filelist:
+                        trimmed_tarlist = [pd for pd in tar_filelist 
+                                            if pd not in not_to_retry]
+                        retry_retrieval_dict[tarname] = trimmed_tarlist
+            
+            body_json[self.MSG_DATA][self.MSG_RETRIEVAL_FILELIST] = (
+                retry_retrieval_dict
+            )        
             self.send_pathlist(
                 originals_to_retry, rk_retry, body_json, 
                 mode=FilelistType.retry

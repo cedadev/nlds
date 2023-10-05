@@ -40,7 +40,7 @@ from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog, CatalogError
-from nlds_processors.catalog.catalog_models import Storage, File
+from nlds_processors.catalog.catalog_models import Storage, Location
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
 
@@ -99,6 +99,7 @@ class CatalogConsumer(RMQC):
     _DEFAULT_TENANCY = "default_tenancy"
     _DEFAULT_TAPE_URL = "default_tape_url"
     _TARGET_AGGREGATION_SIZE = "target_aggregation_size"
+    _FULLY_UNPACK_TAR = "fully_unpack_tar_fl"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -112,6 +113,7 @@ class CatalogConsumer(RMQC):
         _DEFAULT_TENANCY: None,
         _DEFAULT_TAPE_URL: None,
         _TARGET_AGGREGATION_SIZE: 5 * (1024**3), # Default to 5 GB
+        _FULLY_UNPACK_TAR: False,
         RMQC.RETRY_DELAYS: RMQC.DEFAULT_RETRY_DELAYS,
     }
 
@@ -133,6 +135,9 @@ class CatalogConsumer(RMQC):
         )
         self.target_aggregation_size = self.load_config_value(
             self._TARGET_AGGREGATION_SIZE
+        )
+        self.fully_unpack_tar_fl = self.load_config_value(
+            self._FULLY_UNPACK_TAR
         )
 
         self.catalog = None
@@ -585,19 +590,31 @@ class CatalogConsumer(RMQC):
                         new_file.tape_url = location.url_netloc
                         new_file.tape_path = tape_object_name
 
-                        # Save the aggregation id for later so we can add 
-                        # objectstore aggregations for all of the files 
-                        # retrieved from archive. 
-                        # NOTE: We attempt to get the aggregation here so the 
-                        # file can be failed at the earliest opportunity if 
-                        # there is a problem.
+                        # Get the aggregation so we can group by tarname in 
+                        # retrieval_dict
                         agg = self.catalog.get_aggregation(
                             aggregation_id=location.aggregation_id
                         )
-                        if agg in aggs_to_retrieve:
-                            aggs_to_retrieve[agg].append(new_file)
+                        if self.fully_unpack_tar_fl:
+                            # Save the aggregation for later so we can add 
+                            # objectstore location for all of the files needed 
+                            # to be retrieved from tape.
+                            if agg in aggs_to_retrieve:
+                                aggs_to_retrieve[agg].append(new_file)
+                            else:
+                                aggs_to_retrieve[agg] = [new_file, ]
                         else:
-                            aggs_to_retrieve[agg] = [new_file, ]
+                            # If we just want the files requested from the 
+                            # archive then make the necessary Location and 
+                            # message data now.
+                            self.create_objectstore_location(
+                                location, tenancy
+                            )
+                            self.reroutelist.append(new_file)
+                            if agg.tarname in self.retrievedict:
+                                self.retrievedict[agg.tarname].append(new_file)
+                            else:
+                                self.retrievedict[agg.tarname] = [new_file, ]
 
             except CatalogError as e:
                 if file_details.retries.count > self.max_retries:
@@ -610,6 +627,8 @@ class CatalogConsumer(RMQC):
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
         
+        # Create object store Locations for each member of an aggregation (if 
+        # unpacking the whole tar file)
         for aggregation, details_list in aggs_to_retrieve.items():
             # Make a session checkpoint here so we can rollback in the event of 
             # a failed Location creation
@@ -624,50 +643,11 @@ class CatalogConsumer(RMQC):
                 # Add the new objectstore location to the catalog now, 
                 # to be removed in the event of an s3 get failure. 
                 for tape_location in aggregation.locations:
-                    # Need to query catalog for file and transaction info to 
-                    # create the same object_store location that existed before
-                    # archive. 
-                    file_ = self.catalog.get_location_file(tape_location)
-                    transaction = self.catalog.get_location_transaction(
-                        tape_location
+                    path_details = self.create_objectstore_location(
+                        tape_location, tenancy
                     )
-                    access_time = tape_location.access_time.timestamp()
-                    # Check if objectstore location already exists and skip if so
-                    if self.catalog.get_location(file_, Storage.OBJECT_STORAGE):
+                    if path_details is None:
                         continue
-                    # Create the object store location with the old bucket name
-                    objstr_location = self.catalog.create_location(
-                        FakeFile(id=tape_location.file_id),
-                        storage_type=Storage.OBJECT_STORAGE,
-                        url_scheme="http",
-                        url_netloc=tenancy,
-                        root=f"nlds.{transaction.transaction_id}",
-                        path=file_.original_path, 
-                        access_time = tape_location.access_time
-                    )
-                    # Also need to make a path_details object for each of the 
-                    # files within the same aggregation and add it to the 
-                    # retrieve list.
-                    tape_object_name = (
-                        f"nlds.{tape_location.root}:{tape_location.path}"
-                    )
-                    objstr_object_name = (
-                        f"nlds.{transaction.transaction_id}:{tape_location.path}"
-                    )
-                    path_details = PathDetails(
-                        original_path = file_.original_path,
-                        object_name = objstr_object_name,
-                        tape_url = tape_location.url_netloc,
-                        tape_path = tape_object_name,
-                        tenancy = tenancy,
-                        size = file_.size,
-                        user = file_.user,
-                        group = file_.group,
-                        permissions = file_.file_permissions,
-                        access_time = access_time,
-                        path_type = file_.path_type,
-                        link_path = file_.link_path
-                    )
                     retrievelist.append(path_details)
             except CatalogError as e:
                 # In the event of a failure we rollback all the added locations 
@@ -743,6 +723,55 @@ class CatalogConsumer(RMQC):
 
         # stop db transistions and commit
         self.catalog.end_session()
+    
+
+    def create_objectstore_location(self, tape_location: Location, 
+                                    tenancy: str) -> PathDetails:
+        # Need to query catalog for file and transaction info to 
+        # create the same object_store location that existed before
+        # archive. 
+        file_ = self.catalog.get_location_file(tape_location)
+        
+        # Check if objectstore location already exists and skip if so
+        if self.catalog.get_location(file_, Storage.OBJECT_STORAGE):
+            return
+
+        transaction = self.catalog.get_location_transaction(
+            tape_location
+        )
+        access_time = tape_location.access_time.timestamp()
+        # Create the object store location with the old bucket name
+        objstr_location = self.catalog.create_location(
+            file_=file_,
+            storage_type=Storage.OBJECT_STORAGE,
+            url_scheme="http",
+            url_netloc=tenancy,
+            root=f"nlds.{transaction.transaction_id}",
+            path=file_.original_path, 
+            access_time = tape_location.access_time
+        )
+        # Also need to make a path_details object for each of the 
+        # files within the same aggregation and add it to the 
+        # retrieve list.
+        tape_object_name = f"nlds.{tape_location.root}:{tape_location.path}"
+        objstr_object_name = (
+            f"nlds.{transaction.transaction_id}:{tape_location.path}"
+        )
+        path_details = PathDetails(
+            original_path = file_.original_path,
+            object_name = objstr_object_name,
+            tape_url = tape_location.url_netloc,
+            tape_path = tape_object_name,
+            tenancy = tenancy,
+            size = file_.size,
+            user = file_.user,
+            group = file_.group,
+            permissions = file_.file_permissions,
+            access_time = access_time,
+            path_type = file_.path_type,
+            link_path = file_.link_path
+        )
+        return path_details
 
 
     def aggregate_files(
