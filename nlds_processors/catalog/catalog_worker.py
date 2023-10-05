@@ -635,10 +635,6 @@ class CatalogConsumer(RMQC):
             # TODO: We need a way to mark a file as being a problem
             checkpoint = self.catalog.session.begin_nested()
             try:
-                # Create a fake file class with just an id so we can pass it to 
-                # the create_location method
-                class FakeFile:
-                    id: int
                 retrievelist = []
                 # Add the new objectstore location to the catalog now, 
                 # to be removed in the event of an s3 get failure. 
