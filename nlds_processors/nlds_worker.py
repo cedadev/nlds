@@ -239,7 +239,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
     def _process_rk_catalog_archive_next_complete(self, rk_parts: List, 
                                                   body_json: Dict) -> None:
         self.log(f"Next archivable holding aggregated, sending aggregations "
-                 f"for archive", self.RK_LOG_INFO)
+                 f"for archive-write", self.RK_LOG_INFO)
         
         # Do initial monitoring update. NOTE: unclear whether this is necessary 
         # as the entry point for the next message hasn't been decided yet, so 
@@ -290,8 +290,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
 
     def _process_rk_archive_put_failed(self, body_json: Dict) -> None:
-        self.log(f"Archive-put unsuccessful, sending failed files back to "
-                 f"catalog for tape-location deletion", self.RK_LOG_INFO)
+        self.log(f"Archive-put unsuccessful, sending back to catalog to mark "
+                 "aggregation as failed.", self.RK_LOG_INFO)
 
         queue = f"{self.RK_CATALOG_ARCHIVE_DEL}"
         new_routing_key = ".".join([self.RK_ROOT, 

@@ -588,10 +588,13 @@ class Catalog(DBMixin):
         return None
 
 
-    def create_aggregation(self, 
-                           tarname: str, 
-                           checksum: str = None, 
-                           algorithm: str = None) -> None:
+    def create_aggregation(
+            self, 
+            tarname: str, 
+            checksum: str = None, 
+            algorithm: str = None,
+            failed_fl: bool = False,
+        ) -> Aggregation:
         """Create an aggregation of files to write to tape as a tar file"""
         assert self.session is not None
         try:
@@ -599,6 +602,7 @@ class Catalog(DBMixin):
                 tarname=tarname,
                 checksum=checksum,
                 algorithm=algorithm,
+                failed_fl=failed_fl,
             )
             self.session.add(aggregation)
             self.session.flush()           # flush to generate aggregation.id
@@ -640,6 +644,24 @@ class Catalog(DBMixin):
                 f"tarname:{tarname}."
             )
         return aggregation
+    
+
+    def fail_aggregation(
+            self,
+            aggregation: Aggregation,
+        ) -> Aggregation:
+        """Mark an aggregation as failed, as the final step of a failed 
+        archive-put. """
+        assert self.session is not None
+        try:
+            aggregation.failed_fl = True
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Aggregation with id:{aggregation.id} and "
+                f"tarname:{aggregation.tarname} could not be marked as failed."
+            )
+        return aggregation
+
 
     def get_aggregation(self, aggregation_id: int) -> Aggregation:
         """Simple function for getting of Aggregation from aggregation_id."""

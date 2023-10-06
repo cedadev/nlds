@@ -961,9 +961,12 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session()
 
 
-    def _catalog_archive_update(self, body: Dict) -> None:
+    def _catalog_archive_update(self, body: Dict, rollback_fl: bool = False) -> None:
         """Update the aggregation record following successful archive write to 
-        fill in the missing checksum information."""
+        fill in the missing checksum information. Alternative mode is rollback, 
+        to be used on CATALOG_ARCHIVE_ROLLBACK, which simply marks the 
+        aggregation as failed upon a failed write attempt.
+        """
         # Parse the message body for required variables
         message_vars = self._parse_required_vars(body)
         if message_vars is None:
@@ -1011,8 +1014,8 @@ class CatalogConsumer(RMQC):
             if aggregation_id is not None:
                 aggregation = self.catalog.get_aggregation()
             elif holding_id is not None:
-                # get first file in list, that is all we should need, and turn it 
-                # into a PathDetails object
+                # get first file in list (that is all we should need) and turn 
+                # it into a PathDetails object
                 f = filelist[0] 
                 file_details = PathDetails.from_dict(f)
                 # Using that and the holding_id, we can get the 
@@ -1023,13 +1026,15 @@ class CatalogConsumer(RMQC):
                 )
                 file_ = files[0]
                 aggregation = self.catalog.get_aggregation_by_file(file_)
-            
-            self.catalog.update_aggregation(
-                aggregation, 
-                checksum=checksum, 
-                algorithm="ADLER32", 
-                tarname=new_tarname,
-            )
+            if rollback_fl:
+                self.catalog.fail_aggregation(aggregation)
+            else:
+                self.catalog.update_aggregation(
+                    aggregation, 
+                    checksum=checksum, 
+                    algorithm="ADLER32", 
+                    tarname=new_tarname,
+                )
         except CatalogError as e:
             self.log(f"Error encountered during _catalog_archive_update(): {e}", 
                      self.RK_LOG_ERROR)
@@ -1160,16 +1165,15 @@ class CatalogConsumer(RMQC):
         # get the holding from the database
         if holding_label is None and holding_id is None and tag is None:
             self.log("No method for identifying a holding or transaction "
-                     "provided, will continue without.",
-                     self.RK_LOG_WARNING)
+                     "provided, will continue without.", self.RK_LOG_WARNING)
 
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
                 # get the files first
                 files = self.catalog.get_files(
-                    user, group, holding_label, holding_id, 
-                    transaction_id, file_details.original_path, tag
+                    user, group, holding_label, holding_id, transaction_id, 
+                    file_details.original_path, tag
                 )
                 if len(files) == 0:
                     raise CatalogError(
@@ -1178,11 +1182,9 @@ class CatalogConsumer(RMQC):
                     )
                 # now get the location for the storage type requested so we can 
                 # delete it
-                for file in files:
+                for file_ in files:
                     try:
-                        self.catalog.delete_location(
-                            file, location_type
-                        )
+                        self.catalog.delete_location(file_, location_type)
                     except CatalogError as e:
                         if file_details.retries.count > self.max_retries:
                             self.failedlist.append(file_details)
@@ -1677,6 +1679,29 @@ class CatalogConsumer(RMQC):
             self.log(f"Message did not contain appropriate API method", 
                      self.RK_LOG_ERROR)
             return
+        
+        # If received system test message, reply to it and end the callback
+        # TODO: Convert these strings to publisher constants. 
+        # TODO: Can probably also refactor this (and other similar snippets) 
+        # into a single function and maybe put it before the callback in the 
+        # wrapper
+        if api_method == "system_stat":
+            if (properties.correlation_id is not None and 
+                    properties.correlation_id != self.channel.consumer_tags[0]):
+                # If not message not for this consumer then nack it
+                return False
+            if (body["details"]["ignore_message"]) == True:
+                # End the callback without replying to simulate an unresponsive 
+                # consumer
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
 
         # check whether this is a GET or a PUT
         if (api_method == self.RK_GETLIST) or (api_method == self.RK_GET):
@@ -1695,26 +1720,6 @@ class CatalogConsumer(RMQC):
                 # catalog.
                 self._catalog_location_del(body, rk_parts[0], 
                                            location_type=Storage.OBJECT_STORAGE)
-                
-                
-        
-            
-        # If received system test message, reply to it (this is for system status check)
-        elif api_method == "system_stat":
-            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
-                return False
-            if (body["details"]["ignore_message"]) == True:
-                return
-            else:
-                self.publish_message(
-                    properties.reply_to,
-                    msg_dict=body,
-                    exchange={'name': ''},
-                    correlation_id=properties.correlation_id
-                )
-            return
-            
-        
 
         elif (api_method == self.RK_PUTLIST) or (api_method == self.RK_PUT):
             # split the routing key
@@ -1748,10 +1753,11 @@ class CatalogConsumer(RMQC):
                          self.RK_LOG_DEBUG)
                 self._catalog_archive_put(body, rk_parts[0])    
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_UPDATE):
-                self._catalog_archive_update(body, rk_parts[0])
+                # NOTE: this doesn't need an rk_origin as it relies on TLR to 
+                # handle retries. 
+                self._catalog_archive_update(body)
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_DEL):
-                self._catalog_location_del(body, rk_parts[0], 
-                                           location_type=Storage.TAPE)
+                self._catalog_archive_update(body, rollback_fl=True)
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method
