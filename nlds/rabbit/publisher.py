@@ -205,7 +205,14 @@ class RabbitMQPublisher():
         if setup_logging_fl:
             self.setup_logging()
     
-    @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
+    @retry(
+        RabbitRetryError, 
+        tries=-1, 
+        delay=1, 
+        backoff=2, 
+        max_delay=60, 
+        logger=logger
+    )
     def get_connection(self):
         try:
             if (not self.channel or not self.channel.is_open):
@@ -238,7 +245,7 @@ class RabbitMQPublisher():
         except (AMQPConnectionError, ChannelWrongStateError) as e:
             logger.error("AMQPConnectionError encountered on attempting to "
                          "establish a connection. Retrying...")
-            logger.debug(f"{e}")
+            logger.debug(f"{type(e).__name__}: {e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
