@@ -954,7 +954,7 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.completelist, rk_complete, body, 
-                               state=State.CATALOG_BACKUP)
+                               state=State.CATALOG_ARCHIVE_AGGREGATING)
         
         # stop db transactions and commit
         self.catalog.save()
@@ -992,9 +992,15 @@ class CatalogConsumer(RMQC):
         try: 
             checksum = body[self.MSG_DATA][self.MSG_CHECKSUM]
         except KeyError:
-            self.log("Checksum not in message, exiting callback.", 
-                     self.RK_LOG_ERROR)
-            return
+            if not rollback_fl:
+                # Checksum required if we're finishing the put workflow
+                self.log("Checksum not in message, exiting callback.", 
+                        self.RK_LOG_ERROR)
+                return
+            else:
+                # Checksum not required if we're just failing the agg
+                self.log("Checksum not in message, continuing without.", 
+                         self.RK_LOG_INFO)
         
         if holding_id is None and aggregation_id is None:
             self.log("No method for identifying an aggregation provided, forced"
@@ -1012,7 +1018,7 @@ class CatalogConsumer(RMQC):
 
         try:
             if aggregation_id is not None:
-                aggregation = self.catalog.get_aggregation()
+                aggregation = self.catalog.get_aggregation(aggregation_id)
             elif holding_id is not None:
                 # get first file in list (that is all we should need) and turn 
                 # it into a PathDetails object
