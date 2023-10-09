@@ -284,7 +284,14 @@ class RabbitMQPublisher():
             delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
         )
 
-    @retry(RabbitRetryError, tries=2, delay=0, backoff=1, logger=logger)
+    @retry(
+        RabbitRetryError, 
+        tries=-1, 
+        delay=1, 
+        backoff=2, 
+        max_delay=60, 
+        logger=logger
+    )
     def publish_message(self, 
                         routing_key: str, 
                         msg_dict: Dict, 
