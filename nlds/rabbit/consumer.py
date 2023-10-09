@@ -329,7 +329,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             current_state = State(body_json[self.MSG_DETAILS][self.MSG_STATE])
         except (ValueError, KeyError) as e:
             self.log("Couldn't retrieve current state from message, continuing "
-                     "with default state.", self.RK_LOG_ERROR)
+                     "with default state.", self.RK_LOG_WARNING)
             self.log(f"Exception raised during state retrieval: {e}", 
                      self.RK_LOG_DEBUG)
             current_state = self.DEFAULT_STATE
