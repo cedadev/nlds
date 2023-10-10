@@ -1,7 +1,7 @@
 import json
 import os
 import pathlib as pth
-from typing import List, NamedTuple, Dict
+from typing import List, NamedTuple, Dict, Any
 
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
@@ -23,14 +23,16 @@ class IndexerConsumer(StattingConsumer):
     _MAX_RETRIES = "max_retries"
     _CHECK_PERMISSIONS = "check_permissions_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
+    _MAX_FILESIZE = "max_filesize"
     
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
-        _MESSAGE_MAX_SIZE: 1000,    # in kB
+        _MESSAGE_MAX_SIZE: 1000 * 1000,    # in kB
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
+        _MAX_FILESIZE: (500*1000*1000),  # in kB, default=500GB 
         RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
     }
 
@@ -54,6 +56,7 @@ class IndexerConsumer(StattingConsumer):
             self._CHECK_PERMISSIONS
         )
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
+        self.max_filesize = self.load_config_value(self._MAX_FILESIZE)
         self.retry_delays = self.load_config_value(self.RETRY_DELAYS)
 
         self.reset()
@@ -128,7 +131,7 @@ class IndexerConsumer(StattingConsumer):
                 self.log(f"Scan finished.", self.RK_LOG_INFO)
 
     def split(self, filelist: List[PathDetails], rk_origin: str, 
-              body_json: Dict[str, str]) -> None:
+              body_json: Dict[str, Any]) -> None:
         """ Split the given filelist into batches of some configurable max 
         length and resubmit each to exchange for indexing proper.
 
@@ -156,7 +159,7 @@ class IndexerConsumer(StattingConsumer):
             )
         
     def index(self, raw_filelist: List[NamedTuple], rk_origin: str, 
-              body_json: Dict[str, str]):
+              body_json: Dict[str, Any]):
         """Indexes a list of PathDetails. 
         
         Each IndexItem is a named tuple consisting of an item (a file or 
@@ -255,15 +258,18 @@ class IndexerConsumer(StattingConsumer):
                             # (in kilobytes)
                             filesize = None
                             if self.check_filesize_fl:
-                                filesize = stat_result.st_size / 1000
-
+                                filesize = self.get_filesize(
+                                    walk_path_details, rk_retry, body_json
+                                )
+                                if not filesize:
+                                    continue
+                                
                             # Pass the size through to ensure maximum size is 
                             # used as the partitioning metric (if checking file
                             # size)
                             self.append_and_send(walk_path_details, rk_complete, 
                                                  body_json, list_type="indexed", 
                                                  filesize=filesize)
-
                         else:
                             # If file is not valid, not accessible with uid and 
                             # gid if checking permissions, and not existing 
@@ -286,7 +292,11 @@ class IndexerConsumer(StattingConsumer):
                 filesize = None
                 if self.check_filesize_fl:
                     path_details.stat()
-                    filesize = path_details.size
+                    filesize = self.get_filesize(
+                        path_details, rk_retry, body_json
+                    )
+                    if not filesize:
+                        continue
 
                 # Pass the size through to ensure maximum size is 
                 # used as the partitioning metric
@@ -323,6 +333,22 @@ class IndexerConsumer(StattingConsumer):
             access, 
             self.check_permissions_fl
         )
+    
+    def get_filesize(self, path_details: PathDetails, rk_retry: str, 
+                     body_json: Dict[str, Any]) -> bool:
+        filesize = path_details.size
+        if filesize >= self.max_filesize:
+            reason = (
+                f"File too large for the NLDS tape system ({filesize / 1000}MB)."
+                f" The max allowed file size is {self.max_filesize / 1000}MB."
+            )
+            self.log(reason, self.RK_LOG_DEBUG)
+            path_details.retries.increment(reason=reason)
+            self.append_and_send(
+                path_details, rk_retry, body_json, list_type="retry"
+            )
+            return None
+        return filesize
 
 
 def main():
