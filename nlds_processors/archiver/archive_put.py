@@ -6,7 +6,6 @@ from hashlib import shake_256
 
 import minio
 from minio.error import S3Error
-from retry import retry
 from urllib3.exceptions import HTTPError
 from XRootD import client
 from XRootD.client.flags import (OpenFlags, MkDirFlags, QueryCode)
@@ -59,6 +58,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         self.log(f"Tape url:{tape_url} split into tape server:{tape_server} "
                  f"and tape base directory:{tape_base_dir}.", self.RK_LOG_INFO)
 
+        # NOTE: For the purposes of tape reading and writing, the holding slug 
+        # has 'nlds.' prepended
         holding_slug = self.get_holding_slug(body_json)
 
         # Create minio client
@@ -314,7 +315,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             raise ArchiveError(f"Could not make holding slug, original error: "
                                f"{e}")
 
-        return f"{holding_id}.{user}.{group}"
+        return f"nlds.{holding_id}.{user}.{group}"
 
     
 def main():
