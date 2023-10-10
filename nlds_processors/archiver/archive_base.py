@@ -114,10 +114,10 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
 
     def callback(self, ch, method, properties, body, connection):
-        """Callback for the base archiver consumer. Takes the message in body 
-        runs some standard objectstore verification, taken from the 
-        BaseTransferConsumer, as well as some more tape specific config 
-        scraping, then runs the appropriate  transfer function. 
+        """Callback for the base archiver consumer. Takes the message contents 
+        in body and runs some standard objectstore verification (reused from the 
+        BaseTransferConsumer) as well as some more tape-specific config 
+        scraping, then runs the appropriate transfer function. 
         """
         self.reset()
         
@@ -253,7 +253,10 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
     def verify_tape_server(self, fs_client: FileSystem, tape_server: str,
                            tape_base_dir: str):
-        """Make several simple checks """    
+        """Make several simple checks with xrootd to ensure the tape server and 
+        tape base path, derived form a given tape url, are valid and the xrootd 
+        endpoint they describe is accessible on the current system.
+        """    
         # Attempt to ping the tape server to check connection is workable.
         status, _ = fs_client.ping()
         if status.status != 0:
