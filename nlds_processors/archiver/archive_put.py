@@ -56,6 +56,9 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Can call this with impunity as the url has been verified previously
         tape_server, tape_base_dir = self.split_tape_url(tape_url)
+        self.log(f"Tape url:{tape_url} split into tape server:{tape_server} "
+                 f"and tape base directory:{tape_base_dir}.", self.RK_LOG_INFO)
+
         holding_slug = self.get_holding_slug(body_json)
 
         # Create minio client
@@ -68,15 +71,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Create the FileSystem client at this point to verify the tape_base_dir 
         fs_client = client.FileSystem(f"root://{tape_server}")
-        # Attempt to create it, should succeed if everything is working properly
-        # but otherwise will be passed for message-level retry. 
-        status, _ = fs_client.mkdir(tape_base_dir, MkDirFlags.MAKEPATH)
-        if status.status != 0:
-            self.log(f"Failed status message: {status.message}", 
-                     self.RK_LOG_ERROR)
-            raise CallbackError(f"Base dir {tape_base_dir} derived from "
-                                f"tape_url ({tape_url}) could not be created or"
-                                f" verified.")
+        self.verify_tape_server(fs_client, tape_server, tape_base_dir)
 
         # Generate a name for the tarfile by hashing the combined filelist. 
         # Length of the hash will be 16. 

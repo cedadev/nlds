@@ -13,14 +13,19 @@ from abc import ABC, abstractmethod
 import json
 from typing import Tuple, List, Dict, TypeVar
 from zlib import adler32
+from enum import Enum
 
 try:
-    from pyxrootd.client import File
+    from XRootD.client import File, FileSystem
+    from XRootD.client.flags import StatInfoFlags
 except ModuleNotFoundError:
     File = TypeVar('File')
+    FileSystem = TypeVar('FileSystem')
+    StatInfoFlags = Enum()
 
 from nlds_processors.transferers.base_transfer import (BaseTransferConsumer, 
                                                        TransferError)
+from nlds.errors import CallbackError
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
 
@@ -121,14 +126,12 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         body = body.decode("utf-8")
         body_dict = json.loads(body)
         
-        
         # This checks if the message was for a system status check
         try:
             api_method = body_dict[self.MSG_DETAILS][self.MSG_API_ACTION]
         except KeyError:
             self.log(f"Message did not contain api_method", self.RK_LOG_INFO)
             api_method = None
-        
         
         # If received system test message, reply to it (this is for system status check)
         if api_method == "system_stat":
@@ -144,7 +147,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                     correlation_id=properties.correlation_id
                 )
             return
-        
 
         self.log(f"Received {json.dumps(body_dict, indent=4)} from "
                  f"{self.queues[0].name} ({method.routing_key})", 
@@ -247,6 +249,31 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         # prepend a slash onto the base_dir so it can directly be used to make 
         # directories with the pyxrootd client
         return server, f"/{base_dir}"
+    
+
+    def verify_tape_server(self, fs_client: FileSystem, tape_server: str,
+                           tape_base_dir: str):
+        """Make several simple checks """    
+        # Attempt to ping the tape server to check connection is workable.
+        status, _ = fs_client.ping()
+        if status.status != 0:
+            self.log(f"Failed status message: {status.message}", 
+                     self.RK_LOG_ERROR)
+            raise CallbackError(f"Could not ping cta server at {tape_server}.")
+
+        # Stat the base directory and check it's a directory.
+        status, resp = fs_client.stat(tape_base_dir)
+        if status.status != 0:
+            self.log(f"Failed status message: {status.message}", 
+                     self.RK_LOG_ERROR)
+            raise CallbackError(f"Base dir {tape_base_dir} could not be statted")
+        # Check whether the flag indicates it's a directory
+        elif not bool(resp.flags & StatInfoFlags.IS_DIR):
+            self.log(f"Failed status message: {status.message}", 
+                     self.RK_LOG_ERROR)
+            self.log(f"Full status object: {status}", self.RK_LOG_DEBUG)
+            raise CallbackError(f"Stat result for base dir {tape_base_dir} "
+                                f"indicates it is not a directory.")
     
 
     @abstractmethod

@@ -102,15 +102,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
         # Create the FileSystem client at this point to verify the tape_base_dir 
         fs_client = client.FileSystem(f"root://{tape_server}")
-        # Attempt to list the base-directory to ensure it exists, should succeed 
-        # if everything is working properly but otherwise will be passed for 
-        # message-level retry. 
-        status, _ = fs_client.dirlist(tape_base_dir, DirListFlags.STAT)
-        if status.status != 0:
-            self.log(f"Full status object: {status}", self.RK_LOG_DEBUG)
-            raise CallbackError(f"Base dir derived from tape_url "
-                                f"({tape_base_dir}) does not seem to exist. "
-                                f"Status message: {status.message}")
+        # Attempt to verify that the base-directory exists
+        self.verify_tape_server(fs_client, tape_server, tape_base_dir) 
         
         # Ensure minimum part_size is met for put_object to function
         chunk_size = max(5*1024*1024, self.chunk_size)
