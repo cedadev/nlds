@@ -175,7 +175,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                         )
 
                         tar_info = tarfile.TarInfo(name=object_name)
-                        tar_info.size = path_details.size
+                        tar_info.size = int(path_details.size)
                         # TODO: add more file data into the tar_info?
 
                         # Attempt to stream the object directly into the File 
