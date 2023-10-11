@@ -119,12 +119,10 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 # Check the bucket and that the object is in the bucket and 
                 # matches the metadata stored.
                 assert s3_client.bucket_exists(check_bucket)
-                objects = s3_client.list_objects(check_bucket, 
-                                                 prefix=check_object)
-                assert len(objects) == 1
-                assert check_object == objects[0].object_name
-                assert path_details.size == objects[0].size
-            except AssertionError as e:
+                obj_stat_result = s3_client.stat_object(check_bucket, check_object)
+                assert check_object == obj_stat_result.object_name
+                assert path_details.size == obj_stat_result.size
+            except (AssertionError, S3Error, HTTPError) as e:
                 raise CallbackError(
                     f"Could not verify that bucket {check_bucket} contained "
                     f"object {check_object} before writing to tape."
