@@ -128,22 +128,26 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     f"object {check_object} before writing to tape."
                 )
             
-        # After verifying the filelist integrity we can make the path + tar file
-        holding_tape_path = (f"root://{tape_server}/{tape_base_dir}/"
-                             f"{holding_slug}")
-        full_tape_path = (f"{holding_tape_path}/{tar_filename}")
+        # After verifying the filelist integrity we can actually write to tape. 
+        # Path to the tar file formatted for the standard xrd client
+        client_full_tapepath = (f"root://{tape_server}/{fs_holding_tapepath}/"
+                                f"{tar_filename}")
+        # The paths to the tar file and holding folder formatted for the xrd 
+        # FileSystem client
+        fs_holding_tapepath = f"{tape_base_dir}/{holding_slug}"
+        fs_full_tapepath = f"{fs_holding_tapepath}/{tar_filename}"
 
         # Make holding folder and retry if it can't be created. 
-        status, _ = fs_client.mkdir(holding_tape_path, MkDirFlags.MAKEPATH)
+        status, _ = fs_client.mkdir(fs_holding_tapepath, MkDirFlags.MAKEPATH)
         if status.status != 0:
             # If bucket directory couldn't be created then fail for retrying
             raise CallbackError(f"Couldn't create or find holding directory "
-                                f"({holding_tape_path}).")
+                                f"({fs_holding_tapepath}).")
         
         with client.File() as f:
             # Open the file as NEW, to avoid having to prepare it
-            status, _ = f.open(full_tape_path, (OpenFlags.NEW | 
-                                                OpenFlags.MAKEPATH))
+            flags = (OpenFlags.NEW | OpenFlags.MAKEPATH)
+            status, _ = f.open(client_full_tapepath, flags)
             if status.status != 0:
                 raise CallbackError("Failed to open file for writing")
             
@@ -211,7 +215,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     f"Exception occurred during write, need to delete file from "
                     f"disk cache before we send for retry. Original exception: "
                     f"{e}", self.RK_LOG_ERROR)
-                self.remove_file(full_tape_path, fs_client)
+                self.remove_file(fs_full_tapepath, fs_client)
                 raise TapeWriteError(f"Failure occurred during tape-write ({e})")
             
         # Write has now finished so, unless something is wrong with the 
@@ -225,8 +229,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         if self.query_checksum_fl:
             status, result = fs_client.query(
                 QueryCode.CHECKSUM, 
-                f"{tape_base_dir}/{holding_slug}/{tar_filename}"
-                f"?cks.type=adler32" # Specify the type of checksum 
+                f"{fs_full_tapepath}?cks.type=adler32" # Specify the type of checksum 
             )
             if status.status != 0:
                 self.log(f"Could not query xrootd's checksum for tar file "
@@ -251,7 +254,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                         f"{reason}. Deleting file from disk-cache before it "
                         "gets written to tape.", self.RK_LOG_ERROR
                     )
-                    self.remove_file(full_tape_path, fs_client)
+                    self.remove_file(fs_full_tapepath, fs_client)
                     raise TapeWriteError(f"Failure occurred during tape-write "
                                          f"({e}).")
 
@@ -280,7 +283,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             # puts
             self.send_pathlist(
                 self.failedlist, rk_failed, body_json, 
-                state=State.CATALOG_ARCHIVE_ROLLBACK
+                state=State.CATALOG_ARCHIVE_ROLLBACK,
             )
 
 
