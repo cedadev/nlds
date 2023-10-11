@@ -275,7 +275,11 @@ class MonitorConsumer(RMQC):
             self.log("This sub_record is now in its final state for this "
                      "workflow, now checking if all others have reached a "
                      "final state.", self.RK_LOG_INFO)
-            self.monitor.check_completion(trec)
+            try:
+                self.monitor.check_completion(trec)
+            except MonitorError as e:
+                self.log(e.message, self.RK_LOG_ERROR)
+                return
 
         # Commit all transactions when we're sure everything is as it should be.
         self.monitor.save() 

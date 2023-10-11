@@ -250,9 +250,10 @@ class Monitor(DBMixin):
         # Upgrade state to new_state, but throw exception if regressing state 
         # (staying the same is fine)
         if (new_state.value < sub_record.state.value):
-            raise ValueError(f"Monitoring state cannot go backwards or skip "
-                             f"steps. Attempted {sub_record.state}->{new_state}"
-                             )
+            raise MonitorError(
+                f"Monitoring state cannot go backwards or skip steps. Attempted"
+                f" {sub_record.state}->{new_state}"
+            )
         sub_record.state = new_state
         self.session.flush()
 
