@@ -132,13 +132,13 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 )
             
         # After verifying the filelist integrity we can actually write to tape. 
-        # Path to the tar file formatted for the standard xrd client
-        client_full_tapepath = (f"root://{tape_server}/{fs_holding_tapepath}/"
-                                f"{tar_filename}")
         # The paths to the tar file and holding folder formatted for the xrd 
         # FileSystem client
         fs_holding_tapepath = f"{tape_base_dir}/{holding_slug}"
         fs_full_tapepath = f"{fs_holding_tapepath}/{tar_filename}"
+        # Path to the tar file formatted for the standard xrd client
+        client_full_tapepath = (f"root://{tape_server}/{fs_holding_tapepath}/"
+                                f"{tar_filename}")
 
         # Make holding folder and retry if it can't be created. 
         status, _ = fs_client.mkdir(fs_holding_tapepath, MkDirFlags.MAKEPATH)
