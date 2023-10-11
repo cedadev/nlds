@@ -103,7 +103,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
         self.tape_pool = self.load_config_value(self._TAPE_POOL)
         self.tape_url = self.load_config_value(self._TAPE_URL)
-        self.chunk_size = self.load_config_value(self._CHUNK_SIZE)
+        self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
         self.query_checksum_fl = self.load_config_value(self._QUERY_CHECKSUM)
         
         # Verify the tape_url is valid, if it exists
