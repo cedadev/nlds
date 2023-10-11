@@ -49,8 +49,11 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             # Mark the message as 'processed' so it can be failed more safely.
             self.log("Max transaction-level retries reached, failing filelist", 
                      self.RK_LOG_ERROR)
-            self.send_pathlist(filelist, rk_failed, body_json, 
-                               state=State.CATALOG_ARCHIVE_ROLLBACK)
+            self.send_pathlist(
+                filelist, rk_failed, body_json, 
+                state=State.CATALOG_ARCHIVE_ROLLBACK, 
+                save_reasons_fl=True,
+            )
             return
 
         # Can call this with impunity as the url has been verified previously

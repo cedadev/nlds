@@ -40,13 +40,17 @@ class PathType(Enum):
 class Retries(BaseModel):
     count: Optional[int] = 0
     reasons: Optional[List[str]] = []
+    saved_reasons: Optional[List[str]] = []
 
     def increment(self, reason: str = None) -> None:
         self.count += 1 
         if reason:
             self.reasons.append(reason)
 
-    def reset(self) -> None:
+    def reset(self, save_reasons_fl=False) -> None:
+        # Load the last reasons into old reasons for later access if needed
+        if len(self.reasons) > 0:
+            self.saved_reasons.append(self.reasons[-1])
         self.count = 0
         self.reasons = []
 
@@ -54,7 +58,8 @@ class Retries(BaseModel):
         return { 
             RMQP.MSG_RETRIES: {
                 RMQP.MSG_RETRIES_COUNT: self.count,
-                RMQP.MSG_RETRIES_REASONS: self.reasons
+                RMQP.MSG_RETRIES_REASONS: self.reasons,
+                RMQP.MSG_RETRIES_SAVED_REASONS: self.saved_reasons,
             }
         }
     
@@ -65,6 +70,7 @@ class Retries(BaseModel):
         return cls(
             count=dictionary[RMQP.MSG_RETRIES][RMQP.MSG_RETRIES_COUNT],
             reasons=dictionary[RMQP.MSG_RETRIES][RMQP.MSG_RETRIES_REASONS],
+            saved_reasons=dictionary[RMQP.MSG_RETRIES][RMQP.MSG_RETRIES_SAVED_REASONS]
         )
 
 RetriesType = TypeVar('RetriesType', bound=Retries)

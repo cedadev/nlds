@@ -297,13 +297,14 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
                        body_json: Dict[str, Any], state: State = None,
                        mode: FilelistType = FilelistType.processed, 
-                       warning: List[str] = None
+                       warning: List[str] = None, save_reasons_fl=False,
                        ) -> None:
         """Convenience function which sends the given list of PathDetails 
         objects to the exchange with the given routing key and message body. 
         Mode specifies what to put into the log message, as well as determining 
         whether the list should be retry-reset and whether the message should be 
-        delayed.
+        delayed. Optionally, when resetting the retries the retry-reasons can be 
+        saved for later perusal by setting the save_reasons_fl.
 
         Additionally forwards transaction state info on to the monitor. As part 
         of this it keeps track of the number of messages sent and reassigns 
@@ -340,10 +341,10 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             # Reset the retries (both transaction-level and file-level) upon 
             # successful completion of processing. 
             trans_retries = Retries.from_dict(body_json)
-            trans_retries.reset()
+            trans_retries.reset(save_reasons_fl=save_reasons_fl)
             body_json.update(trans_retries.to_dict())
             for path_details in pathlist:
-                path_details.retries.reset()
+                path_details.retries.reset(save_reasons_fl=save_reasons_fl)
             if state is None: 
                 state = self.DEFAULT_STATE
         elif mode == FilelistType.retry:

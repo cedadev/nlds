@@ -89,7 +89,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         if retries is not None and retries.count > self.max_retries:
             # Mark the message as 'processed' so it can be failed more safely.
             self.send_pathlist(filelist, rk_failed, body_json, 
-                               state=State.CATALOG_ARCHIVE_ROLLBACK)
+                               state=State.CATALOG_ARCHIVE_ROLLBACK,
+                               save_reasons_fl=True,)
             return
 
         # Create minio client
@@ -282,6 +283,9 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 # Handle whole-tar error, i.e. fail whole list 
                 self.log(f"Tar-level error raised: {e}, failing whole tar and "
                          "continuing to next.", self.RK_LOG_ERROR)
+                # Give each a failure reason for creating FailedFiles
+                for pd in tar_filelist:
+                    pd.retries.increment(reason=str(e))
                 self.failedlist.extend(tar_filelist)
             except XRootDError as e:
                 # Handle xrootd error, where file failed to be read. Retry the 

@@ -149,6 +149,7 @@ class RabbitMQPublisher():
     MSG_RETRIES = "retries"
     MSG_RETRIES_COUNT = "count"
     MSG_RETRIES_REASONS = "reasons"
+    MSG_RETRIES_SAVED_REASONS = "saved_reasons"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"

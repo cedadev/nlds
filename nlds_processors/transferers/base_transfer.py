@@ -147,12 +147,14 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                 # failed more safely.
                 mode = FilelistType.processed
                 state = State.CATALOG_ROLLBACK
+                save_reasons_fl = True
             else:
                 # Otherwise fail it regularly
                 mode = FilelistType.failed
                 state = None
+                save_reasons_fl = False
             self.send_pathlist(filelist, rk_failed, body_json, mode=mode, 
-                               state=state)
+                               state=state, save_reasons_fl=save_reasons_fl)
             return
 
         # Set uid and gid from message contents if configured to check 

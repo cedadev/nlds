@@ -236,24 +236,39 @@ class MonitorConsumer(RMQC):
         except MonitorError as e:
             # If the state update is invalid then rollback session and exit 
             # callback
-            self.log(e, self.RK_LOG_ERROR)
+            self.log(e.message, self.RK_LOG_ERROR)
             # session.rollback() # rollback needed?
             return
 
         # Create failed_files if necessary
-        if state == State.FAILED:
-            try:
-                # Passing reason as None to create_failed_file will default to 
-                # to the last reason in the PathDetails object retries section. 
-                reason = None
+        if state in State.get_failed_states():
+            self.log("Creating FailedFiles records as transaction appears to "
+                     "have failed", self.RK_LOG_INFO)
+            # Make failed files reasons for the immediate retry reason and any 
+            # saved reasons. 
+            try: 
                 for pd in filelist:
-                    # Check which was the final reason for failure and store 
+                    # First make FailedFiles for each of the saved reasons. 
+                    # These are only made in the event of a failure, and so 
+                    # should definitely be recorded as _a_ reason for failure.
+                    for reason in trans_retries.saved_reasons:
+                        self.monitor.create_failed_file(srec, pd, reason=reason)
+                    for reason in pd.retries.saved_reasons:
+                        self.monitor.create_failed_file(srec, pd, reason=reason)
+
+                    # Second check the immediate retrys for any reasons
+                    reason = None
+                    # Check which was the final reason for failure and pass 
                     # that as the failure reason for the FailedFile.
                     if len(trans_retries.reasons) > len(pd.retries.reasons):
                         reason = trans_retries.reasons[-1]
+                    elif len(pd.retries.reasons) > 0:
+                        reason = pd.retries.reasons[-1]
+                    else: 
+                        continue
                     self.monitor.create_failed_file(srec, pd, reason=reason)
             except MonitorError as e:
-                self.log(e, self.RK_LOG_ERROR)
+                self.log(e.message, self.RK_LOG_ERROR)
         
         # If reached the end of a workflow then check for completeness                                          
         if state in State.get_final_states():
