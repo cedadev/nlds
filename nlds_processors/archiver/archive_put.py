@@ -226,7 +226,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Finally get the checksum out of the file wrapper to pass back to the 
         # catalog 
-        body_json[self.MSG_DETAILS][self.MSG_CHECKSUM] = \
+        body_json[self.MSG_DATA][self.MSG_CHECKSUM] = \
             file_wrapper.checksum
             
         if self.query_checksum_fl:
@@ -251,15 +251,15 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 except AssertionError as e:
                     # If it fails at this point then attempt to delete and start 
                     # again. 
-                    reason = ("XRootD checksum differs from that calculated "
-                              f"block-wise")
+                    reason = (f"XRootD checksum {checksum} differs from that "
+                              f"calculated block-wise {file_wrapper.checksum}.")
                     self.log(
                         f"{reason}. Deleting file from disk-cache before it "
                         "gets written to tape.", self.RK_LOG_ERROR
                     )
                     self.remove_file(fs_full_tapepath, fs_client)
                     raise TapeWriteError(f"Failure occurred during tape-write "
-                                         f"({e}).")
+                                         f"({reason}).")
 
         self.log("Archive complete, passing lists back to worker for re-routing"
                  " and cataloguing.", self.RK_LOG_INFO)
