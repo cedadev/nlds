@@ -65,7 +65,11 @@ class AdlerisingXRDFile():
         # Update the checksum before we actually do the writing
         self.checksum = adler32(b, self.checksum)
         to_write = len(b)
-        self.f.write(b, offset=self.pointer, size=to_write)
+        status, _ = self.f.write(b, offset=self.pointer, size=to_write)
+        if status.status != 0:
+            raise IOError(f"Unable to write to file f {self.f}")
+        # Move the pointer on
+        self.pointer += to_write
         return to_write
     
     def seek(self, whence: int) -> None:
