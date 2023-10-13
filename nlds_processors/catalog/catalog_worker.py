@@ -727,6 +727,7 @@ class CatalogConsumer(RMQC):
                                mode="failed")
 
         # stop db transistions and commit
+        self.catalog.save()
         self.catalog.end_session()
     
 
@@ -1720,7 +1721,7 @@ class CatalogConsumer(RMQC):
                 return 
             if (rk_parts[1] == self.RK_CATALOG_GET):
                 self._catalog_get(body, rk_parts[0])
-            elif (rk_parts[1] == self.RK_CATALOG_DEL):
+            elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_DEL):
                 # If part of a GET transaction but received via the del topic 
                 # then delete the new object storage locations added to the 
                 # catalog.
