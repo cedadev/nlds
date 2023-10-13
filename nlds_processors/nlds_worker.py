@@ -163,8 +163,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.log(f"Sending message to {self.RK_MONITOR} queue", 
                  self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR, 
-                                    rk_parts[2]])
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
         self.publish_and_log_message(new_routing_key, body_json)
 
         # forward to transfer_get
@@ -189,8 +189,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.log(f"Sending message to {self.RK_MONITOR} queue", 
                  self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR, 
-                                    rk_parts[2]])
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
         self.publish_and_log_message(new_routing_key, body_json)
 
         # forward to archive_get
@@ -247,8 +247,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.log(f"Sending message to {self.RK_MONITOR} queue", 
                  self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR, 
-                                    rk_parts[2]])
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
         self.publish_and_log_message(new_routing_key, body_json)
 
         queue = f"{self.RK_ARCHIVE_PUT}"
@@ -284,8 +284,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.log(f"Sending message to {self.RK_MONITOR} queue", 
                  self.RK_LOG_INFO)
         new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR, 
-                                    rk_parts[2]])
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
         self.publish_and_log_message(new_routing_key, body_json)
 
 
