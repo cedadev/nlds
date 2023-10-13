@@ -119,7 +119,7 @@ class RabbitMQPublisher():
     MSG_JOB_LABEL = "job_label"
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
-    MSG_RETRIEVAL_FILELIST = "fl_original"
+    MSG_RETRIEVAL_FILELIST = "retrieval_dict"
     MSG_TRANSACTIONS = "transactions"
     MSG_LOG_TARGET = "log_target"
     MSG_LOG_MESSAGE = "log_message"
@@ -352,8 +352,10 @@ class RabbitMQPublisher():
             # For any Undelivered messages attempt to send again
             logger.error("Message delivery was not confirmed, wasn't delivered "
                          f"properly (rk = {routing_key}). Attempting retry...")
-            logger.debug(f"{e}")
-            raise RabbitRetryError(str(e), ampq_exception=e)
+            logger.debug(f"{type(e).__name__}: {e}")
+            # NOTE: don't reraise in this case, can cause an infinite loop as 
+            # the message will never be sent. 
+            # raise RabbitRetryError(str(e), ampq_exception=e)
 
     def get_retry_delay(self, retries: int):
         """Simple convenience function for getting the delay (in seconds) for an 
