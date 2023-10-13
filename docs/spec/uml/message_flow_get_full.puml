@@ -97,6 +97,22 @@ loop #LightPink for file in //filelist//
         end
     end
 end
+loop #LightPink for file in //archive_list//
+    catalog_get -> catalog_db : get //aggregation// record from catalog
+    catalog_db -> catalog_get 
+    alt #MistyRose catalog configured for full unpack?
+        loop #FFF8F8 for location in //aggregation//
+            catalog_get->catalog_db: add TAPE Location to catalog
+            catalog_get->catalog_get: add //aggregation//: //location// to //retrieval_dict//
+        end
+        ' catalog_get->catalog_get: get the //aggregate_list//
+    else else
+        loop #FFF8F8 for location in //filelist//
+            catalog_get->catalog_db: add TAPE Location to catalog
+            catalog_get->catalog_get: add //aggregation//: //location// to //retrieval_dict//
+        end
+    end
+end
 
 catalog_get -> wex : key=""nlds-api.catalog-get.reroute""
 
@@ -114,30 +130,38 @@ qag -> archive_gets : key=""nlds-api.archive-get.start""
 deactivate qag
 
 activate archive_gets
-loop #LightPink for file in //archive_list//
-    alt #MistyRose the //aggregate_list// exists
-        archive_gets->archive_gets: get the //aggregate_list//
-    else else
-        archive_gets->archive_gets: create the //aggregate_list//
+alt #LightPink //filelist// needs to be prepared
+    loop #MistyRose Pre-get verification - for file in //filelist//
+        archive_gets->archive_gets: Verify filelist contents
+        archive_gets->tape: Ping tape server and check base_dir
+        archive_gets->obj: Verify object integrity
+        archive_gets->archive_gets: Add to //preparelist//, add to //original_filelist_map//
     end
-    archive_gets->archive_gets: add file record to //aggregate_list//
+    archive_gets->tape: Prepare //preparelist//
+    archive_gets->archive_gets: Mark as prepared
+else //filelist// has been prepared
+    archive_gets->tape: Get prepare status
+    alt #MistyRose Prepare has finished
+        archive_gets->archive_gets: Continue to get
+    else Prepare still in progress
+        archive_gets->qag: Requeue filelist
+    end
 end
-
 loop #LightPink for aggregate in //aggregate_list//
     archive_gets -> tape : get aggregate from tape
     tape -> archive_gets
-    alt #MistyRose tape retrieval succeeded
+    alt #MistyRose Tape retrieval succeeded
         loop #FFF8F8 for file in aggregate
-            archive_gets->obj : extract file from aggregate
+            archive_gets->obj : Extract file from aggregate
             obj->archive_gets
-            alt #FFFDFD extract succeeded
-                archive_gets->archive_gets : add file record to //transferred_list//
+            alt #FFFDFD Extract succeeded
+                archive_gets->archive_gets : Add file record to //transferred_list//
             else
-                archive_gets->archive_gets : add file record to //failed_list//
+                archive_gets->archive_gets : Add file record to //failed_list//
             end
         end
     else else
-        archive_gets->archive_gets : add aggregate to //failed_list//
+        archive_gets->archive_gets : Add aggregate to //failed_list//
     end
 end
 

@@ -1,6 +1,6 @@
 from typing import List, Dict, Tuple, Any
-from pathlib import Path
-import os
+import json
+from importlib.metadata import version
 import tarfile
 from tarfile import TarFile, TarInfo
 
@@ -9,7 +9,13 @@ from minio.error import S3Error
 from retry import retry
 from urllib3.exceptions import HTTPError
 from XRootD import client
-from XRootD.client.flags import (DirListFlags, PrepareFlags, OpenFlags)
+from XRootD.client.flags import (
+    DirListFlags, 
+    PrepareFlags, 
+    OpenFlags, 
+    StatInfoFlags,
+    QueryCode,
+)
 
 from nlds_processors.archiver.archive_base import (BaseArchiveConsumer, 
                                                    ArchiveError,
@@ -92,6 +98,13 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                state=State.CATALOG_ARCHIVE_ROLLBACK,
                                save_reasons_fl=True,)
             return
+        
+        try:
+            prepare_id = body_json[self.MSG_DATA][self.MSG_PREPARE_ID]
+        except KeyError:
+            self.log("Could not get prepare_id from message info, continuing "
+                     "without", self.RK_LOG_INFO)
+            prepare_id = None
 
         # Create minio client
         s3_client = Minio(
@@ -108,16 +121,20 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         
         # Ensure minimum part_size is met for put_object to function
         chunk_size = max(5*1024*1024, self.chunk_size)
-        prepare_list = []
-        tar_originals_map = {}
 
-        # Pre-read loop. 
-        # Each file_details will have an associated tar file which will need to 
-        # be prepared/staged
+        #################
+        # Pre-read loop:
+        # Verify the filelist contents and create the necessary lists for the 
+        # tape preparation request
+
+        # TODO: refactor this?
+        tar_list = []
+        tar_originals_map = {}
         for path_details in filelist:
             # First check whether path_details has failed too many times
             if path_details.retries.count > self.max_retries:
                 self.failedlist.append(path_details)
+                # TODO: do these actually get skipped?
                 continue
             
             try:
@@ -145,18 +162,17 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                           DirListFlags.STAT)
             if status.status != 0:
                 # If bucket tape-folder can't be found then pass for retry
-                reason = (f"Tape holding folder ({tape_base_dir}/{holding_slug})"
-                          f" could not be found, cannot retrieve from archive")
+                reason = (
+                    f"Tape holding folder ({tape_base_dir}/{holding_slug}) "
+                    f"could not be found, cannot retrieve from archive")
                 self.process_retry(reason, path_details)
                 continue
             
             # The tar_filenames must be encoded into a list of byte strings for 
             # prepare to work, as of pyxrootd v5.5.3. We group them together to 
             # ensure only a single transaction is passed to the tape server. 
-            prepare_bytes = (f"{tape_base_dir}/"
-                             f"{holding_slug}/"
-                             f"{tar_filename}").encode("utf_8")
-            prepare_list.append(prepare_bytes)
+            prepare_item = f"{tape_base_dir}/{holding_slug}/{tar_filename}"
+            tar_list.append(prepare_item)
 
             # Create the tar_originals_map, which maps from tar file to the
             # path_details in the original filelist (i.e. the files in the 
@@ -166,25 +182,80 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             else:
                 tar_originals_map[tar_filename].append(path_details)
         
-        # Deduplicate the list
-        prepare_list = list(set(prepare_list))
+        ###########
+        # Prepare:
+        # Make a preparation request and/or check on the status of an existing 
+        # preparation request
 
-        # Prepare all the tar files at once.     
-        # NOTE: This may take a while as it's being copied to a disk cache, 
-        # should benchmark.
-        # TODO: Utilise the prepare result for eviction later. 
-        status, prepare_result = fs_client.prepare(prepare_list, 
-                                                   PrepareFlags.STAGE)
-        if status.status != 0:
-            # If tarfiles can't be staged then pass for transaction-level 
-            # retry. TODO: Probably need to figure out which files have failed 
-            # this step as it won't necessarily be all of them.
-            raise CallbackError(f"Tar files ({prepare_list}) could not be "
-                                "prepared.")
+        # Deduplicate the list of tar files
+        tar_list = list(set(tar_list))
+        # Convert to bytes (if necessary)
+        prepare_list = self.prepare_preparelist(tar_list)
 
+        if prepare_id is None:
+            # Prepare all the tar files at once. This can take a while so requeue 
+            # the message afterwards to free up the consumer and periodicaly check 
+            # the status of the prepare command. 
+            # TODO: Utilise the prepare result for eviction later? 
+            status, prepare_result = fs_client.prepare(prepare_list, 
+                                                       PrepareFlags.STAGE)
+            if status.status != 0:
+                # If tarfiles can't be staged then pass for transaction-level 
+                # retry. TODO: Probably need to figure out which files have failed 
+                # this step as it won't necessarily be all of them.
+                raise CallbackError(f"Tar files ({tar_list}) could not be "
+                                    "prepared.")
+        
+            prepare_id = prepare_result.decode()[:-1]
+            body_json[self.MSG_DATA][self.MSG_PREPARED_FL] = prepare_id
+        
+        query_resp = self.query_prepare_request(prepare_id, tar_list, fs_client)
+        # Check whether the file is still offline, if so then requeue filelist
+            
+        for response in query_resp['responses']:
+            tar_path = response['path']
+            # First verify file integrity.
+            if not response['on_tape'] or not response['path_exists']:
+                tarname = tar_path.split("/")[-1]
+                # Big problem if the file is not on tape as it will never be 
+                # prepared properly. Need to fail it and remove it from filelist
+                # i.e split off the files from the workflow
+                failed_pds = retrieval_dict[tarname]
+                self.failedlist.extend(failed_pds)
+                del retrieval_dict[tarname]
+                
+            # Check if the preparation has finished for this file
+            if response['online']:
+                self.log(f"Prepare has completed for {tar_path}", 
+                         self.RK_LOG_INFO)
+                continue
+            elif response['requested']:
+                # If the file is not online and not requested anymore, 
+                # another request needs to be made. 
+                # NOTE: we can either throw an exception here and let this only 
+                # happen a set number of times before failure, or we can just 
+                # requeue without a preapre_id and let the whole process happen 
+                # again. I don't really know the specifics of why something 
+                # would refuse to be prepared, so I don't know what the best 
+                # strategy would be...
+                raise CallbackError(
+                    f"Prepare request could not be fulfilled for request "
+                    f"{prepare_id}, sending for retry."
+                )
+            else:
+                # TODO: split list at this point? Not yet. 
+                self.log(f"Prepare has not completed for {tar_path}, requeuing "
+                         "whole list.", self.RK_LOG_INFO)
+                self.send_pathlist(
+                    filelist, rk_retry, body_json, mode=FilelistType.retry,#?
+                    state=State.CATALOG_ARCHIVE_AGGREGATING,
+                )
+                return
+
+        #############
         # Main loop:
         # Loop through retrieval dict and put the contents of each tar file into 
-        # it's appropriate bucket on the objectstore.
+        # its appropriate bucket on the objectstore.
         for tarname, tar_filelist in retrieval_dict:
             original_filelist = tar_originals_map[tarname]
             
@@ -308,10 +379,14 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     pass
                 continue
         
-        # Evict the file at the end to ensure the EOS cache doesn't fill 
-        # up. NOTE: This is not implementation agnostic, but probably 
-        # good practice.
-        status, _ = fs_client.prepare(prepare_list, PrepareFlags.EVICT)
+        # Evict the files at the end to ensure the EOS cache doesn't fill up. 
+        # First need to check whether the files are in another prepare request
+        query_resp = self.query_prepare_request(prepare_id, tar_list, fs_client)
+        evict_list = [response['path'] for response in query_resp['responses']
+                      if not response['requested']]
+        evict_list = self.prepare_preparelist(evict_list)
+
+        status, _ = fs_client.prepare(evict_list, PrepareFlags.EVICT)
         if status.status != 0:
             self.log(f"Could not evict tar files from tape cache.", 
                      self.RK_LOG_WARNING)
@@ -381,6 +456,27 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             reason = (f"Could not unpack mandatory info from path_details. {e}")
             self.log(reason, self.RK_LOG_ERROR)
             raise ArchiveError(reason)
+        
+
+    def prepare_preparelist(self, tar_list: List[str]) -> List[str | bytes]:
+        # Check the version of xrootd and convert the list to bytes if necessary
+        if version("XRootD") < "5.5.5":
+            tar_list = [i.decode("utf_8") for i in tar_list]
+
+        return tar_list
+    
+
+    def query_prepare_request(self, prepare_id: str, tar_list: List[str], 
+                              fs_client: client.FileSystem) -> Dict[str, str]:
+        # Generate the arg string for the prepare query with new line characters
+        query_args = "\n".join([prepare_id, *tar_list])
+        status, query_resp = fs_client.query(QueryCode.PREPARE, query_args)
+        if status.status != 0:
+            raise CallbackError(f"Could not check status of prepare request "
+                                f"{prepare_id}.")
+        
+        # Convert into a dictionary
+        return json.loads(query_resp.decode())
         
 
     def validate_tar(self, tar: TarFile, original_filelist: List[PathDetails]
