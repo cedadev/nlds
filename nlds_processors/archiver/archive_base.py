@@ -42,12 +42,13 @@ class AdlerisingXRDFile():
     implentation of checksums within the catalog feasible. 
     """
 
-    def __init__(self, f: File, offset=0, length=0, checksum=1):
+    def __init__(self, f: File, offset=0, length=0, checksum=1, debug_fl=False):
         self.f = f
         self.offset = offset
         self.length = length
         self.pointer = 0
         self.checksum = checksum
+        self.debug_fl = debug_fl
 
     def read(self, size):
         """Read some number of bytes (size) from the file, offset by the current 
@@ -65,6 +66,8 @@ class AdlerisingXRDFile():
         # Update the checksum before we actually do the writing
         self.checksum = adler32(b, self.checksum)
         to_write = len(b)
+        if self.debug_fl:
+            print(f"{self.pointer}:{to_write}")
         status, _ = self.f.write(b, offset=self.pointer, size=to_write)
         if status.status != 0:
             raise IOError(f"Unable to write to file f {self.f}")
