@@ -88,16 +88,6 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         rk_complete = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_COMPLETE])
         rk_retry = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_START])
         rk_failed = ".".join([rk_origin, self.RK_ARCHIVE_GET, self.RK_FAILED])
-
-        # First check for transaction-level message failure and boot back to 
-        # catalog if necessary.
-        retries = self.get_retries(body_json)
-        if retries is not None and retries.count > self.max_retries:
-            # Mark the message as 'processed' so it can be failed more safely.
-            self.send_pathlist(filelist, rk_failed, body_json, 
-                               state=State.CATALOG_ARCHIVE_ROLLBACK,
-                               save_reasons_fl=True,)
-            return
         
         try:
             prepare_id = body_json[self.MSG_DATA][self.MSG_PREPARE_ID]

@@ -28,6 +28,7 @@ from nlds_processors.transferers.base_transfer import (BaseTransferConsumer,
 from nlds.errors import CallbackError
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
+from nlds.rabbit.consumer import State
 
 
 class ArchiveError(Exception):
@@ -168,6 +169,23 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 self.RK_LOG_ERROR
             )
             return
+        
+        filelist = self.parse_filelist(body_dict)
+        
+        # We do this here in case a Transaction-level Retry is triggered before 
+        # we get to the transfer method.
+        rk_failed = ".".join([rk_parts[0], rk_parts[1], self.RK_FAILED])
+        retries = self.get_retries(body_dict)
+        if retries is not None and retries.count >= self.max_retries:
+            # Mark the message as 'processed' so it can be failed more safely.
+            self.log("Max transaction-level retries reached, failing filelist", 
+                     self.RK_LOG_ERROR)
+            self.send_pathlist(
+                filelist, rk_failed, body_dict, 
+                state=State.CATALOG_ARCHIVE_ROLLBACK, 
+                save_reasons_fl=True,
+            )
+            return
 
         ### 
         # Verify and load message contents 
@@ -181,8 +199,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             )
             return
 
-        filelist = self.parse_filelist(body_dict)
-
         # Set uid and gid from message contents if configured to check 
         # permissions
         if self.check_permissions_fl:
@@ -195,7 +211,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         except TransferError: 
             self.log("Objectstore config unobtainable, exiting callback.", 
                      self.RK_LOG_ERROR)
-            return
+            raise
 
         try:
             tape_url = self.get_tape_config(body_dict)
@@ -203,7 +219,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             self.log("Tape config unobtainable or invalid, exiting callback.", 
                      self.RK_LOG_ERROR)
             self.log(str(e), self.RK_LOG_DEBUG)
-            return
+            raise
 
         self.log(f"Starting tape transfer between {tape_url} and object store "
                  f"{tenancy}", self.RK_LOG_INFO)

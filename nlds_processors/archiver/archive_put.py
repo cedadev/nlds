@@ -45,16 +45,6 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # First check for transaction-level message failure and boot back to 
         # catalog if necessary.
         retries = self.get_retries(body_json)
-        if retries is not None and retries.count > self.max_retries:
-            # Mark the message as 'processed' so it can be failed more safely.
-            self.log("Max transaction-level retries reached, failing filelist", 
-                     self.RK_LOG_ERROR)
-            self.send_pathlist(
-                filelist, rk_failed, body_json, 
-                state=State.CATALOG_ARCHIVE_ROLLBACK, 
-                save_reasons_fl=True,
-            )
-            return
 
         # Can call this with impunity as the url has been verified previously
         tape_server, tape_base_dir = self.split_tape_url(tape_url)
