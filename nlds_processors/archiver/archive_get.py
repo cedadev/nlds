@@ -134,15 +134,15 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 self.process_retry(str(e), path_details)
                 continue
             
+            tar_filename = f"{filelist_hash}.tar"
             try:
                 # Check that filelist hash is in the full retrieval list
-                assert filelist_hash in retrieval_dict
+                assert tar_filename in retrieval_dict
             except AssertionError as e:
                 reason = f"Tar file name not found in full retrieval list"
                 self.process_retry(reason, path_details)
                 continue
 
-            tar_filename = f"{filelist_hash}.tar"
             holding_tape_path = (f"root://{tape_server}/{tape_base_dir}/"
                                  f"{holding_slug}")
             full_tape_path = (f"{holding_tape_path}/{tar_filename}")
@@ -171,6 +171,12 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 tar_originals_map[tar_filename] = [path_details, ]
             else:
                 tar_originals_map[tar_filename].append(path_details)
+
+        # If tar_list is empty at this point everything is either in need of 
+        # retrying or failing so we can just start a TLR with an exception
+        if len(tar_list) == 0:
+            raise CallbackError("All paths failed verification, nothing to "
+                                "prepare or get.")
         
         ###########
         # Prepare:
@@ -197,7 +203,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                     "prepared.")
         
             prepare_id = prepare_result.decode()[:-1]
-            body_json[self.MSG_DATA][self.MSG_PREPARED_FL] = prepare_id
+            body_json[self.MSG_DATA][self.MSG_PREPARE_ID] = prepare_id
         
         query_resp = self.query_prepare_request(prepare_id, tar_list, fs_client)
         # Check whether the file is still offline, if so then requeue filelist
@@ -219,7 +225,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 self.log(f"Prepare has completed for {tar_path}", 
                          self.RK_LOG_INFO)
                 continue
-            elif response['requested']:
+            elif not response['requested']:
                 # If the file is not online and not requested anymore, 
                 # another request needs to be made. 
                 # NOTE: we can either throw an exception here and let this only 
@@ -246,7 +252,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         # Main loop:
         # Loop through retrieval dict and put the contents of each tar file into 
         # its appropriate bucket on the objectstore.
-        for tarname, tar_filelist in retrieval_dict:
+        for tarname, tar_filelist in retrieval_dict.items():
             original_filelist = tar_originals_map[tarname]
             
             # Get the holding_slug from the first path_details in the 
@@ -318,18 +324,23 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                 # This exception is only raised when retrying 
                                 # will not help, so fail the file (regardless of
                                 # origin)
+                                self.log("TarMemberError encountered at stream "
+                                         f"time {e}, failing whole tar file "
+                                         f"({tar_filename})", self.RK_LOG_INFO)
                                 self.failedlist.append(path_details)
                             except FileAlreadyRetrieved as e:
                                 # Handle specific case of a file already having
                                 # been retrieved.
+                                self.log(f"Tar member {path_details.path} has "
+                                         "already been retrieved, passing to "
+                                         "completelist", self.RK_LOG_INFO)
                                 self.completelist.append(path_details)
                             else:
                                 # Log successful 
                                 self.log(
-                                    f"Successfully retrieved "
-                                    f"{path_details.path} from the archive and "
-                                    f"streamed to {bucket_name}", 
-                                    self.RK_LOG_INFO
+                                    f"Successfully retrieved {path_details.path}"
+                                    f" from the archive and streamed to "
+                                    f"{bucket_name}", self.RK_LOG_INFO
                                 )
                                 self.completelist.append(path_details)
                             finally:
@@ -371,6 +382,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         
         # Evict the files at the end to ensure the EOS cache doesn't fill up. 
         # First need to check whether the files are in another prepare request
+        self.log("Querying prepare request to check whether it should be "
+                 f"evicted from the disk-cache", self.RK_LOG_INFO)
         query_resp = self.query_prepare_request(prepare_id, tar_list, fs_client)
         evict_list = [response['path'] for response in query_resp['responses']
                       if not response['requested']]
@@ -383,6 +396,11 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
         self.log("Archive read complete, passing lists back to worker for "
                  "re-routing and cataloguing.", self.RK_LOG_INFO)
+        self.log(
+            f"List lengths: complete:{len(self.completelist)}, "
+            f"retry:{len(self.retrylist)}, failed:{len(self.failedlist)}", 
+            self.RK_LOG_DEBUG
+        )
 
         # Reorganise the lists and send the necessary message info for each mode
         if len(self.completelist) > 0:
@@ -520,13 +538,14 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             else:
                 self.log(f"Bucket for this transaction ({bucket_name}) already "
                          f"exists", self.RK_LOG_INFO)
-                objects = list([obj.object_name for obj 
-                               in s3_client.list_objects(bucket_name)])
+                objects_iter = s3_client.list_objects(bucket_name, 
+                                                      prefix=f"/{object_name}")
+                objects = [obj.object_name for obj in objects_iter]
                 # Look for object in bucket, continue if not present
                 assert object_name not in objects
         except (HTTPError, S3Error) as e:   
             # If bucket can't be created then pass for retry and continue
-            self.log(f"Bucket {bucket_name} could not be created due to error "
+            self.log(f"Bucket {bucket_name} could not be validated due to error "
                      f"connecting with tenancy. ({e})")
             raise e
         except AssertionError as e:
