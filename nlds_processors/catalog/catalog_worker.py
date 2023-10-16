@@ -516,8 +516,13 @@ class CatalogConsumer(RMQC):
             try:
                 # get the files first
                 files = self.catalog.get_files(
-                    user, group, groupall, holding_label, holding_id, 
-                    transaction_id, file_details.original_path, holding_tag
+                    user, group, 
+                    groupall=groupall, 
+                    holding_label=holding_label, 
+                    holding_id=holding_id, 
+                    transaction_id=transaction_id, 
+                    original_path=file_details.original_path, 
+                    tag=holding_tag
                 )
                 if len(files) == 0:
                     raise CatalogError(
@@ -1179,8 +1184,12 @@ class CatalogConsumer(RMQC):
             try:
                 # get the files first
                 files = self.catalog.get_files(
-                    user, group, holding_label, holding_id, transaction_id, 
-                    file_details.original_path, tag
+                    user, group, 
+                    holding_label=holding_label, 
+                    holding_id=holding_id, 
+                    transaction_id=transaction_id, 
+                    original_path=file_details.original_path, 
+                    tag=tag
                 )
                 if len(files) == 0:
                     raise CatalogError(
@@ -1671,20 +1680,12 @@ class CatalogConsumer(RMQC):
         # Convert body from bytes to json for ease of manipulation
         body = json.loads(body)
 
-        self.log(f"Received {json.dumps(body, indent=4)} from "
-                 f"{self.queues[0].name} ({method.routing_key})", 
-                 self.RK_LOG_INFO)
-
-        self.log(f"Appending rerouting information to message: "
-                 f"{self.DEFAULT_REROUTING_INFO} ", self.RK_LOG_DEBUG)
-        body = self.append_route_info(body)
-
         # Get the API method and decide what to do with it
         try:
             api_method = body[RMQC.MSG_DETAILS][RMQC.MSG_API_ACTION]
         except KeyError:
-            self.log(f"Message did not contain appropriate API method", 
-                     self.RK_LOG_ERROR)
+            self.log(f"Message did not contain an appropriate API method, "
+                     "exiting callback", self.RK_LOG_ERROR)
             return
         
         # If received system test message, reply to it and end the callback
@@ -1709,6 +1710,17 @@ class CatalogConsumer(RMQC):
                     correlation_id=properties.correlation_id
                 )
             return
+        
+        # Only print the message contents when we're not statting, the message 
+        # can get very long.
+        if not api_method == self.RK_STAT:
+            self.log(f"Received {json.dumps(body, indent=4)} from "
+                     f"{self.queues[0].name} ({method.routing_key})", 
+                     self.RK_LOG_DEBUG)
+
+        self.log(f"Appending rerouting information to message: "
+                 f"{self.DEFAULT_REROUTING_INFO} ", self.RK_LOG_DEBUG)
+        body = self.append_route_info(body)
 
         # check whether this is a GET or a PUT
         if (api_method == self.RK_GETLIST) or (api_method == self.RK_GET):
@@ -1720,11 +1732,13 @@ class CatalogConsumer(RMQC):
                          self.RK_LOG_ERROR)
                 return 
             if (rk_parts[1] == self.RK_CATALOG_GET):
+                self.log(f"Running catalog get workflow", self.RK_LOG_INFO)
                 self._catalog_get(body, rk_parts[0])
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_DEL):
                 # If part of a GET transaction but received via the del topic 
-                # then delete the new object storage locations added to the 
-                # catalog.
+                # then delete the previously added object storage Locations
+                self.log(f"Deleting objectstore Locations as part of a failed "
+                         f"archive-get workflow", self.RK_LOG_INFO)
                 self._catalog_location_del(body, rk_parts[0], 
                                            location_type=Storage.OBJECT_STORAGE)
 
