@@ -2,9 +2,11 @@ from typing import List, Dict, Tuple, Any
 import json
 from importlib.metadata import version
 import tarfile
-from tarfile import TarFile, TarInfo
+from tarfile import TarFile
+from datetime import timedelta
 
 from minio import Minio
+from minio.helpers import ObjectWriteResult
 from minio.error import S3Error
 from retry import retry
 from urllib3.exceptions import HTTPError
@@ -60,8 +62,20 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                            f"{BaseArchiveConsumer.RK_WILD}")
     DEFAULT_STATE = State.ARCHIVE_GETTING
 
+    _PREPARE_REQUEUE_DELAY = "prepare_requeue"
+    ARCHIVE_GET_CONSUMER_CONFIG = {
+        _PREPARE_REQUEUE_DELAY: timedelta(seconds=30).total_seconds() * 1000,
+    }
+    DEFAULT_CONSUMER_CONFIG = (BaseArchiveConsumer.DEFAULT_CONSUMER_CONFIG 
+                               | ARCHIVE_GET_CONSUMER_CONFIG)
+
+
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
+
+        self.prepare_requeue_delay = self.load_config_value(
+            self._PREPARE_REQUEUE_DELAY
+        )
 
 
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
@@ -239,12 +253,16 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     f"{prepare_id}, sending for retry."
                 )
             else:
-                # TODO: split list at this point? Not yet. 
-                self.log(f"Prepare has not completed for {tar_path}, requeuing "
-                         "whole list.", self.RK_LOG_INFO)
+                # TODO: split list at this point? Probably want to keep all 
+                # members of the same request together?
+                self.log(
+                    f"Prepare request with id {prepare_id} has not completed "
+                    f"for {tar_path}, requeuing message with a delay of "
+                    f"{self.prepare_requeue_delay}", self.RK_LOG_INFO)
                 self.send_pathlist(
-                    filelist, rk_retry, body_json, mode=FilelistType.retry,#?
-                    state=State.CATALOG_ARCHIVE_AGGREGATING,
+                    filelist, rk_retry, body_json, mode=FilelistType.retry,
+                    state=State.CATALOG_ARCHIVE_AGGREGATING, 
+                    delay=self.prepare_requeue_delay,
                 )
                 return
 
@@ -278,7 +296,6 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             # at a time 
             try:
                 path_details = None
-                result = None
                 with client.File() as f:
                     # Open the tar file with READ
                     status, _ = f.open(full_tape_path, OpenFlags.READ)
@@ -301,7 +318,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         # for tarinfo in members:
                         for path_details in tar_filelist:
                             try:
-                                self.stream_tarmember(
+                                _ = self.stream_tarmember(
                                     path_details, 
                                     tar, 
                                     s3_client, 
@@ -335,22 +352,18 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                          "already been retrieved, passing to "
                                          "completelist", self.RK_LOG_INFO)
                                 self.completelist.append(path_details)
+                            except Exception as e:
+                                self.log("Unexpected exception occurred during "
+                                         f"stream time {e}", self.RK_LOG_ERROR)
+                                raise
                             else:
                                 # Log successful 
                                 self.log(
                                     f"Successfully retrieved {path_details.path}"
-                                    f" from the archive and streamed to "
-                                    f"{bucket_name}", self.RK_LOG_INFO
+                                    f" from the archive and streamed to object "
+                                    "store", self.RK_LOG_INFO
                                 )
                                 self.completelist.append(path_details)
-                            finally:
-                                # Terminate any hanging/unclosed connections
-                                try:
-                                    result.close()
-                                    result.release_conn()
-                                except AttributeError:
-                                    # If it can't be closed then dw
-                                    pass
             except (TarError, ArchiveError) as e:
                 # Handle whole-tar error, i.e. fail whole list 
                 self.log(f"Tar-level error raised: {e}, failing whole tar and "
@@ -366,19 +379,14 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 self.log(f"{e}. Passing for retry.", self.RK_LOG_ERROR)
                 for pd in tar_filelist:
                     self.process_retry(reason, pd)
+            except Exception as e:
+                self.log(f"Unexpected exception occurred during stream time {e}", 
+                         self.RK_LOG_ERROR)
+                raise
             else:
                 # Log successful retrieval
                 self.log(f"Successfully streamed tar file {tarname}", 
-                         self.RK_LOG_DEBUG)
-            finally:
-                # Tidy up any open connections.
-                try:
-                    result.close()
-                    result.release_conn()
-                except AttributeError:
-                    # If can't be closed then it's already been closed.
-                    pass
-                continue
+                         self.RK_LOG_INFO)
         
         # Evict the files at the end to ensure the EOS cache doesn't fill up. 
         # First need to check whether the files are in another prepare request
@@ -561,7 +569,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
     @retry((S3Error, HTTPError) , tries=5, delay=1, backoff=2)
     def stream_tarmember(self, path_details: PathDetails, tar: TarFile, 
-                         s3_client: Minio, chunk_size=None):
+                         s3_client: Minio, chunk_size=None) -> ObjectWriteResult:
         """The inner loop of actions to be performed on each memeber of the tar 
         file"""
         try:
@@ -575,25 +583,25 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
         # Get bucket info and check that it exists/doesn't already contain the 
         # file
-        bucket_name, object_name = self.validate_bucket(path_details, 
-                                                             s3_client)
+        bucket_name, object_name = self.validate_bucket(path_details, s3_client)
 
         self.log(f"Starting stream of {tarinfo.name} to object store bucket "
-                 f"{bucket_name}.", self.RK_LOG_DEBUG)
+                 f"{bucket_name}.", self.RK_LOG_INFO)
         
         # Extract the file as a file object, this makes a thin wrapper around 
         # the filewrapper we're already using and maintains chunked reading
         f = tar.extractfile(tarinfo)
-        result = s3_client.put_object(
+        write_result = s3_client.put_object(
             bucket_name, 
             object_name, 
             f, 
             -1, 
             part_size=chunk_size,
         )
-        self.log(f"Minio put result: {result}", self.RK_LOG_DEBUG)
-        result.close()
-        result.release_conn()
+        self.log(f"Finsihed stream of {tarinfo.name} to object store", 
+                 self.RK_LOG_INFO)
+        
+        return write_result
     
 
     def process_retry(self, reason: str, path_details: PathDetails) -> None:

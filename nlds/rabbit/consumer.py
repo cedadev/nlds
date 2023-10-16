@@ -294,11 +294,17 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return new_filelist
 
 
-    def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
-                       body_json: Dict[str, Any], state: State = None,
-                       mode: FilelistType = FilelistType.processed, 
-                       warning: List[str] = None, save_reasons_fl=False,
-                       ) -> None:
+    def send_pathlist(
+            self, 
+            pathlist: List[PathDetails], 
+            routing_key: str, 
+            body_json: Dict[str, Any], 
+            state: State = None,
+            mode: FilelistType = FilelistType.processed, 
+            warning: List[str] = None, 
+            delay: int = None,
+            save_reasons_fl: bool = False,
+        ) -> None:
         """Convenience function which sends the given list of PathDetails 
         objects to the exchange with the given routing key and message body. 
         Mode specifies what to put into the log message, as well as determining 
@@ -335,7 +341,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                      self.RK_LOG_DEBUG)
             current_state = self.DEFAULT_STATE
 
-        delay = 0
         body_json[self.MSG_DETAILS][self.MSG_RETRY] = False
         if mode == FilelistType.processed:
             # Reset the retries (both transaction-level and file-level) upon 
@@ -351,21 +356,22 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             # Delay the retry message depending on how many retries have been 
             # accumulated. All retries in a retry list _should_ be the same so 
             # base it off of the first one.
-            delay = self.get_retry_delay(pathlist[0].retries.count)
-            self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
-                     f" {datetime.now() + timedelta(milliseconds=delay)}", 
-                     self.RK_LOG_DEBUG)
+            if delay is None:
+                delay = self.get_retry_delay(pathlist[0].retries.count)
+                arrival_time = datetime.now() + timedelta(milliseconds=delay)
+                self.log(f"Adding {delay / 1000}s delay to retry. Should be "
+                         f"sent at {arrival_time}", self.RK_LOG_DEBUG)
             body_json[self.MSG_DETAILS][self.MSG_RETRY] = True
             if state is None:
                 state = current_state
         elif mode == FilelistType.failed:
             state = State.FAILED
-        
-        # If state not set at this point then revert to the default value for 
-        # the consumer. It _should_ always be set though so this is probably 
-        # redundant
+
+        # If necessary values not set at this point then use default values
         if state is None:
             state = self.DEFAULT_STATE
+        if delay is None:
+            delay = 0
 
         # Create new sub_id for each extra subrecord created.
         if self.sent_message_count >= 1:
