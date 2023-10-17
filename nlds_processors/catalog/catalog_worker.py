@@ -967,12 +967,20 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session()
 
 
-    def _catalog_archive_update(self, body: Dict, rollback_fl: bool = False) -> None:
+    def _catalog_archive_update(self, body: Dict, rk_origin: str, 
+                                rollback_fl: bool = False) -> None:
         """Update the aggregation record following successful archive write to 
         fill in the missing checksum information. Alternative mode is rollback, 
         to be used on CATALOG_ARCHIVE_ROLLBACK, which simply marks the 
         aggregation as failed upon a failed write attempt.
         """
+        if rollback_fl:
+            state = State.CATALOG_ARCHIVE_ROLLBACK
+            rk_subject = self.RK_CATALOG_ARCHIVE_DEL
+        else:
+            state = State.CATALOG_ARCHIVE_UPDATING
+            rk_subject = self.RK_CATALOG_ARCHIVE_UPDATE
+
         # Parse the message body for required variables
         message_vars = self._parse_required_vars(body)
         if message_vars is None:
@@ -1053,6 +1061,16 @@ class CatalogConsumer(RMQC):
             raise CallbackError("Encountered error during aggregation update, "
                                 "submitting for retry")
         
+        # Compile back into a list of PathDetails objects for finishing things up
+        self.completelist = [PathDetails.from_dict(f) for f in filelist]
+        # Send confirmation on to monitor/worker
+        rk_complete = ".".join([rk_origin, rk_subject, self.RK_COMPLETE])
+        self.log(
+            f"Sending completed PathList from CATALOG_ARCHIVE_UPDATE", 
+            self.RK_LOG_DEBUG
+        )
+        self.send_pathlist(self.completelist, rk_complete, body, state=state)
+
         # stop db transactions and commit
         self.catalog.save()
         self.catalog.end_session() 
@@ -1774,11 +1792,10 @@ class CatalogConsumer(RMQC):
                          self.RK_LOG_DEBUG)
                 self._catalog_archive_put(body, rk_parts[0])    
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_UPDATE):
-                # NOTE: this doesn't need an rk_origin as it relies on TLR to 
-                # handle retries. 
-                self._catalog_archive_update(body)
+                # NOTE: retries and failures for this method are handled by TLR
+                self._catalog_archive_update(body, rk_parts[0])
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_DEL):
-                self._catalog_archive_update(body, rollback_fl=True)
+                self._catalog_archive_update(body, rk_parts[0], rollback_fl=True)
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method
