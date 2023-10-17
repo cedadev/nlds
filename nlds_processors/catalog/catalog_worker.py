@@ -855,6 +855,14 @@ class CatalogConsumer(RMQC):
         # Get the next holding in the catalog, by id, which has any unarchived 
         # Files, i.e. any files which don't have a tape location
         next_holding = self.catalog.get_next_holding()
+
+        # If no holdings left to archive then end the callback
+        if not next_holding:
+            self.log("No holdings found to archive, exiting callback.", 
+                     self.RK_LOG_INFO)
+            self.catalog.end_session()
+            return
+
         # We need a new root as we can't rely on the transaction_id any more. 
         # Create a slug from the uneditable holding information, this will be 
         # the directory on the tape that contains each of the tar files. 
