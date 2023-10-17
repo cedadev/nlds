@@ -982,13 +982,6 @@ class CatalogConsumer(RMQC):
         to be used on CATALOG_ARCHIVE_ROLLBACK, which simply marks the 
         aggregation as failed upon a failed write attempt.
         """
-        if rollback_fl:
-            state = State.CATALOG_ARCHIVE_ROLLBACK
-            rk_subject = self.RK_CATALOG_ARCHIVE_DEL
-        else:
-            state = State.CATALOG_ARCHIVE_UPDATING
-            rk_subject = self.RK_CATALOG_ARCHIVE_UPDATE
-
         # Parse the message body for required variables
         message_vars = self._parse_required_vars(body)
         if message_vars is None:
@@ -1069,15 +1062,21 @@ class CatalogConsumer(RMQC):
             raise CallbackError("Encountered error during aggregation update, "
                                 "submitting for retry")
         
-        # Compile back into a list of PathDetails objects for finishing things up
-        self.completelist = [PathDetails.from_dict(f) for f in filelist]
-        # Send confirmation on to monitor/worker
-        rk_complete = ".".join([rk_origin, rk_subject, self.RK_COMPLETE])
-        self.log(
-            f"Sending completed PathList from CATALOG_ARCHIVE_UPDATE", 
-            self.RK_LOG_DEBUG
-        )
-        self.send_pathlist(self.completelist, rk_complete, body, state=state)
+        # Only need to update the monitor after a successful tape-write
+        if not rollback_fl:
+            # Compile back into a list of PathDetails objects for finishing 
+            # things up
+            self.completelist = [PathDetails.from_dict(f) for f in filelist]
+            # Send confirmation on to monitor/worker
+            rk_complete = ".".join([
+                rk_origin, self.RK_CATALOG_ARCHIVE_UPDATE, self.RK_COMPLETE
+            ])
+            self.log(
+                f"Sending completed PathList from CATALOG_ARCHIVE_UPDATE", 
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_ARCHIVE_UPDATING)
 
         # stop db transactions and commit
         self.catalog.save()
