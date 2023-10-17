@@ -148,7 +148,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             # anything goes wrong we'll need to delete it and try the whole 
             # write again. 
             try:
-                file_wrapper = AdlerisingXRDFile(f, debug_fl=True)
+                file_wrapper = AdlerisingXRDFile(f, debug_fl=False)
                 
                 with tarfile.open(mode="w", fileobj=file_wrapper, 
                                   copybufsize=self.chunk_size) as tar:
