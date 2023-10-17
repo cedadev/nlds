@@ -245,12 +245,12 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         # Check to see whether tape_url has been specified in either the message 
         # or the server_config - exit if not. 
         if tape_url is None:
-            self.log(
+            reason = (
                 "No tenancy specified at server- or request-level, exiting "
-                "callback.", 
-                self.RK_LOG_ERROR
+                "callback."
             )
-            raise ArchiveError() 
+            self.log(reason, self.RK_LOG_ERROR)
+            raise ArchiveError(reason) 
         
         # Verify the tape_url is valid 
         # NOTE: Might not be necessary as it's checked at startup if using 
