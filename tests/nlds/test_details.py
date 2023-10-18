@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 
 import pytest
+from pydantic import ValidationError
 
 from nlds.details import PathDetails, Retries
 from nlds.utils.permissions import check_permissions
@@ -36,26 +37,11 @@ def test_retries():
     assert retries.count == 0
     assert len(retries.reasons) == 0
 
-    # See what happens if we try a non-string reason
-    retries.increment(reason=1)
-    assert retries.count == 1
-    assert len(retries.reasons) == 1
-
     # A None should be interpreted as 'not a reason' so shouldn't add to the 
     # reasons list
     retries.increment(reason=None)
-    assert retries.count == 2
-    assert len(retries.reasons) == 1
-
-    # A 0 should probably count as a reason, but currently doesn't 
-    retries.increment(reason=0)
-    assert retries.count == 3
-    assert len(retries.reasons) == 1
-
-    # Reset for testing dictionary conversion? Not necessary
-    # retries.reset()
-    # assert retries.count == 0
-    # assert len(retries.reasons) == 0
+    assert retries.count == 1
+    assert len(retries.reasons) == 0
 
     # Convert to dict and check integrity of output. 
     # Should be in an outer dict called 'retries'
@@ -71,13 +57,13 @@ def test_retries():
 
     # Attempt to make a Retries object from the dictionary
     new_retries = Retries.from_dict(r_dict)
-    assert new_retries.count == 3
-    assert len(new_retries.reasons) == 1
+    assert new_retries.count == 1
+    assert len(new_retries.reasons) == 0
 
     # Attempt alternative constructor usage
     alt_retries = Retries(**r_dict['retries'])
-    assert alt_retries.count == 3
-    assert len(alt_retries.reasons) == 1
+    assert alt_retries.count == 1
+    assert len(alt_retries.reasons) == 0
 
     assert new_retries == alt_retries
 

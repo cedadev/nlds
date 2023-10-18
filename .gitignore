@@ -17,9 +17,8 @@ dist/
 *.tmproj
 .vscode/
 
-# nlds config files to ignore
+# nlds files to ignore
 **/.server_config
 **/.processor_config
 logs/
-nlds_catalog.db
-nlds_monitor.db
+*.db

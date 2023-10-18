@@ -147,12 +147,14 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                 # failed more safely.
                 mode = FilelistType.processed
                 state = State.CATALOG_ROLLBACK
+                save_reasons_fl = True
             else:
                 # Otherwise fail it regularly
                 mode = FilelistType.failed
                 state = None
+                save_reasons_fl = False
             self.send_pathlist(filelist, rk_failed, body_json, mode=mode, 
-                               state=state)
+                               state=state, save_reasons_fl=save_reasons_fl)
             return
 
         # Set uid and gid from message contents if configured to check 
@@ -177,11 +179,9 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             access_key = body_dict[self.MSG_DETAILS][self.MSG_ACCESS_KEY]
             secret_key = body_dict[self.MSG_DETAILS][self.MSG_SECRET_KEY]
         except KeyError:
-            self.log(
-                "Secret key or access key unobtainable, exiting callback.", 
-                self.RK_LOG_ERROR
-            )
-            raise TransferError()
+            reason = "Secret key or access key unobtainable"
+            self.log(f"{reason}, exiting callback", self.RK_LOG_ERROR)
+            raise TransferError(reason)
 
         tenancy = None
         # If tenancy specified in message details then override the server-
@@ -195,12 +195,9 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         # Check to see whether tenancy has been specified in either the message 
         # or the server_config - exit if not. 
         if tenancy is None:
-            self.log(
-                "No tenancy specified at server- or request-level, exiting "
-                "callback.", 
-                self.RK_LOG_ERROR
-            )
-            raise TransferError() 
+            reason = "No tenancy specified at server- or request-level"
+            self.log(f"{reason}, exiting callback.", self.RK_LOG_ERROR)
+            raise TransferError(reason) 
         
         return access_key, secret_key, tenancy
       
