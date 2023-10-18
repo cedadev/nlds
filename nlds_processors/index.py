@@ -27,7 +27,7 @@ class IndexerConsumer(StattingConsumer):
     
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
-        _MESSAGE_MAX_SIZE: 1000 * 1000,    # in kB
+        _MESSAGE_MAX_SIZE: 16*1000*1000,    # in kB
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         _CHECK_PERMISSIONS: True,
@@ -261,7 +261,7 @@ class IndexerConsumer(StattingConsumer):
                                 filesize = self.get_filesize(
                                     walk_path_details, rk_retry, body_json
                                 )
-                                if not filesize:
+                                if filesize is None:
                                     continue
                                 
                             # Pass the size through to ensure maximum size is 
@@ -295,7 +295,7 @@ class IndexerConsumer(StattingConsumer):
                     filesize = self.get_filesize(
                         path_details, rk_retry, body_json
                     )
-                    if not filesize:
+                    if filesize is None:
                         continue
 
                 # Pass the size through to ensure maximum size is 
