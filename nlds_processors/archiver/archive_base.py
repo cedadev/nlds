@@ -19,9 +19,10 @@ try:
     from XRootD.client import File, FileSystem
     from XRootD.client.flags import StatInfoFlags
 except ModuleNotFoundError:
-    File = TypeVar('File')
-    FileSystem = TypeVar('FileSystem')
-    StatInfoFlags = Enum()
+    File = TypeVar("File")
+    FileSystem = TypeVar("FileSystem")
+    class StatInfoFlags(Enum):
+        IS_DIR = 2
 
 from nlds_processors.transferers.base_transfer import (BaseTransferConsumer, 
                                                        TransferError)
