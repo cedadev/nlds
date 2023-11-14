@@ -1,0 +1,189 @@
+@startuml message_flow_del_full
+
+skinparam participantFontSize 16
+skinparam participantFontName Futura
+
+skinparam queueFontSize 16
+skinparam queueFontName Futura
+
+skinparam actorFontSize 16
+skinparam actorFontName Futura
+
+skinparam collectionsFontSize 16
+skinparam collectionsFontName Futura
+
+skinparam DatabaseFontSize 16
+skinparam DatabaseFontName Futura
+
+actor user as "User"
+participant client as "Client"
+participant server as "API server"
+participant wex as "Exchange"
+
+queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic = nlds-api.route.*
+end note
+collections work as "NLDS\nWorker" #lightgrey
+
+queue qc as "Catalog Q" #springgreen
+collections catalog as "Catalog" #springgreen
+database catalog_db as "Catalog DB" #springgreen
+note over qc
+    topic = *.catalog-del.*
+end note
+
+queue aq as "Archive Q" #LightSteelBlue
+collections archy as "Archive\nWorker" #LightSteelBlue
+
+participant tape as "Tape" #GhostWhite
+
+queue qd as "Transfer Del Q" #gold
+note over qd
+    topic = *.transfer-del.*
+end note
+collections transfer_del as "Transfer Del" #gold
+
+participant obj as "Object\nStore" #GhostWhite
+
+user -> client : DEL(filelist,user,group)
+activate client
+client -> server : DEL(filelist,user,group,id)
+deactivate client
+activate server
+server -> wex : key=""nlds-api.route.del""
+deactivate server
+activate wex
+wex -> qw : key=""nlds-api.route.del""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.route.del""
+deactivate qw
+activate work
+work -> qc : key=""nlds-api.catalog-del.start""
+deactivate work
+activate qc
+qc -> catalog : key=""nlds-api.catalog-del.start""
+deactivate qc
+
+activate catalog
+loop #LightGreen for file in //filelist//
+    catalog->catalog_db : get file record from catalog holding
+    catalog_db->catalog
+    alt #MintCream file exists in catalog holding
+        catalog->catalog : delete file record from catalog
+        catalog->catalog : add file record to //deleted_list//
+    else else
+        catalog->catalog_db : add file record to //failed_list//
+    end
+end
+catalog->wex : key=""nlds-api.catalog-del.failed""
+catalog->wex : key=""nlds-api.catalog-del.complete""
+deactivate catalog
+
+activate wex
+wex->work : key=""nlds-api.catalog-del.complete""
+deactivate wex
+
+activate work
+work->aq : key=""nlds-api.archive-del.start""
+deactivate work
+
+activate aq
+aq->archy : key=""nlds-api.archive-del.start""
+deactivate aq
+
+activate archy
+loop #LightSteelBlue for file in //deleted_list//
+    archy->tape : delete file from tape
+    alt #LightSkyBlue delete succeeded
+        archy->archy: add file to //tape_deleted_list//
+    else else
+        archy->archy: add file to //tape_failed_list//
+    end
+end
+
+archy->wex : key=""nlds-api.archive-del.failed""
+activate wex
+wex->qw : key=""nlds-api.archive-del.failed""
+deactivate wex
+activate qw
+qw->work : key=""nlds-api.archive-del.failed""
+deactivate qw
+activate work
+work->wex : key=""nlds-api.catalog-put.start""
+deactivate work
+activate wex
+wex->catalog : key=""nlds-api.catalog-put.start""
+deactivate wex
+
+activate catalog
+loop #LightGreen for file in //tape_failed_list//
+    catalog->catalog_db : get file record from catalog
+    catalog_db->catalog
+    alt #MintCream file exists in catalog
+        catalog->catalog : pass (check file details match?)
+    else else
+        catalog->catalog_db : add file record to catalog
+    end
+end
+deactivate catalog
+
+archy->wex : key=""nlds-api.archive-del.complete""
+deactivate archy
+activate wex
+wex->work : key=""nlds-api.archive-del.complete""
+deactivate wex
+activate work
+work->qd : key=""nlds-api.transfer-del.start""
+deactivate work
+activate qd 
+qd->transfer_del : key=""nlds-api.transfer-del.start""
+deactivate qd
+
+activate transfer_del
+loop #Gold for file in //tape_deleted_list//
+    transfer_del->obj : delete file from object store
+    alt #PaleGoldenRod delete succeeded
+        transfer_del->transfer_del: add file to //obj_deleted_list//
+    else else
+        transfer_del->transfer_del: add file to //obj_failed_list//
+    end
+end
+transfer_del->wex : key=""nlds-api.transfer-del.complete""
+
+activate wex
+wex->qw : key=""nlds-api.transfer-del.complete""
+deactivate wex
+activate qw
+qw->work : key=""nlds-api.transfer-del.complete""
+deactivate qw
+
+transfer_del->wex : key=""nlds-api.transfer-del.failed""
+deactivate transfer_del
+activate wex
+wex->qw : key=""nlds-api.transfer-del.failed""
+deactivate wex
+activate qw
+qw->work : key=""nlds-api.transfer-del.failed""
+deactivate qw
+activate work
+work->wex : key=""nlds-api.catalog-put.start""
+deactivate work
+activate wex
+wex->catalog : key=""nlds-api.catalog-put.start""
+deactivate wex
+
+activate catalog
+loop #LightGreen for file in //obj_failed_list//
+    catalog->catalog_db : get file record from catalog
+    catalog_db->catalog
+    alt #MintCream file exists in catalog
+        catalog->catalog : pass (check file details match?)
+    else else
+        catalog->catalog_db : add file record to catalog
+    end
+end
+deactivate catalog
+
+@enduml

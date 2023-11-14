@@ -92,8 +92,11 @@ class State(Enum):
     CATALOG_ARCHIVE_AGGREGATING = 21
     ARCHIVE_PUTTING = 22
     CATALOG_ARCHIVE_UPDATING = 23
+    # ARCHIVE_DEL workflow states
+    ARCHIVE_DELETING = 30
     # Shared ARCHIVE states
     CATALOG_ARCHIVE_ROLLBACK = 40
+
 
     @classmethod
     def has_value(cls, value):

@@ -6,4 +6,4 @@ fi
 
 source $HOME/python-venvs/nlds-venv/bin/activate
 # start a named screen session
-screen -S nlds -c test_run/test_run.rc 
+screen -S nlds -c test_run.rc 

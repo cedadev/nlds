@@ -982,13 +982,12 @@ class CatalogConsumer(RMQC):
         # start the database transactions
         self.catalog.start_session()
 
-        # get the holding from the database
-        if holding_label is None and holding_id is None and holding_tag is None:
+        # The holding_label or holding_id must be supplied.
+        if holding_label is None and holding_id is None:
             self.log("No method for identifying a holding or transaction "
-                     "provided, will continue without.",
-                     self.RK_LOG_WARNING)
-            # TODO: what happens in this event?
-
+                     "provided, exiting callback.", self.RK_LOG_ERROR)
+            return
+        
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
@@ -1008,6 +1007,8 @@ class CatalogConsumer(RMQC):
                     self.retrylist.append(file_details)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
+            else:
+                self.completelist.append(file_details)
 
         # log the successful and non-successful catalog puts
         # SUCCESS
@@ -1045,7 +1046,7 @@ class CatalogConsumer(RMQC):
                                mode="failed")
 
         # stop db transactions and commit
-        self.catalog.save()
+        #self.catalog.save()
         self.catalog.end_session() 
 
 
@@ -1161,7 +1162,7 @@ class CatalogConsumer(RMQC):
         # stop db transactions and commit
         self.catalog.save()
         self.catalog.end_session() 
-        
+
 
     def _catalog_list(self, body: Dict, properties: Header) -> None:
         """List the users holdings"""
@@ -1596,7 +1597,7 @@ class CatalogConsumer(RMQC):
             self.log(f"Message did not contain appropriate API method", 
                      self.RK_LOG_ERROR)
             return
-
+        
         # check whether this is a GET or a PUT
         if (api_method == self.RK_GETLIST) or (api_method == self.RK_GET):
             # split the routing key
@@ -1604,45 +1605,26 @@ class CatalogConsumer(RMQC):
                 rk_parts = self.split_routing_key(method.routing_key)
             except ValueError as e:
                 self.log("Routing key inappropriate length, exiting callback.",
-                         self.RK_LOG_ERROR)
-                return 
+                        self.RK_LOG_ERROR)
+                return
             if (rk_parts[1] == self.RK_CATALOG_GET):
                 self._catalog_get(body, rk_parts[0])
             elif (rk_parts[1] == self.RK_CATALOG_DEL):
                 # If part of a GET transaction but received via the del topic 
                 # then delete the new object storage locations added to the 
                 # catalog.
-                self._catalog_location_del(body, rk_parts[0], 
-                                           location_type=Storage.OBJECT_STORAGE)
-                
-                
-        
-            
-        # If received system test message, reply to it (this is for system status check)
-        elif api_method == "system_stat":
-            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
-                return False
-            if (body["details"]["ignore_message"]) == True:
-                return
-            else:
-                self.publish_message(
-                    properties.reply_to,
-                    msg_dict=body,
-                    exchange={'name': ''},
-                    correlation_id=properties.correlation_id
+                self._catalog_location_del(
+                    body, rk_parts[0], location_type=Storage.OBJECT_STORAGE
                 )
-            return
-            
-        
 
-        elif (api_method == self.RK_PUTLIST) or (api_method == self.RK_PUT):
+        elif (api_method == self.RK_PUTLIST) or (api_method == self.RK_PUT):           
             # split the routing key
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
             except ValueError as e:
                 self.log("Routing key inappropriate length, exiting callback.",
                         self.RK_LOG_ERROR)
-                return             
+                return
             if (rk_parts[2] == self.RK_START):
                 # Check the routing key worker section to determine which method 
                 # to call, as a del could be being called from a failed 
@@ -1660,8 +1642,8 @@ class CatalogConsumer(RMQC):
                 rk_parts = self.split_routing_key(method.routing_key)
             except ValueError as e:
                 self.log("Routing key inappropriate length, exiting callback.",
-                         self.RK_LOG_ERROR)
-            
+                        self.RK_LOG_ERROR)
+                return
             if (rk_parts[1] == self.RK_CATALOG_ARCHIVE_NEXT):
                 self.log("Beginning preparation of next archive aggregation", 
                          self.RK_LOG_DEBUG)
@@ -1669,8 +1651,19 @@ class CatalogConsumer(RMQC):
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_UPDATE):
                 self._catalog_archive_update(body, rk_parts[0])
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_DEL):
-                self._catalog_location_del(body, rk_parts[0], 
-                                           location_type=Storage.TAPE)
+                self._catalog_location_del(
+                    body, rk_parts[0], location_type=Storage.TAPE
+                )
+                
+        elif (api_method == self.RK_DEL) or (api_method == self.RK_DELLIST):
+            self.log("Marking files for deletion", self.RK_LOG_DEBUG)
+            # split the routing key
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log("Routing key inappropriate length, exiting callback.",
+                        self.RK_LOG_ERROR)
+            self._catalog_del(body, rk_parts[0])
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method
@@ -1686,6 +1679,21 @@ class CatalogConsumer(RMQC):
 
         elif (api_method == self.RK_STAT):
             self._catalog_stat(body, properties)
+
+        # If received system test message, reply to it (this is for system status check)
+        elif api_method == "system_stat":
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
 
 
 def main():

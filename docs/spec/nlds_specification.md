@@ -1149,3 +1149,20 @@ Neil made the good point that having the api-server talk directly to the databas
 **Initial thoughts:** 
 - The awaiting thread will need to be picked back up by the consumer callback on the API-server - I am not sure how this works!
 - Could call an async `send_and_receive` function within the router function which creates a consumer, sends a message to the exchange and then waits for a response (for some timeout value...) 
+
+### Deleting ###
+Users can delete their files to free up quota and (for example) have one instance
+of a filepath.  When deleting a file users must supply:
+
+1.  Their user & group to check whether they have permission to delete the file.
+(they also need the authorisation credentials for this)
+2.  The holding id or label that the file belongs to: this ensures that they
+delete the exact file they want to.  A filepath can exist in multiple holdings.
+
+1.  Deleting works by the catalog marking the files that are to be deleted.  
+2.  Any request to list / get the file after that will result in "file not found".
+3.  The actual deletion is then enacted by a worker.  This inspects the database for deleted files and then removes them from the object storage.
+4.  After a file has been deleted, the entry is removed from the catalog.
+5.  If a file has been backed up to tape, then it will remain in the database,
+and on tape, until a repack takes place.
+

@@ -1,6 +1,5 @@
 from typing import List, Dict
-from pathlib import Path
-import os
+
 import tarfile
 
 import minio
@@ -10,9 +9,9 @@ from urllib3.exceptions import HTTPError
 from XRootD import client
 from XRootD.client.flags import (DirListFlags, PrepareFlags, OpenFlags)
 
-from nlds_processors.archiver.archive_base import (BaseArchiveConsumer, 
-                                                   ArchiveError,
-                                                   AdlerisingXRDFile)
+from nlds_processors.archiver.archive_base import (
+    BaseArchiveConsumer, ArchiveError, AdlerisingXRDFile
+)
 from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError

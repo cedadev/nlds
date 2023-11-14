@@ -513,6 +513,7 @@ class MonitorConsumer(RMQC):
             
         elif api_method in (self.RK_PUT, self.RK_PUTLIST, 
                             self.RK_GET, self.RK_GETLIST, 
+                            self.RK_DEL, self.RK_DELLIST,
                             self.RK_ARCHIVE_PUT, self.RK_ARCHIVE_GET):
             # Verify routing key is appropriate
             try:

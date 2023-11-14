@@ -1,7 +1,7 @@
 # screen RC config file
 
-setenv PYTHON_DIR "$HOME/nlds-venv/bin"
-setenv NLDS "$HOME/NLDS/nlds-server/nlds"
+setenv PYTHON_DIR "$HOME/python-venvs/nlds-venv/bin"
+setenv NLDS "$HOME/Coding/nlds"
 setenv NLDS_PROC "$NLDS/nlds_processors"
 
 # titles at the top
@@ -60,3 +60,7 @@ focus
 screen -t "logger"
 exec "$PYTHON_DIR/python" "$NLDS_PROC/logger.py"
 
+#split
+#focus
+#screen -t "archive_del"
+#exec "$PYTHON_DIR/python" "$NLDS_PROC/archiver/archive_del.py"

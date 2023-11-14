@@ -101,6 +101,26 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.publish_and_log_message(new_routing_key, body_json)
 
 
+    def _process_rk_del(self, body_json: Dict[str, str]) -> None:
+        # forward to catalog_del
+        queue = f"{self.RK_CATALOG_DEL}"
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    queue, 
+                                    self.RK_START])
+        self.log(f"Sending  message to {queue} queue with routing "
+                 f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
+
+        # Do initial monitoring update to ensure that a subrecord at ROUTING is 
+        # created before the first job 
+        self.log(f"Updating monitor", self.RK_LOG_INFO)
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    self.RK_MONITOR_PUT, 
+                                    self.RK_START])
+        body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
+        self.publish_and_log_message(new_routing_key, body_json)
+
+
     def _process_rk_list(self, body_json: Dict) -> None:
         # forward to catalog_get
         queue = f"{self.RK_CATALOG_GET}"
@@ -300,12 +320,30 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.log(f"Sending  message to {queue} queue with routing "
                  f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
+
+
+    def _process_rk_catalog_del_complete(self, rk_parts: List, 
+                                         body_json: Dict) -> None:
+        # This function will be triggered from two routes:
+        # 1. When trying to transfer to storage, and the transfer fails
+        #    i.e. triggered by an error
+        # 2. When deleting from the storage by the user
+        # differentiate by the api method
+        api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
+        if (api_method == self.RK_DELLIST):
+            queue = f"{self.RK_ARCHIVE_DEL}"
+            new_routing_key = ".".join([self.RK_ROOT, 
+                                        queue, 
+                                        self.RK_START])
+            self.log(f"Sending  message to {queue} queue with routing "
+                     f"key {new_routing_key}", self.RK_LOG_INFO)
+            self.publish_and_log_message(new_routing_key, body_json)
         
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
         
-        # Convert body from bytes to string for ease of manipulation
+        # Convert body from bytes to string for ease of nipulation
         body_json = json.loads(body)
 
         self.log(f"Received {json.dumps(body_json, indent=4)} \nwith " 
@@ -323,7 +361,8 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         
         # If received system test message, reply to it (this is for system status check)
         if api_method == "system_stat":
-            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+            if (properties.correlation_id is not None and 
+                properties.correlation_id != self.channel.consumer_tags[0]):
                 return False
             if (body_json["details"]["ignore_message"]) == True:
                 return
@@ -337,13 +376,15 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             return
         
         rk_parts, body_json = self._process_message(method, body, properties)
-        
         # If putting then first scan file/filelist
         if rk_parts[2] in (self.RK_PUT, self.RK_PUTLIST):
             self._process_rk_put(body_json)
         
         elif rk_parts[2] in (self.RK_GET, self.RK_GETLIST):
             self._process_rk_get(body_json)
+
+        elif rk_parts[2] in (self.RK_DEL, self.RK_DELLIST):
+            self._process_rk_del(body_json)
 
         # If a task has completed, initiate new tasks
         elif rk_parts[2] == f"{self.RK_COMPLETE}":
@@ -370,12 +411,16 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
             # If finished with aggregation of unarchived holding, then send for 
             # archive write
-            elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_NEXT):
+            elif (rk_parts[1] == f"{self.RK_CATALOG_ARCHIVE_NEXT}"):
                 self._process_rk_catalog_archive_next_complete(rk_parts, 
                                                                body_json)
             # If finished with archive write, then pass checksum info to catalog
             elif (rk_parts[1] == f"{self.RK_ARCHIVE_PUT}"):
                 self._process_rk_archive_put_complete(rk_parts, body_json)
+
+            # If finished with catalog deleting
+            elif (rk_parts[1] == f"{self.RK_CATALOG_DEL}"):
+                self._process_rk_catalog_del_complete(rk_parts, body_json)
 
         # If a reroute has happened from the catalog then we need to get from 
         # archive before we can do the transfer from object store.

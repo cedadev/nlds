@@ -84,13 +84,13 @@ note right of qc
 end note
 
 activate catalog_get
-loop #LightPink for file in //filelist//
+loop #SpringGreen for file in //filelist//
     catalog_get -> catalog_db : get file record from catalog holding
     catalog_db -> catalog_get
-    alt #MistyRose the file exists on the object storage
+    alt #LightGreen the file exists on the object storage
         catalog_get->catalog_get : add file record to //transfer_list//
     else else
-        alt #FFF8F8 the file exists on the tape
+        alt #MintCream the file exists on the tape
             catalog_get->catalog_get : add file record to //archive_list//
         else else
             catalog_get->catalog_get : add file record to //failed_list//
@@ -127,7 +127,7 @@ loop #LightPink for aggregate in //aggregate_list//
     archive_gets -> tape : get aggregate from tape
     tape -> archive_gets
     alt #MistyRose tape retrieval succeeded
-        loop #FFF8F8 for file in aggregate
+        loop #FFF4F4 for file in aggregate
             archive_gets->obj : extract file from aggregate
             obj->archive_gets
             alt #FFFDFD extract succeeded
@@ -196,7 +196,7 @@ qt -> transfer_get : key=""nlds-api.transfer-get.start""
 deactivate qt
 activate transfer_get
 
-loop #LightPink for file in //transferred_list//
+loop #Gold for file in //transferred_list//
     transfer_get -> obj : copy file to target
     obj -> transfer_get : 
     transfer_get->transfer_get : add file record to //completed_list//
@@ -209,7 +209,7 @@ activate qw
 qw -> work : key=""nlds-api.transfer-get.complete""
 deactivate qw
 
-loop #LightPink for file, aggregation in //failed_list//
+loop #Gold for file, aggregation in //failed_list//
     transfer_get->transfer_get : add file record(s) to //failed_list//
 end
 

@@ -70,6 +70,7 @@ class RabbitMQPublisher():
     RK_ARCHIVE = "archive"
     RK_ARCHIVE_PUT = "archive-put"
     RK_ARCHIVE_GET = "archive-get"
+    RK_ARCHIVE_DEL = "archive-del"
     RK_CATALOG_ARCHIVE_NEXT = "catalog-archive-next"
     RK_CATALOG_ARCHIVE_DEL = "catalog-archive-del"
     RK_CATALOG_ARCHIVE_UPDATE = "catalog-archive-update"

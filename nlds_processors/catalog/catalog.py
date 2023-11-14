@@ -308,6 +308,7 @@ class Catalog(DBMixin):
                 ).all()
                 for f in file:
                     # check user has permission to access this file
+                    # NRM - 12/10/2023, is this necessary?
                     if (f and 
                         not self._user_has_get_file_permission(user, group, f)
                         ):
@@ -369,6 +370,23 @@ class Catalog(DBMixin):
         return new_file
 
 
+    @staticmethod
+    def _user_has_delete_from_holding_permission(user: str, 
+                                                 group: str,
+                                                 is_admin: bool,
+                                                 holding: Holding) -> bool:
+        """Check whether a user has permission to delete files from this holding.
+        When we implement ROLES this will be more complicated."""
+        # is_admin == whether the user is an administrator of the group
+        # i.e. a DEPUTY or MANAGER
+        # this gives them delete permissions for all files in the group
+        permitted = True
+        # Currently, only users can delete files from their owned holdings
+        permitted &= (holding.user == user or is_admin)
+        permitted &= holding.group == group
+        return permitted
+    
+
     def delete_files(self, 
                      user: str, 
                      group: str, 
@@ -393,6 +411,14 @@ class Catalog(DBMixin):
                 transaction = self.get_transaction(f.transaction_id)
                 holding = self.get_holding(user, group, 
                                            holding_id=transaction.holding_id)[0]
+                if not Catalog._user_has_delete_from_holding_permission(
+                    user, group, False, holding):
+                    # No admins at the moment!
+                    raise CatalogError(
+                       f"User:{user} in group:{group} does not have permission "
+                       f"to delete files from the holding with label:"
+                       f"{holding.label}."
+                    )                    
                 self.session.delete(f)
                 if len(transaction.files) == 0:
                     self.session.delete(transaction)
@@ -404,6 +430,8 @@ class Catalog(DBMixin):
             checkpoint.rollback()
             err_msg = f"File with original_path:{path} could not be deleted"
             raise CatalogError(err_msg)
+        
+        return files
 
 
     def get_location(self, 
