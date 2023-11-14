@@ -41,7 +41,7 @@ depends_on = None
 # future updates to these tables. Use a separate base from the one used by the 
 # catalog
 Base = declarative_base()
-_DEFAULT_URL = "PLACEHOLDER_VALUE"
+_DEFAULT_URL = "placeholder"
 
 class Holding(Base):
     """Class containing the details of a Holding - i.e. a batch"""
@@ -266,11 +266,13 @@ def upgrade_catalog() -> None:
 
     # Do initial schema migration with a placeholder value as default
     op.add_column('location', sa.Column('url_scheme', sa.String(), 
-                                        nullable=False, 
-                                        server_default=text(_DEFAULT_URL)))
+                                        nullable=True,
+                                        # server_default=text(_DEFAULT_URL)
+                                        ))
     op.add_column('location', sa.Column('url_netloc', sa.String(), 
-                                        nullable=False,
-                                        server_default=text(_DEFAULT_URL)))
+                                        nullable=True,
+                                        # server_default=text(_DEFAULT_URL)
+                                        ))
     
     # Make a session to iterate over the data and make necessary changes. 
     session = Session(bind=op.get_bind())
@@ -298,10 +300,10 @@ def upgrade_catalog() -> None:
     # too (see https://alembic.sqlalchemy.org/en/latest/batch.html for details)
     with op.batch_alter_table("location") as bop:
         # Remove the server_default from both new columns. 
-        bop.alter_column("url_scheme", server_default=None, 
-                         existing_nullable=False, existing_type=sa.String())
-        bop.alter_column("url_netloc", server_default=None, 
-                         existing_nullable=False, existing_type=sa.String())
+        bop.alter_column("url_scheme", existing_server_default=None,
+                         nullable=False, existing_type=sa.String())
+        bop.alter_column("url_netloc", existing_server_default=None,
+                         nullable=False, existing_type=sa.String())
 
 
 def downgrade_catalog() -> None:

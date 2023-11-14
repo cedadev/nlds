@@ -13,16 +13,23 @@ from abc import ABC, abstractmethod
 import json
 from typing import Tuple, List, Dict, TypeVar
 from zlib import adler32
+from enum import Enum
 
 try:
-    from pyxrootd.client import File
+    from XRootD.client import File, FileSystem
+    from XRootD.client.flags import StatInfoFlags
 except ModuleNotFoundError:
-    File = TypeVar('File')
+    File = TypeVar("File")
+    FileSystem = TypeVar("FileSystem")
+    class StatInfoFlags(Enum):
+        IS_DIR = 2
 
 from nlds_processors.transferers.base_transfer import (BaseTransferConsumer, 
                                                        TransferError)
+from nlds.errors import CallbackError
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
+from nlds.rabbit.consumer import State
 
 
 class ArchiveError(Exception):
@@ -37,12 +44,13 @@ class AdlerisingXRDFile():
     implentation of checksums within the catalog feasible. 
     """
 
-    def __init__(self, f: File, offset=0, length=0, checksum=1):
+    def __init__(self, f: File, offset=0, length=0, checksum=1, debug_fl=False):
         self.f = f
         self.offset = offset
         self.length = length
         self.pointer = 0
         self.checksum = checksum
+        self.debug_fl = debug_fl
 
     def read(self, size):
         """Read some number of bytes (size) from the file, offset by the current 
@@ -60,7 +68,13 @@ class AdlerisingXRDFile():
         # Update the checksum before we actually do the writing
         self.checksum = adler32(b, self.checksum)
         to_write = len(b)
-        self.f.write(b, offset=self.pointer, size=to_write)
+        if self.debug_fl:
+            print(f"{self.pointer}:{to_write}")
+        status, _ = self.f.write(b, offset=self.pointer, size=to_write)
+        if status.status != 0:
+            raise IOError(f"Unable to write to file f {self.f}")
+        # Move the pointer on
+        self.pointer += to_write
         return to_write
     
     def seek(self, whence: int) -> None:
@@ -98,7 +112,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
         self.tape_pool = self.load_config_value(self._TAPE_POOL)
         self.tape_url = self.load_config_value(self._TAPE_URL)
-        self.chunk_size = self.load_config_value(self._CHUNK_SIZE)
+        self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
         self.query_checksum_fl = self.load_config_value(self._QUERY_CHECKSUM)
         
         # Verify the tape_url is valid, if it exists
@@ -109,10 +123,10 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
 
     def callback(self, ch, method, properties, body, connection):
-        """Callback for the base archiver consumer. Takes the message in body 
-        runs some standard objectstore verification, taken from the 
-        BaseTransferConsumer, as well as some more tape specific config 
-        scraping, then runs the appropriate  transfer function. 
+        """Callback for the base archiver consumer. Takes the message contents 
+        in body and runs some standard objectstore verification (reused from the 
+        BaseTransferConsumer) as well as some more tape-specific config 
+        scraping, then runs the appropriate transfer function. 
         """
         self.reset()
         
@@ -121,14 +135,12 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         body = body.decode("utf-8")
         body_dict = json.loads(body)
         
-        
         # This checks if the message was for a system status check
         try:
             api_method = body_dict[self.MSG_DETAILS][self.MSG_API_ACTION]
         except KeyError:
             self.log(f"Message did not contain api_method", self.RK_LOG_INFO)
             api_method = None
-        
         
         # If received system test message, reply to it (this is for system status check)
         if api_method == "system_stat":
@@ -144,7 +156,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                     correlation_id=properties.correlation_id
                 )
             return
-        
 
         self.log(f"Received {json.dumps(body_dict, indent=4)} from "
                  f"{self.queues[0].name} ({method.routing_key})", 
@@ -157,6 +168,23 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             self.log(
                 "Routing key inappropriate length, exiting callback.", 
                 self.RK_LOG_ERROR
+            )
+            return
+        
+        filelist = self.parse_filelist(body_dict)
+        
+        # We do this here in case a Transaction-level Retry is triggered before 
+        # we get to the transfer method.
+        rk_failed = ".".join([rk_parts[0], rk_parts[1], self.RK_FAILED])
+        retries = self.get_retries(body_dict)
+        if retries is not None and retries.count >= self.max_retries:
+            # Mark the message as 'processed' so it can be failed more safely.
+            self.log("Max transaction-level retries reached, failing filelist", 
+                     self.RK_LOG_ERROR)
+            self.send_pathlist(
+                filelist, rk_failed, body_dict, 
+                state=State.CATALOG_ARCHIVE_ROLLBACK, 
+                save_reasons_fl=True,
             )
             return
 
@@ -172,8 +200,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             )
             return
 
-        filelist = self.parse_filelist(body_dict)
-
         # Set uid and gid from message contents if configured to check 
         # permissions
         if self.check_permissions_fl:
@@ -187,7 +213,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         except TransferError: 
             self.log("Objectstore config unobtainable, exiting callback.", 
                      self.RK_LOG_ERROR)
-            return
+            raise
 
         try:
             tape_url = self.get_tape_config(body_dict)
@@ -195,7 +221,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             self.log("Tape config unobtainable or invalid, exiting callback.", 
                      self.RK_LOG_ERROR)
             self.log(str(e), self.RK_LOG_DEBUG)
-            return
+            raise
 
         self.log(f"Starting tape transfer between {tape_url} and object store "
                  f"{tenancy}", self.RK_LOG_INFO)
@@ -221,12 +247,12 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         # Check to see whether tape_url has been specified in either the message 
         # or the server_config - exit if not. 
         if tape_url is None:
-            self.log(
+            reason = (
                 "No tenancy specified at server- or request-level, exiting "
-                "callback.", 
-                self.RK_LOG_ERROR
+                "callback."
             )
-            raise ArchiveError() 
+            self.log(reason, self.RK_LOG_ERROR)
+            raise ArchiveError(reason) 
         
         # Verify the tape_url is valid 
         # NOTE: Might not be necessary as it's checked at startup if using 
@@ -248,6 +274,34 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         # prepend a slash onto the base_dir so it can directly be used to make 
         # directories with the pyxrootd client
         return server, f"/{base_dir}"
+    
+
+    def verify_tape_server(self, fs_client: FileSystem, tape_server: str,
+                           tape_base_dir: str):
+        """Make several simple checks with xrootd to ensure the tape server and 
+        tape base path, derived form a given tape url, are valid and the xrootd 
+        endpoint they describe is accessible on the current system.
+        """    
+        # Attempt to ping the tape server to check connection is workable.
+        status, _ = fs_client.ping()
+        if status.status != 0:
+            self.log(f"Failed status message: {status.message}", 
+                     self.RK_LOG_ERROR)
+            raise CallbackError(f"Could not ping cta server at {tape_server}.")
+
+        # Stat the base directory and check it's a directory.
+        status, resp = fs_client.stat(tape_base_dir)
+        if status.status != 0:
+            self.log(f"Failed status message: {status.message}", 
+                     self.RK_LOG_ERROR)
+            raise CallbackError(f"Base dir {tape_base_dir} could not be statted")
+        # Check whether the flag indicates it's a directory
+        elif not bool(resp.flags & StatInfoFlags.IS_DIR):
+            self.log(f"Failed status message: {status.message}", 
+                     self.RK_LOG_ERROR)
+            self.log(f"Full status object: {status}", self.RK_LOG_DEBUG)
+            raise CallbackError(f"Stat result for base dir {tape_base_dir} "
+                                f"indicates it is not a directory.")
     
 
     @abstractmethod

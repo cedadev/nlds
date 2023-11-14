@@ -23,7 +23,8 @@ setup(
     include_package_data=True,
     package_data={
         'nlds': ['templates/*'],
-        'nlds_processors': ['templates/*.j2']
+        'nlds_processors': ['templates/*.j2'],
+        'scripts': ['*'],
     },
     license='LICENSE.txt',  # example license
     description=('REST-API server for CEDA Near-Line Data Store'),
@@ -39,8 +40,9 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
@@ -55,6 +57,7 @@ setup(
             'logging_q=nlds_processors.logger:main',
             'archive_put_q=nlds_processors.archiver.archive_put:main',
             'archive_get_q=nlds_processors.archiver.archive_get:main',
+            'send_archive_next=scripts.send_archive_next:send_archive_next',
         ],
     }
 )

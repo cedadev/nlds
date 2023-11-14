@@ -140,7 +140,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
     DEFAULT_EXCHANGE_NAME = "test_exchange"
     DEFAULT_REROUTING_INFO = "->"
 
-    DEFAULT_CONSUMER_CONFIG : Dict[str, str] = dict()
+    DEFAULT_CONSUMER_CONFIG : Dict[str, Any] = dict()
 
     # The state associated with finishing the consumer, must be set but can be 
     # overridden
@@ -297,16 +297,23 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return new_filelist
 
 
-    def send_pathlist(self, pathlist: List[PathDetails], routing_key: str, 
-                       body_json: Dict[str, Any], state: State = None,
-                       mode: FilelistType = FilelistType.processed, 
-                       warning: List[str] = None
-                       ) -> None:
+    def send_pathlist(
+            self, 
+            pathlist: List[PathDetails], 
+            routing_key: str, 
+            body_json: Dict[str, Any], 
+            state: State = None,
+            mode: FilelistType = FilelistType.processed, 
+            warning: List[str] = None, 
+            delay: int = None,
+            save_reasons_fl: bool = False,
+        ) -> None:
         """Convenience function which sends the given list of PathDetails 
         objects to the exchange with the given routing key and message body. 
         Mode specifies what to put into the log message, as well as determining 
         whether the list should be retry-reset and whether the message should be 
-        delayed.
+        delayed. Optionally, when resetting the retries the retry-reasons can be 
+        saved for later perusal by setting the save_reasons_fl.
 
         Additionally forwards transaction state info on to the monitor. As part 
         of this it keeps track of the number of messages sent and reassigns 
@@ -332,42 +339,42 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             current_state = State(body_json[self.MSG_DETAILS][self.MSG_STATE])
         except (ValueError, KeyError) as e:
             self.log("Couldn't retrieve current state from message, continuing "
-                     "with default state.", self.RK_LOG_ERROR)
+                     "with default state.", self.RK_LOG_WARNING)
             self.log(f"Exception raised during state retrieval: {e}", 
                      self.RK_LOG_DEBUG)
             current_state = self.DEFAULT_STATE
 
-        delay = 0
         body_json[self.MSG_DETAILS][self.MSG_RETRY] = False
         if mode == FilelistType.processed:
             # Reset the retries (both transaction-level and file-level) upon 
             # successful completion of processing. 
             trans_retries = Retries.from_dict(body_json)
-            trans_retries.reset()
+            trans_retries.reset(save_reasons_fl=save_reasons_fl)
             body_json.update(trans_retries.to_dict())
             for path_details in pathlist:
-                path_details.retries.reset()
+                path_details.retries.reset(save_reasons_fl=save_reasons_fl)
             if state is None: 
                 state = self.DEFAULT_STATE
         elif mode == FilelistType.retry:
             # Delay the retry message depending on how many retries have been 
             # accumulated. All retries in a retry list _should_ be the same so 
             # base it off of the first one.
-            delay = self.get_retry_delay(pathlist[0].retries.count)
-            self.log(f"Adding {delay / 1000}s delay to retry. Should be sent at"
-                     f" {datetime.now() + timedelta(milliseconds=delay)}", 
-                     self.RK_LOG_DEBUG)
+            if delay is None:
+                delay = self.get_retry_delay(pathlist[0].retries.count)
+                arrival_time = datetime.now() + timedelta(milliseconds=delay)
+                self.log(f"Adding {delay / 1000}s delay to retry. Should be "
+                         f"sent at {arrival_time}", self.RK_LOG_DEBUG)
             body_json[self.MSG_DETAILS][self.MSG_RETRY] = True
             if state is None:
                 state = current_state
         elif mode == FilelistType.failed:
             state = State.FAILED
-        
-        # If state not set at this point then revert to the default value for 
-        # the consumer. It _should_ always be set though so this is probably 
-        # redundant
+
+        # If necessary values not set at this point then use default values
         if state is None:
             state = self.DEFAULT_STATE
+        if delay is None:
+            delay = 0
 
         # Create new sub_id for each extra subrecord created.
         if self.sent_message_count >= 1:
@@ -659,12 +666,14 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             # NOTE: why are we making this distinction? We can attempt to retry 
             # any message that fails and the worst that can happen is what 
             # already happens now
-            self.log(f"Unexpected exception encountered! The current list of "
-                     f"expected exceptions is: {self.EXPECTED_EXCEPTIONS}. "
-                     f"Consider adding this exception ({e}) to the list and "
-                     f"accounting for it more specifically. Now attempting to "
-                     f"handle message with retry/fail mechanism.", 
-                     self.RK_LOG_WARNING)
+            self.log(
+                f"Unexpected exception encountered! The current list of "
+                f"expected exceptions is: {self.EXPECTED_EXCEPTIONS}. Consider "
+                f"adding this exception type ({type(e).__name__}) to the list "
+                f"and accounting for it more specifically. Now attempting to "
+                f"handle message with standard retry/fail mechanism.", 
+                self.RK_LOG_WARNING
+            )
             self._handle_expected_error(body, method.routing_key, e)
         finally:
             # Only ack message if the message has not been flagged for nacking 

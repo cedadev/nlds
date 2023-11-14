@@ -120,7 +120,7 @@ class RabbitMQPublisher():
     MSG_JOB_LABEL = "job_label"
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
-    MSG_RETRIEVAL_FILELIST = "fl_original"
+    MSG_RETRIEVAL_FILELIST = "retrieval_dict"
     MSG_TRANSACTIONS = "transactions"
     MSG_LOG_TARGET = "log_target"
     MSG_LOG_MESSAGE = "log_message"
@@ -145,10 +145,13 @@ class RabbitMQPublisher():
     MSG_TAPE_POOL = "tape_pool"
     MSG_AGGREGATION_ID = "aggregation_id"
     MSG_CHECKSUM = "checksum"
+    MSG_NEW_TARNAME = "new_tarname"
+    MSG_PREPARE_ID = "prepare_id"
 
     MSG_RETRIES = "retries"
     MSG_RETRIES_COUNT = "count"
     MSG_RETRIES_REASONS = "reasons"
+    MSG_RETRIES_SAVED_REASONS = "saved_reasons"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
@@ -205,7 +208,14 @@ class RabbitMQPublisher():
         if setup_logging_fl:
             self.setup_logging()
     
-    @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
+    @retry(
+        RabbitRetryError, 
+        tries=-1, 
+        delay=1, 
+        backoff=2, 
+        max_delay=60, 
+        logger=logger
+    )
     def get_connection(self):
         try:
             if (not self.channel or not self.channel.is_open):
@@ -238,7 +248,7 @@ class RabbitMQPublisher():
         except (AMQPConnectionError, ChannelWrongStateError) as e:
             logger.error("AMQPConnectionError encountered on attempting to "
                          "establish a connection. Retrying...")
-            logger.debug(f"{e}")
+            logger.debug(f"{type(e).__name__}: {e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
@@ -277,7 +287,14 @@ class RabbitMQPublisher():
             delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
         )
 
-    @retry(RabbitRetryError, tries=2, delay=0, backoff=1, logger=logger)
+    @retry(
+        RabbitRetryError, 
+        tries=-1, 
+        delay=1, 
+        backoff=2, 
+        max_delay=60, 
+        logger=logger
+    )
     def publish_message(self, 
                         routing_key: str, 
                         msg_dict: Dict, 
@@ -336,8 +353,10 @@ class RabbitMQPublisher():
             # For any Undelivered messages attempt to send again
             logger.error("Message delivery was not confirmed, wasn't delivered "
                          f"properly (rk = {routing_key}). Attempting retry...")
-            logger.debug(f"{e}")
-            raise RabbitRetryError(str(e), ampq_exception=e)
+            logger.debug(f"{type(e).__name__}: {e}")
+            # NOTE: don't reraise in this case, can cause an infinite loop as 
+            # the message will never be sent. 
+            # raise RabbitRetryError(str(e), ampq_exception=e)
 
     def get_retry_delay(self, retries: int):
         """Simple convenience function for getting the delay (in seconds) for an 

@@ -1,7 +1,15 @@
 """Declare the SQLAlchemy ORM models for the NLDS Catalog database"""
 from __future__ import annotations
 
-from sqlalchemy import Integer, String, Column, DateTime, Enum, BigInteger, UniqueConstraint
+from sqlalchemy import (
+    Integer, 
+    String, Column, 
+    DateTime, 
+    Enum, 
+    BigInteger, 
+    UniqueConstraint, 
+    Boolean,
+)
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -166,6 +174,8 @@ class Aggregation(CatalogBase):
     checksum = Column(String, nullable=True)
     # checksum method / algorithm
     algorithm = Column(String, nullable=True)
+    # whether aggregation has failed or not
+    failed_fl = Column(Boolean, nullable=False)
 
     # relationship for location (one to many)
     locations = relationship("Location", cascade="delete, delete-orphan")

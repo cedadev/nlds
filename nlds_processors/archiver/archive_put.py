@@ -6,7 +6,6 @@ from hashlib import shake_256
 
 import minio
 from minio.error import S3Error
-from retry import retry
 from urllib3.exceptions import HTTPError
 from XRootD import client
 from XRootD.client.flags import (OpenFlags, MkDirFlags, QueryCode)
@@ -17,6 +16,10 @@ from nlds_processors.archiver.archive_base import (BaseArchiveConsumer,
 from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
+
+
+class TapeWriteError(CallbackError):
+    pass
 
 
 class PutArchiveConsumer(BaseArchiveConsumer):
@@ -31,16 +34,10 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         super().__init__(queue=queue)
 
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
                  secret_key: str, tape_url: str, filelist: List[PathDetails], 
                  rk_origin: str, body_json: Dict[str, str]):
-        # Grab message sections for ease of access. This shouldn't fail becuase
-        # of checking done in the worker, might make sense to do it here/in the 
-        # basetransfer too though
-        msg_details = body_json[self.MSG_DETAILS]
-        msg_meta = body_json[self.MSG_META]
-
+        # Make the routing keys now
         rk_complete = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_COMPLETE])
         rk_retry = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_START])
         rk_failed = ".".join([rk_origin, self.RK_ARCHIVE_PUT, self.RK_FAILED])
@@ -48,14 +45,14 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # First check for transaction-level message failure and boot back to 
         # catalog if necessary.
         retries = self.get_retries(body_json)
-        if retries is not None and retries.count > self.max_retries:
-            # Mark the message as 'processed' so it can be failed more safely.
-            self.send_pathlist(filelist, rk_failed, body_json, 
-                               state=State.CATALOG_ARCHIVE_ROLLBACK)
-            return
 
         # Can call this with impunity as the url has been verified previously
         tape_server, tape_base_dir = self.split_tape_url(tape_url)
+        self.log(f"Tape url:{tape_url} split into tape server:{tape_server} "
+                 f"and tape base directory:{tape_base_dir}.", self.RK_LOG_INFO)
+
+        # NOTE: For the purposes of tape reading and writing, the holding slug 
+        # has 'nlds.' prepended
         holding_slug = self.get_holding_slug(body_json)
 
         # Create minio client
@@ -68,21 +65,20 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Create the FileSystem client at this point to verify the tape_base_dir 
         fs_client = client.FileSystem(f"root://{tape_server}")
-        # Attempt to create it, should succeed if everything is working properly
-        # but otherwise will be passed for message-level retry. 
-        status, _ = fs_client.mkdir(tape_base_dir, MkDirFlags.MAKEPATH)
-        if status.status != 0:
-            self.log(f"Failed status message: {status.message}", 
-                     self.RK_LOG_ERROR)
-            raise CallbackError(f"Base dir {tape_base_dir} derived from "
-                                f"tape_url ({tape_url}) could not be created or"
-                                f" verified.")
+        self.verify_tape_server(fs_client, tape_server, tape_base_dir)
 
         # Generate a name for the tarfile by hashing the combined filelist. 
-        # Length of the hash will be 16
+        # Length of the hash will be 16. 
+        # NOTE: this breaks if a problem file is removed from an aggregation
         filenames = [f.original_path for f in filelist]
-        filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8) 
-        tar_filename = f"{filelist_hash}.tar"
+        filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8)
+        # Conflicting filename in cache from previous attempt might prevent us 
+        # making a new tar, so guarantee a new filename for each attempt.
+        retry_str = ""
+        if retries is not None and retries.count > 0: 
+            retry_str = f".{retries.count}"
+
+        tar_filename = f"{filelist_hash}{retry_str}.tar"
 
         # All files are now supposed to be from a single aggregation according 
         # to the current implementation of the PUT workflow. Here we do an 
@@ -116,157 +112,161 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 # Check the bucket and that the object is in the bucket and 
                 # matches the metadata stored.
                 assert s3_client.bucket_exists(check_bucket)
-                objects = s3_client.list_objects(check_bucket, 
-                                                 prefix=check_object)
-                assert len(objects) == 1
-                assert check_object == objects[0].object_name
-                assert path_details.size == objects[0].size
-            except AssertionError as e:
+                obj_stat_result = s3_client.stat_object(check_bucket, check_object)
+                assert check_object == obj_stat_result.object_name
+                assert path_details.size == obj_stat_result.size
+            except (AssertionError, S3Error, HTTPError) as e:
                 raise CallbackError(
                     f"Could not verify that bucket {check_bucket} contained "
                     f"object {check_object} before writing to tape."
                 )
             
-            # NOTE: This is probably unnecessary given we're not doing 
-            # file-level retries for tape writes to tar files now
-            # First we can check whether each path_details has failed too many 
-            # times
-            # if path_details.retries.count > self.max_retries:
-            #     self.append_and_send(
-            #         path_details, rk_failed, body_json, list_type="failed"
-            #     )
-            #     continue
-            # else:
-            #     # Otherwise, log error and queue for retry
-            #     reason = "Unable to get bucket_name from message info"
-            #     self.log(f"{reason}, adding "
-            #              f"{path_details.object_name} to retry list.", 
-            #              self.RK_LOG_INFO)
-            #     path_details.retries.increment(reason=reason)
-            #     self.append_and_send(
-            #         path_details, rk_failed, body_json, list_type="retry"
-            #     )
-            #     continue
-            
-        # After verifying the filelist integrity we can make the path + tar file
-        holding_tape_path = (f"root://{tape_server}/{tape_base_dir}/"
-                             f"{holding_slug}")
-        full_tape_path = (f"{holding_tape_path}/{tar_filename}")
+        # After verifying the filelist integrity we can actually write to tape. 
+        # The paths to the tar file and holding folder formatted for the xrd 
+        # FileSystem client
+        fs_holding_tapepath = f"{tape_base_dir}/{holding_slug}"
+        fs_full_tapepath = f"{fs_holding_tapepath}/{tar_filename}"
+        # Path to the tar file formatted for the standard xrd client
+        client_full_tapepath = (f"root://{tape_server}/{fs_holding_tapepath}/"
+                                f"{tar_filename}")
 
         # Make holding folder and retry if it can't be created. 
-        status, _ = fs_client.mkdir(holding_tape_path, MkDirFlags.MAKEPATH)
+        status, _ = fs_client.mkdir(fs_holding_tapepath, MkDirFlags.MAKEPATH)
         if status.status != 0:
             # If bucket directory couldn't be created then fail for retrying
             raise CallbackError(f"Couldn't create or find holding directory "
-                                f"({holding_tape_path}).")
+                                f"({fs_holding_tapepath}).")
         
         with client.File() as f:
             # Open the file as NEW, to avoid having to prepare it
-            status, _ = f.open(full_tape_path, (OpenFlags.NEW | 
-                                                OpenFlags.MAKEPATH))
+            flags = (OpenFlags.NEW | OpenFlags.MAKEPATH)
+            status, _ = f.open(client_full_tapepath, flags)
             if status.status != 0:
                 raise CallbackError("Failed to open file for writing")
             
-            file_wrapper = AdlerisingXRDFile(f)
-            
-            with tarfile.open(mode="w", fileobj=file_wrapper, 
-                              copybufsize=self.chunk_size) as tar:
-                for path_details in filelist:
-                    item_path = path_details.path
+            # From this point onward we have a file on the disk cache. If 
+            # anything goes wrong we'll need to delete it and try the whole 
+            # write again. 
+            try:
+                file_wrapper = AdlerisingXRDFile(f, debug_fl=False)
+                
+                with tarfile.open(mode="w", fileobj=file_wrapper, 
+                                  copybufsize=self.chunk_size) as tar:
+                    for path_details in filelist:
+                        item_path = path_details.path
+                            
+                        self.log(f"Attempting to stream file {item_path} "
+                                 "directly to tape archive", self.RK_LOG_DEBUG)
                         
-                    self.log(f"Attempting to stream file {item_path} "
-                            "directly to tape archive", self.RK_LOG_DEBUG)
-                    
-                    # Get the relevant variables from the path_details. 
-                    # NOTE: This can't fail as it's been verified above. 
-                    bucket_name, object_name = path_details.object_name.split(':')
-
-                    tar_info = tarfile.TarInfo(name=object_name)
-                    tar_info.size = path_details.size
-                    # TODO: add more file data into the tar_info?
-
-                    # Attempt to stream the object directly into the File object            
-                    try:
-                        result = s3_client.get_object(
-                            bucket_name, object_name,
+                        # Get the relevant variables from the path_details. 
+                        # NOTE: This won't fail as it's been verified above. 
+                        bucket_name, object_name = (
+                            path_details.object_name.split(':')
                         )
-                        # Adds bytes to xrd.File from result, one chunk_size at 
-                        # a time
-                        tar.addfile(tar_info, fileobj=result)
 
-                    # TODO: Need to think about error handling here, any failure 
-                    # will result in a corrupted tar file so probably can't just 
-                    # pick up where we left off, will need to start the whole 
-                    # thing again. There is something to do with 
-                    # failed_write_recovery in the docs that maybe should be 
-                    # looked into. This is related to the checksum issue, i.e. 
-                    # what to do on a failed write. 
-                    except (HTTPError, ArchiveError) as e:
-                        reason = f"Stream-time exception occurred: {e}"
-                        self.log(reason, self.RK_LOG_DEBUG)
-                        self.log(f"Exception encountered during stream, adding "
-                                 f"{object_name} to retry-list.", self.RK_LOG_INFO)
-                        path_details.retries.increment(reason=reason)
-                        self.append_and_send(path_details, rk_retry, body_json, 
-                                             list_type=FilelistType.retry)
-                    else:
-                        # Log successful 
-                        self.log(f"Successfully archived {item_path}", 
-                                 self.RK_LOG_DEBUG)
-                        self.completelist.append(path_details)
-                    finally:
-                        result.close()
-                        result.release_conn()
-                        continue
+                        tar_info = tarfile.TarInfo(name=object_name)
+                        tar_info.size = int(path_details.size)
+                        # TODO: add more file data into the tar_info?
 
-            # Finally get the checksum out of the file wrapper to pass back to 
-            # the catalog 
-            body_json[self.MSG_DETAILS][self.MSG_CHECKSUM] = \
-                file_wrapper.checksum
+                        # Attempt to stream the object directly into the File 
+                        # object            
+                        try:
+                            stream = s3_client.get_object(
+                                bucket_name, object_name,
+                            )
+                            # Adds bytes to xrd.File from result, one chunk_size 
+                            # at a time
+                            tar.addfile(tar_info, fileobj=stream)
+ 
+                        except (HTTPError, S3Error, ArchiveError) as e:
+                            # Catch error, increment retry info and then rethrow
+                            # error to ensure file is deleted
+                            reason = (f"Stream-time exception occurred: "
+                                      f"{type(e).__name__}: {e}")
+                            self.log(f"{reason}", self.RK_LOG_ERROR)
+                            # NOTE: for now the retrylist is purely symbolic, 
+                            # we may change this in the future
+                            path_details.retries.increment(reason=reason)
+                            self.retrylist.append(path_details)
+                            raise e
+                        else:
+                            # Log successful 
+                            self.log(f"Successfully archived {item_path}", 
+                                     self.RK_LOG_DEBUG)
+                            self.completelist.append(path_details)
+                        finally:
+                            # Terminate any hanging/unclosed connections
+                            try:
+                                stream.close()
+                                stream.release_conn()
+                            except AttributeError:
+                                # If it can't be closed then dw
+                                pass
+
+            except Exception as e:
+                self.log(
+                    f"Exception occurred during write, need to delete file from "
+                    f"disk cache before we send for retry. Original exception: "
+                    f"{e}", self.RK_LOG_ERROR)
+                self.remove_file(fs_full_tapepath, fs_client)
+                raise TapeWriteError(f"Failure occurred during tape-write ({e})")
             
-            if self.query_checksum_fl:
-                status, result = fs_client.query(
-                    QueryCode.CHECKSUM, 
-                    f"{tape_base_dir}/{holding_slug}/{tar_filename}"
-                    f"?cks.type=adler32" # Specify the type of checksum to query
-                )
-                if status.status != 0:
-                    self.log(f"Could not query xrootd's checksum for tar file "
-                            f"{tar_filename}.", self.RK_LOG_WARNING)
-                    # TODO: Schedule another for later?
-                else:
-                    try:
-                        method, value = result.decode().split()
-                        assert method == 'adler32'
-                        # Convert checksum from from hex to int for comparison
-                        checksum = int(value[:8], 16)
-                        assert checksum == file_wrapper.checksum
-                    except ValueError as e:
-                        self.log(f"Exception {e} when attempting to parse "
-                                 f"tarfile checksum from xrootd", 
-                                 self.RK_LOG_ERROR)
-                    except AssertionError as e:
-                        # TODO: what do we actually want to do here? Failing 
-                        # means we have to make a brand new tar file. Not 
-                        # failing means we have corrupt data and are doing 
-                        # nothing about it. Raising a callback error like this 
-                        # means a retry is triggered but will fail on second 
-                        # write because the tar file already exists. Can we 
-                        # delete the write before it's made to tape? One for the 
-                        # SCD team methinks. At least it's unlikely. 
-                        raise CallbackError(
-                            f"XRootD checksum differs from that calculated "
-                            f"block-wise."
-                        )
+        # Write has now finished so, unless something is wrong with the 
+        # checksum, we no longer have to delete the file.
 
-        self.log("Archive complete, passing lists back to worker for "
-                 "re-routing and cataloguing.", self.RK_LOG_INFO)
+        # Finally get the checksum out of the file wrapper to pass back to the 
+        # catalog 
+        body_json[self.MSG_DATA][self.MSG_CHECKSUM] = \
+            file_wrapper.checksum
+            
+        if self.query_checksum_fl:
+            status, result = fs_client.query(
+                QueryCode.CHECKSUM, 
+                f"{fs_full_tapepath}?cks.type=adler32" # Specify the type of checksum 
+            )
+            if status.status != 0:
+                self.log(f"Could not query xrootd's checksum for tar file "
+                         f"{tar_filename}.", self.RK_LOG_WARNING)
+                # TODO: Schedule another for later?
+            else:
+                try:
+                    method, value = result.decode().split()
+                    assert method == 'adler32'
+                    # Convert checksum from hex to int for comparison
+                    checksum = int(value[:8], 16)
+                    assert checksum == file_wrapper.checksum
+                except ValueError as e:
+                    self.log(f"Exception {e} when attempting to parse tarfile "
+                             f"checksum from xrootd", self.RK_LOG_ERROR)
+                except AssertionError as e:
+                    # If it fails at this point then attempt to delete and start 
+                    # again. 
+                    reason = (f"XRootD checksum {checksum} differs from that "
+                              f"calculated block-wise {file_wrapper.checksum}.")
+                    self.log(
+                        f"{reason}. Deleting file from disk-cache before it "
+                        "gets written to tape.", self.RK_LOG_ERROR
+                    )
+                    self.remove_file(fs_full_tapepath, fs_client)
+                    raise TapeWriteError(f"Failure occurred during tape-write "
+                                         f"({reason}).")
+
+        self.log("Archive complete, passing lists back to worker for re-routing"
+                 " and cataloguing.", self.RK_LOG_INFO)
         
-        # Send whatever remains after all items have been (attempted to be) put
+        # Send whatever remains after all items have been put
         if len(self.completelist) > 0:
+            # If file has had to be renamed and successfully written, the 
+            # catalog will need to know
+            if retry_str:
+                body_json[self.MSG_DATA][self.MSG_NEW_TARNAME] = (
+                    f"{filelist_hash}{retry_str}"
+                )
             self.send_pathlist(
                 self.completelist, rk_complete, body_json, mode="archived"
             )
+
+        # These _should_ both be empty as they're not populated anywhere.
         if len(self.retrylist) > 0:
             self.send_pathlist(
                 self.retrylist, rk_retry, body_json, mode="retry"
@@ -276,11 +276,29 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             # puts
             self.send_pathlist(
                 self.failedlist, rk_failed, body_json, 
-                state=State.CATALOG_ARCHIVE_ROLLBACK
+                state=State.CATALOG_ARCHIVE_ROLLBACK,
             )
 
+
+    def remove_file(self, full_tape_path: str, fs_client: client.FileSystem):
+        """Part of the error handling process, if any error occurs during write 
+        we'll have to be very defensive and start the whole process again. If 
+        doing so we'll need to remove the file from the disk cache before it 
+        gets written to tape, hence this function. 
+        """
+        status, _ = fs_client.rm(full_tape_path, )
+        if status.status != 0:
+            reason = "Could not delete file from disk-cache"
+            self.log(f"{reason}, will need to be marked as deleted for future "
+                     "tape repacking", self.RK_LOG_ERROR)
+            raise CallbackError(reason)
+        else:
+            self.log("Deleted errored file from disk-cache to prevent tape "
+                     "write.", self.RK_LOG_INFO)
+
+
     @classmethod
-    def get_holding_slug(cls, body: Dict[str, Any]):
+    def get_holding_slug(cls, body: Dict[str, Any]) -> str:
         """Get the uneditable holding information from the message body to 
            reproduce the holding slug made in the catalog"""
         try:
@@ -291,7 +309,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             raise ArchiveError(f"Could not make holding slug, original error: "
                                f"{e}")
 
-        return f"{holding_id}.{user}.{group}"
+        return f"nlds.{holding_id}.{user}.{group}"
 
     
 def main():

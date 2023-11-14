@@ -42,7 +42,7 @@ from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog, CatalogError
-from nlds_processors.catalog.catalog_models import Storage, File
+from nlds_processors.catalog.catalog_models import Storage, Location, File
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
 
@@ -102,6 +102,7 @@ class CatalogConsumer(RMQC):
     _DEFAULT_TENANCY = "default_tenancy"
     _DEFAULT_TAPE_URL = "default_tape_url"
     _TARGET_AGGREGATION_SIZE = "target_aggregation_size"
+    _FULLY_UNPACK_TAR = "fully_unpack_tar_fl"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -115,6 +116,7 @@ class CatalogConsumer(RMQC):
         _DEFAULT_TENANCY: None,
         _DEFAULT_TAPE_URL: None,
         _TARGET_AGGREGATION_SIZE: 5 * (1024**3), # Default to 5 GB
+        _FULLY_UNPACK_TAR: False,
         RMQC.RETRY_DELAYS: RMQC.DEFAULT_RETRY_DELAYS,
     }
 
@@ -137,9 +139,13 @@ class CatalogConsumer(RMQC):
         self.target_aggregation_size = self.load_config_value(
             self._TARGET_AGGREGATION_SIZE
         )
+        self.fully_unpack_tar_fl = self.load_config_value(
+            self._FULLY_UNPACK_TAR
+        )
 
         self.catalog = None
         self.reroutelist = []
+        self.retrievedict = {}
 
 
     @property
@@ -155,6 +161,7 @@ class CatalogConsumer(RMQC):
         self.failedlist = []
         # New list for rerouting to archive if not found on object store
         self.reroutelist = []
+        self.retrievedict = {}
 
 
     def _parse_required_vars(self, body: Dict) -> Tuple:
@@ -509,8 +516,13 @@ class CatalogConsumer(RMQC):
             try:
                 # get the files first
                 files = self.catalog.get_files(
-                    user, group, groupall, holding_label, holding_id, 
-                    transaction_id, file_details.original_path, holding_tag
+                    user, group, 
+                    groupall=groupall, 
+                    holding_label=holding_label, 
+                    holding_id=holding_id, 
+                    transaction_id=transaction_id, 
+                    original_path=file_details.original_path, 
+                    tag=holding_tag
                 )
                 if len(files) == 0:
                     raise CatalogError(
@@ -533,6 +545,11 @@ class CatalogConsumer(RMQC):
                             location = self.catalog.get_location(
                                 file_, Storage.TAPE
                             )
+                            transaction = self.catalog.get_location_transaction(
+                                location)
+                            root = transaction.transaction_id
+                        else:
+                            root = location.root
                             
                         # If still None then file doesn't exist within the NLDS
                         if location is None:
@@ -550,14 +567,11 @@ class CatalogConsumer(RMQC):
                             )
                         self.log(e.message, RMQC.RK_LOG_ERROR)
                         continue
-                    # Make the object name. The format of location.root here 
-                    # will vary a little depending on the workflow: if the file 
-                    # has never been restored from tape before it will still be 
-                    # the transaction_id, but if it has been restored this will 
-                    # be a combination of holding and aggregation details. This 
-                    # reflects the change in bucket required by tape retrieval.
+                    # Make the object name. (2023-09) As of now the root will 
+                    # always be the transaction id, so files are retrieved from 
+                    # tape into the same original bucket name (for URIs).
                     object_name = (
-                        f"nlds.{location.root}:{location.path}"
+                        f"nlds.{root}:{location.path}"
                     )
                     access_time = location.access_time.timestamp()
                     # create a new PathDetails with all the info from the DB
@@ -585,23 +599,36 @@ class CatalogConsumer(RMQC):
                     else: 
                         # Need the new tenancy info as well as the stored tape 
                         # location info
+                        tape_object_name = f"nlds.{location.root}:{location.path}"
                         new_file.tenancy = tenancy
                         new_file.tape_url = location.url_netloc
-                        new_file.tape_path = object_name
+                        new_file.tape_path = tape_object_name
 
-                        # Save the aggregation id for later so we can add 
-                        # objectstore aggregations for all of the files 
-                        # retrieved from archive. 
-                        # NOTE: We attempt to get the aggregation here so the 
-                        # file can be failed at the earliest opportunity if 
-                        # there is a problem.
+                        # Get the aggregation so we can group by tarname in 
+                        # retrieval_dict
                         agg = self.catalog.get_aggregation(
                             aggregation_id=location.aggregation_id
                         )
-                        if agg in aggs_to_retrieve:
-                            aggs_to_retrieve[agg].append(new_file)
+                        if self.fully_unpack_tar_fl:
+                            # Save the aggregation for later so we can add 
+                            # objectstore location for all of the files needed 
+                            # to be retrieved from tape.
+                            if agg in aggs_to_retrieve:
+                                aggs_to_retrieve[agg].append(new_file)
+                            else:
+                                aggs_to_retrieve[agg] = [new_file, ]
                         else:
-                            aggs_to_retrieve[agg] = [new_file, ]
+                            # If we just want the files requested from the 
+                            # archive then make the necessary Location and 
+                            # message data now.
+                            self.create_objectstore_location(
+                                location, tenancy
+                            )
+                            self.reroutelist.append(new_file)
+                            if agg.tarname in self.retrievedict:
+                                self.retrievedict[agg.tarname].append(new_file)
+                            else:
+                                self.retrievedict[agg.tarname] = [new_file, ]
 
             except CatalogError as e:
                 if file_details.retries.count > self.max_retries:
@@ -614,30 +641,24 @@ class CatalogConsumer(RMQC):
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
         
+        # Create object store Locations for each member of an aggregation (if 
+        # unpacking the whole tar file)
         for aggregation, details_list in aggs_to_retrieve.items():
             # Make a session checkpoint here so we can rollback in the event of 
             # a failed Location creation
             # TODO: We need a way to mark a file as being a problem
             checkpoint = self.catalog.session.begin_nested()
             try:
-                # Create a fake file class with just an id so we can pass it to 
-                # the create_location method
-                class FakeFile:
-                    id: int
+                retrievelist = []
                 # Add the new objectstore location to the catalog now, 
                 # to be removed in the event of an s3 get failure. 
                 for tape_location in aggregation.locations:
-                    objstr_location = self.catalog.create_location(
-                        FakeFile(id=tape_location.file_id),
-                        storage_type=Storage.OBJECT_STORAGE,
-                        url_scheme="http",
-                        url_netloc=tenancy,
-                        root=tape_location.root,
-                        path=tape_location.path, 
-                        access_time = tape_location.access_time
+                    path_details = self.create_objectstore_location(
+                        tape_location, tenancy
                     )
-                # Also need to make locations for each of the files 
-                # within the same aggregation
+                    if path_details is None:
+                        continue
+                    retrievelist.append(path_details)
             except CatalogError as e:
                 # In the event of a failure we rollback all the added locations 
                 # and add the original file_details to the retry/fail list
@@ -656,6 +677,7 @@ class CatalogConsumer(RMQC):
                 # Add the file_details to the reroute list for archive retrieval 
                 for file_details in details_list:
                     self.reroutelist.append(file_details)
+                self.retrievedict[aggregation.tarname] = retrievelist
 
         # log the successful and non-successful catalog puts
         # SUCCESS
@@ -674,14 +696,18 @@ class CatalogConsumer(RMQC):
             rk_reroute = ".".join([rk_origin,
                                    self.RK_CATALOG_GET, 
                                    self.RK_REROUTE])
-            # Ensure the holding_id is present as we'll need it during retrieval  
+            # Ensure the holding_id is present as we'll need it during retrieval 
+            # TODO: double check both that it's included and whether you need it!
             body[self.MSG_META][self.MSG_HOLDING_ID] = holding_id # Ensure this is actually populated
+            # Include the original files requested in the message body so they 
+            # can be moved to disk after retrieval
+            body[self.MSG_DATA][self.MSG_RETRIEVAL_FILELIST] = self.retrievedict
             self.log(
-                f"Rerouting PathList from CATALOG_GET for archive retrieval "
-                f"{self.reroutelist}", self.RK_LOG_DEBUG
+                f"Rerouting PathList from CATALOG_GET to ARCHIVE_GET for "
+                f"archive retrieval ({self.reroutelist})", self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.reroutelist, rk_reroute, body, 
-                               state=State.CATALOG_RESTORING)
+                               state=State.CATALOG_GETTING)
         # RETRY
         if len(self.retrylist) > 0:
             rk_retry = ".".join([rk_origin,
@@ -706,7 +732,57 @@ class CatalogConsumer(RMQC):
                                mode="failed")
 
         # stop db transistions and commit
+        self.catalog.save()
         self.catalog.end_session()
+    
+
+    def create_objectstore_location(self, tape_location: Location, 
+                                    tenancy: str) -> PathDetails:
+        # Need to query catalog for file and transaction info to 
+        # create the same object_store location that existed before
+        # archive. 
+        file_ = self.catalog.get_location_file(tape_location)
+        
+        # Check if objectstore location already exists and skip if so
+        if self.catalog.get_location(file_, Storage.OBJECT_STORAGE):
+            return
+
+        transaction = self.catalog.get_location_transaction(
+            tape_location
+        )
+        access_time = tape_location.access_time.timestamp()
+        # Create the object store location with the old bucket name
+        objstr_location = self.catalog.create_location(
+            file_=file_,
+            storage_type=Storage.OBJECT_STORAGE,
+            url_scheme="http",
+            url_netloc=tenancy,
+            root=transaction.transaction_id,
+            path=file_.original_path, 
+            access_time = tape_location.access_time
+        )
+        # Also need to make a path_details object for each of the 
+        # files within the same aggregation and add it to the 
+        # retrieve list.
+        tape_object_name = f"nlds.{tape_location.root}:{tape_location.path}"
+        objstr_object_name = (
+            f"nlds.{transaction.transaction_id}:{tape_location.path}"
+        )
+        path_details = PathDetails(
+            original_path = file_.original_path,
+            object_name = objstr_object_name,
+            tape_url = tape_location.url_netloc,
+            tape_path = tape_object_name,
+            tenancy = tenancy,
+            size = file_.size,
+            user = file_.user,
+            group = file_.group,
+            permissions = file_.file_permissions,
+            access_time = access_time,
+            path_type = file_.path_type,
+            link_path = file_.link_path
+        )
+        return path_details
 
 
     def aggregate_files(
@@ -779,6 +855,14 @@ class CatalogConsumer(RMQC):
         # Get the next holding in the catalog, by id, which has any unarchived 
         # Files, i.e. any files which don't have a tape location
         next_holding = self.catalog.get_next_holding()
+
+        # If no holdings left to archive then end the callback
+        if not next_holding:
+            self.log("No holdings found to archive, exiting callback.", 
+                     self.RK_LOG_INFO)
+            self.catalog.end_session()
+            return
+
         # We need a new root as we can't rely on the transaction_id any more. 
         # Create a slug from the uneditable holding information, this will be 
         # the directory on the tape that contains each of the tar files. 
@@ -884,16 +968,20 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.completelist, rk_complete, body, 
-                               state=State.CATALOG_BACKUP)
+                               state=State.CATALOG_ARCHIVE_AGGREGATING)
         
         # stop db transactions and commit
         self.catalog.save()
         self.catalog.end_session()
 
 
-    def _catalog_archive_update(self, body: Dict) -> None:
+    def _catalog_archive_update(self, body: Dict, rk_origin: str, 
+                                rollback_fl: bool = False) -> None:
         """Update the aggregation record following successful archive write to 
-        fill in the missing checksum information."""
+        fill in the missing checksum information. Alternative mode is rollback, 
+        to be used on CATALOG_ARCHIVE_ROLLBACK, which simply marks the 
+        aggregation as failed upon a failed write attempt.
+        """
         # Parse the message body for required variables
         message_vars = self._parse_required_vars(body)
         if message_vars is None:
@@ -919,23 +1007,36 @@ class CatalogConsumer(RMQC):
         try: 
             checksum = body[self.MSG_DATA][self.MSG_CHECKSUM]
         except KeyError:
-            self.log("Checksum not in message, exiting callback.", 
-                     self.RK_LOG_ERROR)
-            return
+            if not rollback_fl:
+                # Checksum required if we're finishing the put workflow
+                self.log("Checksum not in message, exiting callback.", 
+                        self.RK_LOG_ERROR)
+                return
+            else:
+                # Checksum not required if we're just failing the agg
+                self.log("Checksum not in message, continuing without.", 
+                         self.RK_LOG_INFO)
         
         if holding_id is None and aggregation_id is None:
             self.log("No method for identifying an aggregation provided, forced"
                      " to exit callback.", self.RK_LOG_ERROR)
             return
+        
+        try:
+            new_tarname = body[self.MSG_DATA][self.MSG_NEW_TARNAME]
+        except KeyError as e:
+            self.log("Optional parameter new_tarname not found, continuing "
+                     "without", self.RK_LOG_INFO) 
+            new_tarname = None
 
         self.catalog.start_session()
 
         try:
             if aggregation_id is not None:
-                aggregation = self.catalog.get_aggregation()
+                aggregation = self.catalog.get_aggregation(aggregation_id)
             elif holding_id is not None:
-                # get first file in list, that is all we should need, and turn it 
-                # into a PathDetails object
+                # get first file in list (that is all we should need) and turn 
+                # it into a PathDetails object
                 f = filelist[0] 
                 file_details = PathDetails.from_dict(f)
                 # Using that and the holding_id, we can get the 
@@ -946,15 +1047,37 @@ class CatalogConsumer(RMQC):
                 )
                 file_ = files[0]
                 aggregation = self.catalog.get_aggregation_by_file(file_)
-            
-            self.catalog.update_aggregation(aggregation, checksum=checksum, 
-                                            algorithm="ADLER32")
+            if rollback_fl:
+                self.catalog.fail_aggregation(aggregation)
+            else:
+                self.catalog.update_aggregation(
+                    aggregation, 
+                    checksum=checksum, 
+                    algorithm="ADLER32", 
+                    tarname=new_tarname,
+                )
         except CatalogError as e:
             self.log(f"Error encountered during _catalog_archive_update(): {e}", 
                      self.RK_LOG_ERROR)
             raise CallbackError("Encountered error during aggregation update, "
                                 "submitting for retry")
         
+        # Only need to update the monitor after a successful tape-write
+        if not rollback_fl:
+            # Compile back into a list of PathDetails objects for finishing 
+            # things up
+            self.completelist = [PathDetails.from_dict(f) for f in filelist]
+            # Send confirmation on to monitor/worker
+            rk_complete = ".".join([
+                rk_origin, self.RK_CATALOG_ARCHIVE_UPDATE, self.RK_COMPLETE
+            ])
+            self.log(
+                f"Sending completed PathList from CATALOG_ARCHIVE_UPDATE", 
+                self.RK_LOG_DEBUG
+            )
+            self.send_pathlist(self.completelist, rk_complete, body, 
+                               state=State.CATALOG_ARCHIVE_UPDATING)
+
         # stop db transactions and commit
         self.catalog.save()
         self.catalog.end_session() 
@@ -1080,16 +1203,19 @@ class CatalogConsumer(RMQC):
         # get the holding from the database
         if holding_label is None and holding_id is None and tag is None:
             self.log("No method for identifying a holding or transaction "
-                     "provided, will continue without.",
-                     self.RK_LOG_WARNING)
+                     "provided, will continue without.", self.RK_LOG_WARNING)
 
         for f in filelist:
             file_details = PathDetails.from_dict(f)
             try:
                 # get the files first
                 files = self.catalog.get_files(
-                    user, group, holding_label, holding_id, 
-                    transaction_id, file_details.original_path, tag
+                    user, group, 
+                    holding_label=holding_label, 
+                    holding_id=holding_id, 
+                    transaction_id=transaction_id, 
+                    original_path=file_details.original_path, 
+                    tag=tag
                 )
                 if len(files) == 0:
                     raise CatalogError(
@@ -1098,11 +1224,9 @@ class CatalogConsumer(RMQC):
                     )
                 # now get the location for the storage type requested so we can 
                 # delete it
-                for file in files:
+                for file_ in files:
                     try:
-                        self.catalog.delete_location(
-                            file, location_type
-                        )
+                        self.catalog.delete_location(file_, location_type)
                     except CatalogError as e:
                         if file_details.retries.count > self.max_retries:
                             self.failedlist.append(file_details)
@@ -1582,22 +1706,48 @@ class CatalogConsumer(RMQC):
         # Convert body from bytes to json for ease of manipulation
         body = json.loads(body)
 
-        self.log(f"Received {json.dumps(body, indent=4)} from "
-                 f"{self.queues[0].name} ({method.routing_key})", 
-                 self.RK_LOG_INFO)
+        # Get the API method and decide what to do with it
+        try:
+            api_method = body[RMQC.MSG_DETAILS][RMQC.MSG_API_ACTION]
+        except KeyError:
+            self.log(f"Message did not contain an appropriate API method, "
+                     "exiting callback", self.RK_LOG_ERROR)
+            return
+        
+        # If received system test message, reply to it and end the callback
+        # TODO: Convert these strings to publisher constants. 
+        # TODO: Can probably also refactor this (and other similar snippets) 
+        # into a single function and maybe put it before the callback in the 
+        # wrapper
+        if api_method == "system_stat":
+            if (properties.correlation_id is not None and 
+                    properties.correlation_id != self.channel.consumer_tags[0]):
+                # If not message not for this consumer then nack it
+                return False
+            if (body["details"]["ignore_message"]) == True:
+                # End the callback without replying to simulate an unresponsive 
+                # consumer
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
+        
+        # Only print the message contents when we're not statting, the message 
+        # can get very long.
+        if not api_method == self.RK_STAT:
+            self.log(f"Received {json.dumps(body, indent=4)} from "
+                     f"{self.queues[0].name} ({method.routing_key})", 
+                     self.RK_LOG_DEBUG)
 
         self.log(f"Appending rerouting information to message: "
                  f"{self.DEFAULT_REROUTING_INFO} ", self.RK_LOG_DEBUG)
         body = self.append_route_info(body)
 
-        # Get the API method and decide what to do with it
-        try:
-            api_method = body[RMQC.MSG_DETAILS][RMQC.MSG_API_ACTION]
-        except KeyError:
-            self.log(f"Message did not contain appropriate API method", 
-                     self.RK_LOG_ERROR)
-            return
-        
         # check whether this is a GET or a PUT
         if (api_method == self.RK_GETLIST) or (api_method == self.RK_GET):
             # split the routing key
@@ -1608,14 +1758,15 @@ class CatalogConsumer(RMQC):
                         self.RK_LOG_ERROR)
                 return
             if (rk_parts[1] == self.RK_CATALOG_GET):
+                self.log(f"Running catalog get workflow", self.RK_LOG_INFO)
                 self._catalog_get(body, rk_parts[0])
-            elif (rk_parts[1] == self.RK_CATALOG_DEL):
+            elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_DEL):
                 # If part of a GET transaction but received via the del topic 
-                # then delete the new object storage locations added to the 
-                # catalog.
-                self._catalog_location_del(
-                    body, rk_parts[0], location_type=Storage.OBJECT_STORAGE
-                )
+                # then delete the previously added object storage Locations
+                self.log(f"Deleting objectstore Locations as part of a failed "
+                         f"archive-get workflow", self.RK_LOG_INFO)
+                self._catalog_location_del(body, rk_parts[0], 
+                                           location_type=Storage.OBJECT_STORAGE)
 
         elif (api_method == self.RK_PUTLIST) or (api_method == self.RK_PUT):           
             # split the routing key
@@ -1649,6 +1800,7 @@ class CatalogConsumer(RMQC):
                          self.RK_LOG_DEBUG)
                 self._catalog_archive_put(body, rk_parts[0])    
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_UPDATE):
+                # NOTE: retries and failures for this method are handled by TLR
                 self._catalog_archive_update(body, rk_parts[0])
             elif (rk_parts[1] == self.RK_CATALOG_ARCHIVE_DEL):
                 self._catalog_location_del(
