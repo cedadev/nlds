@@ -1133,7 +1133,7 @@ class CatalogConsumer(RMQC):
             else:
                 self.completelist.append(file_details)
 
-        # log the successful and non-successful catalog puts
+        # log the successful and non-successful catalog dels
         # SUCCESS
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin,
