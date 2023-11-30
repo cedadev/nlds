@@ -1613,7 +1613,7 @@ class CatalogConsumer(RMQC):
                     "Holding not found: holding_id or label or tag(s) not specified."
                 )
             holdings = self.catalog.get_holding(
-                user, group, holding_label, holding_id, tag=tag
+                user, group, label=holding_label, holding_id=holding_id, tag=tag
             )
             ret_list = []
             for holding in holdings:
