@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
     NoResultFound
 
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
-     Location, Transaction, Aggregation, Storage, Checksum, Tag
+     Location, Transaction, Aggregation, Storage, Tag
 from nlds_processors.db_mixin import DBMixin
 
 class CatalogError(Exception):
@@ -305,6 +305,70 @@ class Catalog(DBMixin):
         return permitted
 
 
+    def get_file(self,
+                 user: str, 
+                 group: str, 
+                 groupall: bool=False,
+                 holding_label: str=None, 
+                 holding_id: int=None,
+                 path: str=None, 
+                 ) -> list:
+        """Get a single file when we have already got all the other file 
+        information (such as holding id or name, etc.), and we have the exact
+        file path (rather than a regex).
+        This should be quicker than the "get_files" method below.
+        """
+
+        if holding_label is None and holding_id is None:
+            raise CatalogError("No method for identifying a holding provided")
+        
+        try:
+            # build holding query bit by bit
+            holding_q = self.session.query(Holding).filter(
+                Holding.group == group
+            )
+            # if the groupall flag is set then don't filter on user
+            if not groupall:
+                holding_q = holding_q.filter(
+                    Holding.user == user,
+                )
+            # holding id filtering
+            if holding_id:
+                holding_q = holding_q.filter(
+                    Holding.id == holding_id,
+                )
+            # search label filtering
+            if holding_label:
+                holding_q = holding_q.filter(
+                    Holding.label.regexp_match(holding_label)
+                )
+            # perform the query - get one holding
+            h = holding_q.one()
+        except(IntegrityError, KeyError, ArgumentError, NoResultFound):
+            msg = ""
+            if holding_id:
+                msg = (f"Holding with holding_id:{holding_id} not found for "
+                       f"user:{user} and group:{group}")
+            elif holding_label:
+                msg = (f"Holding with label:{holding_label} not found for "
+                       f"user:{user} and group:{group}")
+            raise CatalogError(msg)        
+
+        try:
+            file_q = self.session.query(File).filter(
+                File.transaction_id == Transaction.id,
+                Transaction.holding_id == h.id,
+                File.original_path == path
+            )
+            file = file_q.one()
+        except(IntegrityError, KeyError, ArgumentError, NoResultFound):
+            raise CatalogError(
+                f"File with holding_id:{holding_id} and label:{holding_label} "
+                f"not found for user:{user} and group:{group}"
+            )
+        return file
+
+
     def get_files(self, 
                   user: str, 
                   group: str, 
@@ -451,7 +515,7 @@ class Catalog(DBMixin):
                        f"User:{user} in group:{group} does not have permission "
                        f"to delete files from the holding with label:"
                        f"{holding.label}."
-                    )                    
+                    )
                 self.session.delete(f)
                 if len(transaction.files) == 0:
                     self.session.delete(transaction)
@@ -463,8 +527,6 @@ class Catalog(DBMixin):
             checkpoint.rollback()
             err_msg = f"File with original_path:{path} could not be deleted"
             raise CatalogError(err_msg)
-        
-        return files
 
 
     def get_location(self, 

@@ -340,6 +340,39 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             self.publish_and_log_message(new_routing_key, body_json)
         
 
+    def _process_rk_archive_del_complete(self, rk_parts: List,
+                                         body_json: Dict) -> None:
+        # this function will be triggered when the files have been deleted
+        # from tape
+        queue = f"{self.RK_TRANSFER_DEL}"
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    queue, 
+                                    self.RK_START])
+        self.log(f"Sending  message to {queue} queue with routing "
+                    f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
+
+
+    def _process_rk_archive_del_failed(self, body_json: Dict) -> None:
+        queue = f"{self.RK_CATALOG_RESTORE}"
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    queue, 
+                                    self.RK_START])
+        self.log(f"Sending  message to {queue} queue with routing "
+                    f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
+
+
+    def _process_rk_transfer_del_failed(self, body_json: Dict) -> None:
+        queue = f"{self.RK_CATALOG_RESTORE}"
+        new_routing_key = ".".join([self.RK_ROOT, 
+                                    queue, 
+                                    self.RK_START])
+        self.log(f"Sending  message to {queue} queue with routing "
+                    f"key {new_routing_key}", self.RK_LOG_INFO)
+        self.publish_and_log_message(new_routing_key, body_json)
+
+
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:
         
@@ -422,6 +455,15 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             elif (rk_parts[1] == f"{self.RK_CATALOG_DEL}"):
                 self._process_rk_catalog_del_complete(rk_parts, body_json)
 
+            # if finished with archive deleting
+            elif (rk_parts[1] == f"{self.RK_ARCHIVE_DEL}"):
+                self._process_rk_archive_del_complete(rk_parts, body_json)
+
+            # if finished with object store deleting
+            elif (rk_parts[1] == f"{self.RK_ARCHIVE_DEL}"):
+                print("Finished object store deletion!")
+
+
         # If a reroute has happened from the catalog then we need to get from 
         # archive before we can do the transfer from object store.
         elif rk_parts[2] == f"{self.RK_REROUTE}":
@@ -444,6 +486,16 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
             # locations from the catalog
             if rk_parts[1] == f"{self.RK_ARCHIVE_GET}":
                 self._process_rk_archive_get_failed(body_json)
+
+            # if archive_del failed then we need to restore the files into the
+            # catalog
+            if rk_parts[1] == f"{self.RK_ARCHIVE_DEL}":
+                self._process_rk_archive_del_failed(body_json)
+
+            # identically, if transfer_del failed then we need to restore the 
+            # files into the catalog
+            if rk_parts[1] == f"{self.RK_TRANSFER_DEL}":
+                self._process_rk_transfer_del_failed(body_json)
             
         self.log(f"Worker callback complete!", self.RK_LOG_INFO)
 

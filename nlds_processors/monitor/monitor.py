@@ -1,8 +1,5 @@
-from typing import List
 
-from sqlalchemy import create_engine, func, Enum
-from sqlalchemy.exc import ArgumentError, IntegrityError, OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -252,7 +249,7 @@ class Monitor(DBMixin):
         if (new_state.value < sub_record.state.value):
             raise MonitorError(
                 f"Monitoring state cannot go backwards or skip steps. Attempted"
-                f" {sub_record.state}->{new_state}"
+                f" {sub_record.state}->{new_state}."
             )
         sub_record.state = new_state
         self.session.flush()

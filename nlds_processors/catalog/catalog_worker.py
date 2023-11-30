@@ -1080,10 +1080,36 @@ class CatalogConsumer(RMQC):
 
         # stop db transactions and commit
         self.catalog.save()
-        self.catalog.end_session() 
+        self.catalog.end_session()
 
 
-    def _catalog_del(self, body: Dict, rk_origin: str) -> None:
+    def __File_to_PathDetails(self, file):
+        """Transfer details from a (Catalog) File object to a PathDetails object
+        """
+        # load the details in from the file object
+        new_details = PathDetails(
+            original_path = file.original_path,
+            size = file.size,
+            user = file.user,
+            group = file.group,
+            permissions = file.file_permissions,
+            path_type = file.path_type,
+            link_path = file.link_path,
+        )
+
+        for l in file.locations:
+            if l.storage_type == Storage.OBJECT_STORAGE:
+                new_details.object_name = f"nlds.{l.root}:{l.path}"
+                new_details.tenancy = l.url_netloc
+                new_details.access_time = l.access_time.timestamp()
+            elif l.storage_type == Storage.TAPE:
+                new_details.tape_url = l.url_netloc
+                new_details.tape_path = f"nlds.{l.root}:{l.path}"
+        return new_details
+    
+
+    def _catalog_del(self, body: Dict, rk_origin: str, 
+                     post_state: State) -> None:
         """Remove a given list of files from the catalog if the transfer 
         fails"""
         # Parse the message body for required variables
@@ -1112,8 +1138,16 @@ class CatalogConsumer(RMQC):
             return
         
         for f in filelist:
-            file_details = PathDetails.from_dict(f)
             try:
+                file_details = PathDetails.from_dict(f)
+                # single, quick(er) method of get_file
+                file = self.catalog.get_file(
+                    user, group, holding_label=holding_label,
+                    holding_id=holding_id, 
+                    path = f["file_details"]["original_path"],
+                    )
+                # get the file details
+                file_details = self.__File_to_PathDetails(file)
                 # outsource deleting to the catalog itself
                 self.catalog.delete_files(
                     user, group, holding_label=holding_label, 
@@ -1144,7 +1178,7 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.completelist, rk_complete, body, 
-                               state=State.CATALOG_ROLLBACK)
+                                state=post_state)
         # RETRY
         if len(self.retrylist) > 0:
             rk_retry = ".".join([rk_origin,
@@ -1155,7 +1189,7 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.retrylist, rk_retry, body, mode="retry",
-                               state=State.CATALOG_ROLLBACK)
+                               state=post_state)
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin,
@@ -1170,6 +1204,7 @@ class CatalogConsumer(RMQC):
 
         # stop db transactions and commit
         #self.catalog.save()
+
         self.catalog.end_session() 
 
 
@@ -1228,15 +1263,7 @@ class CatalogConsumer(RMQC):
                     try:
                         self.catalog.delete_location(file_, location_type)
                     except CatalogError as e:
-                        if file_details.retries.count > self.max_retries:
-                            self.failedlist.append(file_details)
-                        else:
-                            file_details.retries.increment(
-                                reason=f"{e.message}"
-                            )
-                            self.retrylist.append(file_details)
-                        self.log(e.message, RMQC.RK_LOG_ERROR)
-                        continue
+                        raise
             except CatalogError as e:
                 if file_details.retries.count > self.max_retries:
                     self.failedlist.append(file_details)
@@ -1247,6 +1274,7 @@ class CatalogConsumer(RMQC):
                     self.retrylist.append(file_details)
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 continue
+            self.completelist.append(file_details)
 
         # log the successful and non-successful catalog puts
         # SUCCESS
@@ -1259,7 +1287,7 @@ class CatalogConsumer(RMQC):
                 self.RK_LOG_DEBUG
             )
             self.send_pathlist(self.completelist, rk_complete, body, 
-                               state=State.CATALOG_ROLLBACK)
+                               state=State.CATALOG_ARCHIVE_ROLLBACK)
         # RETRY
         if len(self.retrylist) > 0:
             rk_retry = ".".join([rk_origin,
@@ -1783,7 +1811,8 @@ class CatalogConsumer(RMQC):
                 if (rk_parts[1] == self.RK_CATALOG_PUT):
                     self._catalog_put(body, rk_parts[0])
                 elif (rk_parts[1] == self.RK_CATALOG_DEL):
-                    self._catalog_del(body, rk_parts[0])
+                    self._catalog_del(body, rk_parts[0], 
+                                      post_state=State.CATALOG_ROLLBACK)
 
         # Archive put requires getting from the catalog
         elif (api_method == self.RK_ARCHIVE_PUT):
@@ -1808,14 +1837,26 @@ class CatalogConsumer(RMQC):
                 )
                 
         elif (api_method == self.RK_DEL) or (api_method == self.RK_DELLIST):
-            self.log("Marking files for deletion", self.RK_LOG_DEBUG)
+            self.log("Starting an archive-del workflow", self.RK_LOG_DEBUG)
             # split the routing key
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
             except ValueError as e:
                 self.log("Routing key inappropriate length, exiting callback.",
                         self.RK_LOG_ERROR)
-            self._catalog_del(body, rk_parts[0])
+            self._catalog_del(body, rk_parts[0], 
+                              post_state=State.CATALOG_ARCHIVE_DELETING)
+            
+        elif (api_method == self.RK_CATALOG_RESTORE):
+            self.log("Restoring failed deleted files into the catalog",
+                     self.RK_LOG_DEBUG)
+            # split the routing key
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log("Routing key inappropriate length, exiting callback.",
+                        self.RK_LOG_ERROR)
+            print("self._catalog_restore")
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method

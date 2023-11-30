@@ -114,7 +114,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         self.tape_url = self.load_config_value(self._TAPE_URL)
         self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
         self.query_checksum_fl = self.load_config_value(self._QUERY_CHECKSUM)
-        
         # Verify the tape_url is valid, if it exists
         if self.tape_url is not None:
             self.split_tape_url(self.tape_url)
@@ -172,12 +171,11 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             return
         
         filelist = self.parse_filelist(body_dict)
-        
         # We do this here in case a Transaction-level Retry is triggered before 
         # we get to the transfer method.
         rk_failed = ".".join([rk_parts[0], rk_parts[1], self.RK_FAILED])
         retries = self.get_retries(body_dict)
-        if retries is not None and retries.count >= self.max_retries:
+        if retries is not None and retries.count > self.max_retries:
             # Mark the message as 'processed' so it can be failed more safely.
             self.log("Max transaction-level retries reached, failing filelist", 
                      self.RK_LOG_ERROR)
@@ -215,22 +213,12 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                      self.RK_LOG_ERROR)
             raise
 
-        try:
-            tape_url = self.get_tape_config(body_dict)
-        except ArchiveError as e:
-            self.log("Tape config unobtainable or invalid, exiting callback.", 
-                     self.RK_LOG_ERROR)
-            self.log(str(e), self.RK_LOG_DEBUG)
-            raise
-
-        self.log(f"Starting tape transfer between {tape_url} and object store "
-                 f"{tenancy}", self.RK_LOG_INFO)
-
         # Append route info to message to track the route of the message
         body_dict = self.append_route_info(body_dict)
-
-        self.transfer(transaction_id, tenancy, access_key, secret_key, tape_url, 
-                      filelist, rk_parts[0], body_dict)
+        # self.tape_url is set in the subclass callback method and can be
+        # set to None 
+        self.transfer(transaction_id, tenancy, access_key, secret_key, 
+                      self.tape_url, filelist, rk_parts[0], body_dict)
 
 
     def get_tape_config(self, body_dict) -> Tuple:

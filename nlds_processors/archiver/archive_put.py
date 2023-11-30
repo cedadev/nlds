@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import tarfile
 from hashlib import shake_256
+import json
 
 import minio
 from minio.error import S3Error
@@ -33,6 +34,23 @@ class PutArchiveConsumer(BaseArchiveConsumer):
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
+
+    def callback(self, ch, method, properties, body, connection):
+
+        # Convert body from bytes to string for ease of manipulation and then to 
+        # a dict 
+        body = body.decode("utf-8")
+        body_dict = json.loads(body)
+
+        try:
+            self.tape_url = self.get_tape_config(body_dict)
+        except ArchiveError as e:
+            self.log("Tape config unobtainable or invalid, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            self.log(str(e), self.RK_LOG_DEBUG)
+            raise
+
+        return super().callback(ch, method, properties, body, connection)
 
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
                  secret_key: str, tape_url: str, filelist: List[PathDetails], 

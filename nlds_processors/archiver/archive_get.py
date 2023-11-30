@@ -83,6 +83,24 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         )
 
 
+    def callback(self, ch, method, properties, body, connection):
+
+        # Convert body from bytes to string for ease of manipulation and then to 
+        # a dict 
+        body = body.decode("utf-8")
+        body_dict = json.loads(body)
+
+        try:
+            self.tape_url = self.get_tape_config(body_dict)
+        except ArchiveError as e:
+            self.log("Tape config unobtainable or invalid, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            self.log(str(e), self.RK_LOG_DEBUG)
+            raise
+
+        return super().callback(ch, method, properties, body, connection)
+    
+
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
                  secret_key: str, tape_url: str, filelist: List[PathDetails], 
                  rk_origin: str, body_json: Dict[str, Any]):

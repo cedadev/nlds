@@ -63,6 +63,7 @@ object "**Checksum**" as checksum {
 aggregation "1"  *-- "many" location
 'holding "1" *-- "many" aggregation
 transaction "1" *-- "many" file
+transaction "1" *-- "many" aggregation
 holding "1" *-- "many" transaction
 holding "1" *-- "many" tag
 file "1" *-- "many" location

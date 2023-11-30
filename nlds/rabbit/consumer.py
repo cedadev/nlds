@@ -70,6 +70,7 @@ class FilelistType(Enum):
     transferred = 1
     catalogued = 1
     archived = 1
+    deleted = 1
 
 class State(Enum):
     # Generic states
@@ -87,15 +88,19 @@ class State(Enum):
     CATALOG_GETTING = 10
     ARCHIVE_GETTING = 11
     TRANSFER_GETTING = 12
+    # DEL workflow states
     # ARCHIVE_PUT workflow states
     ARCHIVE_INIT = 20
     CATALOG_ARCHIVE_AGGREGATING = 21
     ARCHIVE_PUTTING = 22
     CATALOG_ARCHIVE_UPDATING = 23
-    # ARCHIVE_DEL workflow states
+    # DEL workflow states
     ARCHIVE_DELETING = 30
+    CATALOG_ARCHIVE_DELETING = 31
+    TRANSFER_DELETING = 32
     # Shared ARCHIVE states
     CATALOG_ARCHIVE_ROLLBACK = 40
+    CATALOG_DELETE_ROLLBACK = 41
 
 
     @classmethod
