@@ -1615,21 +1615,26 @@ class CatalogConsumer(RMQC):
             holdings = self.catalog.get_holding(
                 user, group, label=holding_label, holding_id=holding_id, tag=tag
             )
+            old_meta_list = []
             ret_list = []
             for holding in holdings:
                 # get the old metadata so we can record it, then modify
-                old_meta = {
+                old_meta_list.append({
                     "label": holding.label,
                     "tags" : holding.get_tags()
-                }
-                holding = self.catalog.modify_holding(
+                })                
+                self.catalog.modify_holding(
                     holding, new_label, new_tag, del_tag
                 )
+            self.catalog.save()
+
+            for holding, old_meta in zip(holdings, old_meta_list):
                 # record the new metadata
                 new_meta = {
                     "label": holding.label,
                     "tags":  holding.get_tags()
                 }
+                    
                 # build the return dictionary and append it to the list of
                 # holdings that have been modified
                 ret_dict = {
@@ -1641,7 +1646,7 @@ class CatalogConsumer(RMQC):
                 }
                 ret_list.append(ret_dict)
 
-            self.catalog.save()
+            
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
