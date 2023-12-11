@@ -162,17 +162,6 @@ class GetTransferConsumer(BaseTransferConsumer):
             try:
                 # Attempt to change back to original permissions
                 os.chmod(download_path, mode=path_details.permissions)
-                # Also change the permissions of the parent directory, so the 
-                # file can be moved in the event that the file can't change 
-                # ownership for whatever reason 
-                os.chmod(
-                    download_path.parent, 
-                    # Change to current permissions + 0o70
-                    download_path.parent.stat().st_mode 
-                    | stat.S_IRGRP
-                    | stat.S_IWGRP
-                    | stat.S_IXGRP
-                )
             except (KeyError, PermissionError) as e:
                 self.log("Couldn't change permissions of downloaded file", 
                          self.RK_LOG_WARNING) 
