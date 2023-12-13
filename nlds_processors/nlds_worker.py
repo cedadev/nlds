@@ -363,6 +363,13 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.publish_and_log_message(new_routing_key, body_json)
 
 
+    def _process_rk_transfer_del_complete(self, body_json: Dict) -> None:
+        # Nothing happens after a successful delete, so we leave this 
+        # empty in case any future messages are required (queueing archive for 
+        # example)
+        pass
+
+
     def _process_rk_transfer_del_failed(self, body_json: Dict) -> None:
         queue = f"{self.RK_CATALOG_RESTORE}"
         new_routing_key = ".".join([self.RK_ROOT, 
@@ -460,14 +467,15 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
                 self._process_rk_archive_del_complete(rk_parts, body_json)
 
             # if finished with object store deleting
-            elif (rk_parts[1] == f"{self.RK_ARCHIVE_DEL}"):
-                print("Finished object store deletion!")
+            elif (rk_parts[1] == f"{self.RK_TRANSFER_DEL}"):
+                self._process_rk_transfer_del_complete(rk_parts, body_json)
 
 
         # If a reroute has happened from the catalog then we need to get from 
         # archive before we can do the transfer from object store.
         elif rk_parts[2] == f"{self.RK_REROUTE}":
             self._process_rk_catalog_get_reroute(rk_parts, body_json)
+
 
         # If a transfer/archive task has failed, remove something from the 
         # catalog 

@@ -1312,7 +1312,7 @@ class CatalogConsumer(RMQC):
                                mode="failed")
 
         # stop db transactions and commit
-        self.catalog.save()
+        #self.catalog.save()
         self.catalog.end_session() 
 
 
@@ -1845,11 +1845,12 @@ class CatalogConsumer(RMQC):
                 self.log("Routing key inappropriate length, exiting callback.",
                         self.RK_LOG_ERROR)
             self._catalog_del(body, rk_parts[0], 
-                              post_state=State.CATALOG_ARCHIVE_DELETING)
+                              post_state=State.CATALOG_DELETING)
             
         elif (api_method == self.RK_CATALOG_RESTORE):
             self.log("Restoring failed deleted files into the catalog",
                      self.RK_LOG_DEBUG)
+            print("CATALOG RESTORE")
             # split the routing key
             try:
                 rk_parts = self.split_routing_key(method.routing_key)

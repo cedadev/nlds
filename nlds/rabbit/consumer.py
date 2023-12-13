@@ -95,8 +95,8 @@ class State(Enum):
     ARCHIVE_PUTTING = 22
     CATALOG_ARCHIVE_UPDATING = 23
     # DEL workflow states
-    ARCHIVE_DELETING = 30
-    CATALOG_ARCHIVE_DELETING = 31
+    CATALOG_DELETING = 30
+    ARCHIVE_DELETING = 31
     TRANSFER_DELETING = 32
     # Shared ARCHIVE states
     CATALOG_ARCHIVE_ROLLBACK = 40
@@ -116,6 +116,7 @@ class State(Enum):
         final_states = (
             cls.TRANSFER_GETTING,
             cls.TRANSFER_PUTTING,
+            cls.TRANSFER_DELETING,
             cls.CATALOG_ARCHIVE_UPDATING,
             cls.CATALOG_ROLLBACK,
             cls.CATALOG_ARCHIVE_ROLLBACK,
@@ -507,7 +508,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         monitoring_rk = ".".join([rk_source, 
                                   self.RK_MONITOR_PUT,  
                                   self.RK_START])
-
+        
         if retries is not None and retries.count <= self.max_retries:
             # Retry the job
             self.log(f"Retrying errored job with routing key {routing_key}", 
@@ -667,6 +668,8 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
             ack_fl = self.callback(ch, method, properties, body, connection)
         except self.EXPECTED_EXCEPTIONS as original_error:
             self._handle_expected_error(body, method.routing_key, original_error)
+        except AssertionError:
+            raise
         except Exception as e:
             # NOTE: why are we making this distinction? We can attempt to retry 
             # any message that fails and the worst that can happen is what 

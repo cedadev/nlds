@@ -61,7 +61,8 @@ class DelArchiveConsumer(BaseArchiveConsumer):
 
         if len(completelist) > 0:
             self.send_pathlist(
-                completelist, rk_complete, body_json
+                completelist, rk_complete, body_json,
+                state=State.ARCHIVE_DELETING
             )
 
         if len(retrylist) > 0:

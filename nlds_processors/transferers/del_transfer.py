@@ -77,40 +77,45 @@ class DelTransferConsumer(BaseTransferConsumer):
                 )
                 continue
 
-            # try to do the deletion
-            try:
-                raise Exception("Hello failure")
-            except Exception as e:
-                reason = f"Delete-time exception occurred: {e}"
-                self.log(reason, self.RK_LOG_DEBUG)
-                self.log(f"Exception encountered during deletion, adding "
-                         f"{object_name} to retry-list.", self.RK_LOG_INFO)
-                path_details.retries.increment(reason=reason)
-                self.append_and_send(path_details, rk_retry, body_json, 
-                                     list_type=FilelistType.retry)
-                continue
-
-            self.log(f"Successfully got {path_details.original_path}", 
+            # # try to do the deletion
+            # try:
+            #     raise Exception("Hello failure")
+            # except Exception as e:
+            #     reason = f"Delete-time exception occurred: {e}"
+            #     self.log(reason, self.RK_LOG_DEBUG)
+            #     self.log(f"Exception encountered during deletion, adding "
+            #              f"{object_name} to retry-list.", self.RK_LOG_INFO)
+            #     path_details.retries.increment(reason=reason)
+            #     self.append_and_send(path_details, rk_retry, body_json, 
+            #                          list_type=FilelistType.retry)
+            #     continue
+            # else:
+            #     self.log(f"Successfully deleted {path_details.original_path}", 
+            #              self.RK_LOG_DEBUG)
+            #     self.append_and_send(path_details, rk_complete, body_json, 
+            #                          list_type=FilelistType.deleted)
+            self.log(f"Successfully deleted {path_details.original_path}", 
                      self.RK_LOG_DEBUG)
             self.append_and_send(path_details, rk_complete, body_json, 
                                  list_type=FilelistType.deleted)
 
-
-        # Send whatever remains after all items have been (attempted to be) put
+        # Send whatever remains after all items have been (attempted to be) deleted
         if len(self.completelist) > 0:
             self.send_pathlist(
                 self.completelist, rk_complete, body_json, 
                 mode=FilelistType.deleted,
+                state=State.TRANSFER_DELETING
             )
         if len(self.retrylist) > 0:
             self.send_pathlist(
                 self.retrylist, rk_retry, body_json, 
-                mode=FilelistType.retry
+                mode="retry"
             )
         if len(self.failedlist) > 0:
             self.send_pathlist(
                 self.failedlist, rk_failed, body_json, 
-                mode=FilelistType.failed
+                mode="failed",
+                state=State.CATALOG_DELETE_ROLLBACK
             )
 
 

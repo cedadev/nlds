@@ -10,13 +10,13 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 from .base_authenticator import BaseAuthenticator
 from ..server_config import load_config
-from ..errors import ResponseError
-from fastapi import status
-from fastapi.exceptions import HTTPException
+from retry import retry
 import requests
 import json
 
 class JasminAuthenticator(BaseAuthenticator):
+
+    _timeout = 10.0
 
     def __init__(self):
         self.config = load_config()
@@ -24,6 +24,7 @@ class JasminAuthenticator(BaseAuthenticator):
         self.auth_name = "authentication"
 
 
+    @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
     def authenticate_token(self, oauth_token: str):
         """Make a call to the JASMIN token introspection to determine whether
         the token is a true token and whether it is valid."""
@@ -45,7 +46,8 @@ class JasminAuthenticator(BaseAuthenticator):
             response = requests.post(
                 config['oauth_token_introspect_url'],
                 data = token_data,
-                headers = token_headers
+                headers = token_headers,
+                timeout = JasminAuthenticator._timeout,
             )
         except requests.exceptions.ConnectionError:
             raise RuntimeError(
@@ -78,6 +80,7 @@ class JasminAuthenticator(BaseAuthenticator):
         return False
 
 
+    @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
     def authenticate_user(self, oauth_token: str, user: str):
         """Make a call to the JASMIN services for a user to determine whether
         the user with the token is a valid user."""
@@ -95,7 +98,8 @@ class JasminAuthenticator(BaseAuthenticator):
         try:
             response = requests.get(
                 config['user_profile_url'],
-                headers = token_headers
+                headers = token_headers,
+                timeout = JasminAuthenticator._timeout,
             )
         except requests.exceptions.ConnectionError:
             raise RuntimeError(
@@ -128,6 +132,7 @@ class JasminAuthenticator(BaseAuthenticator):
         return user
 
 
+    @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
     def authenticate_group(self, oauth_token: str, group: str):
         """Make a call to the JASMIN services for a user to determine whether
         the user with the token is part of the requested group."""
@@ -145,7 +150,8 @@ class JasminAuthenticator(BaseAuthenticator):
         try:
             response = requests.get(
                 config['user_services_url'],
-                headers = token_headers
+                headers = token_headers,
+                timeout = JasminAuthenticator._timeout
             )
         except requests.exceptions.ConnectionError:
             raise RuntimeError(
