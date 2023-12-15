@@ -57,7 +57,7 @@ setup(
             'logging_q=nlds_processors.logger:main',
             'archive_put_q=nlds_processors.archiver.archive_put:main',
             'archive_get_q=nlds_processors.archiver.archive_get:main',
-            'send_archive_next=scripts.send_archive_next:send_archive_next',
+            'send_archive_next=nlds_processors.archiver.send_archive_next:send_archive_next',
         ],
     }
 )
