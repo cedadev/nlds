@@ -13,7 +13,8 @@ def chown_nlds(new_uid, filepath):
     new_uid = int(new_uid)
     filepath = pth.Path(filepath).resolve()
     # Check path exists and is a file 
-    if filepath.exists() and not filepath.is_symlink() and (filepath.is_dir() or filepath.is_file()):
+    if (filepath.exists() and not filepath.is_symlink() 
+            and (filepath.is_dir() or filepath.is_file())):
         stat_result = filepath.stat()
         if stat_result.st_uid != NLDS_UID:
             raise PermissionError(
