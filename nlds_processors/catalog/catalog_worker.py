@@ -27,7 +27,7 @@ import json
 from typing import Dict, Tuple, List
 from hashlib import shake_256
 
-from urllib.parse import urlunsplit, urljoin
+from urllib.parse import urlunsplit
 
 # Typing imports
 from pika.channel import Channel
@@ -1108,6 +1108,139 @@ class CatalogConsumer(RMQC):
         return new_details
     
 
+    def _catalog_restore(self, body: Dict, rk_origin: str) -> None:
+        """Restore entries into the catalog that have been deleted in the intitial
+        transfer delete phase."""
+        # Parse the message body for required variables
+        message_vars = self._parse_required_vars(body)
+        if message_vars is None:
+            # Check if any problems have occurred in the parsing of the message 
+            # body and exit if necessary 
+            self.log("Could not parse one or more mandatory variables, exiting "
+                     "callback.", self.RK_LOG_ERROR)
+            return
+        else:
+            # Unpack if no problems found in parsing
+            filelist, user, group = message_vars
+
+        # Extract variables from the metadata section of the message body
+        md = Metadata(body)
+        holding_label, holding_id, tag, transaction_id = md.unpack
+
+        # get the transaction id from the details section of the message. This is
+        # needed for creating a transaction if it doesn't exist during the 
+        # reconstruction
+        try:
+            new_transaction_id = body[self.MSG_DETAILS][self.MSG_TRANSACT_ID]
+        except KeyError:
+            new_transaction_id = None
+
+        rk_complete = ".".join([rk_origin,
+                                self.RK_CATALOG_RESTORE, 
+                                self.RK_COMPLETE])
+        self.reset()
+        self.catalog.start_session()
+
+        # get the previously created holding - if it has already been deleted
+        # then we need to recreate them from the details in the message
+        try:
+            holding = self.catalog.get_holding(
+                user, group, holding_id=holding_id
+            )[0]        # should only be one
+        except (KeyError, CatalogError):
+            holding = None
+
+        if holding is None:
+            if holding_label is None:
+                holding_label = new_transaction_id
+            try:
+                holding = self.catalog.create_holding(user, group, holding_label)
+            except CatalogError:    # holding somehow already exists
+                self.send_pathlist([], rk_complete, body, mode="failed")
+                return
+            
+        # get the previously create transaction - if it has already been deleted
+        # then we need to recreate them from the details in the message
+        try:
+            transaction = self.catalog.get_transaction(
+                transaction_id=transaction_id
+            )
+        except (KeyError, CatalogError):
+            transaction = None
+        if transaction is None:
+            try:
+                transaction = self.catalog.create_transaction(
+                    holding, new_transaction_id
+                )
+            except CatalogError:    # transaction somehow already exists
+                self.send_pathlist([], rk_complete, body, mode="failed")
+                return
+
+        for f in filelist:
+            pd = PathDetails.from_dict(f)
+            # Search first for file existence within holding, retry/fail if 
+            # present
+            # try:
+            #     files = self.catalog.get_files(
+            #         user, 
+            #         group, 
+            #         holding_id=holding.id,
+            #         original_path=pd.original_path, 
+            #     )
+            # except CatalogError:
+            #     pass # should throw a catalog error if file(s) not found
+            # else:
+            #     raise CatalogError("File already exists in holding")
+            # create the file
+            file_ = self.catalog.create_file(
+                transaction,
+                pd.user, 
+                pd.group, 
+                pd.original_path, 
+                pd.path_type, 
+                pd.link_path,
+                pd.size, 
+                pd.permissions
+            )
+            # create the object storage location if not null
+            if pd.object_name is not None and pd.tenancy is not None:
+                bucket_name, object_name = pd.object_name.split(':')
+                obj_loc = self.catalog.create_location(
+                    file_,
+                    Storage.OBJECT_STORAGE,
+                    url_scheme="http",
+                    url_netloc=pd.tenancy,
+                    root=bucket_name,
+                    path=object_name,
+                    access_time=datetime.fromtimestamp(
+                        pd.access_time, tz=timezone.utc
+                    )
+                )
+            # create the tape location
+            if pd.tape_path is not None and pd.tape_url is not None:
+                tape_loc = self.catalog.create_location(
+                    file_,
+                    Storage.TAPE,
+                    url_scheme="root",
+                    url_netloc=pd.tape_url,
+                    #### !!!! NRM - 19/12/23 - I don't know what to put in here!
+                    root=pd.tape_path,
+                    path=pd.tape_path,
+                    access_time=datetime.fromtimestamp(
+                        pd.access_time, tz=timezone.utc
+                    ),
+                    aggregation="What?"
+                )
+
+            self.completelist.append(pd)
+
+        # stop db transitions and commit
+        self.catalog.save()
+        self.catalog.end_session()
+
+        self.send_pathlist(self.completelist, rk_complete, body, mode="failed")
+
+
     def _catalog_del(self, body: Dict, rk_origin: str, 
                      post_state: State) -> None:
         """Remove a given list of files from the catalog if the transfer 
@@ -1129,6 +1262,7 @@ class CatalogConsumer(RMQC):
         holding_label, holding_id, holding_tag, _ = md.unpack
 
         # start the database transactions
+        self.reset()
         self.catalog.start_session()
 
         # The holding_label or holding_id must be supplied.
@@ -1203,7 +1337,7 @@ class CatalogConsumer(RMQC):
                                mode="failed")
 
         # stop db transactions and commit
-        #self.catalog.save()
+        self.catalog.save()
 
         self.catalog.end_session() 
 
@@ -1312,7 +1446,7 @@ class CatalogConsumer(RMQC):
                                mode="failed")
 
         # stop db transactions and commit
-        #self.catalog.save()
+        self.catalog.save()
         self.catalog.end_session() 
 
 
@@ -1844,20 +1978,12 @@ class CatalogConsumer(RMQC):
             except ValueError as e:
                 self.log("Routing key inappropriate length, exiting callback.",
                         self.RK_LOG_ERROR)
-            self._catalog_del(body, rk_parts[0], 
-                              post_state=State.CATALOG_DELETING)
-            
-        elif (api_method == self.RK_CATALOG_RESTORE):
-            self.log("Restoring failed deleted files into the catalog",
-                     self.RK_LOG_DEBUG)
-            print("CATALOG RESTORE")
-            # split the routing key
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log("Routing key inappropriate length, exiting callback.",
-                        self.RK_LOG_ERROR)
-            print("self._catalog_restore")
+                return
+            if rk_parts[1] == self.RK_CATALOG_DEL:
+                self._catalog_del(body, rk_parts[0], 
+                                  post_state=State.CATALOG_DELETING)
+            elif rk_parts[1] == self.RK_CATALOG_RESTORE:
+                self._catalog_restore(body, rk_parts[0]) 
 
         elif (api_method == self.RK_LIST):
             # don't need to split any routing key for an RPC method

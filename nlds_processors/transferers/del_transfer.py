@@ -8,7 +8,7 @@ from minio.error import S3Error
 from retry import retry
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
-from nlds.rabbit.consumer import FilelistType, State
+from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
 
@@ -47,7 +47,7 @@ class DelTransferConsumer(BaseTransferConsumer):
             # check if this has failed too often
             if path_details.retries.count > self.max_retries:
                 self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="failed"
+                    path_details, rk_failed, body_json, list_type="failed",
                 )
                 continue
             # If bucketname inserted into object path (i.e. from catalogue) then 
@@ -77,45 +77,41 @@ class DelTransferConsumer(BaseTransferConsumer):
                 )
                 continue
 
-            # # try to do the deletion
-            # try:
-            #     raise Exception("Hello failure")
-            # except Exception as e:
-            #     reason = f"Delete-time exception occurred: {e}"
-            #     self.log(reason, self.RK_LOG_DEBUG)
-            #     self.log(f"Exception encountered during deletion, adding "
-            #              f"{object_name} to retry-list.", self.RK_LOG_INFO)
-            #     path_details.retries.increment(reason=reason)
-            #     self.append_and_send(path_details, rk_retry, body_json, 
-            #                          list_type=FilelistType.retry)
-            #     continue
-            # else:
-            #     self.log(f"Successfully deleted {path_details.original_path}", 
-            #              self.RK_LOG_DEBUG)
-            #     self.append_and_send(path_details, rk_complete, body_json, 
-            #                          list_type=FilelistType.deleted)
+            # try to do the deletion
+            try:
+                raise Exception("Hello failure")
+            except Exception as e:
+                reason = f"Delete-time exception occurred: {e}"
+                self.log(reason, self.RK_LOG_DEBUG)
+                self.log(f"Exception encountered during deletion, adding "
+                         f"{object_name} to retry-list.", self.RK_LOG_INFO)
+                path_details.retries.increment(reason=reason)
+                self.append_and_send(path_details, rk_retry, body_json, 
+                                     list_type="retry")
+                continue
+            else:
+                self.log(f"Successfully deleted {path_details.original_path}", 
+                         self.RK_LOG_DEBUG)
+                self.append_and_send(path_details, rk_complete, body_json, 
+                                     list_type="deleted")
             self.log(f"Successfully deleted {path_details.original_path}", 
                      self.RK_LOG_DEBUG)
             self.append_and_send(path_details, rk_complete, body_json, 
-                                 list_type=FilelistType.deleted)
+                                 list_type="deleted")
 
         # Send whatever remains after all items have been (attempted to be) deleted
         if len(self.completelist) > 0:
             self.send_pathlist(
-                self.completelist, rk_complete, body_json, 
-                mode=FilelistType.deleted,
-                state=State.TRANSFER_DELETING
+                self.completelist, rk_complete, body_json, mode="deleted",
             )
         if len(self.retrylist) > 0:
             self.send_pathlist(
-                self.retrylist, rk_retry, body_json, 
-                mode="retry"
+                self.retrylist, rk_retry, body_json, mode="retry"
             )
         if len(self.failedlist) > 0:
             self.send_pathlist(
-                self.failedlist, rk_failed, body_json, 
-                mode="failed",
-                state=State.CATALOG_DELETE_ROLLBACK
+                self.failedlist, rk_failed, body_json,
+                state=State.CATALOG_RESTORING
             )
 
 

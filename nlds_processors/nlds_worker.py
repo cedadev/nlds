@@ -15,6 +15,7 @@ from pika.channel import Channel
 from pika.connection import Connection
 from pika.frame import Method
 from pika.frame import Header
+import time
 
 # NLDS imports
 from nlds.rabbit.consumer import RabbitMQConsumer, State
@@ -354,6 +355,11 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
 
 
     def _process_rk_archive_del_failed(self, body_json: Dict) -> None:
+        return
+        self.log(f"Delete unsuccessful, sending failed files back to catalog "
+                  "for restoration", 
+                 self.RK_LOG_INFO)
+
         queue = f"{self.RK_CATALOG_RESTORE}"
         new_routing_key = ".".join([self.RK_ROOT, 
                                     queue, 
@@ -378,7 +384,6 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         self.log(f"Sending  message to {queue} queue with routing "
                     f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)
-
 
     def callback(self, ch: Channel, method: Method, properties: Header, 
                  body: bytes, connection: Connection) -> None:

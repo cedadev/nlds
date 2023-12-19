@@ -71,6 +71,7 @@ class FilelistType(Enum):
     catalogued = 1
     archived = 1
     deleted = 1
+    restored = 1
 
 class State(Enum):
     # Generic states
@@ -101,7 +102,7 @@ class State(Enum):
     # Shared ARCHIVE states
     CATALOG_ARCHIVE_ROLLBACK = 40
     CATALOG_DELETE_ROLLBACK = 41
-
+    CATALOG_RESTORING = 42
 
     @classmethod
     def has_value(cls, value):
@@ -120,6 +121,7 @@ class State(Enum):
             cls.CATALOG_ARCHIVE_UPDATING,
             cls.CATALOG_ROLLBACK,
             cls.CATALOG_ARCHIVE_ROLLBACK,
+            cls.CATALOG_RESTORING,
             cls.FAILED,
         )
         return final_states
