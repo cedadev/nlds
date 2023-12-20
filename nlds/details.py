@@ -28,6 +28,7 @@ class PathType(Enum):
     LINK_ABSOLUTE_PATH = 4
     NOT_RECOGNISED = 5
     UNINDEXED = 6
+    MISSING = 7
     def __str__(self):
         return ["FILE",
                 "DIRECTORY",
@@ -35,7 +36,8 @@ class PathType(Enum):
                 "LINK_COMMON_PATH",
                 "LINK_ABSOLUTE_PATH",
                 "NOT_RECOGNISED",
-                "UNINDEXED"][self.value]
+                "UNINDEXED",
+                "MISSING"][self.value]
 
 class Retries(BaseModel):
     count: Optional[int] = 0

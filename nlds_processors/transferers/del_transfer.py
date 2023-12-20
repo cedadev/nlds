@@ -9,7 +9,7 @@ from retry import retry
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
-from nlds.details import PathDetails
+from nlds.details import PathDetails, PathType
 from nlds.errors import CallbackError
 
 
@@ -72,6 +72,9 @@ class DelTransferConsumer(BaseTransferConsumer):
                 self.log(f"{reason}. Adding {object_name} to retry list.", 
                          self.RK_LOG_ERROR)
                 path_details.retries.increment(reason=reason)
+                if path_details.retries.count > self.max_retries:
+                    # set the path type to missing if it is
+                    path_details.path_type = PathType.MISSING
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="retry"
                 )
@@ -79,7 +82,11 @@ class DelTransferConsumer(BaseTransferConsumer):
 
             # try to do the deletion
             try:
-                raise Exception("Hello failure")
+                client.remove_object(bucket_name, object_name)
+                # see if the bucket is empty - list objects is an iterator
+                lb = sum(1 for _ in client.list_objects(bucket_name))
+                if lb == 0:
+                    client.remove_bucket(bucket_name)
             except Exception as e:
                 reason = f"Delete-time exception occurred: {e}"
                 self.log(reason, self.RK_LOG_DEBUG)
@@ -94,10 +101,6 @@ class DelTransferConsumer(BaseTransferConsumer):
                          self.RK_LOG_DEBUG)
                 self.append_and_send(path_details, rk_complete, body_json, 
                                      list_type="deleted")
-            self.log(f"Successfully deleted {path_details.original_path}", 
-                     self.RK_LOG_DEBUG)
-            self.append_and_send(path_details, rk_complete, body_json, 
-                                 list_type="deleted")
 
         # Send whatever remains after all items have been (attempted to be) deleted
         if len(self.completelist) > 0:

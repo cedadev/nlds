@@ -283,7 +283,20 @@ class Catalog(DBMixin):
             )
         return transaction
 
-
+    def delete_transaction(self, 
+                           transaction_id: str) -> None:
+        """Delete a transaction"""
+        assert(self.session != None)
+        try:
+            transaction = self.get_transaction(transaction_id=transaction_id)
+            self.session.delete(transaction)
+            self.session.flush()
+        except (IntegrityError, KeyError):
+            raise CatalogError(
+                f"Transaction with transaction_id:{transaction_id} could not "
+                "be added to the database"
+            )
+        
     def _user_has_get_file_permission(self, 
                                       user: str, 
                                       group: str,
@@ -501,26 +514,29 @@ class Catalog(DBMixin):
         files = self.get_files(user, group, holding_label=holding_label, 
                                holding_id=holding_id, original_path=path, 
                                tag=tag)
+        holding = self.get_holding(user, group, holding_id=holding_id)[0]
+        if not Catalog._user_has_delete_from_holding_permission(
+            user, group, False, holding):
+            # No admins at the moment!
+            raise CatalogError(
+                f"User:{user} in group:{group} does not have permission "
+                f"to delete files from the holding with label:"
+                f"{holding.label}."
+            )
         checkpoint = self.session.begin_nested()
         try:
+            # first delete the files
             for f in files:
-                # First get parent transaction and holding
-                transaction = self.get_transaction(f.transaction_id)
-                holding = self.get_holding(user, group, 
-                                           holding_id=transaction.holding_id)[0]
-                if not Catalog._user_has_delete_from_holding_permission(
-                    user, group, False, holding):
-                    # No admins at the moment!
-                    raise CatalogError(
-                       f"User:{user} in group:{group} does not have permission "
-                       f"to delete files from the holding with label:"
-                       f"{holding.label}."
-                    )
                 self.session.delete(f)
+            self.session.flush()
+            # now clean up all the transactions
+            for transaction in holding.transactions:
                 if len(transaction.files) == 0:
                     self.session.delete(transaction)
-                if len(holding.transactions) == 0:
-                    self.session.delete(holding)
+            self.session.flush()
+            # now clean up the holding
+            if len(holding.transactions) == 0:
+                self.session.delete(holding)
         except (IntegrityError, KeyError, OperationalError):
             # This rollsback only to the checkpoint, so any successful deletes 
             # done already will stay in the transaction.

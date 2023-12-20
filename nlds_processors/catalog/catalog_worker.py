@@ -43,7 +43,7 @@ from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog, CatalogError
 from nlds_processors.catalog.catalog_models import Storage, Location, File
-from nlds.details import PathDetails
+from nlds.details import PathDetails, PathType
 from nlds_processors.db_mixin import DBError
 
 
@@ -425,6 +425,14 @@ class CatalogConsumer(RMQC):
                         f":{label} as that tag already exists.  Tags can be modified"
                         f" using the meta command"
                     )
+
+        # remove empty transactions
+        try:
+            if len(transaction.files) == 0:
+                self.catalog.delete_transaction(transaction_id)
+        except CatalogError as e:
+            self.log(e.message, RMQC.RK_LOG_ERROR)
+            return
 
         # stop db transitions and commit
         self.catalog.save()
@@ -1178,6 +1186,9 @@ class CatalogConsumer(RMQC):
 
         for f in filelist:
             pd = PathDetails.from_dict(f)
+            # don't restore missing, deleted files!
+            if pd.path_type == PathType.MISSING:
+                continue
             file_ = self.catalog.create_file(
                 transaction,
                 pd.user, 
@@ -1193,7 +1204,7 @@ class CatalogConsumer(RMQC):
                 bucket_name, object_name = pd.object_name.split(':')
                 # have to remove the "nlds" prefix from the bucket_name as it is
                 # added in the create_location function below
-                slug_len = len("nlds")
+                slug_len = len("nlds")+1
                 bucket_name = bucket_name[slug_len:]
                 obj_loc = self.catalog.create_location(
                     file_,
@@ -1265,11 +1276,19 @@ class CatalogConsumer(RMQC):
         # it in the message so that we can reconstruct with the correct label if
         # the delete goes wrong
         if holding_label is None:
-            holding = self.catalog.get_holding(user, group, holding_id=holding_id)
-            # should only be one
-            holding_label = holding[0].label
-            # add to metadata
-            body[RMQC.MSG_META][RMQC.MSG_LABEL] = holding_label
+            try:
+                holding = self.catalog.get_holding(
+                    user, group, holding_id=holding_id
+                )
+                # should only be one
+                holding_label = holding[0].label
+                # add to metadata
+                body[RMQC.MSG_META][RMQC.MSG_LABEL] = holding_label
+            except CatalogError:
+                message = (f"Could not delete files from holding with holding_id: "
+                           f"{holding_id}.  holding_id does not exist.")
+                self.log(message, self.RK_LOG_DEBUG)
+                raise CallbackError(message)
         
         for f in filelist:
             try:
@@ -1338,7 +1357,6 @@ class CatalogConsumer(RMQC):
 
         # stop db transactions and commit
         self.catalog.save()
-
         self.catalog.end_session() 
 
 
@@ -1492,17 +1510,18 @@ class CatalogConsumer(RMQC):
             ret_list = []
             for h in holdings:
                 # get the first transaction
-                t = h.transactions[0]
-                ret_dict = {
-                    "id": h.id,
-                    "label": h.label,
-                    "user": h.user,
-                    "group": h.group,
-                    "tags": h.get_tags(),
-                    "transactions": h.get_transaction_ids(),
-                    "date": t.ingest_time.isoformat()
-                }
-                ret_list.append(ret_dict)
+                if len(h.transactions) > 0:
+                    t = h.transactions[0]
+                    ret_dict = {
+                        "id": h.id,
+                        "label": h.label,
+                        "user": h.user,
+                        "group": h.group,
+                        "tags": h.get_tags(),
+                        "transactions": h.get_transaction_ids(),
+                        "date": t.ingest_time.isoformat()
+                    }
+                    ret_list.append(ret_dict)
             # add the return list to successfully completed holding listings
             body[self.MSG_DATA][self.MSG_HOLDING_LIST] = ret_list
             self.log(
