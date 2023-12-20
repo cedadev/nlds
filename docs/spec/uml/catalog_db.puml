@@ -31,6 +31,7 @@ object "**Aggregation**" as aggregation {
     tarname [STRING]
     checksum [STRING]
     algorithm [STRING]
+    failed_fl [BOOL]
 }
 
 object "**File**" as file {
