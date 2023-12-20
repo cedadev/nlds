@@ -1145,14 +1145,14 @@ class CatalogConsumer(RMQC):
         # then we need to recreate them from the details in the message
         try:
             holding = self.catalog.get_holding(
-                user, group, holding_id=holding_id
+                user, group, holding_id=holding_id, label=holding_label
             )[0]        # should only be one
         except (KeyError, CatalogError):
             holding = None
 
         if holding is None:
             if holding_label is None:
-                holding_label = new_transaction_id
+                holding_label = new_transaction_id[0:8]
             try:
                 holding = self.catalog.create_holding(user, group, holding_label)
             except CatalogError:    # holding somehow already exists
@@ -1178,20 +1178,6 @@ class CatalogConsumer(RMQC):
 
         for f in filelist:
             pd = PathDetails.from_dict(f)
-            # Search first for file existence within holding, retry/fail if 
-            # present
-            # try:
-            #     files = self.catalog.get_files(
-            #         user, 
-            #         group, 
-            #         holding_id=holding.id,
-            #         original_path=pd.original_path, 
-            #     )
-            # except CatalogError:
-            #     pass # should throw a catalog error if file(s) not found
-            # else:
-            #     raise CatalogError("File already exists in holding")
-            # create the file
             file_ = self.catalog.create_file(
                 transaction,
                 pd.user, 
@@ -1205,6 +1191,10 @@ class CatalogConsumer(RMQC):
             # create the object storage location if not null
             if pd.object_name is not None and pd.tenancy is not None:
                 bucket_name, object_name = pd.object_name.split(':')
+                # have to remove the "nlds" prefix from the bucket_name as it is
+                # added in the create_location function below
+                slug_len = len("nlds")
+                bucket_name = bucket_name[slug_len:]
                 obj_loc = self.catalog.create_location(
                     file_,
                     Storage.OBJECT_STORAGE,
@@ -1270,6 +1260,16 @@ class CatalogConsumer(RMQC):
             self.log("No method for identifying a holding or transaction "
                      "provided, exiting callback.", self.RK_LOG_ERROR)
             return
+        
+        # if the holding_label is None then get it from the holding_id and put
+        # it in the message so that we can reconstruct with the correct label if
+        # the delete goes wrong
+        if holding_label is None:
+            holding = self.catalog.get_holding(user, group, holding_id=holding_id)
+            # should only be one
+            holding_label = holding[0].label
+            # add to metadata
+            body[RMQC.MSG_META][RMQC.MSG_LABEL] = holding_label
         
         for f in filelist:
             try:

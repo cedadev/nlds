@@ -58,7 +58,7 @@ focus
 
 # left pos 4
 screen -t "logger"
-exec "$PYTHON_DIR/python" "$NLDS_PROC/logger.py"
+#exec "$PYTHON_DIR/python" "$NLDS_PROC/logger.py"
 
 #split
 #focus
