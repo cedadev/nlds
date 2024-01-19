@@ -221,6 +221,7 @@ class RabbitMQPublisher():
                 # Get the username and password for rabbit
                 rabbit_user = self.config["user"]
                 rabbit_password = self.config["password"]
+                connection_heartbeat = self.config.get("heartbeat") or 300
 
                 # Start the rabbitMQ connection
                 connection = pika.BlockingConnection(
@@ -229,7 +230,7 @@ class RabbitMQPublisher():
                         credentials=pika.PlainCredentials(rabbit_user, 
                                                           rabbit_password),
                         virtual_host=self.config["vhost"],
-                        heartbeat=60
+                        heartbeat=connection_heartbeat,
                     )
                 )
 
