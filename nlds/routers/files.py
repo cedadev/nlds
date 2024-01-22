@@ -85,6 +85,7 @@ async def get(transaction_id: UUID,
               token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
+              groupall: bool = False,
               filepath: str = None,
               target: Optional[str] = None,
               job_label: Optional[str] = None,
@@ -105,7 +106,7 @@ async def get(transaction_id: UUID,
             detail = response_error.json()
         )
     if job_label is None:
-        job_label = transaction_id[0:8]
+        job_label = str(transaction_id)[0:8]
     # return response, job label accepted for processing
     response = FileResponse(
         transaction_id = transaction_id,
@@ -121,6 +122,7 @@ async def get(transaction_id: UUID,
             RMQP.MSG_SUB_ID: str(uuid4()),
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,
+            RMQP.MSG_GROUPALL: groupall,
             RMQP.MSG_TENANCY: tenancy,
             RMQP.MSG_TARGET: target,
             RMQP.MSG_ACCESS_KEY: access_key,
@@ -160,10 +162,11 @@ async def get(transaction_id: UUID,
             }
         )
 async def put(transaction_id: UUID,
-              filemodel: FileModel,
               token: str = Depends(authenticate_token),
               user: str = Depends(authenticate_user),
               group: str = Depends(authenticate_group),
+              groupall: bool = False,
+              filemodel: Optional[FileModel]=None,
               tenancy: Optional[str]=None,
               target: Optional[str]=None,
               job_label: Optional[str] = None,
@@ -183,7 +186,7 @@ async def put(transaction_id: UUID,
             detail = response_error.json()
         )
     if job_label is None:
-        job_label = transaction_id[0:8]
+        job_label = str(transaction_id)[0:8]
     # return response, transaction id accepted for processing
     response = FileResponse(
         transaction_id = transaction_id,
@@ -202,6 +205,7 @@ async def put(transaction_id: UUID,
             RMQP.MSG_SUB_ID: str(uuid4()),
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,
+            RMQP.MSG_GROUPALL: groupall,
             RMQP.MSG_TENANCY: tenancy,
             RMQP.MSG_TARGET: target,
             RMQP.MSG_JOB_LABEL: job_label,
@@ -283,7 +287,7 @@ async def put(transaction_id: UUID,
     contents = filemodel.get_cleaned_list()
 
     if job_label is None:
-        job_label = transaction_id[0:8]
+        job_label = str(transaction_id)[0:8]
         
     # return response, transaction id accepted for processing
     response = FileResponse(
@@ -340,6 +344,111 @@ async def put(transaction_id: UUID,
     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
                         content = response.json())
 
+
+@router.put("/archive",
+            status_code = status.HTTP_202_ACCEPTED,
+            responses = {
+                status.HTTP_202_ACCEPTED: {"model" : FileResponse},
+                status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
+                status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
+                status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
+                status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
+            }
+        )
+async def put(transaction_id: UUID,
+              token: str=Depends(authenticate_token),
+              user: str=Depends(authenticate_user),
+              group: str=Depends(authenticate_group),
+              filemodel: Optional[FileModel]=None,
+              tenancy: Optional[str]=None,
+              job_label: Optional[str] = None,
+              access_key: str="",
+              secret_key: str=""
+            ):
+
+    # validate FileModel, it has to exist
+    if not filemodel:
+        response_error = ResponseError(
+            loc = ["files", "archive"],
+            msg = ("body data is incomplete"),
+            type = "Resources not found."
+        )
+        raise HTTPException(
+            status_code = status.HTTP_400_BAD_REQUEST,
+            detail = response_error.json()
+        )
+    
+    if user not in ('jleland', 'nrmassey', 'nlds'):
+        response_error = ResponseError(
+            loc = ["files", "archive"],
+            msg = ("archive action is admin-only"),
+            type = "Action Forbidden."
+        )
+        raise HTTPException(
+            status_code = status.HTTP_403_FORBIDDEN,
+            detail = response_error.json()
+        )
+
+    # Convert filepath or filelist to lists
+    contents = filemodel.get_cleaned_list()
+
+    if job_label is None:
+        job_label = str(transaction_id)[0:8]
+        
+    # return response, transaction id accepted for processing
+    response = FileResponse(
+        transaction_id = transaction_id,
+        msg = (f"ARCHIVE transaction accepted for processing.")
+    )
+
+    # create the message dictionary - do this here now as it's more transparent
+    routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_ARCHIVE_PUT}"
+    api_method = f"{RMQP.RK_ARCHIVE_PUT}"
+    msg_dict = {
+        RMQP.MSG_DETAILS: {
+            RMQP.MSG_TRANSACT_ID: str(transaction_id),
+            RMQP.MSG_SUB_ID: str(uuid4()),
+            RMQP.MSG_USER: user,
+            RMQP.MSG_GROUP: group,
+            RMQP.MSG_TENANCY: tenancy,
+            RMQP.MSG_JOB_LABEL: job_label,
+            RMQP.MSG_ACCESS_KEY: access_key,
+            RMQP.MSG_SECRET_KEY: secret_key,
+            RMQP.MSG_API_ACTION: api_method
+        }, 
+        RMQP.MSG_DATA: {
+            # Convert to PathDetails for JSON serialisation
+            RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
+        },
+        **Retries().to_dict(),
+        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
+    }
+    response.user = user
+    response.group = group
+    response.api_action = api_method
+    if job_label:
+        response.job_label = job_label
+    if tenancy:
+        response.tenancy = tenancy
+    # add the metadata
+    meta_dict = {}
+    if (filemodel.label):
+        meta_dict[RMQP.MSG_LABEL] = filemodel.label
+        response.label = filemodel.label
+    if (filemodel.holding_id):
+        meta_dict[RMQP.MSG_HOLDING_ID] = filemodel.holding_id
+        response.holding_id = filemodel.holding_id
+    if (filemodel.tag):
+        tag_dict = filemodel.tag
+        meta_dict[RMQP.MSG_TAG] = tag_dict
+        response.tag = tag_dict
+
+    if (len(meta_dict) > 0):
+        msg_dict[RMQP.MSG_META] = meta_dict
+    rabbit_publisher.publish_message(routing_key, msg_dict)
+
+    return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
+                        content = response.json())
 
 # @router.post("/")
 # async def post():

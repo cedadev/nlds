@@ -1,0 +1,250 @@
+@startuml message_flow_get_full
+skinparam participantFontSize 16
+skinparam participantFontName Futura
+
+skinparam queueFontSize 16
+skinparam queueFontName Futura
+
+skinparam actorFontSize 16
+skinparam actorFontName Futura
+
+skinparam collectionsFontSize 16
+skinparam collectionsFontName Futura
+
+skinparam DatabaseFontSize 16
+skinparam DatabaseFontName Futura
+
+actor user as "User"
+participant client as "Client"
+participant server as "API server"
+participant wex as "Exchange"
+
+queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic=""nlds-api.route.*""
+end note
+collections work as "NLDS\nWorker" #lightgrey
+
+queue qc as "Catalog Q" #springgreen
+collections catalog_get as "Catalog" #springgreen
+database catalog_db as "Catalog DB" #springgreen
+note over qc
+    topic=""*.catalog-get.*""
+end note
+
+queue qt as "Transfer Get Q" #gold
+note over qt
+    topic=""*.transfer-get.*""
+end note
+collections transfer_get as "Transfer Get" #gold
+
+participant obj as "Object\nStore" #GhostWhite
+
+queue qag as "Archive Get Q" #MistyRose
+note over qag
+    topic = nlds-api.archive-get.*
+end note
+collections archive_gets as "Archive Get" #MistyRose
+
+participant tape as "Tape" #GhostWhite
+
+user -> client : ""GET(filelist,target,\n\tuser,group,id)""
+
+activate client
+client -> server : ""GET(filelist,target,\n\tuser,group,id)""
+deactivate client
+
+activate server
+server -> wex : key=""nlds-api.route.get""
+deactivate server
+
+activate wex
+wex -> qw : key=""nlds-api.route.get""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.route.get""
+deactivate qw
+
+activate work
+work -> wex : key=""nlds-api.catalog-get.start""
+deactivate work
+
+activate wex
+wex -> qc : key=""nlds-api.catalog-get.start""
+deactivate wex
+
+activate qc
+qc -> catalog_get : key=""nlds-api.catalog-get.start""
+deactivate qc
+note right of qc
+    (*) here will match the calling
+    application.
+    `nlds-api` in this case.
+end note
+
+activate catalog_get
+loop #LightPink for file in //filelist//
+    catalog_get -> catalog_db : get file record from catalog holding
+    catalog_db -> catalog_get
+    alt #MistyRose the file exists on the object storage
+        catalog_get->catalog_get : add file record to //transfer_list//
+    else else
+        alt #FFF8F8 the file exists on the tape
+            catalog_get->catalog_get : add file record to //archive_list//
+        else else
+            catalog_get->catalog_get : add file record to //failed_list//
+        end
+    end
+end
+loop #LightPink for file in //archive_list//
+    catalog_get -> catalog_db : get //aggregation// record from catalog
+    catalog_db -> catalog_get 
+    alt #MistyRose catalog configured for full unpack?
+        loop #FFF8F8 for location in //aggregation//
+            catalog_get->catalog_db: add TAPE Location to catalog
+            catalog_get->catalog_get: add //aggregation//: //location// to //retrieval_dict//
+        end
+        ' catalog_get->catalog_get: get the //aggregate_list//
+    else else
+        loop #FFF8F8 for location in //filelist//
+            catalog_get->catalog_db: add TAPE Location to catalog
+            catalog_get->catalog_get: add //aggregation//: //location// to //retrieval_dict//
+        end
+    end
+end
+
+catalog_get -> wex : key=""nlds-api.catalog-get.reroute""
+
+activate wex
+wex -> qw : key=""nlds-api.catalog-get.reroute""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.catalog-get.reroute""
+deactivate qw
+activate work
+work -> qag : key=""nlds-api.archive-get.start""
+deactivate work
+activate qag
+qag -> archive_gets : key=""nlds-api.archive-get.start""
+deactivate qag
+
+activate archive_gets
+alt #LightPink //filelist// needs to be prepared
+    loop #MistyRose Pre-get verification - for file in //filelist//
+        archive_gets->archive_gets: Verify filelist contents
+        archive_gets->tape: Ping tape server and check base_dir
+        archive_gets->obj: Verify object integrity
+        archive_gets->archive_gets: Add to //preparelist//, add to //original_filelist_map//
+    end
+    archive_gets->tape: Prepare //preparelist//
+    archive_gets->archive_gets: Mark as prepared
+else //filelist// has been prepared
+    archive_gets->tape: Get prepare status
+    alt #MistyRose Prepare has finished
+        archive_gets->archive_gets: Continue to get
+    else Prepare still in progress
+        archive_gets->qag: Requeue filelist
+    end
+end
+loop #LightPink for aggregate in //aggregate_list//
+    archive_gets -> tape : get aggregate from tape
+    tape -> archive_gets
+    alt #MistyRose Tape retrieval succeeded
+        loop #FFF8F8 for file in aggregate
+            archive_gets->obj : Extract file from aggregate
+            obj->archive_gets
+            alt #FFFDFD Extract succeeded
+                archive_gets->archive_gets : Add file record to //transferred_list//
+            else
+                archive_gets->archive_gets : Add file record to //failed_list//
+            end
+        end
+    else else
+        archive_gets->archive_gets : Add aggregate to //failed_list//
+    end
+end
+
+archive_gets -> wex : key=""nlds-api.archive-get.failed""
+
+activate wex
+wex -> qw : key=""nlds-api.archive-get.failed""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.archive-get.failed""
+deactivate qw
+activate work
+
+catalog_get -> wex : key=""nlds-api.catalog-get.failed""
+activate wex
+wex -> qw : key=""nlds-api.catalog-get.failed""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.catalog-get.failed""
+deactivate qw
+
+deactivate work
+
+archive_gets -> wex : key=""nlds-api.archive-get.complete""
+deactivate archive_gets
+
+activate wex
+wex -> qw : key=""nlds-api.archive-get.complete""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.archive-get.complete""
+deactivate qw
+activate work
+catalog_get -> wex : key=""nlds-api.catalog-get.complete""
+
+deactivate catalog_get
+
+activate wex
+wex -> qw : key=""nlds-api.catalog-get.complete""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.catalog-get.complete""
+deactivate qw
+
+work -> wex : key=""nlds-api.transfer-get.start""
+deactivate work
+
+activate wex
+wex -> qt : key=""nlds-api.transfer-get.start""
+deactivate wex
+
+activate qt
+qt -> transfer_get : key=""nlds-api.transfer-get.start""
+deactivate qt
+activate transfer_get
+
+loop #LightPink for file in //transferred_list//
+    transfer_get -> obj : copy file to target
+    obj -> transfer_get : 
+    transfer_get->transfer_get : add file record to //completed_list//
+end
+transfer_get -> wex : key=""nlds-api.transfer-get.complete""
+activate wex
+wex -> qw : key=""nlds-api.transfer-get.complete""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.transfer-get.complete""
+deactivate qw
+
+loop #LightPink for file, aggregation in //failed_list//
+    transfer_get->transfer_get : add file record(s) to //failed_list//
+end
+
+transfer_get -> wex : key=""nlds-api.transfer-get.failed""
+deactivate transfer_get
+
+activate wex
+wex -> qw : key=""nlds-api.transfer-get.failed""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.transfer-get.failed""
+deactivate qw
+
+@enduml

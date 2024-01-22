@@ -7,7 +7,7 @@ It requires the use of the NLDS client, either the command line or library:
 
 NLDS server is built upon [FastAPI](https://fastapi.tiangolo.com).
 
-NLDS requires Python 3.  It has been tested with Python 3.8 and Python 3.9.
+NLDS requires Python 3.  It has been tested with Python 3.9, 3.10 and Python 3.11.
 
 Installation
 ------------
@@ -32,7 +32,7 @@ Running - Dec 2021
 2. To run the processors, you have two options:
     1. In unique terminals start each processor individually, after 
     activating the virtual env, for example:
-        ```source ~/nlds-venv/bin/activate; python nlds_processors/index.py```
+       ```source ~/nlds-venv/bin/activate; python nlds_processors/index.py```
        This will send the output to the terminal.
 
     2. Use the script `test_run_processor.sh`.  This will run all five processors

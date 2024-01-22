@@ -30,8 +30,9 @@ def test_callback(monkeypatch, default_indexer, default_rmq_method,
     default_indexer.callback(None, default_rmq_method, None, default_rmq_body, 
                              None)
 
+@pytest.mark.parametrize("file_size", [0, 1e3, 1e6, 1e9])
 def test_index(monkeypatch, caplog, default_indexer, 
-               default_rmq_message_dict, fs):
+               default_rmq_message_dict, fs, file_size):
     # Deactivate messaging for test environment and initialise uid and gid
     monkeypatch.setattr(default_indexer, "publish_message", 
                         lambda *_args, **_kwargs: None)
@@ -45,7 +46,6 @@ def test_index(monkeypatch, caplog, default_indexer,
     default_indexer.reset()
     default_indexer.uid = 100
     default_indexer.gids = [100]
-
 
     dirs = [
         "/test/1-1/2-1/3-1/4-1/5-1",
@@ -64,7 +64,7 @@ def test_index(monkeypatch, caplog, default_indexer,
     for d in dirs:
         fs.create_dir(d)
     for f in files:
-        fs.create_file(f)
+        fs.create_file(f, st_size=int(file_size))
 
 
     expected_filelist = [

@@ -11,20 +11,18 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 """Base class used to authenticate / authorise the users, groups, collections,
    etc.
 """
+from abc import ABC
 
-class BaseAuthenticator:
+class BaseAuthenticator(ABC):
 
-    def authenticate_token(oauth_token: str):
+    def authenticate_token(self, oauth_token: str):
         """Validate an oauth token."""
         raise NotImplementedError
 
-    def authenticate_user(oauth_token: str, user: str):
+    def authenticate_user(self, oauth_token: str, user: str):
         """Validate whether the Bearer of the token is a valid user."""
         raise NotImplementedError
 
-    def authenticate_group(oauth_token: str, group: str):
+    def authenticate_group(self, oauth_token: str, group: str):
         """Validate whether the Bearer of the token belongs to the group."""
-        return NotImplementedError
-
-    def authenticate_collection(oauth_token: str, collection: str):
         return NotImplementedError

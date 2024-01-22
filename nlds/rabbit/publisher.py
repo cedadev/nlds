@@ -13,9 +13,9 @@ from datetime import datetime, timedelta
 import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
-from typing import Dict, List
+from typing import Dict, List, Any
 import pathlib
-import collections
+from collections.abc import Sequence
 
 import pika
 from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
@@ -67,6 +67,12 @@ class RabbitMQPublisher():
     RK_TRANSFER = "transfer"
     RK_TRANSFER_PUT = "transfer-put"
     RK_TRANSFER_GET = "transfer-get"
+    RK_ARCHIVE = "archive"
+    RK_ARCHIVE_PUT = "archive-put"
+    RK_ARCHIVE_GET = "archive-get"
+    RK_CATALOG_ARCHIVE_NEXT = "catalog-archive-next"
+    RK_CATALOG_ARCHIVE_DEL = "catalog-archive-del"
+    RK_CATALOG_ARCHIVE_UPDATE = "catalog-archive-update"
     RK_ROUTE = "route"
     RK_LOG = "log"
 
@@ -75,6 +81,8 @@ class RabbitMQPublisher():
     RK_START = "start"
     RK_COMPLETE = "complete"
     RK_FAILED = "failed"
+    RK_REROUTE = "reroute"
+    RK_NEXT = "next"
 
     # Exchange routing key parts – monitoring levels
     RK_LOG_NONE = "none"
@@ -100,6 +108,7 @@ class RabbitMQPublisher():
     MSG_TIMESTAMP = "timestamp"
     MSG_USER = "user"
     MSG_GROUP = "group"
+    MSG_GROUPALL = "groupall"
     MSG_TARGET = "target"
     MSG_ROUTE = "route"
     MSG_ERROR = "error"
@@ -110,8 +119,7 @@ class RabbitMQPublisher():
     MSG_JOB_LABEL = "job_label"
     MSG_DATA = "data"
     MSG_FILELIST = "filelist"
-    MSG_FILELIST_ITEMS = "fl_items"
-    MSG_FILELIST_RETRIES = "fl_retries"
+    MSG_RETRIEVAL_FILELIST = "retrieval_dict"
     MSG_TRANSACTIONS = "transactions"
     MSG_LOG_TARGET = "log_target"
     MSG_LOG_MESSAGE = "log_message"
@@ -132,10 +140,17 @@ class RabbitMQPublisher():
     MSG_RETRY_COUNT_QUERY = "retry_count"
     MSG_RECORD_LIST = "records"
     MSG_WARNING = "warning"
+    MSG_TAPE_URL = "tape_url"
+    MSG_TAPE_POOL = "tape_pool"
+    MSG_AGGREGATION_ID = "aggregation_id"
+    MSG_CHECKSUM = "checksum"
+    MSG_NEW_TARNAME = "new_tarname"
+    MSG_PREPARE_ID = "prepare_id"
 
     MSG_RETRIES = "retries"
     MSG_RETRIES_COUNT = "count"
     MSG_RETRIES_REASONS = "reasons"
+    MSG_RETRIES_SAVED_REASONS = "saved_reasons"
 
     MSG_TYPE = "type"
     MSG_TYPE_STANDARD = "standard"
@@ -182,7 +197,7 @@ class RabbitMQPublisher():
         try:
             # Do some basic verification of the general retry delays. 
             self.retry_delays = self.general_config[self.RETRY_DELAYS]
-            assert (isinstance(self.retry_delays, collections.Sequence) 
+            assert (isinstance(self.retry_delays, Sequence) 
                     and not isinstance(self.retry_delays, str))
             assert len(self.retry_delays) > 0
             assert isinstance(self.retry_delays[0], int)
@@ -192,13 +207,21 @@ class RabbitMQPublisher():
         if setup_logging_fl:
             self.setup_logging()
     
-    @retry(RabbitRetryError, tries=5, delay=1, backoff=2, logger=logger)
+    @retry(
+        RabbitRetryError, 
+        tries=-1, 
+        delay=1, 
+        backoff=2, 
+        max_delay=60, 
+        logger=logger
+    )
     def get_connection(self):
         try:
             if (not self.channel or not self.channel.is_open):
                 # Get the username and password for rabbit
                 rabbit_user = self.config["user"]
                 rabbit_password = self.config["password"]
+                connection_heartbeat = self.config.get("heartbeat") or 300
 
                 # Start the rabbitMQ connection
                 connection = pika.BlockingConnection(
@@ -207,7 +230,7 @@ class RabbitMQPublisher():
                         credentials=pika.PlainCredentials(rabbit_user, 
                                                           rabbit_password),
                         virtual_host=self.config["vhost"],
-                        heartbeat=60
+                        heartbeat=connection_heartbeat,
                     )
                 )
 
@@ -225,7 +248,7 @@ class RabbitMQPublisher():
         except (AMQPConnectionError, ChannelWrongStateError) as e:
             logger.error("AMQPConnectionError encountered on attempting to "
                          "establish a connection. Retrying...")
-            logger.debug(f"{e}")
+            logger.debug(f"{type(e).__name__}: {e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
@@ -264,7 +287,14 @@ class RabbitMQPublisher():
             delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
         )
 
-    @retry(RabbitRetryError, tries=2, delay=0, backoff=1, logger=logger)
+    @retry(
+        RabbitRetryError, 
+        tries=-1, 
+        delay=1, 
+        backoff=2, 
+        max_delay=60, 
+        logger=logger
+    )
     def publish_message(self, 
                         routing_key: str, 
                         msg_dict: Dict, 
@@ -323,8 +353,10 @@ class RabbitMQPublisher():
             # For any Undelivered messages attempt to send again
             logger.error("Message delivery was not confirmed, wasn't delivered "
                          f"properly (rk = {routing_key}). Attempting retry...")
-            logger.debug(f"{e}")
-            raise RabbitRetryError(str(e), ampq_exception=e)
+            logger.debug(f"{type(e).__name__}: {e}")
+            # NOTE: don't reraise in this case, can cause an infinite loop as 
+            # the message will never be sent. 
+            # raise RabbitRetryError(str(e), ampq_exception=e)
 
     def get_retry_delay(self, retries: int):
         """Simple convenience function for getting the delay (in seconds) for an 
@@ -537,7 +569,7 @@ class RabbitMQPublisher():
 
     @classmethod
     def create_log_message(cls, message: str, target: str, 
-                           route: str = None) -> bytes:
+                           route: str = None) -> Dict[str, Any]:
         """
         Create logging message to send to rabbit exchange. Message is, as with 
         the standard message, in json format with metadata described in DETAILS 

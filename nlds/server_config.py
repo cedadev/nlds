@@ -21,6 +21,7 @@ RABBIT_CONFIG_EXCHANGES = "exchanges"
 RABBIT_CONFIG_QUEUES = "queues"
 RABBIT_CONFIG_QUEUE_NAME = "name"
 RABBIT_CONFIG_EXCHANGE_DELAYED = "delayed"
+RABBIT_CONFIG_PORT = "port"
 
 LOGGING_CONFIG_SECTION = "logging"
 LOGGING_CONFIG_LEVEL = "log_level"
@@ -36,7 +37,7 @@ GENERAL_CONFIG_SECTION = "general"
 # Defines the compulsory server config file sections
 CONFIG_SCHEMA = (
     (AUTH_CONFIG_SECTION, ("authenticator_backend", )),
-    (RABBIT_CONFIG_SECTION, ("user", "password", "server", "vhost", "exchange", 
+    (RABBIT_CONFIG_SECTION, ("user", "password", "server", "admin_port", "vhost", "exchange", 
                              "queues"))
 )
 

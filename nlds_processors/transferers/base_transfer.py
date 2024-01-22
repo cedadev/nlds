@@ -11,12 +11,18 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 from abc import ABC, abstractmethod
 import json
 import os
-from typing import List, NamedTuple, Dict
+from typing import List, NamedTuple, Dict, Tuple
 import pathlib as pth
 
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
+from nlds.rabbit.consumer import FilelistType, State
+
+
+class TransferError(Exception):
+    pass
+
 
 class BaseTransferConsumer(StattingConsumer, ABC):
     DEFAULT_QUEUE_NAME = "transfer_q"
@@ -59,13 +65,39 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.RETRY_DELAYS)
 
         self.reset()
-        
+
+
     def callback(self, ch, method, properties, body, connection):
         self.reset()
         
         # Convert body from bytes to string for ease of manipulation
         body = body.decode("utf-8")
         body_json = json.loads(body)
+        
+        
+        # This checks if the message was for a system status check
+        try:
+            api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
+        except KeyError:
+            self.log(f"Message did not contain api_method", self.RK_LOG_INFO)
+            api_method = None
+        
+        
+        # If received system test message, reply to it (this is for system status check)
+        if api_method == "system_stat":
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body_json["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body_json,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
+        
 
         self.log(f"Received {json.dumps(body_json, indent=4)} from "
                  f"{self.queues[0].name} ({method.routing_key})", 
@@ -96,34 +128,35 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         filelist = self.parse_filelist(body_json)
 
         try:
-            access_key = body_json[self.MSG_DETAILS][self.MSG_ACCESS_KEY]
-            secret_key = body_json[self.MSG_DETAILS][self.MSG_SECRET_KEY]
-        except KeyError:
-            self.log(
-                "Secret key or access key unobtainable, exiting callback.", 
-                self.RK_LOG_ERROR
+            access_key, secret_key, tenancy = self.get_objectstore_config(
+                body_json
             )
+        except TransferError: 
+            self.log("Objectstore config unobtainable, exiting callback.", 
+                     self.RK_LOG_ERROR)
+            return
+        
+        # First check for transaction-level message failure and boot back to 
+        # catalog if necessary. We do this here so that errors in set_ids() can
+        # still be caught at the transaction-level
+        retries = self.get_retries(body_json)
+        if retries is not None and retries.count > self.max_retries:
+            rk_failed = ".".join([rk_parts[0], rk_parts[1], self.RK_FAILED])
+            if rk_parts[1] == self.RK_TRANSFER_PUT:
+                # For transfer-put, mark the message as 'processed' so it can be
+                # failed more safely.
+                mode = FilelistType.processed
+                state = State.CATALOG_ROLLBACK
+                save_reasons_fl = True
+            else:
+                # Otherwise fail it regularly
+                mode = FilelistType.failed
+                state = None
+                save_reasons_fl = False
+            self.send_pathlist(filelist, rk_failed, body_json, mode=mode, 
+                               state=state, save_reasons_fl=save_reasons_fl)
             return
 
-        tenancy = None
-        # If tenancy specified in message details then override the server-
-        # config value
-        if (self.MSG_TENANCY in body_json[self.MSG_DETAILS] 
-                and body_json[self.MSG_DETAILS][self.MSG_TENANCY] is not None):
-            tenancy = body_json[self.MSG_DETAILS][self.MSG_TENANCY]
-        else:
-            tenancy = self.tenancy
-        
-        # Check to see whether tenancy has been specified in either the message 
-        # or the server_config - exit if not. 
-        if tenancy is None:
-            self.log(
-                "No tenancy specified at server- or request-level, exiting "
-                "callback.", 
-                self.RK_LOG_ERROR
-            )
-            return 
-        
         # Set uid and gid from message contents if configured to check 
         # permissions
         if self.check_permissions_fl:
@@ -139,6 +172,35 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         # classes 
         self.transfer(transaction_id, tenancy, access_key, secret_key, 
                       filelist, rk_parts[0], body_json)
+        
+
+    def get_objectstore_config(self, body_dict) -> Tuple:
+        try:
+            access_key = body_dict[self.MSG_DETAILS][self.MSG_ACCESS_KEY]
+            secret_key = body_dict[self.MSG_DETAILS][self.MSG_SECRET_KEY]
+        except KeyError:
+            reason = "Secret key or access key unobtainable"
+            self.log(f"{reason}, exiting callback", self.RK_LOG_ERROR)
+            raise TransferError(reason)
+
+        tenancy = None
+        # If tenancy specified in message details then override the server-
+        # config value
+        if (self.MSG_TENANCY in body_dict[self.MSG_DETAILS] 
+                and body_dict[self.MSG_DETAILS][self.MSG_TENANCY] is not None):
+            tenancy = body_dict[self.MSG_DETAILS][self.MSG_TENANCY]
+        else:
+            tenancy = self.tenancy
+        
+        # Check to see whether tenancy has been specified in either the message 
+        # or the server_config - exit if not. 
+        if tenancy is None:
+            reason = "No tenancy specified at server- or request-level"
+            self.log(f"{reason}, exiting callback.", self.RK_LOG_ERROR)
+            raise TransferError(reason) 
+        
+        return access_key, secret_key, tenancy
+      
 
     def check_path_access(self, path: pth.Path, stat_result: NamedTuple = None, 
                           access: int = os.R_OK) -> bool:
@@ -148,6 +210,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             access, 
             self.check_permissions_fl
         )
+
 
     @abstractmethod
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 

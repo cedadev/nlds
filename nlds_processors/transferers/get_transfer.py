@@ -1,7 +1,8 @@
-from typing import List, Dict
+from typing import List, Dict, Any
 from pathlib import Path
 import os
-from uuid import UUID
+import subprocess
+import stat
 
 import minio
 from minio.error import S3Error
@@ -10,6 +11,7 @@ from retry import retry
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import FilelistType, State
 from nlds.details import PathDetails
+from nlds.errors import CallbackError
 
 
 class GetTransferConsumer(BaseTransferConsumer):
@@ -19,13 +21,27 @@ class GetTransferConsumer(BaseTransferConsumer):
                            f"{BaseTransferConsumer.RK_WILD}")
     DEFAULT_STATE = State.TRANSFER_GETTING
 
+    _CHOWN_COMMAND = "chown_cmd"
+    _CHOWN_FL = "chown_fl"
+    TRANSFER_GET_CONSUMER_CONFIG = {
+        _CHOWN_COMMAND: "chown",
+        _CHOWN_FL: False
+    }
+    DEFAULT_CONSUMER_CONFIG = (
+        TRANSFER_GET_CONSUMER_CONFIG 
+        | BaseTransferConsumer.DEFAULT_CONSUMER_CONFIG
+    )
+
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
+
+        self.chown_cmd = self.load_config_value(self._CHOWN_COMMAND)
+        self.chown_fl = self.load_config_value(self._CHOWN_FL)
     
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
                  secret_key: str, filelist: List[PathDetails], rk_origin: str,
-                 body_json: Dict[str, str]) -> None:
+                 body_json: Dict[str, Any]) -> None:
         # Grab message details for ease of access. This shouldn't fail becuase
         # of checking done in the worker, might make sense to do it here/in the 
         # basetransfer too though
@@ -36,11 +52,12 @@ class GetTransferConsumer(BaseTransferConsumer):
         if target:
             target_path = Path(target)
             if not self.check_path_access(target_path, access=os.W_OK):
-                # NOTE: should we retry here?
-                self.log("Unable to copy, given target path is inaccessible. "
-                        "Exiting callback", 
-                        self.RK_LOG_ERROR)
-                return
+                self.log(f"Full path: {target_path}", self.RK_LOG_DEBUG)
+                raise CallbackError("Unable to copy, given target path is "
+                                    "inaccessible. Passing for retry.")
+        
+        if self.chown_fl:
+            self.set_ids(body_json)
 
         # Create client!
         client = minio.Minio(
@@ -79,8 +96,7 @@ class GetTransferConsumer(BaseTransferConsumer):
 
             if bucket_name and not client.bucket_exists(bucket_name):
                 # If bucket doesn't exist then pass for retry
-                reason = (f"transaction_id {transaction_id} doesn't match any "
-                           "buckets")
+                reason = (f"Bucket {bucket_name} doesn't seem to exist")
                 self.log(f"{reason}. Adding {object_name} to retry list.", 
                          self.RK_LOG_ERROR)
                 path_details.retries.increment(reason=reason)
@@ -96,7 +112,7 @@ class GetTransferConsumer(BaseTransferConsumer):
             if not target:
                 # In the case of no given target, we just download the files 
                 # back to their original location. 
-                download_path = path_details.original_path
+                download_path = path_details.path
                 # Check we have permission to write to the parent folder of the 
                 # original location. If the parent folder doesn't exist this 
                 # will fail.
@@ -123,10 +139,13 @@ class GetTransferConsumer(BaseTransferConsumer):
                          "gotten to target path.", self.RK_LOG_WARNING)
                 download_path = target_path
 
+            # Cast to string
+            download_path_str = str(download_path)
+
             # Attempt the download!
             try:
-                result = client.fget_object(
-                    bucket_name, object_name, str(download_path),
+                resp = client.fget_object(
+                    bucket_name, object_name, download_path_str,
                 )
             except Exception as e:
                 reason = f"Download-time exception occurred: {e}"
@@ -137,6 +156,27 @@ class GetTransferConsumer(BaseTransferConsumer):
                 self.append_and_send(path_details, rk_retry, body_json, 
                                      list_type=FilelistType.retry)
                 continue
+            
+            self.log(f"Changing permissions and ownership of file "
+                     f"{download_path}", self.RK_LOG_ERROR)
+            try:
+                # Attempt to change back to original permissions
+                os.chmod(download_path, mode=path_details.permissions)
+            except (KeyError, PermissionError) as e:
+                self.log("Couldn't change permissions of downloaded file", 
+                         self.RK_LOG_WARNING) 
+                self.log(f"Original error: {e}", self.RK_LOG_DEBUG)
+                
+            # Attempt to chown the path back to the requesting user using the 
+            # configured binary/command. 
+            try:
+                subprocess.run([self.chown_cmd, 
+                                str(self.uid), 
+                                download_path_str])
+            except (KeyError, PermissionError) as e:
+                self.log("Couldn't change owner of downloaded file", 
+                         self.RK_LOG_WARNING) 
+                self.log(f"Original error: {e}", self.RK_LOG_DEBUG)
 
             self.log(f"Successfully got {path_details.original_path}", 
                      self.RK_LOG_DEBUG)

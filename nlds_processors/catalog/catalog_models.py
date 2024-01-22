@@ -1,7 +1,15 @@
 """Declare the SQLAlchemy ORM models for the NLDS Catalog database"""
 from __future__ import annotations
 
-from sqlalchemy import Integer, String, Column, DateTime, Enum, BigInteger, UniqueConstraint
+from sqlalchemy import (
+    Integer, 
+    String, Column, 
+    DateTime, 
+    Enum, 
+    BigInteger, 
+    UniqueConstraint, 
+    Boolean,
+)
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -43,8 +51,8 @@ class Holding(CatalogBase):
 
 
 class Transaction(CatalogBase):
-    """Class containing details of a transaction.  Note that a holding can consist
-    of many transactions."""
+    """Class containing details of a transaction.  Note that a holding can 
+    consist of many transactions."""
     __tablename__ = "transaction"
     # primay key / integer id
     id = Column(Integer, primary_key=True)
@@ -79,7 +87,7 @@ class File(CatalogBase):
     __tablename__ = "file"
     # primary key / integer id
     id = Column(Integer, primary_key=True)
-    # holding id as ForeignKey "Parent"
+    # transaction id as ForeignKey "Parent"
     transaction_id = Column(Integer, ForeignKey("transaction.id"), 
                             index=True, nullable=False)
     # original path on POSIX disk - this should be unique per holding
@@ -98,9 +106,9 @@ class File(CatalogBase):
     file_permissions = Column(Integer)
 
     # relationship for location (one to many)
-    location = relationship("Location", cascade="delete, delete-orphan")
+    locations = relationship("Location", cascade="delete, delete-orphan")
     # relationship for checksum (one to one)
-    checksum = relationship("Checksum", cascade="delete, delete-orphan")
+    checksums = relationship("Checksum", cascade="delete, delete-orphan")
 
 
 class Storage(enum.Enum):
@@ -117,6 +125,10 @@ class Location(CatalogBase):
     id = Column(Integer, primary_key=True)
     # storage type = OBJECT_STORAGE | TAPE
     storage_type = Column(Enum(Storage))
+    # scheme / protocol from the url 
+    url_scheme = Column(String, nullable=False)
+    # network location from the url
+    url_netloc = Column(String, nullable=False)
     # root of the file on the storage (bucket on object storage)
     root = Column(String, nullable=False)
     # path of the file on the storage
@@ -126,6 +138,12 @@ class Location(CatalogBase):
     # file id as ForeignKey "Parent"
     file_id = Column(Integer, ForeignKey("file.id"), 
                      index=True, nullable=False)
+    aggregation_id = Column(Integer, ForeignKey("aggregation.id"), 
+                            index=True, nullable=True)
+    
+    # storage_type must be unique per file_id, i.e. each file can only have one 
+    # each location
+    __table_args__ = (UniqueConstraint("storage_type", "file_id"), )
 
 
 class Checksum(CatalogBase):
@@ -144,9 +162,20 @@ class Checksum(CatalogBase):
     __table_args__ = (UniqueConstraint('checksum', 'algorithm'),)
 
 
-if __name__ == "__main__":
-    # render the schema if run from command line
-    # needs fixed version of eralchemy from:
-    # https://github.com/maurerle/eralchemy2.git
-    from eralchemy2 import render_er 
-    render_er(CatalogBase, 'catalog_schema.png')
+class Aggregation(CatalogBase):
+    """Class containing the details of file aggregations made for writing files 
+    to tape (specifically CTA) as tars"""
+    __tablename__ = "aggregation"
+    # primary key / integer id
+    id = Column(Integer, primary_key=True)
+    # The name of the tarfile on tape
+    tarname = Column(String, nullable=False)
+    # checksum
+    checksum = Column(String, nullable=True)
+    # checksum method / algorithm
+    algorithm = Column(String, nullable=True)
+    # whether aggregation has failed or not
+    failed_fl = Column(Boolean, nullable=False)
+
+    # relationship for location (one to many)
+    locations = relationship("Location", cascade="delete, delete-orphan")

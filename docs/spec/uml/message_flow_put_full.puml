@@ -1,0 +1,225 @@
+@startuml message_flow_put_full
+
+skinparam participantFontSize 16
+skinparam participantFontName Futura
+
+skinparam queueFontSize 16
+skinparam queueFontName Futura
+
+skinparam actorFontSize 16
+skinparam actorFontName Futura
+
+skinparam collectionsFontSize 16
+skinparam collectionsFontName Futura
+
+skinparam DatabaseFontSize 16
+skinparam DatabaseFontName Futura
+
+actor user as "User"
+participant client as "Client"
+participant server as "API server"
+participant wex as "Exchange"
+
+queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic = nlds-api.route.*
+end note
+collections work as "NLDS\nWorker" #lightgrey
+
+/'
+database iddb as "Transaction DB" #lightgrey
+'/
+queue qs as "Index Q" #lightblue
+note over qs
+    topic = *.index.*
+end note
+collections index as "Indexers" #lightblue
+
+queue qc as "Catalog Q" #springgreen
+collections catalog as "Catalog" #springgreen
+database catalog_db as "Catalog DB" #springgreen
+note over qc
+    topic = *.catalog-put.*
+end note
+
+queue qt as "Transfer Put Q" #gold
+note over qt
+    topic = *.transfer-put.*
+end note
+collections transfer_puts as "Transfer Put" #gold
+
+participant disk as "POSIX\nDisk" #GhostWhite
+participant obj as "Object\nStore" #GhostWhite
+
+user -> client : PUT(filelist,target,\n\tuser,group)
+activate client
+client -> server : PUT(filelist,target,\n\tuser,group,id)
+deactivate client
+activate server
+server -> wex : key=""nlds-api.route.put""
+deactivate server
+activate wex
+wex -> qw : key=""nlds-api.route.put""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.route.put""
+deactivate qw
+
+activate work
+work -> wex : key=""nlds-api.index.init""
+deactivate work
+activate wex
+/'work -> iddb : INSERT(id,target,\n\tuser,group)'/
+wex -> qs : key=""nlds-api.index.init""
+deactivate wex
+
+note right of qs
+    (*) here will match the calling
+    application.
+    `nlds-api` in this case.
+    `gws-api` for group workspace scanner.
+end note
+activate qs
+qs -> index : key=""nlds-api.index.init""
+deactivate qs
+activate index
+loop #lightgrey for subfile in filelist[::1000]
+    index -> wex : key=""nlds-api.index.start""
+    activate wex
+end
+deactivate index
+
+wex -> qs : key=""nlds-api.index.start""
+deactivate wex
+
+activate qs
+qs -> index : key=""nlds-api.index.start""
+deactivate qs
+activate index
+loop #lightgrey for file in subfilelist
+    index -> disk : get file type
+    disk -> index
+    alt #Gainsboro file is a directory
+        index -> wex : key=""nlds-api.index.start""
+    else else
+        index -> index : add file record to\n//indexed_list//
+    end
+end
+index -> wex : key=""nlds-api.index.complete""
+deactivate index
+
+activate wex
+wex -> qw : key=""nlds-api.index.complete""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.index.complete""
+deactivate qw
+
+activate work
+work -> wex : key=""nlds-api.catalog-put.start""
+deactivate work
+
+activate wex
+wex -> qc : key=""nlds-api.catalog-put.start""
+deactivate wex
+
+activate qc
+qc -> catalog : key=""nlds-api.catalog-put.start""
+deactivate qc
+
+activate catalog
+loop #lightgrey for file in //indexed_list//
+    catalog -> catalog_db : get file record from catalog holding
+    catalog_db -> catalog
+    alt #Gainsboro file exists in catalog holding
+        catalog -> catalog : add file record to //failed_list//
+    else else
+        catalog -> catalog_db : add file record to catalog holding
+        catalog -> catalog : add file record to //catalogued_list//
+    end
+end
+
+catalog -> wex : key=""nlds-api.catalog-put.failed""
+catalog -> wex : key=""nlds-api.catalog-put.complete""
+
+deactivate catalog
+
+activate wex
+wex -> qw : key=""nlds-api.catalog-put.complete""
+deactivate wex
+
+activate qw
+qw -> work: key=""nlds-api.catalog-put.complete""
+deactivate qw
+
+activate work
+work -> wex  : key=""nlds-api.transfer-put.start""
+deactivate work
+
+activate wex
+wex -> qt : key=""nlds-api.transfer-put.start""
+deactivate wex
+
+activate qt
+qt -> transfer_puts : key=""nlds-api.transfer-put.start""
+deactivate qt
+
+activate transfer_puts
+loop #lightgrey for file in //catalogued_list//
+    transfer_puts -> disk : copy file to storage
+    disk -> obj : copy file
+    obj -> transfer_puts 
+    alt #Gainsboro the copy succeeded
+        transfer_puts -> transfer_puts : add file record to //transfer_list//
+    else else
+        transfer_puts -> transfer_puts : add file record to //failed_list//
+    end
+end
+
+transfer_puts -> wex : key=""nlds-api.transfer-put.complete""
+
+activate wex
+wex -> qw : key=""nlds-api.transfer-put.complete""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.transfer-put.complete""
+deactivate qw
+
+transfer_puts -> wex : key=""nlds-api.transfer-put.failed""
+deactivate transfer_puts
+
+activate wex
+wex -> qw : key=""nlds-api.transfer-put.failed""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.transfer-put.failed""
+deactivate qw
+
+activate work
+work -> wex : key=""nlds-api.catalog-del.start""
+deactivate work
+
+activate wex
+wex -> qc : key=""nlds-api.catalog-del.start""
+deactivate wex
+
+activate qc
+qc -> catalog : key=""nlds-api.catalog-del.start""
+deactivate qc
+
+activate catalog
+loop #lightgrey for file in //failed_list//
+    catalog -> catalog_db : remove file record from catalog holding
+end
+
+catalog -> wex : key=""nlds-api.catalog-del.complete""
+deactivate catalog
+
+activate wex
+wex -> work : key=""nlds-api.catalog-del.complete""
+deactivate wex
+
+@enduml

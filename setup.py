@@ -9,7 +9,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='nlds',
-    version='0.0.1',
+    version='0.0.2',
     packages=find_packages(),
     install_requires=[
         'fastapi',
@@ -22,8 +22,9 @@ setup(
     ],
     include_package_data=True,
     package_data={
-        'nlds': ['templates/*.j2'],
-        'nlds_processors': ['templates/*.j2']
+        'nlds': ['templates/*'],
+        'nlds_processors': ['templates/*.j2'],
+        'scripts': ['*'],
     },
     license='LICENSE.txt',  # example license
     description=('REST-API server for CEDA Near-Line Data Store'),
@@ -39,8 +40,9 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
@@ -52,7 +54,10 @@ setup(
             'monitor_q=nlds_processors.monitor.monitor_worker:main',
             'transfer_put_q=nlds_processors.transferers.put_transfer:main',
             'transfer_get_q=nlds_processors.transferers.get_transfer:main',
-            'logging_q=nlds_processors.logger:main'            
+            'logging_q=nlds_processors.logger:main',
+            'archive_put_q=nlds_processors.archiver.archive_put:main',
+            'archive_get_q=nlds_processors.archiver.archive_get:main',
+            'send_archive_next=nlds_processors.archiver.send_archive_next:send_archive_next',
         ],
     }
 )

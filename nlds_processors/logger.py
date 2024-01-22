@@ -33,6 +33,32 @@ class LoggingConsumer(RabbitMQConsumer):
         # Convert body from bytes to json for ease of manipulation
         body_json = json.loads(body)
 
+
+        # This checks if the message was for a system status check
+        try:
+            api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
+        except KeyError:
+            logger.info(f"Message did not contain api_method")
+            api_method = None
+        
+        
+        # If received system test message, reply to it (this is for system status check)
+        if api_method == "system_stat":
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body_json["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body_json,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
+
+
+
         # Verify routing key is appropriate
         try:
             rk_parts = self.split_routing_key(method.routing_key)

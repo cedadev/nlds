@@ -1,5 +1,12 @@
 @startuml catalog_db
 
+object "**Quota**" as quota {
+    id [INT] (unique)
+    group [STRING]
+    size [INT]
+    used [INT]
+}
+
 object "**Holding**" as holding {
     id [INT](unique)
     label [STRING](unique with user)
@@ -19,6 +26,14 @@ object "**Tag**" as tag {
     value [STRING]
 }
 
+object "**Aggregation**" as aggregation {
+    id [INT](unique)
+    tarname [STRING]
+    checksum [STRING]
+    algorithm [STRING]
+    failed_fl [BOOL]
+}
+
 object "**File**" as file {
     id [INT](unique)
     original_path [STRING]
@@ -33,6 +48,8 @@ object "**File**" as file {
 object "**Location**" as location {
     id [INT](unique)
     storage_type [OBJECT_STORAGE|TAPE]
+    url_scheme [STRING]
+    url_netloc [STRING]
     root [STRING]
     path [STRING]
     access_time [DATETIME]
@@ -44,6 +61,8 @@ object "**Checksum**" as checksum {
     algorithm [STRING]
 }
 
+aggregation "1"  *-- "many" location
+'holding "1" *-- "many" aggregation
 transaction "1" *-- "many" file
 holding "1" *-- "many" transaction
 holding "1" *-- "many" tag

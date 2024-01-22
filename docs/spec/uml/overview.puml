@@ -16,11 +16,17 @@ cloud object_storage as "Object Storage"
 component posix as "POSIX disk"
 component tape as "Tape"
 
+component sys_stat as "System Status" #LimeGreen
+
 package Exchange{
     control mb as "Message Broker"
     queue mq as "Monitor Q" #tomato
     queue iq as "Index Q" #lightblue
-    queue tq as "Transfer Q" #gold
+    queue tpq as "Transfer Put Q" #gold
+    queue tgq as "Transfer Get Q" #gold
+    queue aq as "Archive Q" #LightSteelBlue
+    queue qap as "Archive Put Q" #MistyRose
+    queue qag as "Archive Get Q" #MistyRose
     queue wq as "NLDS Q" #lightgrey
     queue cq as "Catalog Q" #SpringGreen
     queue lq as "Logging Q" #hotpink
@@ -29,7 +35,11 @@ package Exchange{
 package Microservices {
     component monitor as "Monitor" #tomato
     component indexer as "Indexer" #lightblue
-    component transfer as "Transfer" #gold
+    component transfer_put as "Transfer Put" #gold
+    component transfer_get as "Transfer Get" #gold
+    component archy as "Archive\nWorker" #LightSteelBlue
+    component archive_put as "Archive Put" #MistyRose
+    component archive_get as "Archive Get" #MistyRose
     component work as "NLDS" #lightgrey
     component catalog as "Catalog" #SpringGreen
     component logger as "Logger" #hotpink
@@ -38,19 +48,29 @@ package Microservices {
 Microservices-->mb
 
 user-->client
+user-->sys_stat
 client<-->API_server
 API_server-->mb
+sys_stat<--API_server
 
 mb --> wq
 mb --> iq
-mb --> tq
+mb --> tpq
+mb --> tgq
+mb --> aq
+mb --> qap
+mb --> qag
 mb --> cq
 mb --> mq
 mb --> lq
 
 wq --> work
 iq --> indexer
-tq --> transfer
+tpq --> transfer_put
+tgq --> transfer_get
+aq --> archy
+qap --> archive_put
+qag --> archive_get
 cq --> catalog
 mq --> monitor
 lq --> logger
@@ -63,10 +83,15 @@ logger --> logging
 API_server <--- logging
 
 catalog <--> catalogdb
-transfer <--> object_storage
-transfer <--> posix
-transfer <--> tape
-indexer <--> posix
+transfer_put --> object_storage
+transfer_put <-- posix
+transfer_get ..> object_storage
+transfer_get <.. posix
+archive_put <-- object_storage
+archive_put --> tape
+archive_get <.. object_storage
+archive_get ..> tape
+indexer <-- posix
 
 posix <-> object_storage
 object_storage <-> tape

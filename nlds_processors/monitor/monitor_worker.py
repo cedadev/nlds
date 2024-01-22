@@ -65,8 +65,15 @@ class MonitorConsumer(RMQC):
         },
     }
 
+
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
+        self.monitor = None
+
+
+    @property
+    def database(self):
+        return self.monitor
 
 
     def _monitor_put(self, body: Dict[str, str]) -> None:
@@ -182,7 +189,7 @@ class MonitorConsumer(RMQC):
         #     a split)
         try:
             trec = self.monitor.get_transaction_record(
-                user, group, None, transaction_id
+                user, group, idd=None, transaction_id=transaction_id
             )
         except MonitorError:
             # fine to pass here as if transaction_record is not returned then it
@@ -229,31 +236,50 @@ class MonitorConsumer(RMQC):
         except MonitorError as e:
             # If the state update is invalid then rollback session and exit 
             # callback
-            self.log(e, self.RK_LOG_ERROR)
+            self.log(e.message, self.RK_LOG_ERROR)
             # session.rollback() # rollback needed?
             return
 
         # Create failed_files if necessary
-        if state == State.FAILED:
-            try:
-                # Passing reason as None to create_failed_file will default to 
-                # to the last reason in the PathDetails object retries section. 
-                reason = None
+        if state in State.get_failed_states():
+            self.log("Creating FailedFiles records as transaction appears to "
+                     "have failed", self.RK_LOG_INFO)
+            # Make failed files reasons for the immediate retry reason and any 
+            # saved reasons. 
+            try: 
                 for pd in filelist:
-                    # Check which was the final reason for failure and store 
+                    # First make FailedFiles for each of the saved reasons. 
+                    # These are only made in the event of a failure, and so 
+                    # should definitely be recorded as _a_ reason for failure.
+                    for reason in trans_retries.saved_reasons:
+                        self.monitor.create_failed_file(srec, pd, reason=reason)
+                    for reason in pd.retries.saved_reasons:
+                        self.monitor.create_failed_file(srec, pd, reason=reason)
+
+                    # Second check the immediate retrys for any reasons
+                    reason = None
+                    # Check which was the final reason for failure and pass 
                     # that as the failure reason for the FailedFile.
                     if len(trans_retries.reasons) > len(pd.retries.reasons):
                         reason = trans_retries.reasons[-1]
+                    elif len(pd.retries.reasons) > 0:
+                        reason = pd.retries.reasons[-1]
+                    else: 
+                        continue
                     self.monitor.create_failed_file(srec, pd, reason=reason)
             except MonitorError as e:
-                self.log(e, self.RK_LOG_ERROR)
+                self.log(e.message, self.RK_LOG_ERROR)
         
         # If reached the end of a workflow then check for completeness                                          
         if state in State.get_final_states():
             self.log("This sub_record is now in its final state for this "
                      "workflow, now checking if all others have reached a "
                      "final state.", self.RK_LOG_INFO)
-            self.monitor.check_completion(trec)
+            try:
+                self.monitor.check_completion(trec)
+            except MonitorError as e:
+                self.log(e.message, self.RK_LOG_ERROR)
+                return
 
         # Commit all transactions when we're sure everything is as it should be.
         self.monitor.save() 
@@ -291,6 +317,11 @@ class MonitorConsumer(RMQC):
                      self.RK_LOG_ERROR)
             return
         
+        try:
+            groupall = body[self.MSG_DETAILS][self.MSG_GROUPALL]
+        except KeyError:
+            groupall = False
+
         # get the api-action from the details section of the message
         try:
             api_action = body[self.MSG_DETAILS][self.MSG_API_ACTION]
@@ -318,7 +349,13 @@ class MonitorConsumer(RMQC):
         # For now we're not allowing users to query other users, but will in the 
         # future with the inclusion of ROLES. Leave this here for completeness 
         # and ease of insertion of the appropriate logic in the future.
-        if query_user is not None and user != query_user:
+        # groupall allows users to query other groups
+        if query_group is not None and query_group != group:
+            self.log("Attempting to query a group that does not match current "
+                     "group, exiting callback", self.RK_LOG_ERROR)
+            return
+
+        elif query_user is not None and user != query_user:
             self.log("Attempting to query a user that does not match current "
                      "user, exiting callback", self.RK_LOG_ERROR)
             return
@@ -386,7 +423,8 @@ class MonitorConsumer(RMQC):
 
         try:
             trecs = self.monitor.get_transaction_record(
-                user, group, idd, transaction_id, job_label
+                user, group, groupall=groupall, idd=idd, 
+                transaction_id=transaction_id, job_label=job_label
             )
         except MonitorError:
             trecs = []
@@ -395,6 +433,9 @@ class MonitorConsumer(RMQC):
         # we want a list of transaction_records, each transaction_record
         # contains a list of sub_records
         trecs_dict = {}
+        # allo groupall to get all the sub records by setting query_user to None
+        if groupall:
+            query_user = None
         for tr in trecs:
             srecs = self.monitor.get_sub_records(
                 tr, sub_id, query_user, query_group, state, 
@@ -470,14 +511,34 @@ class MonitorConsumer(RMQC):
         if (api_method == self.RK_STAT):
             self.log("Starting stat from monitoring db.", self.RK_LOG_INFO)
             self._monitor_get(body, properties)
+            
+        
+            
+        # If received system test message, reply to it (this is for system status check)
+        elif api_method == "system_stat":
+            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
+                return False
+            if (body["details"]["ignore_message"]) == True:
+                return
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body,
+                    exchange={'name': ''},
+                    correlation_id=properties.correlation_id
+                )
+            return
+            
+            
         elif api_method in (self.RK_PUT, self.RK_PUTLIST, 
-                            self.RK_GET, self.RK_GETLIST):
+                            self.RK_GET, self.RK_GETLIST, 
+                            self.RK_ARCHIVE_PUT, self.RK_ARCHIVE_GET):
             # Verify routing key is appropriate
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
             except ValueError as e:
                 self.log("Routing key inappropriate length, exiting callback.", 
-                        self.RK_LOG_ERROR)
+                         self.RK_LOG_ERROR)
                 return
             # NOTE: Could check that rk_parts[2] is 'start' here? No particular 
             # need as the exchange does that for us and merely having three 
@@ -491,7 +552,7 @@ class MonitorConsumer(RMQC):
         self.log("Callback complete!", self.RK_LOG_INFO)
 
 
-    def attach_monitor(self):
+    def attach_database(self, create_db_fl: bool = True):
         """Attach the Monitor to the consumer"""
         # Load config options or fall back to default values.
         db_engine = self.load_config_value(self._DB_ENGINE)
@@ -499,10 +560,26 @@ class MonitorConsumer(RMQC):
         self.monitor = Monitor(db_engine, db_options)
 
         try:
-            db_connect = self.monitor.connect()
-            self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
+            db_connect = self.monitor.connect(create_db_fl=create_db_fl)
+            if create_db_fl:
+                self.log(f"db_connect string is {db_connect}", RMQC.RK_LOG_DEBUG)
         except DBError as e:
             self.log(e.message, RMQC.RK_LOG_CRITICAL)
+
+
+    def get_engine(self):
+        # Method for making the db_engine available to alembic
+        return self.database.db_engine
+    
+
+    def get_url(self):
+        """ Method for making the sqlalchemy url available to alembic"""
+        # Create a minimum version of the catalog to put together a url
+        if self.monitor is None:
+            db_engine = self.load_config_value(self._DB_ENGINE)
+            db_options = self.load_config_value(self._DB_OPTIONS)
+            self.monitor = Monitor(db_engine, db_options)
+        return self.monitor.get_db_string()
 
 
 def main():
@@ -511,7 +588,7 @@ def main():
     # connecting to the database
     consumer.get_connection()
     # connect to the DB
-    consumer.attach_monitor()
+    consumer.attach_database()
     # run the loop
     consumer.run()
 

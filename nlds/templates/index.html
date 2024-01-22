@@ -1,0 +1,129 @@
+<html>
+<head>
+    <title>System Status</title>
+    <!--<link href="/styles.css" rel="stylesheet" type="text/css">-->
+    <link rel="stylesheet" href="https://artefacts.ceda.ac.uk/themes/orgtheme_jasmin/0.6/theme/css/main.css" media="screen">
+</head>
+<body>
+    <br>
+    <div class="table-responsive container">
+    <h1>NLDS system status:</h1>
+    <hr>
+    <div class="alert {{ status.failed.failed_colour }}">
+        {% if status.failed.failed_num > 0 %}
+            <strong>INFO:</strong> {{ status.failed.failed_num }} consumers failed
+        {% elif ( (status.failed.failed_num == 0) and (status.failed.failed_colour != "alert-info") ) %}
+            <strong>INFO:</strong> No active consumers failed
+        {% else %}
+            <strong>INFO:</strong> No consumers online
+        {% endif %}
+    </div>
+    <table class="table table-striped table-bordered table-hover">
+        <tr class="table-dark">
+            <th>Service</th>
+            <th>Status</th>
+            <th>Failed Consumer Tags (if any)</th>
+        </tr>
+        <tr>
+            <td>Monitor</td>
+            <td><FONT COLOR={{ status.monitor.colour }}>{{ status.monitor.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.monitor.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>Catalog</td>
+            <td><FONT COLOR={{ status.catalog.colour }}>{{ status.catalog.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.catalog.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>NLDS Worker</td>
+            <td><FONT COLOR={{ status.nlds_worker.colour }}>{{ status.nlds_worker.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.nlds_worker.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>Index</td>
+            <td><FONT COLOR={{ status.index.colour }}>{{ status.index.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.index.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>Get Transfer</td>
+            <td><FONT COLOR={{ status.get_transfer.colour }}>{{ status.get_transfer.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.get_transfer.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>Put Transfer</td>
+            <td><FONT COLOR={{ status.put_transfer.colour }}>{{ status.put_transfer.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.put_transfer.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>Logger</td>
+            <td><FONT COLOR={{ status.logger.colour }}>{{ status.logger.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.logger.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>Archive Get</td>
+            <td><FONT COLOR={{ status.archive_get.colour }}>{{ status.archive_get.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.archive_get.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+        <tr>
+            <td>Archive Put</td>
+            <td><FONT COLOR={{ status.archive_put.colour }}>{{ status.archive_put.val }}</FONT></td>
+            <td id="nested">
+                <table>
+                    {% for id in status.archive_put.failed %}
+                        <tr><td>{{ id }}</td></tr>
+                    {% endfor %}
+                </table>
+            </td>
+        </tr>
+    </table>
+    </div>
+</body>
+</html>

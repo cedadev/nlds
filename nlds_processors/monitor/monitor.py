@@ -56,6 +56,7 @@ class Monitor(DBMixin):
     def get_transaction_record(self, 
                                user: str,
                                group: str,
+                               groupall: bool = False,
                                idd: int = None,
                                transaction_id: str = None,
                                job_label: str = None) -> list:
@@ -69,24 +70,24 @@ class Monitor(DBMixin):
         try:
             if idd:
                 trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.user == user,
                     TransactionRecord.group == group,
                     TransactionRecord.id == idd
                 )
             elif job_label:
                 trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.user == user,
                     TransactionRecord.group == group,
                     TransactionRecord.job_label.regexp_match(job_label)
                 )
             else:
                 trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.user == user,
                     TransactionRecord.group == group,
                     TransactionRecord.transaction_id.regexp_match(
                         transaction_search
                     )
                 )
+            # user filter
+            if not groupall:
+                trec = trec.filter(TransactionRecord.user == user)
             trecs = trec.all()
 
         except (IntegrityError, KeyError, OperationalError):
@@ -249,9 +250,10 @@ class Monitor(DBMixin):
         # Upgrade state to new_state, but throw exception if regressing state 
         # (staying the same is fine)
         if (new_state.value < sub_record.state.value):
-            raise ValueError(f"Monitoring state cannot go backwards or skip "
-                             f"steps. Attempted {sub_record.state}->{new_state}"
-                             )
+            raise MonitorError(
+                f"Monitoring state cannot go backwards or skip steps. Attempted"
+                f" {sub_record.state}->{new_state}"
+            )
         sub_record.state = new_state
         self.session.flush()
 
@@ -281,9 +283,10 @@ class Monitor(DBMixin):
             if all([sr.has_finished() for sr in sub_records]):
                 # If all have, then set all non-failed jobs to complete
                 for sr in sub_records:
-                    if sr.state == State.FAILED:
-                        continue
-                    self.update_sub_record(sr, State.COMPLETE, False)
+                    if sr.state in State.get_failed_states():
+                        self.update_sub_record(sr, State.FAILED, False)
+                    else:
+                        self.update_sub_record(sr, State.COMPLETE, False)
 
         except IntegrityError:
             raise MonitorError(
