@@ -41,12 +41,14 @@
 <li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a></li>
 </ul>
 
         </div>
@@ -80,6 +82,7 @@
  | <a href="#B"><strong>B</strong></a>
  | <a href="#C"><strong>C</strong></a>
  | <a href="#D"><strong>D</strong></a>
+ | <a href="#E"><strong>E</strong></a>
  | <a href="#F"><strong>F</strong></a>
  | <a href="#G"><strong>G</strong></a>
  | <a href="#H"><strong>H</strong></a>
@@ -102,14 +105,14 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.acknowledge_message">acknowledge_message() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
 </li>
-      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_worker.CatalogConsumer.attach_catalog">attach_catalog() (nlds_processors.catalog.catalog_worker.CatalogConsumer method)</a>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_worker.CatalogConsumer.aggregate_files">aggregate_files() (nlds_processors.catalog.catalog_worker.CatalogConsumer method)</a>
 </li>
-      <li><a href="nlds-processors.html#nlds_processors.monitor.monitor_worker.MonitorConsumer.attach_monitor">attach_monitor() (nlds_processors.monitor.monitor_worker.MonitorConsumer method)</a>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_models.Aggregation">Aggregation (class in nlds_processors.catalog.catalog_models)</a>
 </li>
-      <li><a href="nlds-server.html#nlds.authenticators.base_authenticator.BaseAuthenticator.authenticate_collection">authenticate_collection() (nlds.authenticators.base_authenticator.BaseAuthenticator method)</a>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_worker.CatalogConsumer.attach_database">attach_database() (nlds_processors.catalog.catalog_worker.CatalogConsumer method)</a>
 
       <ul>
-        <li><a href="nlds-server.html#nlds.authenticators.jasmin_authenticator.JasminAuthenticator.authenticate_collection">(nlds.authenticators.jasmin_authenticator.JasminAuthenticator method)</a>
+        <li><a href="nlds-processors.html#nlds_processors.monitor.monitor_worker.MonitorConsumer.attach_database">(nlds_processors.monitor.monitor_worker.MonitorConsumer method)</a>
 </li>
       </ul></li>
   </ul></td>
@@ -161,6 +164,8 @@
 </li>
         <li><a href="nlds-processors.html#nlds_processors.monitor.monitor_worker.MonitorConsumer.callback">(nlds_processors.monitor.monitor_worker.MonitorConsumer method)</a>
 </li>
+        <li><a href="nlds-processors.html#nlds_processors.nlds_worker.NLDSWorkerConsumer.callback">(nlds_processors.nlds_worker.NLDSWorkerConsumer method)</a>
+</li>
         <li><a href="nlds-processors.html#nlds_processors.transferers.base_transfer.BaseTransferConsumer.callback">(nlds_processors.transferers.base_transfer.BaseTransferConsumer method)</a>
 </li>
       </ul></li>
@@ -181,6 +186,8 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_models.Checksum">Checksum (class in nlds_processors.catalog.catalog_models)</a>
+</li>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.create_aggregation">create_aggregation() (nlds_processors.catalog.catalog.Catalog method)</a>
 </li>
       <li><a href="nlds-processors.html#nlds_processors.monitor.monitor.Monitor.create_failed_file">create_failed_file() (nlds_processors.monitor.monitor.Monitor method)</a>
 </li>
@@ -210,6 +217,8 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds_processors.db_mixin.DBError">DBError</a>
 </li>
+      <li><a href="nlds-processors.html#nlds_processors.db_mixin.DBMixin">DBMixin (class in nlds_processors.db_mixin)</a>
+</li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.declare_bindings">declare_bindings() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
 
       <ul>
@@ -218,9 +227,23 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.dedup_filelist">dedup_filelist() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.del_tag">del_tag() (nlds_processors.catalog.catalog.Catalog method)</a>
 </li>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.delete_aggregation">delete_aggregation() (nlds_processors.catalog.catalog.Catalog method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.delete_files">delete_files() (nlds_processors.catalog.catalog.Catalog method)</a>
+</li>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.delete_location">delete_location() (nlds_processors.catalog.catalog.Catalog method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="E">E</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds_processors.db_mixin.DBMixin.end_session">end_session() (nlds_processors.db_mixin.DBMixin method)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -228,6 +251,8 @@
 <h2 id="F">F</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.fail_aggregation">fail_aggregation() (nlds_processors.catalog.catalog.Catalog method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds_processors.monitor.monitor_models.FailedFile">FailedFile (class in nlds_processors.monitor.monitor_models)</a>
 </li>
   </ul></td>
@@ -242,7 +267,9 @@
 <h2 id="G">G</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_file">get_file() (nlds_processors.catalog.catalog.Catalog method)</a>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_aggregation">get_aggregation() (nlds_processors.catalog.catalog.Catalog method)</a>
+</li>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_aggregation_by_file">get_aggregation_by_file() (nlds_processors.catalog.catalog.Catalog method)</a>
 </li>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_files">get_files() (nlds_processors.catalog.catalog.Catalog method)</a>
 </li>
@@ -250,12 +277,20 @@
 </li>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_location">get_location() (nlds_processors.catalog.catalog.Catalog method)</a>
 </li>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_location_file">get_location_file() (nlds_processors.catalog.catalog.Catalog method)</a>
+</li>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_location_transaction">get_location_transaction() (nlds_processors.catalog.catalog.Catalog method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds_processors.logger.LoggingConsumer.get_logging_func">get_logging_func() (nlds_processors.logger.LoggingConsumer static method)</a>
 </li>
-      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.get_retry_delay">get_retry_delay() (nlds.rabbit.publisher.RabbitMQPublisher method)</a>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_next_holding">get_next_holding() (nlds_processors.catalog.catalog.Catalog method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.get_retries">get_retries() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+</li>
+      <li><a href="nlds-server.html#nlds.rabbit.publisher.RabbitMQPublisher.get_retry_delay">get_retry_delay() (nlds.rabbit.publisher.RabbitMQPublisher method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds_processors.monitor.monitor.Monitor.get_sub_record">get_sub_record() (nlds_processors.monitor.monitor.Monitor method)</a>
 </li>
       <li><a href="nlds-processors.html#nlds_processors.monitor.monitor.Monitor.get_sub_records">get_sub_records() (nlds_processors.monitor.monitor.Monitor method)</a>
@@ -266,8 +301,14 @@
 </li>
       <li><a href="nlds-processors.html#nlds_processors.monitor.monitor.Monitor.get_transaction_record">get_transaction_record() (nlds_processors.monitor.monitor.Monitor method)</a>
 </li>
-      <li><a href="nlds-processors.html#nlds_processors.transferers.get_transfer.GetTransferConsumer">GetTransferConsumer (class in nlds_processors.transferers.get_transfer)</a>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.get_unarchived_files">get_unarchived_files() (nlds_processors.catalog.catalog.Catalog method)</a>
 </li>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_worker.CatalogConsumer.get_url">get_url() (nlds_processors.catalog.catalog_worker.CatalogConsumer method)</a>
+
+      <ul>
+        <li><a href="nlds-processors.html#nlds_processors.monitor.monitor_worker.MonitorConsumer.get_url">(nlds_processors.monitor.monitor_worker.MonitorConsumer method)</a>
+</li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -322,6 +363,8 @@
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_worker.Metadata">Metadata (class in nlds_processors.catalog.catalog_worker)</a>
+</li>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.modify_holding">modify_holding() (nlds_processors.catalog.catalog.Catalog method)</a>
 </li>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.modify_tag">modify_tag() (nlds_processors.catalog.catalog.Catalog method)</a>
@@ -358,9 +401,9 @@
 </li>
         <li><a href="nlds-processors.html#module-nlds_processors.monitor.monitor_worker">nlds_processors.monitor.monitor_worker</a>
 </li>
-        <li><a href="nlds-processors.html#module-nlds_processors.transferers.base_transfer">nlds_processors.transferers.base_transfer</a>
+        <li><a href="nlds-processors.html#module-nlds_processors.nlds_worker">nlds_processors.nlds_worker</a>
 </li>
-        <li><a href="nlds-processors.html#module-nlds_processors.transferers.get_transfer">nlds_processors.transferers.get_transfer</a>
+        <li><a href="nlds-processors.html#module-nlds_processors.transferers.base_transfer">nlds_processors.transferers.base_transfer</a>
 </li>
         <li><a href="nlds-processors.html#module-nlds_processors.transferers.put_transfer">nlds_processors.transferers.put_transfer</a>
 </li>
@@ -379,6 +422,8 @@
 <h2 id="N">N</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.nack_message">nack_message() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+</li>
       <li>
     nlds.authenticators.base_authenticator
 
@@ -480,17 +525,17 @@
 </li>
       </ul></li>
       <li>
+    nlds_processors.nlds_worker
+
+      <ul>
+        <li><a href="nlds-processors.html#module-nlds_processors.nlds_worker">module</a>
+</li>
+      </ul></li>
+      <li>
     nlds_processors.transferers.base_transfer
 
       <ul>
         <li><a href="nlds-processors.html#module-nlds_processors.transferers.base_transfer">module</a>
-</li>
-      </ul></li>
-      <li>
-    nlds_processors.transferers.get_transfer
-
-      <ul>
-        <li><a href="nlds-processors.html#module-nlds_processors.transferers.get_transfer">module</a>
 </li>
       </ul></li>
       <li>
@@ -500,6 +545,8 @@
         <li><a href="nlds-processors.html#module-nlds_processors.transferers.put_transfer">module</a>
 </li>
       </ul></li>
+      <li><a href="nlds-processors.html#nlds_processors.nlds_worker.NLDSWorkerConsumer">NLDSWorkerConsumer (class in nlds_processors.nlds_worker)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -507,6 +554,8 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.parse_filelist">parse_filelist() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
+</li>
+      <li><a href="nlds-processors.html#nlds_processors.nlds_worker.NLDSWorkerConsumer.publish_and_log_message">publish_and_log_message() (nlds_processors.nlds_worker.NLDSWorkerConsumer method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -534,6 +583,8 @@
 <h2 id="S">S</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds_processors.db_mixin.DBMixin.save">save() (nlds_processors.db_mixin.DBMixin method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.send_pathlist">send_pathlist() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
 </li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.setup_logging">setup_logging() (nlds.rabbit.consumer.RabbitMQConsumer method)</a>
@@ -550,6 +601,8 @@
 </li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.RabbitMQConsumer.split_routing_key">split_routing_key() (nlds.rabbit.consumer.RabbitMQConsumer static method)</a>
 </li>
+      <li><a href="nlds-processors.html#nlds_processors.db_mixin.DBMixin.start_session">start_session() (nlds_processors.db_mixin.DBMixin method)</a>
+</li>
       <li><a href="nlds-processors.html#nlds.rabbit.consumer.State">State (class in nlds.rabbit.consumer)</a>
 </li>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_models.Storage">Storage (class in nlds_processors.catalog.catalog_models)</a>
@@ -564,17 +617,23 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_models.Tag">Tag (class in nlds_processors.catalog.catalog_models)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds_processors.catalog.catalog_models.Transaction">Transaction (class in nlds_processors.catalog.catalog_models)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds_processors.monitor.monitor_models.TransactionRecord">TransactionRecord (class in nlds_processors.monitor.monitor_models)</a>
+</li>
+      <li><a href="nlds-processors.html#nlds_processors.transferers.base_transfer.TransferError">TransferError</a>
 </li>
   </ul></td>
 </tr></table>
 
 <h2 id="U">U</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="nlds-processors.html#nlds_processors.catalog.catalog.Catalog.update_aggregation">update_aggregation() (nlds_processors.catalog.catalog.Catalog method)</a>
+</li>
+  </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="nlds-processors.html#nlds_processors.monitor.monitor.Monitor.update_sub_record">update_sub_record() (nlds_processors.monitor.monitor.Monitor method)</a>
 </li>

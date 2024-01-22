@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The System Status Monitor &mdash; Near-line Data Store 0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="CERN Tape Archive Set Up" href="cta-emulator.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html">
+            <img src="_static/ceda.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Using system status</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#running">Running</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#understanding-the-table">Understanding the table</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#responses">Responses</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#errors">Errors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tl-dr">TL;DR</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Near-line Data Store</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>The System Status Monitor</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/system-status.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="the-system-status-monitor">
+<h1>The System Status Monitor<a class="headerlink" href="#the-system-status-monitor" title="Permalink to this headline"></a></h1>
+<p>This is a feature used to check the general health of the various parts of the NLDS, telling you which parts, if any, of the NLDS are currently offline as well as the IDs of any offline consumers. First, some definitions:</p>
+<ul class="simple">
+<li><p>A microservice is a distinct part of the NLDS structure e.g.: Monitor, Catalog, Index, etc. It will have a single queue.</p></li>
+<li><p>A consumer is a part of a microservice, which takes messages off the queue and processes them. There can be many consumers per microservice.</p></li>
+</ul>
+<p>This utilises the RabbitMQ messaging system, and specifically its capacity for remote procedure calls, to send messages to individual microservice consumers and check whether they reply. If they don’t reply within a given time limit they are considered to be offline and their unique tag is recorded and displayed on the table to easily determine what is working and what isn’t.</p>
+<p>Given these messages are merely sent for monitoring purposes, they are made distinct from regular NLDS rabbit messages with the below changes. This distinction is made in the  dictionary content that is passed as part of the message:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;details&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;api_action&quot;</span><span class="p">:</span> <span class="s2">&quot;system_stat&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;target_consumer&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ignore_message&quot;</span><span class="p">:</span> <span class="kc">False</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>api_action contains “system_stat” which is the identifier that tells the consumer that
+it is a test message</p></li>
+<li><p>target_consumer starts as empty and is filled with the target microservice’s name e.g: monitor</p></li>
+<li><p>ignore_message is by default False, and is used within unit tests to mock what happens if one of the consumers does not respond.</p></li>
+</ul>
+<p>The consumer will, as a first step in consumption, filter all incoming messages for this distinction and send it back to the system status monitor. The message returned by the consumer is as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s1">&#39;details&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;api_action&#39;</span><span class="p">:</span> <span class="s1">&#39;system_stat&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;target_consumer&#39;</span><span class="p">:</span> <span class="s1">&#39;monitor&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;ignore_message&#39;</span><span class="p">:</span> <span class="kc">False</span>
+    <span class="p">},</span>
+    <span class="s1">&#39;timestamp&#39;</span><span class="p">:</span> <span class="s1">&#39;2023-08-01-09:25:12.968165&#39;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<div class="section" id="running">
+<h2>Running<a class="headerlink" href="#running" title="Permalink to this headline"></a></h2>
+<p>After starting the uvicorn server, going to <code class="docutils literal notranslate"><span class="pre">`/system/stats/`</span></code> on a web browser e.g.: &lt;<a class="reference external" href="http://nlds.ceda.ac.uk/system/stats/">http://nlds.ceda.ac.uk/system/stats/</a>&gt; will simply return the whole table with information about each consumer. The contents of this table and web page are also available as a JSON document, through the API. To get the more specific information about a particular consumer, it is possible to make individual requests to the API server (e.g. using <cite>requests.get()</cite> from a python script).</p>
+<p>Query parameters can be used to alter behaviour. Adding ?time_limit={number} to the end of the URL will change the time limit the consumer has to reply (more on that below) e.g.:
+&lt;<a class="reference external" href="http://nlds.ceda.ac.uk/system/status/?time_limit=2">http://nlds.ceda.ac.uk/system/status/?time_limit=2</a>&gt;</p>
+<p>You can also add ?microservice={microservice} to the end of the URL to get a table with only
+those microservices in. e.g. (shows a table with only the monitor row):
+&lt;<a class="reference external" href="http://nlds.ceda.ac.uk/system/status/?microservice=monitor">http://nlds.ceda.ac.uk/system/status/?microservice=monitor</a>&gt;</p>
+<p>These
+?time_limit=2&amp;consumer=Catalog&amp;consumer=Monitor
+e.g.:
+&lt;<a class="reference external" href="http://nlds.ceda.ac.uk/system/status/?time_limit=2&amp;consumer=Catalog&amp;consumer=MonITor&amp;consumer=2&amp;consumer=INdeX&amp;consumer=catalog&amp;time_limit=2&amp;time_limit=2&amp;consumer=logger&amp;">http://nlds.ceda.ac.uk/system/status/?time_limit=2&amp;consumer=Catalog&amp;consumer=MonITor&amp;consumer=2&amp;consumer=INdeX&amp;consumer=catalog&amp;time_limit=2&amp;time_limit=2&amp;consumer=logger&amp;</a>&gt;
+this link does actually work even though it looks very confusing it will set the time limit to 2 and open a table with catalog, monitor, index and logger rows
+and would look like this:</p>
+<a class="reference internal image-reference" href="_images/short_table.png"><img alt="short table" src="_images/short_table.png" style="width: 400px;" /></a>
+<p>Adding these options is not necessary for the web page to work but it adds customisability.</p>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+</div>
+<div class="section" id="understanding-the-table">
+<h2>Understanding the table<a class="headerlink" href="#understanding-the-table" title="Permalink to this headline"></a></h2>
+<p>When you open the webpage, it will load quickly unless some consumers have failed.
+This is because the system will wait the duration of the time limit (hard coded in the files),
+the default for this is 5 seconds but it can be changed by adding ?time_limit={number} at the end of the URL. This
+number cannot go below 0 or above 15 otherwise it defaults to 5 seconds.</p>
+<p>You are also able to select specific microservices and get a JSON response from them
+helpful for an API. To do this add the microservice you want at the end of the URL
+&lt;<a class="reference external" href="http://nlds.ceda.ac.uk/system/status/catalog">http://nlds.ceda.ac.uk/system/status/catalog</a>&gt;
+this will give information as a JSON response for the catalog microservice you can also add time limit to this like the others:
+&lt;<a class="reference external" href="http://nlds.ceda.ac.uk/system/status/catalog?time_limit=6">http://nlds.ceda.ac.uk/system/status/catalog?time_limit=6</a>&gt;
+(this shows catalog JSON information with a time limit as 6). This uses the same rules as
+the other time limit (not below 0 or above 15). If you spell the microservice wrong, then
+it will take you to the main table.</p>
+<p>an example template JSON response would be:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;microservice_name&quot;</span><span class="p">:{</span><span class="n">microservice</span> <span class="n">name</span><span class="p">},</span>
+    <span class="s2">&quot;total_num&quot;</span><span class="p">:{</span><span class="n">number</span> <span class="n">of</span> <span class="n">consumers</span><span class="p">},</span>
+    <span class="s2">&quot;num_failed&quot;</span><span class="p">:{</span><span class="n">number</span> <span class="n">of</span> <span class="n">failed</span> <span class="n">consumers</span><span class="p">},</span>
+    <span class="s2">&quot;num_success&quot;</span><span class="p">:{</span><span class="n">number</span> <span class="n">of</span> <span class="n">successful</span> <span class="n">consumers</span><span class="p">},</span>
+    <span class="s2">&quot;failed_list&quot;</span><span class="p">:[],</span>
+    <span class="s2">&quot;pid&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">process</span> <span class="n">ID</span><span class="p">},</span>
+    <span class="s2">&quot;hostname&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">microservice</span> <span class="n">host</span> <span class="n">name</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>and an example of a full JSON response would be:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>{
+    &quot;microservice_name&quot;:”monitor”,
+    &quot;total_num&quot;:0,
+    &quot;num_failed&quot;:0,
+    &quot;num_success&quot;:0,
+    &quot;failed_list&quot;:[],
+    &quot;pid&quot;: 3873,
+    &quot;hostname&quot;: “RSMLWC01”
+}
+</pre></div>
+</div>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>On the main table you will see 3 columns as well as an info bar above,
+the info bar will give you a summary of the table’s information.</p>
+<ol class="arabic simple">
+<li><p>the left most table column holds all 7 NLDS microservices</p></li>
+<li><p>the middle column will say how many consumers in each microservice is running
+(and change colour depending on that number)</p></li>
+<li><p>the right most column will display the tag of any or all consumers that failed
+to be ran</p></li>
+</ol>
+<p>There’s one tag for each consumer running on a given microservice. This tag can be used to determine which (if any) have stopped working.</p>
+<dl>
+<dt>The table should look something like this (with examples of different status):</dt><dd><table class="docutils align-default">
+<colgroup>
+<col style="width: 14%" />
+<col style="width: 43%" />
+<col style="width: 43%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Service</p></th>
+<th class="head"><p>Status</p></th>
+<th class="head"><p>Failed Consumer Tags (if any)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Monitor</p></td>
+<td><p>All Consumers Offline (None running)</p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>Catalog</p></td>
+<td><p>All Consumers Online (3/3)</p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>NLDS Worker</p></td>
+<td><p>Consumers Online (1/2)</p></td>
+<td><p>ctag1.732d21f82b4c47dcbd7dabe12f95315c</p></td>
+</tr>
+<tr class="row-odd"><td><p>Index</p></td>
+<td><p>Login error</p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>Get Transfer</p></td>
+<td><p>404 error</p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>Put Transfer</p></td>
+<td><p>Rabbit error</p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p>Logger</p></td>
+<td><p>All Consumers Offline (0/2)</p></td>
+<td><p>ctag1.732d21f82b4c47dcbd7dabe12f95315c</p></td>
+</tr>
+<tr class="row-odd"><td><p>Logger</p></td>
+<td><p>(the ctag here will be on the row above)</p></td>
+<td><p>ctag1.040535d3708c4012a4d2e6b0e6884cf2</p></td>
+</tr>
+<tr class="row-even"><td><p>Archive Get</p></td>
+<td><p>All Consumers Online (1/1)</p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p>Archive Put</p></td>
+<td><p>All Consumers Online (4/4)</p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</dd>
+</dl>
+<p>The errors on Index, Get Transfer and Put Transfer are for illustrative purposes and are not accurate
+representations of what the whole table will look like.</p>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p><strong>System status example tables:</strong></p>
+<p>When no consumers are running, the info bar is blue, and the status text is red.</p>
+<a class="reference internal image-reference" href="_images/all_off.png"><img alt="All consumers off" src="_images/all_off.png" style="width: 600px;" /></a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>When all consumers inside a microservice are offline the info bar is red as well as the status column text for the offline microservice. The working microservices status text is green.</p>
+<a class="reference internal image-reference" href="_images/failed.png"><img alt="A consumer failed" src="_images/failed.png" style="width: 600px;" /></a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>When some consumers inside a microservice are offline the info bar is red
+the partially failed microservice’s status text is orange.</p>
+<a class="reference internal image-reference" href="_images/part_failed.png"><img alt="some consumers failed" src="_images/part_failed.png" style="width: 600px;" /></a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>When all consumers online the info bar is green, there is nothing in failed consumer column and all status text is green.</p>
+<a class="reference internal image-reference" href="_images/success.png"><img alt="All consumers on" src="_images/success.png" style="width: 600px;" /></a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>We get the number of consumers that should be online by an HTTP request to the management API which returns a response containing a dictionary of all consumers in a specific microservice this is counted and used as the total consumers.</p>
+<p>Using this URL format:
+<a class="reference external" href="http:/">http:/</a>/{host_ip}:{api_port}/api/queues/{vhost}/{queue_name}</p>
+<ul class="simple">
+<li><p>host_ip = the <code class="docutils literal notranslate"><span class="pre">`server`</span></code> variable from the RabbitMQ section of the config file</p></li>
+<li><p>api_port = the <code class="docutils literal notranslate"><span class="pre">`admin_port`</span></code> variable from the RabbitMQ section of the config file</p></li>
+<li><p>vhost = the <code class="docutils literal notranslate"><span class="pre">`vhost`</span></code> variable  from the RabbitMQ section of the config file</p></li>
+<li><p>queue_name = the name of the microservice to get information for</p></li>
+</ul>
+<p>For more information go to <a class="reference external" href="https://www.rabbitmq.com/management.html#http-api">https://www.rabbitmq.com/management.html#http-api</a></p>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+</div>
+<div class="section" id="responses">
+<h2>Responses<a class="headerlink" href="#responses" title="Permalink to this headline"></a></h2>
+<p>What is returned to the HTML template is a dictionary that could be retrieved using an
+API. This is its structure:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;monitor&quot;</span><span class="p">:</span> <span class="n">monitor</span><span class="p">,</span>
+    <span class="s2">&quot;catalog&quot;</span><span class="p">:</span> <span class="n">catalog</span><span class="p">,</span>
+    <span class="s2">&quot;nlds_worker&quot;</span><span class="p">:</span> <span class="n">nlds_worker</span><span class="p">,</span>
+    <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">index</span><span class="p">,</span>
+    <span class="s2">&quot;get_transfer&quot;</span><span class="p">:</span> <span class="n">get_transfer</span><span class="p">,</span>
+    <span class="s2">&quot;put_transfer&quot;</span><span class="p">:</span> <span class="n">put_transfer</span><span class="p">,</span>
+    <span class="s2">&quot;logger&quot;</span><span class="p">:</span> <span class="n">logger</span><span class="p">,</span>
+    <span class="s2">&quot;archive_get&quot;</span><span class="p">:</span> <span class="n">archive_get</span><span class="p">,</span>
+    <span class="s2">&quot;archive_put&quot;</span><span class="p">:</span> <span class="n">archive_put</span><span class="p">,</span>
+    <span class="s2">&quot;failed&quot;</span><span class="p">:</span> <span class="n">failed_info</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Where the variables for each of the microservices, which gives information to the table on the webpage, would be:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;val&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">number</span> <span class="n">of</span> <span class="n">consumers</span> <span class="n">online</span><span class="p">},</span>
+    <span class="s2">&quot;colour&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">string</span> <span class="n">colour</span><span class="p">},</span>
+    <span class="s2">&quot;failed&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">failed</span> <span class="n">consumer</span> <span class="n">tags</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>val = a string with how many consumers there are and how many are online (e.g.: 2/3)</p></li>
+<li><p>colour = the colour that is used to colour the text in the HTML (e.g.: ORANGE)</p></li>
+<li><p>failed = a list of failed consumer tags populated only if at least one consumer has failed (e.g.: ctag1.87eb99d764be459d88f673cd8eb438da)</p></li>
+</ul>
+<p>And the value of failed_info, which gives information to the INFO bar on the webpage, would be:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;failed_num&quot;</span><span class="p">:</span> <span class="n">num</span><span class="p">,</span>
+    <span class="s2">&quot;failed_colour&quot;</span><span class="p">:</span> <span class="n">colour</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>num = the total number of failed consumers across all microservices</p></li>
+<li><p>colour = HTML code string used to colour the INFO box e.g.: alert-info (turns the INFO box blue)</p></li>
+</ul>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+</div>
+<div class="section" id="errors">
+<h2>Errors<a class="headerlink" href="#errors" title="Permalink to this headline"></a></h2>
+<p>The page may not always work properly.
+This can include but is not limited to:</p>
+<ol class="arabic simple">
+<li><p>The uvicorn server is not running (page will not load)</p></li>
+<li><p>The RabbitMQ server is down (the Status says <code class="docutils literal notranslate"><span class="pre">`Rabbit</span> <span class="pre">error`</span></code>)</p></li>
+<li><p>The HTTP request has failed (the Status says <code class="docutils literal notranslate"><span class="pre">`Failed</span> <span class="pre">to</span> <span class="pre">make</span> <span class="pre">request`</span></code>) or you have the wrong port in the <code class="docutils literal notranslate"><span class="pre">`admin_port`</span></code> section of the config file :doc:’server-config/server-config’</p></li>
+<li><p>If the RabbitMQ login information in the .server_config file is incorrect
+(the Status says <code class="docutils literal notranslate"><span class="pre">`Login</span> <span class="pre">error`</span></code>)</p></li>
+<li><p>If there was an error that didn’t get caught in the code then the request.get response is displayed on the table in JSON format, for example it could display {‘error’: ‘Object Not Found’, ‘reason’: ‘Not Found’}</p></li>
+</ol>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+</div>
+<div class="section" id="tl-dr">
+<h2>TL;DR<a class="headerlink" href="#tl-dr" title="Permalink to this headline"></a></h2>
+<p>going to <code class="docutils literal notranslate"><span class="pre">`/system/status/`</span></code> on a search engine or &lt;<a class="reference external" href="http://nlds.ceda.ac.uk/system/status/">http://nlds.ceda.ac.uk/system/status/</a>&gt;
+will show you a table of what microservices are currently running and the tags of any consumers that have failed.</p>
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="cta-emulator.html" class="btn btn-neutral float-left" title="CERN Tape Archive Set Up" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Neil Massey &amp; Jack Leland.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

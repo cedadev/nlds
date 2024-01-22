@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Database Migrations with Alembic &mdash; Near-line Data Store 0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Server config" href="server-config/server-config.html" />
+    <link rel="prev" title="Microservices" href="nlds-processors.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html">
+            <img src="_static/ceda.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Database Migrations with Alembic</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#using-alembic-migrations">Using Alembic Migrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#writing-alembic-migrations">Writing Alembic Migrations</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Near-line Data Store</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Database Migrations with Alembic</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/alembic-migrations.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="database-migrations-with-alembic">
+<h1>Database Migrations with Alembic<a class="headerlink" href="#database-migrations-with-alembic" title="Permalink to this headline"></a></h1>
+<p>Alembic is the migration tool that comes packaged with SQLAlchemy.</p>
+<div class="section" id="using-alembic-migrations">
+<h2>Using Alembic Migrations<a class="headerlink" href="#using-alembic-migrations" title="Permalink to this headline"></a></h2>
+<p>From an end-user stand point, using alembic is relatively straight forward. If
+you’re using your local development environment or deploying to kubernetes (or
+wherever) the migrations should be designed to be applied in the same manner.
+Basically, the steps consist of:
+1. Make sure alembic is installed (the correct version should be in the
+<code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code>)
+2. Change directory to the root of the repo
+3. Run <code class="docutils literal notranslate"><span class="pre">alembic</span> <span class="pre">upgrade</span> <span class="pre">head</span></code>, which should run all of the pending migrations
+in the correct order and update your database to the latest version.</p>
+</div>
+<div class="section" id="writing-alembic-migrations">
+<h2>Writing Alembic Migrations<a class="headerlink" href="#writing-alembic-migrations" title="Permalink to this headline"></a></h2>
+<p>Writing alembic migrations is a little more complicated unfortunately, because
+we have to account for both SQLite local databases and the PostgreSQL production
+database, as well as migrating two databases (the catalog and the monitoring db)
+at the same time. Fortunately it’s not super complex, and can be done <cite>mostly</cite>
+automatically. <cite>Mostly</cite>…</p>
+<p>So in general we can summarise the steps for a generic upgrade procedure as
+follows:
+1. Do schema migration on database (e.g. add table, add columns, change defaults)
+2. Do data migration (e.g. change values in a column or table)
+3. Do rest of schema migration (e.g. remove columns, add or remove foreign key
+constraints)</p>
+<p>Alembic has auto-generation functionality, which can be useful to generate a
+rough outline of the schema migration you want to apply. This can be generated
+by using the command:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">alembic</span> <span class="n">revision</span> <span class="o">--</span><span class="n">autogenerate</span> <span class="o">-</span><span class="n">m</span> <span class="s1">&#39;</span><span class="si">{DESCRIPTION}</span><span class="s1">&#39;</span>
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">{DESCRIPTION}</span></code> should be replaced with a short description of what the
+migration is changing in the database. Current convention is to use all lower
+case.</p>
+<p>This should provide a filled in template which gets you a good deal of the way
+there in terms of schema migration. This will need to be altered so that
+<code class="docutils literal notranslate"><span class="pre">batch_update_table</span></code> is used in lieu of the regular <code class="docutils literal notranslate"><span class="pre">update_table</span></code> which
+doesn’t work with SQLite (basically implements table altering by deleting and
+remaking a given table). For examples of this see past migrations and for more
+details read the <a class="reference external" href="https://alembic.sqlalchemy.org/en/latest/batch.html">SQLAlchemy documentation</a>
+on it.</p>
+<p>For the data migration we can use the standard ORM model that’s in use across
+the rest of the NLDS database interaction, but in order to do this safely and
+repeatably we have to make a local copy, in the revision file, of the database
+model. This is good practice so as to ensure the migration isn’t broken by
+imports that change in future database migrations. To do it yourself, you
+basically need to copy the class Contents of either <code class="docutils literal notranslate"><span class="pre">catalog_models.py</span></code> or
+<code class="docutils literal notranslate"><span class="pre">monitor_models.py</span></code> into the revision file, including both old and new changes
+to the table fields. You can then make a <code class="docutils literal notranslate"><span class="pre">Session</span></code> and query/update the
+database as you normally would. Again, look at previous revisions for examples
+of this, in particular <code class="docutils literal notranslate"><span class="pre">ee82dd99bfc0_add_storage_url_fields.py</span></code>.</p>
+<p>TODO: Flesh this out, edit for clarity.</p>
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="nlds-processors.html" class="btn btn-neutral float-left" title="Microservices" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="server-config/server-config.html" class="btn btn-neutral float-right" title="Server config" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Neil Massey &amp; Jack Leland.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

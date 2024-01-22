@@ -17,6 +17,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="The System Status Monitor" href="system-status.html" />
     <link rel="prev" title="Examples" href="server-config/examples.html" /> 
 </head>
 
@@ -42,6 +43,7 @@
 <li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul class="current">
@@ -50,8 +52,11 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Setting up a CTA tape emulator</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#commissioning-the-vm">Commissioning the VM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#setting-up-cta-on-the-vm">Setting up CTA on the VM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#additional-steps">Additional steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#xrootd-python-bindings">XRootD Python Bindings</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a></li>
 </ul>
 
         </div>
@@ -276,6 +281,48 @@ if you are running as <code class="docutils literal notranslate"><span class="pr
 </li>
 </ul>
 </div>
+<div class="section" id="additional-steps">
+<h2>Additional steps<a class="headerlink" href="#additional-steps" title="Permalink to this headline"></a></h2>
+<p>The above steps will get you 90% of the way there but there’s some extra steps
+required get <cite>xrd-</cite> commands running, and more for getting it running with
+pyxrootd.</p>
+<p>There’re 3 main pods you’ll want/need to use:
+1. client - where you actually run the xrootd commands (as user1) and will
+eventually run the pyxrootd commands and the archiver
+2. ctaeos - where you run the eos commands, which are basically filesystem admin
+commands, making directories, setting attributes of directories etc.
+3. ctacli - where you run cta-admin commands which, as far as I can tell,
+control the tape system metadata.</p>
+<p>For any of the above to work you’ll first need to run the preparation script
+<code class="docutils literal notranslate"><span class="pre">/home/cta/CTA/continuousintegration/orchestration/tests/prepare_tests.sh</span></code>
+to fill the cta database with the appropriate test metadata. This may or may not
+work straight up, but you may also need to run the command</p>
+<p><code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">--namespace</span> <span class="pre">cta</span> <span class="pre">exec</span> <span class="pre">ctafrontend</span> <span class="pre">--</span> <span class="pre">cta-catalogue-admin-user-create</span> <span class="pre">/etc/cta/cta-catalogue.conf</span> <span class="pre">--username</span> <span class="pre">ctaadmin1</span> <span class="pre">-m</span> <span class="pre">&quot;docker</span> <span class="pre">cli&quot;</span></code></p>
+<p>which recreates the ctaadmin1 user on the ctafrontend pod, a potentially
+necessary step after you’ve recreated the ctaeos instance - which you will
+probably have to to get it working (as per the “Preparing the CTA instance”
+section above).</p>
+</div>
+<div class="section" id="xrootd-python-bindings">
+<h2>XRootD Python Bindings<a class="headerlink" href="#xrootd-python-bindings" title="Permalink to this headline"></a></h2>
+<p>The python xrootd bindings are a bit of a pain to get to work on centos images,
+but after some (read as lots) of trial and error I managed to compile it using
+newer versions of a few packages and have baked it into a docker container. The
+image is on the [ceda registry under the NLDS consumers project]
+(registry.ceda.ac.uk/nlds-consumers/archiver). The
+difficulty is getting these onto the <cite>client</cite> pod to be useful in developing
+against, but this was achieved by taking a snapshot image of the running client
+pod’s container and then running a multi-stage build with both this image and
+the archiver image. [This image is now available on the registry]
+(registry.ceda.ac.uk/nlds-consumers/ctaeos-client). You should be able to deploy
+this using the same pod.yaml that client uses, which you can steal by running:</p>
+<p><code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">pod</span> <span class="pre">-n</span> <span class="pre">cta</span> <span class="pre">client</span> <span class="pre">-o</span> <span class="pre">yaml</span></code></p>
+<p>and then save to a file, change out the image for your new image and then
+redeploy with</p>
+<p><code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">apply</span> <span class="pre">-f</span> <span class="pre">pod.yaml</span></code></p>
+<p>There are many ways to get images to the local repository so I will leave that
+as an exercise to the reader.</p>
+</div>
 </div>
 
 
@@ -283,6 +330,7 @@ if you are running as <code class="docutils literal notranslate"><span class="pr
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="server-config/examples.html" class="btn btn-neutral float-left" title="Examples" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="system-status.html" class="btn btn-neutral float-right" title="The System Status Monitor" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

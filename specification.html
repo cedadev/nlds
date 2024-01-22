@@ -43,12 +43,14 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Specification</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a></li>
 </ul>
 
         </div>
@@ -219,7 +221,7 @@ This will require adding the interface to do so to the object storage.</p>
 <div class="line-block">
 <div class="line">API endpoint | /files |</div>
 </div>
-<p><a href="#id23"><span class="problematic" id="id24">|---|</span></a>—|
+<p><a href="#id25"><span class="problematic" id="id26">|---|</span></a>—|
 | HTTP method  | PUT |
 | Parameters   | transaction_id |
 |              | user |
@@ -231,10 +233,11 @@ This will require adding the interface to do so to the object storage.</p>
 | Body         | none |
 | Example      | <cite>/files/put?transaction_id=1;user=”bob”;group=”root”;filepath=”myfile.txt”</cite> |</p>
 <p>### PUTLIST command</p>
+<p>The <a href="#id1"><span class="problematic" id="id2">`</span></a>PUT</p>
 <div class="line-block">
 <div class="line">API endpoint | /files |</div>
 </div>
-<p><a href="#id25"><span class="problematic" id="id26">|---|</span></a>—|
+<p><a href="#id27"><span class="problematic" id="id28">|---|</span></a>—|
 | HTTP method  | PUT |
 | Parameters   | transaction_id |
 |              | user |
@@ -242,14 +245,14 @@ This will require adding the interface to do so to the object storage.</p>
 |              | tenancy |
 |              | access_key |
 |              | secret_key |
-| Body         | JSON|
-| Example      | <a href="#id1"><span class="problematic" id="id2">`</span></a>PUT /files/transaction_id=1;user=”bob”;group=”root”<a href="#id3"><span class="problematic" id="id4">`</span></a>|
-| Body example | <a href="#id5"><span class="problematic" id="id6">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
+| Body         | JSON |
+| Example      | <a href="#id3"><span class="problematic" id="id4">`</span></a>PUT /files/transaction_id=1;user=”bob”;group=”root”<a href="#id5"><span class="problematic" id="id6">`</span></a>|
+| Body example | <a href="#id7"><span class="problematic" id="id8">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
 <p>### GET command</p>
 <div class="line-block">
 <div class="line">API endpoint | /files |</div>
 </div>
-<p><a href="#id27"><span class="problematic" id="id28">|---|</span></a>—|
+<p><a href="#id29"><span class="problematic" id="id30">|---|</span></a>—|
 | HTTP method  | GET |
 | Parameters   | transaction_id |
 |              | user |
@@ -264,7 +267,7 @@ This will require adding the interface to do so to the object storage.</p>
 <div class="line-block">
 <div class="line">API endpoint | /files/getlist |</div>
 </div>
-<p><a href="#id29"><span class="problematic" id="id30">|---|</span></a>—|
+<p><a href="#id31"><span class="problematic" id="id32">|---|</span></a>—|
 | HTTP method  | PUT |
 | Parameters   | transaction_id |
 |              | user |
@@ -273,13 +276,13 @@ This will require adding the interface to do so to the object storage.</p>
 |              | access_key |
 |              | secret_key |
 | Body         | JSON|
-| Example      | <a href="#id7"><span class="problematic" id="id8">`</span></a>/files/getlist?transaction_id=1;user=”bob”;group=”root”;`|
-| Body example | <a href="#id9"><span class="problematic" id="id10">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
+| Example      | <a href="#id9"><span class="problematic" id="id10">`</span></a>/files/getlist?transaction_id=1;user=”bob”;group=”root”;`|
+| Body example | <a href="#id11"><span class="problematic" id="id12">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
 <p>### DEL command</p>
 <div class="line-block">
 <div class="line">API endpoint | /files |</div>
 </div>
-<p><a href="#id31"><span class="problematic" id="id32">|---|</span></a>—|
+<p><a href="#id33"><span class="problematic" id="id34">|---|</span></a>—|
 | HTTP method  | DELETE |
 | Parameters   | transaction_id |
 |              | user |
@@ -289,12 +292,12 @@ This will require adding the interface to do so to the object storage.</p>
 |              | access_key |
 |              | secret_key |
 | Body         | none |
-| Example      | <a href="#id11"><span class="problematic" id="id12">`</span></a>/files/transaction_id=1;user=”bob”;group=”root”;filepath=”myfile.txt” <a href="#id13"><span class="problematic" id="id14">`</span></a><a href="#id15"><span class="problematic" id="id16">|</span></a></p>
+| Example      | <a href="#id13"><span class="problematic" id="id14">`</span></a>/files/transaction_id=1;user=”bob”;group=”root”;filepath=”myfile.txt” <a href="#id15"><span class="problematic" id="id16">`</span></a><a href="#id17"><span class="problematic" id="id18">|</span></a></p>
 <p>### DELLIST command</p>
 <div class="line-block">
 <div class="line">API endpoint | /files/dellist |</div>
 </div>
-<p><a href="#id33"><span class="problematic" id="id34">|---|</span></a>—|
+<p><a href="#id35"><span class="problematic" id="id36">|---|</span></a>—|
 | HTTP method  | PUT |
 | Parameters   | transaction_id |
 |              | user |
@@ -303,8 +306,8 @@ This will require adding the interface to do so to the object storage.</p>
 |              | access_key |
 |              | secret_key |
 | Body         | JSON|
-| Example      | <a href="#id17"><span class="problematic" id="id18">`</span></a>/files/dellist?transaction_id=1;user=”bob”;group=”root”<a href="#id19"><span class="problematic" id="id20">`</span></a>|
-| Body example | <a href="#id21"><span class="problematic" id="id22">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
+| Example      | <a href="#id19"><span class="problematic" id="id20">`</span></a>/files/dellist?transaction_id=1;user=”bob”;group=”root”<a href="#id21"><span class="problematic" id="id22">`</span></a>|
+| Body example | <a href="#id23"><span class="problematic" id="id24">`</span></a>{“filepath” : [“file1”, “file2”, “file3”]}`|</p>
 <p>## OAuth server</p>
 <ul class="simple">
 <li><p>Performs generation and authorisation of tokens</p></li>
@@ -376,42 +379,22 @@ the RabbitMQPublisher class.</p>
 </div>
 <p>## Message flow</p>
 <p>### Message flow for a <cite>putlist</cite> command
-| ![message_flow_put1](./uml/message_flow_put1.png) |
+| ![message_flow_put1](./uml/message_flow_put_full.png) |
 :-:
-| <strong>Figure 4.1</strong> Flow of messages for a <cite>putlist</cite> case of transferring a list of files to the NLDS. Part 1: from the user submitting the request to the completion of the file indexing|</p>
-<div class="line-block">
-<div class="line">![message_flow_put2](./uml/message_flow_put2.png) |</div>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">-</dt>
-<dd class="field-odd"><p></p></dd>
-</dl>
-<div class="line-block">
-<div class="line"><strong>Figure 4.2</strong> Flow of messages for a <cite>putlist</cite> case of transferring a list of files to the NLDS. Part 2: from the file index completing (for a sublist of files) to the transfer completing (for the sublist)|</div>
-</div>
-<div class="line-block">
-<div class="line">![message_flow_put3](./uml/message_flow_put3.png) |</div>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">-</dt>
-<dd class="field-odd"><p></p></dd>
-</dl>
-<div class="line-block">
-<div class="line"><strong>Figure 4.3</strong> Flow of messages for a <cite>putlist</cite> case of transferring a list of files to the NLDS. Part 3: from a successful completion of a transfer (for a sublist of files) to the cataloguing of the sublist|</div>
-</div>
+| <strong>Figure 4.1</strong> Flow of messages for a <cite>putlist</cite> case of transferring a list of files to the NLDS.|</p>
 <p>### Message flow for a <cite>getlist</cite> command
-| ![message_flow_get1](./uml/message_flow_get1.png) |
+| ![message_flow_get1](./uml/message_flow_get_full.png) |
 :-:
-| <strong>Figure 5.1</strong> Flow of messages for a <cite>getlist</cite> case of retrieving a list of files from the NLDS. Part 1: from the user submitting the request to the finding of the requested files in the catalogue|</p>
+| <strong>Figure 5.1</strong> Flow of messages for a <cite>getlist</cite> case of retrieving a list of files from the NLDS. Including the case where files are only on tape|</p>
 <div class="line-block">
-<div class="line">![message_flow_get2](./uml/message_flow_get2.png) |</div>
+<div class="line">![message_flow_get2](./uml/message_flow_archive_put.png) |</div>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">-</dt>
 <dd class="field-odd"><p></p></dd>
 </dl>
 <div class="line-block">
-<div class="line"><strong>Figure 5.2</strong> Flow of messages for a <cite>getlist</cite> case of retrieving a list of files from the NLDS. Part 2: from the catalogue request completing to the transfer completing|</div>
+<div class="line"><strong>Figure 6.1</strong> Flow of messages for the internal archive worker to put unarchived files onto tape.|</div>
 </div>
 <p>## Message formats</p>
 <p>Message content are in JSON format so as to aid human and machine readability.

@@ -14,6 +14,7 @@ Welcome to Near-line Data Store's documentation!
    Specification <specification>
    NLDS Server API <nlds-server>
    NLDS Processors API <nlds-processors>
+   Database Migrations with Alembic <alembic-migrations>
 
 
 .. toctree::
@@ -23,6 +24,7 @@ Welcome to Near-line Data Store's documentation!
    The server config file <server-config/server-config>
    Server config examples <server-config/examples>
    Setting up a CTA tape emulator <cta-emulator>
+   Using system status <system-status>
 
 
 Indices and tables

@@ -175,6 +175,8 @@ This will require adding the interface to do so to the object storage.
 
 ### PUTLIST command
 
+The `PUT
+
 | API endpoint | /files |
 |---|---|
 | HTTP method  | PUT |
@@ -184,7 +186,7 @@ This will require adding the interface to do so to the object storage.
 |              | tenancy |
 |              | access_key |
 |              | secret_key |
-| Body         | JSON|
+| Body         | JSON |
 | Example      | `PUT /files/transaction_id=1;user="bob";group="root"`|
 | Body example | `{"filepath" : ["file1", "file2", "file3"]}`|
 
@@ -313,26 +315,19 @@ the RabbitMQPublisher class.
 ## Message flow
 
 ### Message flow for a `putlist` command
-| ![message_flow_put1](./uml/message_flow_put1.png) |
+| ![message_flow_put1](./uml/message_flow_put_full.png) |
 :-:
-| **Figure 4.1** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 1: from the user submitting the request to the completion of the file indexing|
+| **Figure 4.1** Flow of messages for a `putlist` case of transferring a list of files to the NLDS.|
 
-| ![message_flow_put2](./uml/message_flow_put2.png) |
-:-:
-| **Figure 4.2** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 2: from the file index completing (for a sublist of files) to the transfer completing (for the sublist)|
-
-| ![message_flow_put3](./uml/message_flow_put3.png) |
-:-:
-| **Figure 4.3** Flow of messages for a `putlist` case of transferring a list of files to the NLDS. Part 3: from a successful completion of a transfer (for a sublist of files) to the cataloguing of the sublist|
 
 ### Message flow for a `getlist` command
-| ![message_flow_get1](./uml/message_flow_get1.png) |
+| ![message_flow_get1](./uml/message_flow_get_full.png) |
 :-:
-| **Figure 5.1** Flow of messages for a `getlist` case of retrieving a list of files from the NLDS. Part 1: from the user submitting the request to the finding of the requested files in the catalogue|
+| **Figure 5.1** Flow of messages for a `getlist` case of retrieving a list of files from the NLDS. Including the case where files are only on tape|
 
-| ![message_flow_get2](./uml/message_flow_get2.png) |
+| ![message_flow_get2](./uml/message_flow_archive_put.png) |
 :-:
-| **Figure 5.2** Flow of messages for a `getlist` case of retrieving a list of files from the NLDS. Part 2: from the catalogue request completing to the transfer completing|
+| **Figure 6.1** Flow of messages for the internal archive worker to put unarchived files onto tape.|
 
 ## Message formats
 

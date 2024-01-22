@@ -185,3 +185,56 @@ by SCD at RAL.
     tpsrv01       2/2       Running   0          35m
     tpsrv02       2/2       Running   0          35m
     ============  ========  ========  =========  ===
+
+
+Additional steps
+----------------
+
+The above steps will get you 90% of the way there but there's some extra steps 
+required get `xrd-` commands running, and more for getting it running with 
+pyxrootd. 
+
+There're 3 main pods you'll want/need to use:
+1. client - where you actually run the xrootd commands (as user1) and will 
+eventually run the pyxrootd commands and the archiver
+2. ctaeos - where you run the eos commands, which are basically filesystem admin 
+commands, making directories, setting attributes of directories etc. 
+3. ctacli - where you run cta-admin commands which, as far as I can tell, 
+control the tape system metadata. 
+
+For any of the above to work you'll first need to run the preparation script 
+``/home/cta/CTA/continuousintegration/orchestration/tests/prepare_tests.sh`` 
+to fill the cta database with the appropriate test metadata. This may or may not 
+work straight up, but you may also need to run the command 
+
+``kubectl --namespace cta exec ctafrontend -- cta-catalogue-admin-user-create /etc/cta/cta-catalogue.conf --username ctaadmin1 -m "docker cli"``
+
+which recreates the ctaadmin1 user on the ctafrontend pod, a potentially 
+necessary step after you've recreated the ctaeos instance - which you will 
+probably have to to get it working (as per the "Preparing the CTA instance" 
+section above). 
+
+XRootD Python Bindings
+----------------------
+
+The python xrootd bindings are a bit of a pain to get to work on centos images, 
+but after some (read as lots) of trial and error I managed to compile it using 
+newer versions of a few packages and have baked it into a docker container. The 
+image is on the [ceda registry under the NLDS consumers project]
+(registry.ceda.ac.uk/nlds-consumers/archiver). The 
+difficulty is getting these onto the `client` pod to be useful in developing 
+against, but this was achieved by taking a snapshot image of the running client 
+pod's container and then running a multi-stage build with both this image and 
+the archiver image. [This image is now available on the registry]
+(registry.ceda.ac.uk/nlds-consumers/ctaeos-client). You should be able to deploy 
+this using the same pod.yaml that client uses, which you can steal by running:
+
+``kubectl get pod -n cta client -o yaml``
+
+and then save to a file, change out the image for your new image and then 
+redeploy with 
+
+``kubectl apply -f pod.yaml``
+
+There are many ways to get images to the local repository so I will leave that 
+as an exercise to the reader. 

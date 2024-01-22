@@ -49,12 +49,14 @@
 <li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a></li>
 </ul>
 
         </div>
@@ -87,7 +89,7 @@
 It requires the use of the NLDS client, either the command line or library:
 [NLDS client on GitHub](<a class="reference external" href="https://github.com/cedadev/nlds-client">https://github.com/cedadev/nlds-client</a>).</p>
 <p>NLDS server is built upon [FastAPI](<a class="reference external" href="https://fastapi.tiangolo.com">https://fastapi.tiangolo.com</a>).</p>
-<p>NLDS requires Python 3.  It has been tested with Python 3.8 and Python 3.9.</p>
+<p>NLDS requires Python 3.  It has been tested with Python 3.9, 3.10 and Python 3.11.</p>
 <div class="section" id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline"></a></h2>
 <ol class="arabic simple">
@@ -111,10 +113,8 @@ It requires the use of the NLDS client, either the command line or library:
 <dt>To run the processors, you have two options:</dt><dd><p>1. In unique terminals start each processor individually, after
 activating the virtual env, for example:</p>
 <blockquote>
-<div><blockquote>
-<div><p><code class="docutils literal notranslate"><span class="pre">`source</span> <span class="pre">~/nlds-venv/bin/activate;</span> <span class="pre">python</span> <span class="pre">nlds_processors/index.py`</span></code></p>
-</div></blockquote>
-<p>This will send the output to the terminal.</p>
+<div><p><code class="docutils literal notranslate"><span class="pre">`source</span> <span class="pre">~/nlds-venv/bin/activate;</span> <span class="pre">python</span> <span class="pre">nlds_processors/index.py`</span></code>
+This will send the output to the terminal.</p>
 </div></blockquote>
 <ol class="arabic simple" start="2">
 <li><p>Use the script <cite>test_run_processor.sh</cite>.  This will run all five processors
