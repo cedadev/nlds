@@ -92,7 +92,9 @@ class PutTransferConsumer(BaseTransferConsumer):
             # TODO: This begs the question of whether we need to store the 
             # object-name at all
             path_details.object_name = path_details.original_path
-            try:
+            try:   
+                import time 
+                time.sleep(900)
                 result = client.fput_object(
                     bucket_name, 
                     path_details.object_name, 
