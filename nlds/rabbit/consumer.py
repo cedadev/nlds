@@ -655,6 +655,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # Wrap callback with a try-except catching a selection of common 
         # errors which can be caught without stopping consumption.
         ack_fl = None 
+        self.consuming_event.set()
         try:
             ack_fl = self.callback(ch, method, properties, body, connection)
         except self.EXPECTED_EXCEPTIONS as original_error:
@@ -679,6 +680,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 self.nack_message(ch, method.delivery_tag, connection)
             else:
                 self.acknowledge_message(ch, method.delivery_tag, connection)
+        self.consuming_event.clear()
 
             
     def declare_bindings(self) -> None:

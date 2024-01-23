@@ -16,8 +16,11 @@ from logging.handlers import TimedRotatingFileHandler
 from typing import Dict, List, Any
 import pathlib
 from collections.abc import Sequence
+import threading as thr
+import time
 
 import pika
+from pika.connection import Connection
 from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
 from retry import retry
 
@@ -194,6 +197,9 @@ class RabbitMQPublisher():
       
         self.connection = None
         self.channel = None
+        self.keepalive = None
+        self.consuming_event = thr.Event()
+
         try:
             # Do some basic verification of the general retry delays. 
             self.retry_delays = self.general_config[self.RETRY_DELAYS]
@@ -233,6 +239,7 @@ class RabbitMQPublisher():
                         heartbeat=connection_heartbeat,
                     )
                 )
+                self.start_keepalive_deamon(connection, connection_heartbeat)
 
                 # Create a new channel with basic qos
                 channel = connection.channel()
@@ -250,6 +257,41 @@ class RabbitMQPublisher():
                          "establish a connection. Retrying...")
             logger.debug(f"{type(e).__name__}: {e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
+        
+        
+    def start_keepalive_deamon(
+            self, 
+            connection: Connection, 
+            heartbeat: int
+        ) -> None:
+        # Create a keepalive daemon thread if one is not already running
+        if 'keepalive' not in (thr.name for thr in thr.enumerate()):
+            # Start a deamon thread which processes data events in the 
+            # background
+            self.keepalive = thr.Thread(
+                name='keepalive', target=self.connection_keepalive,
+                args=(connection, heartbeat, self.consuming_event), daemon=True,
+            )
+            self.keepalive.start()
+        
+
+    @staticmethod
+    def connection_keepalive(connection: Connection, heartbeat: int, 
+                             consuming_event: thr.Event):
+        """Simple infinite loop which keeps the connection alive by creating a 
+        new channel, waiting just less than the heartbeat time and then closing 
+        and creating the channel again again. This should keep the connection 
+        alive. Intended to be run in the background as a daemon thread, can be 
+        exited immediately at main thread exit. Needs to be passed the active 
+        connection object and the required heartbeats.
+        """
+        while True:
+            # If we're actively consuming and the connection is blocked, then 
+            # periodically call process_data_events to keep the connection open.
+            if consuming_event.is_set():
+                connection.process_data_events()
+            time.sleep(max(heartbeat-2, 1))
+
 
     def declare_bindings(self) -> None:
         """Go through list of exchanges from config file and declare each. Will 
