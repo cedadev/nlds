@@ -24,7 +24,7 @@ Requires these settings in the /etc/nlds/server_config file:
 """
 
 import json
-from typing import Dict
+from typing import Any, Dict
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -93,7 +93,8 @@ class MonitorConsumer(RMQC):
         # get the user id from the details section of the message
         try:
             user = body[self.MSG_DETAILS][self.MSG_USER]
-        except KeyError:
+            assert user is not None
+        except (KeyError, AssertionError):
             self.log("User not in message, exiting callback.", 
                      self.RK_LOG_ERROR)
             return
@@ -101,7 +102,8 @@ class MonitorConsumer(RMQC):
         # get the group from the details section of the message
         try:
             group = body[self.MSG_DETAILS][self.MSG_GROUP]
-        except KeyError:
+            assert group is not None
+        except (KeyError, AssertionError):
             self.log("Group not in message, exiting callback.", 
                      self.RK_LOG_ERROR)
             return
@@ -511,9 +513,7 @@ class MonitorConsumer(RMQC):
         if (api_method == self.RK_STAT):
             self.log("Starting stat from monitoring db.", self.RK_LOG_INFO)
             self._monitor_get(body, properties)
-            
-        
-            
+                
         # If received system test message, reply to it (this is for system status check)
         elif api_method == "system_stat":
             if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
@@ -528,7 +528,6 @@ class MonitorConsumer(RMQC):
                     correlation_id=properties.correlation_id
                 )
             return
-            
             
         elif api_method in (self.RK_PUT, self.RK_PUTLIST, 
                             self.RK_GET, self.RK_GETLIST, 
@@ -551,6 +550,15 @@ class MonitorConsumer(RMQC):
         
         self.log("Callback complete!", self.RK_LOG_INFO)
 
+    def _fail_transaction(self, body_json: Dict[str, Any], monitoring_rk: str):
+        """Overrides the fail transaction method so as to avoid an infinite loop
+        in the monitor queue system. The overridden method just adds another 
+        message to the monitoring queue, so for failures in the monitoring queue 
+        we just have to log the failure and move on. 
+        """
+        self.log(f"Failed message on monitoring with routing_key: "
+                 f"{monitoring_rk}. Could not conntinue.", self.RK_LOG_ERROR)
+        return
 
     def attach_database(self, create_db_fl: bool = True):
         """Attach the Monitor to the consumer"""
