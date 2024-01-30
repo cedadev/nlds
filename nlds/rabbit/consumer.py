@@ -509,8 +509,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                         monitoring_rk, original_error)
             except Exception as e:
                 self.log(f"Failed attempt to retry transaction that failed "
-                         "during callback. Error: {e}.",
-                        self.RK_LOG_WARNING)
+                         f"during callback. Error: {e}.", self.RK_LOG_WARNING)
                 # Fail the job if at any point the attempt to retry fails. 
                 self._fail_transaction(body_json, monitoring_rk)
         else:
