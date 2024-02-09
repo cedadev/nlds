@@ -16,8 +16,11 @@ from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Any
 import pathlib
 from collections.abc import Sequence
+import threading as thr
+import time
 
 import pika
+from pika.connection import Connection
 from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
 from retry import retry
 
@@ -35,6 +38,7 @@ from ..server_config import (
     LOGGING_CONFIG_ENABLE,
     LOGGING_CONFIG_BACKUP_COUNT,
 )
+from .keepalive import KeepaliveDaemon
 from ..errors import RabbitRetryError
 
 logger = logging.getLogger("nlds.root")
@@ -195,6 +199,9 @@ class RabbitMQPublisher():
       
         self.connection = None
         self.channel = None
+        self.heartbeat = self.config.get("heartbeat") or 300
+        self.keepalive = None
+
         try:
             # Do some basic verification of the general retry delays. 
             self.retry_delays = self.general_config[self.RETRY_DELAYS]
@@ -208,6 +215,7 @@ class RabbitMQPublisher():
         if setup_logging_fl:
             self.setup_logging()
     
+
     @retry(
         RabbitRetryError, 
         tries=-1, 
@@ -222,7 +230,11 @@ class RabbitMQPublisher():
                 # Get the username and password for rabbit
                 rabbit_user = self.config["user"]
                 rabbit_password = self.config["password"]
-                connection_heartbeat = self.config.get("heartbeat") or 300
+
+                # Kill any daemon threads before we make a new one for the new 
+                # connection
+                if self.keepalive:
+                    self.keepalive.kill()
 
                 # Start the rabbitMQ connection
                 connection = pika.BlockingConnection(
@@ -231,9 +243,11 @@ class RabbitMQPublisher():
                         credentials=pika.PlainCredentials(rabbit_user, 
                                                           rabbit_password),
                         virtual_host=self.config["vhost"],
-                        heartbeat=connection_heartbeat,
+                        heartbeat=self.heartbeat,
                     )
                 )
+                self.keepalive = KeepaliveDaemon(connection, self.heartbeat)
+                self.keepalive.start()
 
                 # Create a new channel with basic qos
                 channel = connection.channel()
@@ -251,6 +265,7 @@ class RabbitMQPublisher():
                          "establish a connection. Retrying...")
             logger.debug(f"{type(e).__name__}: {e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
+
 
     def declare_bindings(self) -> None:
         """Go through list of exchanges from config file and declare each. Will 
@@ -359,6 +374,7 @@ class RabbitMQPublisher():
             # the message will never be sent. 
             # raise RabbitRetryError(str(e), ampq_exception=e)
 
+
     def get_retry_delay(self, retries: int):
         """Simple convenience function for getting the delay (in seconds) for an 
         indexlist with a given number of retries. Works off of the member 
@@ -369,8 +385,10 @@ class RabbitMQPublisher():
         retries = min(retries, len(self.retry_delays) - 1)
         return int(self.retry_delays[retries])
 
+
     def close_connection(self) -> None:
         self.connection.close()
+
 
     _default_logging_conf = {
         LOGGING_CONFIG_ENABLE: True,
@@ -543,6 +561,7 @@ class RabbitMQPublisher():
                         logger.warning(f"Failed to create log file for "
                                        f"{log_file}: {str(e)}")
 
+
     def _log(self, log_message: str, log_level: str, target: str, 
             **kwargs) -> None:
         """
@@ -581,12 +600,14 @@ class RabbitMQPublisher():
         message = self.create_log_message(log_message, target)
         self.publish_message(routing_key, message)
     
+    
     def log(self, log_message: str, log_level: str, target: str = None, 
             **kwargs) -> None:
         # Attempt to log to publisher's name
         if not target:
             target = self.name
         self._log(log_message, log_level, target, **kwargs)
+
 
     @classmethod
     def create_log_message(cls, message: str, target: str, 

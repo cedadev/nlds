@@ -21,6 +21,7 @@ import json
 from json.decoder import JSONDecodeError
 from urllib3.exceptions import HTTPError
 import signal
+import threading as thr
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -206,6 +207,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # Controls default behaviour of logging when certain exceptions are 
         # caught in the callback. 
         self.print_tracebacks_fl = True
+
+        # List of active threads created by consumption process
+        self.threads = []
 
         # Set up the logging and pass through constructor parameter
         self.setup_logging(enable=setup_logging_fl)
@@ -675,9 +679,16 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         This should be performed on all consumers and should be left untouched 
         in child implementations.
         """
+        ack_fl = None 
+        # Begin the 
+        self.keepalive.start_polling()
+
+        # Get and log thread info
+        thread_id = thr.get_ident()
+        self.log(f"Callback started in thread {thread_id}", self.RK_LOG_INFO)
+
         # Wrap callback with a try-except catching a selection of common 
         # errors which can be caught without stopping consumption.
-        ack_fl = None 
         try:
             ack_fl = self.callback(ch, method, properties, body, connection)
         except self.EXPECTED_EXCEPTIONS as original_error:
@@ -702,6 +713,33 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 self.nack_message(ch, method.delivery_tag, connection)
             else:
                 self.acknowledge_message(ch, method.delivery_tag, connection)
+        
+        # Clear the consuming event so the keepalive stops polling the connection
+        self.keepalive.stop_polling()
+
+
+    def _start_callback_threaded(
+            self, 
+            ch: Channel, 
+            method: Method, 
+            properties: Header, 
+            body: bytes, 
+            connection: Connection
+        ) -> None:
+        """Consumption method which starts the _wrapped_callback() in a new 
+        thread so the connection can be kept alive in the main thread. Allows 
+        for both long-running tasks and multithreading, though in the case of 
+        the latter this may not be as efficient as just scaling out to another 
+        consumer. 
+
+        TODO: (2024-02-08) This currently doesn't work but I'll leave it here in 
+        case we return to it further down the line. 
+        """
+        t = thr.Thread(target=self._wrapped_callback, args=(ch, method, 
+                                                            properties, 
+                                                            body, connection))
+        t.start()
+        self.threads.append()
 
             
     def declare_bindings(self) -> None:
@@ -797,4 +835,11 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 break
 
         self.channel.stop_consuming()
+
+        # Wait for all threads to complete
+        # TODO: what happens if we try to sigterm?
+        for t in self.threads:
+            t.join()
+        
+        self.connection.close()
 
