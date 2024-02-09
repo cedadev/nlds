@@ -37,6 +37,7 @@ from ..server_config import (
     LOGGING_CONFIG_FORMAT, 
     LOGGING_CONFIG_ENABLE,
 )
+from .keepalive import KeepaliveDaemon
 from ..errors import RabbitRetryError
 
 logger = logging.getLogger("nlds.root")
@@ -197,8 +198,10 @@ class RabbitMQPublisher():
       
         self.connection = None
         self.channel = None
+        self.heartbeat = self.config.get("heartbeat") or 300
         self.keepalive = None
-        self.consuming_event = thr.Event()
+        # self.connection_event = thr.Event()
+        # self.consuming_event = thr.Event()
 
         try:
             # Do some basic verification of the general retry delays. 
@@ -227,7 +230,11 @@ class RabbitMQPublisher():
                 # Get the username and password for rabbit
                 rabbit_user = self.config["user"]
                 rabbit_password = self.config["password"]
-                connection_heartbeat = self.config.get("heartbeat") or 300
+
+                # Kill any daemon threads before we make a new one for the new 
+                # connection
+                if self.keepalive:
+                    self.keepalive.kill()
 
                 # Start the rabbitMQ connection
                 connection = pika.BlockingConnection(
@@ -236,10 +243,11 @@ class RabbitMQPublisher():
                         credentials=pika.PlainCredentials(rabbit_user, 
                                                           rabbit_password),
                         virtual_host=self.config["vhost"],
-                        heartbeat=connection_heartbeat,
+                        heartbeat=self.heartbeat,
                     )
                 )
-                self.start_keepalive_deamon(connection, connection_heartbeat)
+                self.keepalive = KeepaliveDaemon(connection, self.heartbeat)
+                self.keepalive.start()
 
                 # Create a new channel with basic qos
                 channel = connection.channel()
@@ -268,29 +276,43 @@ class RabbitMQPublisher():
         if 'keepalive' not in (thr.name for thr in thr.enumerate()):
             # Start a deamon thread which processes data events in the 
             # background
+            self.connection_event.set()
             self.keepalive = thr.Thread(
                 name='keepalive', target=self.connection_keepalive,
-                args=(connection, heartbeat, self.consuming_event), daemon=True,
+                args=(connection, heartbeat, 
+                      self.consuming_event, 
+                      self.connection_event), 
+                daemon=True,
             )
             self.keepalive.start()
         
 
+    def kill_keepalive_daemon(self):
+        if 'keepalive' in (thr.name for thr in thr.enumerate()):
+            if not self.keepalive:
+                self.keepalive = [t for t in thr.enumerate() 
+                                  if t.name == 'keepalive'][0]
+            self.connection_event.clear()
+            self.keepalive.join()
+        
+
     @staticmethod
     def connection_keepalive(connection: Connection, heartbeat: int, 
-                             consuming_event: thr.Event):
-        """Simple infinite loop which keeps the connection alive by creating a 
-        new channel, waiting just less than the heartbeat time and then closing 
-        and creating the channel again again. This should keep the connection 
-        alive. Intended to be run in the background as a daemon thread, can be 
-        exited immediately at main thread exit. Needs to be passed the active 
-        connection object and the required heartbeats.
+                             consuming_event: thr.Event, 
+                             connection_event: thr.Event):
+        """Simple infinite loop which keeps the connection alive by calling 
+        process_data_events() during consumption. This is intended to be run in 
+        the background as a daemon thread, can be exited immediately at main 
+        thread exit. Needs to be passed the active connection object and the 
+        required heartbeats.
         """
-        while True:
+        # While we have an open connection continue the process 
+        while connection.is_open and connection_event.is_set():
             # If we're actively consuming and the connection is blocked, then 
             # periodically call process_data_events to keep the connection open.
             if consuming_event.is_set():
                 connection.process_data_events()
-            time.sleep(max(heartbeat-2, 1))
+            time.sleep(max(heartbeat/2, 1))
 
 
     def declare_bindings(self) -> None:
