@@ -200,8 +200,6 @@ class RabbitMQPublisher():
         self.channel = None
         self.heartbeat = self.config.get("heartbeat") or 300
         self.keepalive = None
-        # self.connection_event = thr.Event()
-        # self.consuming_event = thr.Event()
 
         try:
             # Do some basic verification of the general retry delays. 
@@ -216,6 +214,7 @@ class RabbitMQPublisher():
         if setup_logging_fl:
             self.setup_logging()
     
+
     @retry(
         RabbitRetryError, 
         tries=-1, 
@@ -265,54 +264,6 @@ class RabbitMQPublisher():
                          "establish a connection. Retrying...")
             logger.debug(f"{type(e).__name__}: {e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
-        
-        
-    def start_keepalive_deamon(
-            self, 
-            connection: Connection, 
-            heartbeat: int
-        ) -> None:
-        # Create a keepalive daemon thread if one is not already running
-        if 'keepalive' not in (thr.name for thr in thr.enumerate()):
-            # Start a deamon thread which processes data events in the 
-            # background
-            self.connection_event.set()
-            self.keepalive = thr.Thread(
-                name='keepalive', target=self.connection_keepalive,
-                args=(connection, heartbeat, 
-                      self.consuming_event, 
-                      self.connection_event), 
-                daemon=True,
-            )
-            self.keepalive.start()
-        
-
-    def kill_keepalive_daemon(self):
-        if 'keepalive' in (thr.name for thr in thr.enumerate()):
-            if not self.keepalive:
-                self.keepalive = [t for t in thr.enumerate() 
-                                  if t.name == 'keepalive'][0]
-            self.connection_event.clear()
-            self.keepalive.join()
-        
-
-    @staticmethod
-    def connection_keepalive(connection: Connection, heartbeat: int, 
-                             consuming_event: thr.Event, 
-                             connection_event: thr.Event):
-        """Simple infinite loop which keeps the connection alive by calling 
-        process_data_events() during consumption. This is intended to be run in 
-        the background as a daemon thread, can be exited immediately at main 
-        thread exit. Needs to be passed the active connection object and the 
-        required heartbeats.
-        """
-        # While we have an open connection continue the process 
-        while connection.is_open and connection_event.is_set():
-            # If we're actively consuming and the connection is blocked, then 
-            # periodically call process_data_events to keep the connection open.
-            if consuming_event.is_set():
-                connection.process_data_events()
-            time.sleep(max(heartbeat/2, 1))
 
 
     def declare_bindings(self) -> None:
@@ -422,6 +373,7 @@ class RabbitMQPublisher():
             # the message will never be sent. 
             # raise RabbitRetryError(str(e), ampq_exception=e)
 
+
     def get_retry_delay(self, retries: int):
         """Simple convenience function for getting the delay (in seconds) for an 
         indexlist with a given number of retries. Works off of the member 
@@ -432,8 +384,10 @@ class RabbitMQPublisher():
         retries = min(retries, len(self.retry_delays) - 1)
         return int(self.retry_delays[retries])
 
+
     def close_connection(self) -> None:
         self.connection.close()
+
 
     _default_logging_conf = {
         LOGGING_CONFIG_ENABLE: True,
@@ -586,6 +540,7 @@ class RabbitMQPublisher():
                         logger.warning(f"Failed to create log file for "
                                        f"{log_file}: {str(e)}")
 
+
     def _log(self, log_message: str, log_level: str, target: str, 
             **kwargs) -> None:
         """
@@ -624,12 +579,14 @@ class RabbitMQPublisher():
         message = self.create_log_message(log_message, target)
         self.publish_message(routing_key, message)
     
+    
     def log(self, log_message: str, log_level: str, target: str = None, 
             **kwargs) -> None:
         # Attempt to log to publisher's name
         if not target:
             target = self.name
         self._log(log_message, log_level, target, **kwargs)
+
 
     @classmethod
     def create_log_message(cls, message: str, target: str, 
