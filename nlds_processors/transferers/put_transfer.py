@@ -93,8 +93,6 @@ class PutTransferConsumer(BaseTransferConsumer):
             # object-name at all
             path_details.object_name = path_details.original_path
             try:   
-                import time 
-                time.sleep(900)
                 result = client.fput_object(
                     bucket_name, 
                     path_details.object_name, 
