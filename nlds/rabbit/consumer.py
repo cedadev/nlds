@@ -33,11 +33,19 @@ from pydantic import BaseModel
 from minio.error import S3Error
 
 from .publisher import RabbitMQPublisher
-from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, 
-                             LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_LEVEL,    
-                             LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, 
-                             RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
-                             RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
+from ..server_config import (
+    LOGGING_CONFIG_ENABLE, 
+    LOGGING_CONFIG_FILES, 
+    LOGGING_CONFIG_FORMAT, 
+    LOGGING_CONFIG_LEVEL,    
+    LOGGING_CONFIG_SECTION, 
+    LOGGING_CONFIG_STDOUT, 
+    LOGGING_CONFIG_STDOUT_LEVEL, 
+    LOGGING_CONFIG_BACKUP_COUNT,
+    LOGGING_CONFIG_MAX_BYTES,
+    RABBIT_CONFIG_QUEUE_NAME, 
+    RABBIT_CONFIG_QUEUES, 
+)
 from ..details import PathDetails, Retries
 from ..errors import RabbitRetryError, CallbackError
 
@@ -413,10 +421,17 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return retries
     
 
-    def setup_logging(self, enable=False, log_level: str = None, 
-                      log_format: str = None, add_stdout_fl: bool = False, 
-                      stdout_log_level: str = None, log_files: List[str]=None,
-                      log_rollover: str = None) -> None:
+    def setup_logging(
+            self, 
+            enable=False, 
+            log_level: str = None, 
+            log_format: str = None, 
+            add_stdout_fl: bool = False, 
+            stdout_log_level: str = None, 
+            log_files: List[str]=None,
+            log_max_bytes: int = None, 
+            log_backup_count: int = None,
+        ) -> None:
         """
         Override of the publisher method which allows consumer-specific logging 
         to take precedence over the general logging configuration.
@@ -439,17 +454,26 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 )
             if LOGGING_CONFIG_FILES in consumer_logging_conf:
                 log_files = consumer_logging_conf[LOGGING_CONFIG_FILES]
-            if LOGGING_CONFIG_ROLLOVER in consumer_logging_conf:
-                log_rollover = consumer_logging_conf[LOGGING_CONFIG_ROLLOVER]
+            if LOGGING_CONFIG_MAX_BYTES in consumer_logging_conf:
+                log_max_bytes = consumer_logging_conf[LOGGING_CONFIG_MAX_BYTES]
+            if LOGGING_CONFIG_BACKUP_COUNT in consumer_logging_conf:
+                log_backup_count = consumer_logging_conf[LOGGING_CONFIG_BACKUP_COUNT]
 
         # Allow the hard-coded default deactivation of logging to be overridden 
         # by the consumer-specific logging config
         if not enable:
             return
 
-        return super().setup_logging(enable, log_level, log_format, 
-                                     add_stdout_fl, stdout_log_level, log_files,
-                                     log_rollover)
+        return super().setup_logging(
+            enable=enable, 
+            log_level=log_level, 
+            log_format=log_format, 
+            add_stdout_fl=add_stdout_fl, 
+            stdout_log_level=stdout_log_level, 
+            log_files=log_files,
+            log_max_bytes=log_max_bytes,
+            log_backup_count=log_backup_count,
+        )
     
     #######
     # Callback wrappers
@@ -513,8 +537,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                         monitoring_rk, original_error)
             except Exception as e:
                 self.log(f"Failed attempt to retry transaction that failed "
-                         "during callback. Error: {e}.",
-                        self.RK_LOG_WARNING)
+                         f"during callback. Error: {e}.", self.RK_LOG_WARNING)
                 # Fail the job if at any point the attempt to retry fails. 
                 self._fail_transaction(body_json, monitoring_rk)
         else:

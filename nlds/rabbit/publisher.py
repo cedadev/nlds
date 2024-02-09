@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timedelta
 import json
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Any
 import pathlib
 from collections.abc import Sequence
@@ -29,13 +29,14 @@ from ..server_config import (
     GENERAL_CONFIG_SECTION,
     RABBIT_CONFIG_SECTION, 
     LOGGING_CONFIG_SECTION, 
-    LOGGING_CONFIG_ROLLOVER, 
+    LOGGING_CONFIG_MAX_BYTES, 
     LOGGING_CONFIG_FILES, 
     LOGGING_CONFIG_STDOUT, 
     LOGGING_CONFIG_LEVEL, 
     LOGGING_CONFIG_STDOUT_LEVEL, 
     LOGGING_CONFIG_FORMAT, 
     LOGGING_CONFIG_ENABLE,
+    LOGGING_CONFIG_BACKUP_COUNT,
 )
 from .keepalive import KeepaliveDaemon
 from ..errors import RabbitRetryError
@@ -396,12 +397,20 @@ class RabbitMQPublisher():
                                 "%(levelname)s - %(message)s"),
         LOGGING_CONFIG_STDOUT: False,
         LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_WARNING,
-        LOGGING_CONFIG_ROLLOVER: "W0"
+        LOGGING_CONFIG_MAX_BYTES: 16*1024*1024,
+        LOGGING_CONFIG_BACKUP_COUNT: 0,
     }
-    def setup_logging(self, enable: bool = True, log_level: str = None, 
-                      log_format: str = None, add_stdout_fl: bool = False, 
-                      stdout_log_level: str = None, log_files: List[str]=None,
-                      log_rollover: str = None) -> None:
+    def setup_logging(
+            self, 
+            enable: bool = True, 
+            log_level: str = None, 
+            log_format: str = None, 
+            add_stdout_fl: bool = False, 
+            stdout_log_level: str = None, 
+            log_files: List[str]=None,
+            log_max_bytes: int = None, 
+            log_backup_count: int = None,
+        ) -> None:
         """
         Sets up logging for a publisher (i.e. the nlds-api server) using a set 
         number of configuration options from the logging interface. Each of 
@@ -430,10 +439,6 @@ class RabbitMQPublisher():
                                         object referencable by the file name. 
              
         """
-        # TODO: (2022-03-14) This has gotten a bit unwieldy, might be best to 
-        # strip back and keep it simpler.
-        # TODO: (2022-03-21) Or move this all to a mixin? 
-
         # Do not configure logging if not enabled at the internal level (note 
         # this can be overridden by consumer-specific config)
         if not enable:
@@ -497,15 +502,30 @@ class RabbitMQPublisher():
                                f"{str(e)}")
                 return
 
-            # If log files set then see what the rotation time should be
-            if (log_rollover is not None 
-                or LOGGING_CONFIG_ROLLOVER in global_logging_config):
+            # If log files set then see what the rotation bytes should be
+            if (log_max_bytes is not None 
+                or LOGGING_CONFIG_MAX_BYTES in global_logging_config):
                 try:
-                    if log_rollover is None: 
-                        log_rollover = global_logging_config[LOGGING_CONFIG_ROLLOVER]
+                    if log_max_bytes is None: 
+                        log_max_bytes = (
+                            global_logging_config[LOGGING_CONFIG_MAX_BYTES]
+                        )
                 except KeyError as e:
-                    logger.warning(f"Failed to load log rollover from config: "
+                    logger.warning(f"Failed to load log max bytes from config: "
                                    f"{str(e)}")
+                    return
+                
+            # If log files set then see what the number of backups should be
+            if (log_backup_count is not None 
+                or LOGGING_CONFIG_BACKUP_COUNT in global_logging_config):
+                try:
+                    if log_backup_count is None: 
+                        log_backup_count = (
+                            global_logging_config[LOGGING_CONFIG_BACKUP_COUNT]
+                        )
+                except KeyError as e:
+                    logger.warning(f"Failed to load log backup count from "
+                                   f"config: {str(e)}")
                     return
             
             # For each log file specified make and attach a filehandler with 
@@ -514,9 +534,10 @@ class RabbitMQPublisher():
                 for log_file in log_files:
                     try:
                         # Make log file in separate logger
-                        fh = TimedRotatingFileHandler(
+                        fh = RotatingFileHandler(
                             log_file,
-                            when=log_rollover,
+                            maxBytes=log_max_bytes,
+                            backupCount=log_backup_count,
                         )
                         # Use the same log_level and formatter as the base
                         fh.setLevel(getattr(logging, log_level.upper()))
