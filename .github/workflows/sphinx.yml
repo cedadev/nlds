@@ -1,9 +1,13 @@
 name: documentation
 
-on: push
+on: 
+  workflow_run:
+    workflows: [tests]
+    types: [completed]
 
 jobs:
   build:
+    # needs: [tests, coverage]
     runs-on: ubuntu-latest
     steps:
     # Checkout and build the docs with sphinx
@@ -13,6 +17,18 @@ jobs:
       with: 
         docs-folder: "docs/"
         # pre-build-command: "mkdir /tmp/sphinx-log"
+    - name: "Download badge"
+      uses: actions/download-artifact@v3
+      with:
+        name: "covbadge"
+    - name: "Download coverage report"
+      uses: actions/download-artifact@v3
+      with:
+        name: "html-report"
+    - name: "Copy coverage data into html folder"
+      run: |
+        mv htmlcov/ docs/build/html/htmlcov
+        mv coverage.svg docs/build/html/htmlcov/coverage.svg
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
