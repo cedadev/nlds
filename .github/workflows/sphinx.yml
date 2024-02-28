@@ -1,10 +1,6 @@
 name: documentation
 
 on: 
-  push:
-    branches: [ "main", "development" ]
-  pull_request:
-    branches: [ "main", "development" ]
   workflow_run:
     workflows: [tests]
     types: [completed]
