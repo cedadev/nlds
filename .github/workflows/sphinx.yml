@@ -1,4 +1,4 @@
-name: Sphinx build
+name: documentation
 
 on: push
 
