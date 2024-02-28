@@ -60,7 +60,7 @@ jobs:
           python-version: "3.11"
       - name: "Install dependencies"
         run: |
-          python -m pip install --upgrade coverage[toml]
+          python -m pip install --upgrade coverage[toml] coverage-badge
       - name: "Download coverage data"
         uses: actions/download-artifact@v3
         with:
@@ -86,3 +86,9 @@ jobs:
         with:
           name: covbadge
           path: coverage.svg
+      # - name: Deploy
+      #   uses: peaceiris/actions-gh-pages@v3
+      #   if: github.ref == 'refs/heads/main'
+      #   with:
+      #     github_token: ${{ secrets.GITHUB_TOKEN }}
+      #     publish_dir: docs/build/html
