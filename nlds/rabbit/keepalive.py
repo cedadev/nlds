@@ -55,7 +55,6 @@ class KeepaliveDaemon():
         """
         # While we have an open connection continue the process 
         while self.connection.is_open and not self.kill_event.is_set():
-            print(f"{self.name}: {self.get_thread_names()}, {self.poll_event.is_set()}")
             # If we're actively consuming and the connection is blocked, then 
             # periodically call process_data_events to keep the connection open.
             if self.poll_event.is_set():
