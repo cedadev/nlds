@@ -39,12 +39,13 @@ jobs:
     - name: Test with pytest
       run: |
         python -m pytest --cov=.
+        python -m coverage run -m pytest report
         cp .coverage .coverage.${{ matrix.python-version }}
-    - name: upload coverage report
+    - name: Upload coverage report
       uses: actions/upload-artifact@v1
       with:
           name: "coverage-data"
-          path: .coverage.*
+          path: .coverage.${{ matrix.python-version }}
           if-no-files-found: ignore
 
   coverage:
