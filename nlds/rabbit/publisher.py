@@ -16,11 +16,8 @@ from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Any
 import pathlib
 from collections.abc import Sequence
-import threading as thr
-import time
 
 import pika
-from pika.connection import Connection
 from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
 from retry import retry
 
