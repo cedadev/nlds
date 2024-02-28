@@ -4,6 +4,7 @@ CEDA Near-Line Data Store
 [![Tests](https://github.com/cedadev/nlds/actions/workflows/testing.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml)
 [![Documentation](https://github.com/cedadev/nlds/actions/workflows/sphinx.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/sphinx.yml)
 [![PEP8](https://img.shields.io/badge/code%20style-pep8-orange.svg)](https://www.python.org/dev/peps/pep-0008/)
+[![Coverage](https://github.com/cedadev/nlds/actions/workflows/testing.yml/coverage.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml/htmlcov)
 
 This is the HTTP API server code for the CEDA Near-Line Data Store (NLDS).
 It requires the use of the NLDS client, either the command line or library:
