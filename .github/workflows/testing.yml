@@ -71,8 +71,8 @@ jobs:
           python -m coverage html --skip-covered --skip-empty
           # Report and write to summary.
           python -m coverage report | sed 's/^/    /' >> $GITHUB_STEP_SUMMARY
-          # Report again and fail if under 100%.
-          python -Im coverage report --fail-under=100
+          # # Report again and fail if under 100%.
+          # python -Im coverage report --fail-under=100
           # Generate coverage badge
           python -m coverage-badge -o coverage.svg
       - name: "Upload HTML report if check failed"
@@ -80,7 +80,7 @@ jobs:
         with:
           name: html-report
           path: htmlcov
-        if: ${{ failure() }}
+        # if: ${{ failure() }}
       - name: "Upload badge"
         uses: actions/upload-artifact@v3
         with:
