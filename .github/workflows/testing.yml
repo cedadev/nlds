@@ -73,22 +73,27 @@ jobs:
           python -m coverage report | sed 's/^/    /' >> $GITHUB_STEP_SUMMARY
           # # Report again and fail if under 100%.
           # python -Im coverage report --fail-under=100
-          # Generate coverage badge
+          # Generate coverage badge and then combine with coverage report html
           coverage-badge -o coverage.svg
+          cp coverage.svg hmlcov/coverage.svg
+          mkdir -p docs/build/html
+          cp htmlcov/ docs/build/html/htmlcov.${GITHUB_REF_NAME}
       - name: "Upload HTML report if check failed"
         uses: actions/upload-artifact@v3
         with:
           name: html-report
           path: htmlcov
+        # Commented out to save future 
         # if: ${{ failure() }}
       - name: "Upload badge"
         uses: actions/upload-artifact@v3
         with:
           name: covbadge
           path: coverage.svg
-      # - name: Deploy
-      #   uses: peaceiris/actions-gh-pages@v3
-      #   if: github.ref == 'refs/heads/main'
-      #   with:
-      #     github_token: ${{ secrets.GITHUB_TOKEN }}
-      #     publish_dir: docs/build/html
+      # Attempt to add the coverage badge to the gh-pages branch 
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/build/html
+          keep_files: true
