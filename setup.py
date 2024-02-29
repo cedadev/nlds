@@ -1,5 +1,6 @@
 import os
 from setuptools import setup, find_packages
+from nlds import __version__
 
 with open(os.path.join(os.path.dirname(__file__), 'README.md')) as readme:
     README = readme.read()
@@ -9,7 +10,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='nlds',
-    version='0.0.2',
+    version=__version__,
     packages=find_packages(),
     install_requires=[
         'fastapi',
@@ -27,7 +28,7 @@ setup(
         'scripts': ['*'],
     },
     license='LICENSE.txt',  # example license
-    description=('REST-API server for CEDA Near-Line Data Store'),
+    description=('REST-API server and consumers for CEDA Near-Line Data Store'),
     long_description=README,
     url='http://www.ceda.ac.uk/',
     author='Neil Massey',
