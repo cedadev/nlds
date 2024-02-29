@@ -77,7 +77,7 @@ jobs:
           coverage-badge -o coverage.svg
           cp coverage.svg htmlcov/coverage.svg
           mkdir -p docs/build/html
-          cp htmlcov/ docs/build/html/htmlcov.${GITHUB_REF_NAME}
+          cp -r htmlcov/ docs/build/html/htmlcov.${GITHUB_REF_NAME}
       - name: "Upload HTML report if check failed"
         uses: actions/upload-artifact@v3
         with:
