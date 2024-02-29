@@ -75,7 +75,7 @@ jobs:
           # python -Im coverage report --fail-under=100
           # Generate coverage badge and then combine with coverage report html
           coverage-badge -o coverage.svg
-          cp coverage.svg hmlcov/coverage.svg
+          cp coverage.svg htmlcov/coverage.svg
           mkdir -p docs/build/html
           cp htmlcov/ docs/build/html/htmlcov.${GITHUB_REF_NAME}
       - name: "Upload HTML report if check failed"
