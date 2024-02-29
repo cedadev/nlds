@@ -76,8 +76,8 @@ jobs:
           # Generate coverage badge and then combine with coverage report html
           coverage-badge -o coverage.svg
           cp coverage.svg htmlcov/coverage.svg
-          mkdir -p docs/build/html/htmlcov.${GITHUB_REF_NAME}
-          cp -r htmlcov/ docs/build/html/htmlcov.${GITHUB_REF_NAME}
+          mkdir -p docs/build/html/htmlcov/${GITHUB_REF_NAME}
+          cp -r htmlcov/ docs/build/html/htmlcov/${GITHUB_REF_NAME}
       - name: "Upload HTML report if check failed"
         uses: actions/upload-artifact@v3
         with:
@@ -95,5 +95,6 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/build/html
+          publish_dir: docs/build/html/htmlcov
+          desination_dir: htmlcov/
           keep_files: true
