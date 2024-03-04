@@ -87,6 +87,7 @@ An additional CDC used by the microservices which require reading from or writin
 to the JASMIN filesystem are the filesystem mounts, which will mount the group 
 workspaces (in either read or write mode) onto the appropriate path (``/gws`` or 
 ``group_workspaces``). This is used by the following containers:
+
 * Transfer-Put
 * Transfer-Get
 * Indexer
