@@ -21,6 +21,7 @@ import json
 from json.decoder import JSONDecodeError
 from urllib3.exceptions import HTTPError
 import signal
+import threading as thr
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -32,11 +33,19 @@ from pydantic import BaseModel
 from minio.error import S3Error
 
 from .publisher import RabbitMQPublisher
-from ..server_config import (LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FILES, 
-                             LOGGING_CONFIG_FORMAT, LOGGING_CONFIG_LEVEL,    
-                             LOGGING_CONFIG_SECTION, LOGGING_CONFIG_STDOUT, 
-                             RABBIT_CONFIG_QUEUES, LOGGING_CONFIG_STDOUT_LEVEL, 
-                             RABBIT_CONFIG_QUEUE_NAME, LOGGING_CONFIG_ROLLOVER)
+from ..server_config import (
+    LOGGING_CONFIG_ENABLE, 
+    LOGGING_CONFIG_FILES, 
+    LOGGING_CONFIG_FORMAT, 
+    LOGGING_CONFIG_LEVEL,    
+    LOGGING_CONFIG_SECTION, 
+    LOGGING_CONFIG_STDOUT, 
+    LOGGING_CONFIG_STDOUT_LEVEL, 
+    LOGGING_CONFIG_BACKUP_COUNT,
+    LOGGING_CONFIG_MAX_BYTES,
+    RABBIT_CONFIG_QUEUE_NAME, 
+    RABBIT_CONFIG_QUEUES, 
+)
 from ..details import PathDetails, Retries
 from ..errors import RabbitRetryError, CallbackError
 
@@ -198,6 +207,9 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # Controls default behaviour of logging when certain exceptions are 
         # caught in the callback. 
         self.print_tracebacks_fl = True
+
+        # List of active threads created by consumption process
+        self.threads = []
 
         # Set up the logging and pass through constructor parameter
         self.setup_logging(enable=setup_logging_fl)
@@ -409,10 +421,17 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         return retries
     
 
-    def setup_logging(self, enable=False, log_level: str = None, 
-                      log_format: str = None, add_stdout_fl: bool = False, 
-                      stdout_log_level: str = None, log_files: List[str]=None,
-                      log_rollover: str = None) -> None:
+    def setup_logging(
+            self, 
+            enable=False, 
+            log_level: str = None, 
+            log_format: str = None, 
+            add_stdout_fl: bool = False, 
+            stdout_log_level: str = None, 
+            log_files: List[str]=None,
+            log_max_bytes: int = None, 
+            log_backup_count: int = None,
+        ) -> None:
         """
         Override of the publisher method which allows consumer-specific logging 
         to take precedence over the general logging configuration.
@@ -435,17 +454,26 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 )
             if LOGGING_CONFIG_FILES in consumer_logging_conf:
                 log_files = consumer_logging_conf[LOGGING_CONFIG_FILES]
-            if LOGGING_CONFIG_ROLLOVER in consumer_logging_conf:
-                log_rollover = consumer_logging_conf[LOGGING_CONFIG_ROLLOVER]
+            if LOGGING_CONFIG_MAX_BYTES in consumer_logging_conf:
+                log_max_bytes = consumer_logging_conf[LOGGING_CONFIG_MAX_BYTES]
+            if LOGGING_CONFIG_BACKUP_COUNT in consumer_logging_conf:
+                log_backup_count = consumer_logging_conf[LOGGING_CONFIG_BACKUP_COUNT]
 
         # Allow the hard-coded default deactivation of logging to be overridden 
         # by the consumer-specific logging config
         if not enable:
             return
 
-        return super().setup_logging(enable, log_level, log_format, 
-                                     add_stdout_fl, stdout_log_level, log_files,
-                                     log_rollover)
+        return super().setup_logging(
+            enable=enable, 
+            log_level=log_level, 
+            log_format=log_format, 
+            add_stdout_fl=add_stdout_fl, 
+            stdout_log_level=stdout_log_level, 
+            log_files=log_files,
+            log_max_bytes=log_max_bytes,
+            log_backup_count=log_backup_count,
+        )
     
     #######
     # Callback wrappers
@@ -509,8 +537,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                                         monitoring_rk, original_error)
             except Exception as e:
                 self.log(f"Failed attempt to retry transaction that failed "
-                         "during callback. Error: {e}.",
-                        self.RK_LOG_WARNING)
+                         f"during callback. Error: {e}.", self.RK_LOG_WARNING)
                 # Fail the job if at any point the attempt to retry fails. 
                 self._fail_transaction(body_json, monitoring_rk)
         else:
@@ -652,9 +679,16 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         This should be performed on all consumers and should be left untouched 
         in child implementations.
         """
+        ack_fl = None 
+        # Begin the 
+        self.keepalive.start_polling()
+
+        # Get and log thread info
+        thread_id = thr.get_ident()
+        self.log(f"Callback started in thread {thread_id}", self.RK_LOG_INFO)
+
         # Wrap callback with a try-except catching a selection of common 
         # errors which can be caught without stopping consumption.
-        ack_fl = None 
         try:
             ack_fl = self.callback(ch, method, properties, body, connection)
         except self.EXPECTED_EXCEPTIONS as original_error:
@@ -679,6 +713,33 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 self.nack_message(ch, method.delivery_tag, connection)
             else:
                 self.acknowledge_message(ch, method.delivery_tag, connection)
+        
+        # Clear the consuming event so the keepalive stops polling the connection
+        self.keepalive.stop_polling()
+
+
+    def _start_callback_threaded(
+            self, 
+            ch: Channel, 
+            method: Method, 
+            properties: Header, 
+            body: bytes, 
+            connection: Connection
+        ) -> None:
+        """Consumption method which starts the _wrapped_callback() in a new 
+        thread so the connection can be kept alive in the main thread. Allows 
+        for both long-running tasks and multithreading, though in the case of 
+        the latter this may not be as efficient as just scaling out to another 
+        consumer. 
+
+        TODO: (2024-02-08) This currently doesn't work but I'll leave it here in 
+        case we return to it further down the line. 
+        """
+        t = thr.Thread(target=self._wrapped_callback, args=(ch, method, 
+                                                            properties, 
+                                                            body, connection))
+        t.start()
+        self.threads.append()
 
             
     def declare_bindings(self) -> None:
@@ -774,4 +835,11 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
                 break
 
         self.channel.stop_consuming()
+
+        # Wait for all threads to complete
+        # TODO: what happens if we try to sigterm?
+        for t in self.threads:
+            t.join()
+        
+        self.connection.close()
 

@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timedelta
 import json
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Any
 import pathlib
 from collections.abc import Sequence
@@ -26,14 +26,16 @@ from ..server_config import (
     GENERAL_CONFIG_SECTION,
     RABBIT_CONFIG_SECTION, 
     LOGGING_CONFIG_SECTION, 
-    LOGGING_CONFIG_ROLLOVER, 
+    LOGGING_CONFIG_MAX_BYTES, 
     LOGGING_CONFIG_FILES, 
     LOGGING_CONFIG_STDOUT, 
     LOGGING_CONFIG_LEVEL, 
     LOGGING_CONFIG_STDOUT_LEVEL, 
     LOGGING_CONFIG_FORMAT, 
     LOGGING_CONFIG_ENABLE,
+    LOGGING_CONFIG_BACKUP_COUNT,
 )
+from .keepalive import KeepaliveDaemon
 from ..errors import RabbitRetryError
 
 logger = logging.getLogger("nlds.root")
@@ -194,6 +196,9 @@ class RabbitMQPublisher():
       
         self.connection = None
         self.channel = None
+        self.heartbeat = self.config.get("heartbeat") or 300
+        self.keepalive = None
+
         try:
             # Do some basic verification of the general retry delays. 
             self.retry_delays = self.general_config[self.RETRY_DELAYS]
@@ -207,6 +212,7 @@ class RabbitMQPublisher():
         if setup_logging_fl:
             self.setup_logging()
     
+
     @retry(
         RabbitRetryError, 
         tries=-1, 
@@ -221,7 +227,11 @@ class RabbitMQPublisher():
                 # Get the username and password for rabbit
                 rabbit_user = self.config["user"]
                 rabbit_password = self.config["password"]
-                connection_heartbeat = self.config.get("heartbeat") or 300
+
+                # Kill any daemon threads before we make a new one for the new 
+                # connection
+                if self.keepalive:
+                    self.keepalive.kill()
 
                 # Start the rabbitMQ connection
                 connection = pika.BlockingConnection(
@@ -230,9 +240,11 @@ class RabbitMQPublisher():
                         credentials=pika.PlainCredentials(rabbit_user, 
                                                           rabbit_password),
                         virtual_host=self.config["vhost"],
-                        heartbeat=connection_heartbeat,
+                        heartbeat=self.heartbeat,
                     )
                 )
+                self.keepalive = KeepaliveDaemon(connection, self.heartbeat)
+                self.keepalive.start()
 
                 # Create a new channel with basic qos
                 channel = connection.channel()
@@ -250,6 +262,7 @@ class RabbitMQPublisher():
                          "establish a connection. Retrying...")
             logger.debug(f"{type(e).__name__}: {e}")
             raise RabbitRetryError(str(e), ampq_exception=e)
+
 
     def declare_bindings(self) -> None:
         """Go through list of exchanges from config file and declare each. Will 
@@ -358,6 +371,7 @@ class RabbitMQPublisher():
             # the message will never be sent. 
             # raise RabbitRetryError(str(e), ampq_exception=e)
 
+
     def get_retry_delay(self, retries: int):
         """Simple convenience function for getting the delay (in seconds) for an 
         indexlist with a given number of retries. Works off of the member 
@@ -368,8 +382,10 @@ class RabbitMQPublisher():
         retries = min(retries, len(self.retry_delays) - 1)
         return int(self.retry_delays[retries])
 
+
     def close_connection(self) -> None:
         self.connection.close()
+
 
     _default_logging_conf = {
         LOGGING_CONFIG_ENABLE: True,
@@ -378,12 +394,20 @@ class RabbitMQPublisher():
                                 "%(levelname)s - %(message)s"),
         LOGGING_CONFIG_STDOUT: False,
         LOGGING_CONFIG_STDOUT_LEVEL: RK_LOG_WARNING,
-        LOGGING_CONFIG_ROLLOVER: "W0"
+        LOGGING_CONFIG_MAX_BYTES: 16*1024*1024,
+        LOGGING_CONFIG_BACKUP_COUNT: 0,
     }
-    def setup_logging(self, enable: bool = True, log_level: str = None, 
-                      log_format: str = None, add_stdout_fl: bool = False, 
-                      stdout_log_level: str = None, log_files: List[str]=None,
-                      log_rollover: str = None) -> None:
+    def setup_logging(
+            self, 
+            enable: bool = True, 
+            log_level: str = None, 
+            log_format: str = None, 
+            add_stdout_fl: bool = False, 
+            stdout_log_level: str = None, 
+            log_files: List[str]=None,
+            log_max_bytes: int = None, 
+            log_backup_count: int = None,
+        ) -> None:
         """
         Sets up logging for a publisher (i.e. the nlds-api server) using a set 
         number of configuration options from the logging interface. Each of 
@@ -412,10 +436,6 @@ class RabbitMQPublisher():
                                         object referencable by the file name. 
              
         """
-        # TODO: (2022-03-14) This has gotten a bit unwieldy, might be best to 
-        # strip back and keep it simpler.
-        # TODO: (2022-03-21) Or move this all to a mixin? 
-
         # Do not configure logging if not enabled at the internal level (note 
         # this can be overridden by consumer-specific config)
         if not enable:
@@ -479,15 +499,30 @@ class RabbitMQPublisher():
                                f"{str(e)}")
                 return
 
-            # If log files set then see what the rotation time should be
-            if (log_rollover is not None 
-                or LOGGING_CONFIG_ROLLOVER in global_logging_config):
+            # If log files set then see what the rotation bytes should be
+            if (log_max_bytes is not None 
+                or LOGGING_CONFIG_MAX_BYTES in global_logging_config):
                 try:
-                    if log_rollover is None: 
-                        log_rollover = global_logging_config[LOGGING_CONFIG_ROLLOVER]
+                    if log_max_bytes is None: 
+                        log_max_bytes = (
+                            global_logging_config[LOGGING_CONFIG_MAX_BYTES]
+                        )
                 except KeyError as e:
-                    logger.warning(f"Failed to load log rollover from config: "
+                    logger.warning(f"Failed to load log max bytes from config: "
                                    f"{str(e)}")
+                    return
+                
+            # If log files set then see what the number of backups should be
+            if (log_backup_count is not None 
+                or LOGGING_CONFIG_BACKUP_COUNT in global_logging_config):
+                try:
+                    if log_backup_count is None: 
+                        log_backup_count = (
+                            global_logging_config[LOGGING_CONFIG_BACKUP_COUNT]
+                        )
+                except KeyError as e:
+                    logger.warning(f"Failed to load log backup count from "
+                                   f"config: {str(e)}")
                     return
             
             # For each log file specified make and attach a filehandler with 
@@ -496,9 +531,10 @@ class RabbitMQPublisher():
                 for log_file in log_files:
                     try:
                         # Make log file in separate logger
-                        fh = TimedRotatingFileHandler(
+                        fh = RotatingFileHandler(
                             log_file,
-                            when=log_rollover,
+                            maxBytes=log_max_bytes,
+                            backupCount=log_backup_count,
                         )
                         # Use the same log_level and formatter as the base
                         fh.setLevel(getattr(logging, log_level.upper()))
@@ -521,6 +557,7 @@ class RabbitMQPublisher():
                         # at startup seems excessive? 
                         logger.warning(f"Failed to create log file for "
                                        f"{log_file}: {str(e)}")
+
 
     def _log(self, log_message: str, log_level: str, target: str, 
             **kwargs) -> None:
@@ -560,12 +597,14 @@ class RabbitMQPublisher():
         message = self.create_log_message(log_message, target)
         self.publish_message(routing_key, message)
     
+    
     def log(self, log_message: str, log_level: str, target: str = None, 
             **kwargs) -> None:
         # Attempt to log to publisher's name
         if not target:
             target = self.name
         self._log(log_message, log_level, target, **kwargs)
+
 
     @classmethod
     def create_log_message(cls, message: str, target: str, 
