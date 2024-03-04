@@ -3,28 +3,38 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to Near-line Data Store's documentation!
-================================================
+Near-line Data Store documentation
+==================================
+
+This is the documentation for the Near-line Data Store (NLDS), a tool developed 
+at JASMIN to provide a single interface for disk, object storage and tape. 
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents
 
    Getting started <home>
-   Specification <specification>
-   NLDS Server API <nlds-server>
-   NLDS Processors API <nlds-processors>
-   Database Migrations with Alembic <alembic-migrations>
+   Specification document <specification>
+   Using the system status page <system-status>
+   The server config file <server-config/server-config>
+   Server config examples <server-config/examples>
+   Deployment <deployment>
 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Advanced
+   :maxdepth: 1
+   :caption: Development
 
-   The server config file <server-config/server-config>
-   Server config examples <server-config/examples>
-   Setting up a CTA tape emulator <cta-emulator>
-   Using system status <system-status>
+   Setting up a CTA tape emulator <development/cta-emulator>
+   Database Migrations with Alembic <development/alembic-migrations>
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: API Reference
+
+   NLDS Processors <api-reference/nlds-processors>
+   NLDS Server <api-reference/nlds-server>
 
 
 Indices and tables
