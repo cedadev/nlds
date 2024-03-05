@@ -31,7 +31,7 @@ setup(
     description=('REST-API server and consumers for CEDA Near-Line Data Store'),
     long_description=README,
     url='http://www.ceda.ac.uk/',
-    author='Neil Massey',
+    author='Neil Massey & Jack Leland',
     author_email='neil.massey@stfc.ac.uk',
     classifiers=[
         'Environment :: Web Environment',
