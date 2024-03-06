@@ -119,7 +119,7 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: "covbadge"
-        path: "docs/build/html/coverage.svg"
+        path: "docs/build/html"
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
