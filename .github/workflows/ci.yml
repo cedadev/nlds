@@ -109,17 +109,15 @@ jobs:
       uses: ammaraskar/sphinx-action@master
       with: 
         docs-folder: "docs/"
-        pre-build-command: "mkdir docs/build/html && chown 1001:1001 docs/build/html"
+        pre-build-command: "mkdir -p docs/build/html && chmod a+x docs/build/html && chown runner:docker docs/build/html"
     - name: "Download coverage report"
       uses: actions/download-artifact@v3
       with:
         name: "html-report"
-        path: "htmlcov/"
+        path: "docs/build/html/htmlcov/"
     - name: Display permissions information
       run: |
-        ls -la htmlcov
         ls -la docs/build/html
-
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
