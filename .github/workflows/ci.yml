@@ -1,7 +1,7 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: tests
+name: ci
 
 on:
   push:
@@ -110,14 +110,11 @@ jobs:
       with: 
         docs-folder: "docs/"
         # pre-build-command: "mkdir /tmp/sphinx-log"
-    - name: "Download badge"
-      uses: actions/download-artifact@v3
-      with:
-        name: "covbadge"
     - name: "Download coverage report"
       uses: actions/download-artifact@v3
       with:
         name: "html-report"
+        path: "htmlcov/"
     - name: "Copy coverage data into html folder"
       run: |
         mv htmlcov/ docs/build/html/htmlcov
