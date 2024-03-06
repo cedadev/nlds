@@ -20,7 +20,7 @@ from nlds import __version__
 # -- Project information -----------------------------------------------------
 
 project = 'Near-line Data Store'
-copyright = '2022, Neil Massey & Jack Leland'
+copyright = '2022-2024, Neil Massey & Jack Leland'
 author = 'Neil Massey & Jack Leland'
 
 # The full version, including alpha/beta/rc tags
