@@ -104,11 +104,14 @@ workspaces (in either read or write mode) onto the appropriate path (``/gws`` or
     mounting (``/xfc``, ``/home``) but this is not currently possible with the 
     version of Kubernetes installed on wigbiorg
 
-A further CDC is the postgres configuration, which is obviously required by the 
-database-interacting consumers (Catalog and Monitor) and, again, fully described 
-in :doc:`server-config/server-config`. However an additional part of this 
-process is running any database migrations to the database schema is up to date. 
-This will be discussed in more detail in section :ref:`db_migration`.
+A further CDC is the PostgreSQL configuration, which is obviously required by 
+the database-interacting consumers (Catalog and Monitor) and, again, fully 
+described in :doc:`server-config/server-config`. The production system uses the 
+databases ``nlds_catalog`` and ``nlds_monitor`` on the Postgres server 
+``db5.ceda.ac.uk`` hosted and maintained by CEDA. However, an additional part of 
+this configuration is running any database migrations to the database schema is 
+up to date. This will be discussed in more detail in section 
+:ref:`db_migration`.
 
 There are some slightly more complex deployment configurations involved in the 
 rest of the setup, which are described below. 
@@ -211,11 +214,81 @@ in the standard way for quick diagnosis of problems with the NLDS.
 Scaling
 -------
 
-A core part of the design philosophy of the NLDS was it's microservice 
-architecture. 
+A core part of the design philosophy of the NLDS was its microservice 
+architecture, which allows for any of the microservices to be scaled out in an 
+embarrassingly parallelisable way to meet changing demand. This is easily 
+achieved in Kubernetes through simply spinning up additional containers for a 
+given microservice using the ``replicaCount`` `parameter <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/chart/values.yaml?ref_type=heads#L21>`_.
+By default this value is 1 but has been increased for certain microservices 
+deemed to be bottlenecks during beta testing, notably the `Transfer-Put microservice <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/conf/transfer_put/common.yaml?ref_type=heads#L17>`_
+where it is set to 8 and the Transfer-Get where is set to 2. 
+
+.. note::
+    While correct at time of writing, these values are subject to change – it 
+    may be that other microservices are found which require scaling and those 
+    above do not require as many replicas as currently allocated. 
+
+    An ideal solution would be to automatically scale the deployments based on 
+    the size of a ``Rabbit`` queue for a given microservice, and while this is 
+    `in theory` `possible <https://ryanbaker.io/2019-10-07-scaling-rabbitmq-on-k8s/>`_,
+    this was not possible with the current installation of Kubernetes without 
+    additional plugins, namely `Prometheus`.
+
+The other aspect of scaling is the resource requested by each of the pods, which 
+have current `default values <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/conf/common.yaml?ref_type=heads#L7>`_
+and an exception of greater resource for the transfer processors. The values for 
+these were arrived at by using the command::
+
+    kubectl top pod -n {NLDS_NAMESPACE}
+
+.. |sc| raw:: html
+
+    <code class="code docutils literal notranslate">Ctrl + `</code>
+
+within the kubectl shell on the appropriate rancher cluster (accessible via the 
+shell button in the top right, or shortcut |sc|). ``{NLDS_NAMESPACE}``will need 
+to be replaced with the appropriate namespace for the cluster you are on, i.e.::
+
+    kubectl top pod -n nlds                     # on wigbiorg
+    kubectl top pod -n nlds-consumers-master    # for consumers on staging cluster
+    kubectl top pod -n nlds-api-master          # for api-server on staging cluster
+
+and, as before, these will likely need to be adjusted as understanding of the 
+actual resource use of each of the microservices evolves. 
+
 
 
 .. _staging:
 
 Staging Deployment
 ------------------
+
+As alluded to earlier, there are two versions of the NLDS running: (a) the 
+production system on wigbiorg, and (b) the staging/beta testing system on the 
+staging cluster (``ceda-k8s``). These have similar but slightly different 
+configurations, the details of which are summarised in the below table. Like 
+everything on this page, this was true at the time of writing (2024-03-06).
+
+
+.. list-table:: Staging vs. Production Config
+   :widths: 20 40 40
+   :header-rows: 1
+
+   * - System
+     - Staging
+     - Production
+   * - Tape
+     - Pre-production instance (``antares-preprod-fac.stfc.ac.uk``)
+     - Pre-production instance (``antares-preprod-fac.stfc.ac.uk``)
+   * - Database
+     - on ``db5`` - ``nlds_{db_name}_staging``
+     - on ``db5`` - ``nlds_{db_name}``
+   * - Logging
+     - To ``fluentbit`` with tags ``nlds_statging_{service_name}_log``
+     - To ``fluentbit`` with tags ``nlds_prod_{service_name}_log``
+   * - Object store
+     - Uses the ``cedaproc-o`` tenancy 
+     - Uses ``nlds-cache-02-o`` tenancy, ``nlds-cache-01-o`` also available
+   * - API Server
+     - `https://nlds-master.130.246.130.221.nip.io/ <https://nlds-master.130.246.130.221.nip.io/docs>`_ (firewalled)
+     - `https://nlds.jasmin.ac.uk/ <https://nlds.jasmin.ac.uk/docs>`_ (public, ssl secured)
