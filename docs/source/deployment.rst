@@ -48,18 +48,19 @@ The string after each of these corresponds to the image's location on CEDA's
 Harbor registry (and therefore what tag/registry address to use to ``docker 
 pull`` each of them). As may be obvious, the FastAPI server runs on the 
 ``Generic Server`` image and contains an installation of asgi, building upon the 
-``asgi`` [base-image], to actually run the server. The rest run on the ``Generic 
-Consumer`` image, which has an installation of the NLDS repo, along 
-with its dependencies, to allow it to run a given consumer. The only dependency 
-which isn't included is xrootd as it is a very large and long installation 
-process and unnecessary to the running of the non-tape consumers. Therefore the 
-``Tape Consumer`` image was created, which appropriately builds upon the 
-``Geneic Consumer`` image with an additional installation of ``xrootd`` with 
-which to run tape commands. The two tape consumers, ``Archive-Put`` and 
-``Archive-Get``, run on containers using this image.
+``asgi`` `base-image <https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi>`_, 
+to actually run the server. The rest run on the ``Generic Consumer`` image, 
+which has an installation of the NLDS repo, along with its dependencies, to 
+allow it to run a given consumer. The only dependency which isn't included is 
+xrootd as it is a very large and long installation process and unnecessary to 
+the running of the non-tape consumers. Therefore the ``Tape Consumer`` image was 
+created, which appropriately builds upon the ``Geneic Consumer`` image with an 
+additional installation of ``xrootd`` with which to run tape commands. The two 
+tape consumers, ``Archive-Put`` and ``Archive-Get``, run on containers using 
+this image.
 
 The two consumer containers run as the user NLDS, which is an official JASMIN 
-user at uid=7054096 and is baked into the container (i.e. unconfigurable).
+user at ``uid=7054096`` and is baked into the container (i.e. unconfigurable).
 Relatedly, every container runs with config associating the NLDS user with 
 supplemental groups, the list of which constitutes every group-workspace on 
 JASMIN. The list was generated with the command::
@@ -67,7 +68,7 @@ JASMIN. The list was generated with the command::
     ldapsearch -LLL -x -H ldap://homer.esc.rl.ac.uk -b "ou=ceda,ou=Groups,o=hpc,dc=rl,dc=ac,dc=uk"
 
 This will need to be periodically rerun and the output reformatted to update the 
-list of ``supplementalGroups`` in [this config file].
+list of ``supplementalGroups`` in `this config file <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/conf/common.yaml?ref_type=heads#L14-515>`_.
 
 Each of the containers will also have specific config and specific deployment 
 setup to help the container perform its particular task its particular task.  
@@ -80,8 +81,9 @@ tasks, which some, or all, of the containers make use of to function.
 
 The most commonly used is the ``nslcd`` pod which provides the containers with 
 up-to-date uid and gid information from the LDAP servers. This directly uses the 
-[``nslcd``] image developed for the notebook server, and runs as a side-car in 
-every deployed pod to periodically poll the LDAP servers to provide names and 
+`nslcd <https://gitlab.ceda.ac.uk/jasmin-notebooks/jasmin-notebooks/-/tree/master/images/nslcd>`_ 
+image developed for the notebook server, and runs as a side-car in every 
+deployed pod to periodically poll the LDAP servers to provide names and 
 permissions information to the main container in the pod (the consumer) so that 
 file permissions can be handled properly. In other words, it ensures the 
 ``passwd`` file on the consumer container is up to date, and therefore that the 
@@ -181,7 +183,7 @@ The, relatively new, solution that exists on the CEDA cluster is the use of
 `fluentd`, and more precisely `fluentbit <https://fluentbit.io/how-it-works/>`_, 
 to aggregate logs from the NLDS logging microservice and send them to a single 
 external location running `fluentd` – currently the stats-collection virtual 
-machine run on JASMIN. Each log sent to the `fluentd`` service is tagged with a 
+machine run on JASMIN. Each log sent to the `fluentd` service is tagged with a 
 string representing the particular microservice log file it was collected from, 
 e.g. the logs from the indexer microservice on the staging deployment are tagged 
 as:: 
@@ -189,9 +191,9 @@ as::
     nlds_staging_index_q_log
 
 This is practically achieved through the use of a sidecar – a further container 
-running in teh same pod as the logging container – running the fluentbit image 
-as defined by the `fluentbit helm chart <https://gitlab.ceda.ac.uk/cedaci/helm-charts>`_. 
-The full `fluentbit`` config, including the full list of tags, can be found `in 
+running in the same pod as the logging container – running the ``fluentbit`` 
+image as defined by the `fluentbit helm chart <https://gitlab.ceda.ac.uk/cedaci/helm-charts>`_. 
+The full ``fluentbit`` config, including the full list of tags, can be found `in 
 the logging config yamls <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/tree/master/conf/logger>`_.
 When received by the fluentd server, each tagged log is collated into a larger 
 log file for help with debugging at some later date. The log files on the 
@@ -200,7 +202,7 @@ not exceed the pod's allocated memory limit.
 
 .. note::
     The `fluentbit` service is still in its infancy and subject to change at 
-    short notice as the system & helm chart get more widely adopted. For example 
+    short notice as the system & helm chart get more widely adopted. For example, 
     the length of time log files are kept on the stats machine has not been 
     finalised yet. 
 
@@ -246,7 +248,7 @@ these were arrived at by using the command::
     <code class="code docutils literal notranslate">Ctrl + `</code>
 
 within the kubectl shell on the appropriate rancher cluster (accessible via the 
-shell button in the top right, or shortcut |sc|). ``{NLDS_NAMESPACE}``will need 
+shell button in the top right, or shortcut |sc|). ``{NLDS_NAMESPACE}`` will need 
 to be replaced with the appropriate namespace for the cluster you are on, i.e.::
 
     kubectl top pod -n nlds                     # on wigbiorg
@@ -295,4 +297,7 @@ everything on this page, this was true at the time of writing (2024-03-06).
 
 
 .. Possible additional sections:
+.. - Helm charts?
+.. - API Server config?    (this is related to Helm charts)
+.. - NLDS chown
 .. - 
