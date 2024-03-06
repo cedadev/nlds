@@ -114,10 +114,7 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: "html-report"
-        path: "htmlcov/"
-    - name: "Copy coverage data into html folder"
-      run: |
-        cp -r htmlcov/ docs/build/html/htmlcov
+        path: "docs/build/html/htmlcov/"
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
