@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Welcome to Near-line Data Store’s documentation! &mdash; Near-line Data Store 0.1 documentation</title>
+  <title>Near-line Data Store documentation &mdash; Near-line Data Store 1.0.0 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -39,17 +39,21 @@
               <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
-<li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
-<ul>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a></li>
-<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment.html">Deployment</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api-reference/nlds-processors.html">NLDS Processors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api-reference/nlds-server.html">NLDS Server</a></li>
 </ul>
 
         </div>
@@ -66,7 +70,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="#" class="icon icon-home"></a> &raquo;</li>
-      <li>Welcome to Near-line Data Store’s documentation!</li>
+      <li>Near-line Data Store documentation</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -76,67 +80,33 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <div class="section" id="welcome-to-near-line-data-store-s-documentation">
-<h1>Welcome to Near-line Data Store’s documentation!<a class="headerlink" href="#welcome-to-near-line-data-store-s-documentation" title="Permalink to this headline"></a></h1>
+  <div class="section" id="near-line-data-store-documentation">
+<h1>Near-line Data Store documentation<a class="headerlink" href="#near-line-data-store-documentation" title="Permalink to this headline"></a></h1>
+<p>This is the documentation for the Near-line Data Store (NLDS), a tool developed
+at JASMIN to provide a single interface for disk, object storage and tape.</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="home.html#installation">Installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="home.html#running-dec-2021">Running - Dec 2021</a></li>
-<li class="toctree-l2"><a class="reference internal" href="home.html#viewing-the-api-docs">Viewing the API docs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="home.html#server-config">Server Config</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
-<li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="nlds-server.html#module-nlds.rabbit.publisher">The Publisher class</a></li>
-<li class="toctree-l2"><a class="reference internal" href="nlds-server.html#the-routers">The routers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="nlds-server.html#module-nlds.authenticators.base_authenticator">The authenticators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="nlds-server.html#module-nlds.server_config">The server config module</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="nlds-processors.html#module-nlds.rabbit.consumer">The Consumer class</a></li>
-<li class="toctree-l2"><a class="reference internal" href="nlds-processors.html#the-processors">The processors</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="alembic-migrations.html#using-alembic-migrations">Using Alembic Migrations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="alembic-migrations.html#writing-alembic-migrations">Writing Alembic Migrations</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using the system status page</a></li>
+<li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment.html">Deployment</a></li>
 </ul>
 </div>
 <div class="toctree-wrapper compound">
-<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="server-config/server-config.html#required-sections">Required sections</a></li>
-<li class="toctree-l2"><a class="reference internal" href="server-config/server-config.html#generic-optional-sections">Generic optional sections</a></li>
-<li class="toctree-l2"><a class="reference internal" href="server-config/server-config.html#consumer-specific-optional-sections">Consumer-specific optional sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development/alembic-migrations.html">Database Migrations with Alembic</a></li>
 </ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="server-config/examples.html#local-nlds">Local NLDS</a></li>
-<li class="toctree-l2"><a class="reference internal" href="server-config/examples.html#distributed-nlds">Distributed NLDS</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="cta-emulator.html#commissioning-the-vm">Commissioning the VM</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cta-emulator.html#setting-up-cta-on-the-vm">Setting up CTA on the VM</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cta-emulator.html#additional-steps">Additional steps</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cta-emulator.html#xrootd-python-bindings">XRootD Python Bindings</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="system-status.html#running">Running</a></li>
-<li class="toctree-l2"><a class="reference internal" href="system-status.html#understanding-the-table">Understanding the table</a></li>
-<li class="toctree-l2"><a class="reference internal" href="system-status.html#responses">Responses</a></li>
-<li class="toctree-l2"><a class="reference internal" href="system-status.html#errors">Errors</a></li>
-<li class="toctree-l2"><a class="reference internal" href="system-status.html#tl-dr">TL;DR</a></li>
-</ul>
-</li>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api-reference/nlds-processors.html">NLDS Processors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api-reference/nlds-server.html">NLDS Server</a></li>
 </ul>
 </div>
 </div>
@@ -159,7 +129,7 @@
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2022, Neil Massey &amp; Jack Leland.</p>
+    <p>&#169; Copyright 2022-2024, Neil Massey &amp; Jack Leland.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

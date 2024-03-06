@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CEDA Near-Line Data Store &mdash; Near-line Data Store 0.1 documentation</title>
+  <title>CEDA Near-Line Data Store &mdash; Near-line Data Store 1.0.0 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -18,7 +18,7 @@
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Near Line Data Store (NLDS)" href="specification.html" />
-    <link rel="prev" title="Welcome to Near-line Data Store’s documentation!" href="index.html" /> 
+    <link rel="prev" title="Near-line Data Store documentation" href="index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -46,17 +46,21 @@
 <li class="toctree-l2"><a class="reference internal" href="#server-config">Server Config</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
-<li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
-</ul>
-<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
-<ul>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cta-emulator.html">Setting up a CTA tape emulator</a></li>
-<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment.html">Deployment</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api-reference/nlds-processors.html">NLDS Processors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api-reference/nlds-server.html">NLDS Server</a></li>
 </ul>
 
         </div>
@@ -85,6 +89,10 @@
              
   <div class="section" id="ceda-near-line-data-store">
 <h1>CEDA Near-Line Data Store<a class="headerlink" href="#ceda-near-line-data-store" title="Permalink to this headline"></a></h1>
+<p>[![Tests](<a class="reference external" href="https://github.com/cedadev/nlds/actions/workflows/testing.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml">https://github.com/cedadev/nlds/actions/workflows/testing.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml</a>)
+[![Documentation](<a class="reference external" href="https://github.com/cedadev/nlds/actions/workflows/sphinx.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/sphinx.yml">https://github.com/cedadev/nlds/actions/workflows/sphinx.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/sphinx.yml</a>)
+[![PEP8](<a class="reference external" href="https://img.shields.io/badge/code%20style-pep8-orange.svg)](https://www.python.org/dev/peps/pep-0008/">https://img.shields.io/badge/code%20style-pep8-orange.svg)](https://www.python.org/dev/peps/pep-0008/</a>)
+[![Coverage](<a class="reference external" href="https://github.com/cedadev/nlds/actions/workflows/testing.yml/coverage.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml/htmlcov">https://github.com/cedadev/nlds/actions/workflows/testing.yml/coverage.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml/htmlcov</a>)</p>
 <p>This is the HTTP API server code for the CEDA Near-Line Data Store (NLDS).
 It requires the use of the NLDS client, either the command line or library:
 [NLDS client on GitHub](<a class="reference external" href="https://github.com/cedadev/nlds-client">https://github.com/cedadev/nlds-client</a>).</p>
@@ -141,14 +149,14 @@ directory.</p></li>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="index.html" class="btn btn-neutral float-left" title="Welcome to Near-line Data Store’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="index.html" class="btn btn-neutral float-left" title="Near-line Data Store documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="specification.html" class="btn btn-neutral float-right" title="Near Line Data Store (NLDS)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2022, Neil Massey &amp; Jack Leland.</p>
+    <p>&#169; Copyright 2022-2024, Neil Massey &amp; Jack Leland.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

@@ -3,22 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CERN Tape Archive Set Up &mdash; Near-line Data Store 0.1 documentation</title>
-      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <title>CERN Tape Archive Set Up &mdash; Near-line Data Store 1.0.0 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
+    <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-        <script src="_static/jquery.js"></script>
-        <script src="_static/underscore.js"></script>
-        <script src="_static/doctools.js"></script>
-    <script src="_static/js/theme.js"></script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="The System Status Monitor" href="system-status.html" />
-    <link rel="prev" title="Examples" href="server-config/examples.html" /> 
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Database Migrations with Alembic" href="alembic-migrations.html" />
+    <link rel="prev" title="Deployment" href="../deployment.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -26,11 +26,11 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="index.html">
-            <img src="_static/ceda.png" class="logo" alt="Logo"/>
+            <a href="../index.html">
+            <img src="../_static/ceda.png" class="logo" alt="Logo"/>
           </a>
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -39,16 +39,15 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification</a></li>
-<li class="toctree-l1"><a class="reference internal" href="nlds-server.html">NLDS Server API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="nlds-processors.html">NLDS Processors API</a></li>
-<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../home.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../system-status.html">Using the system status page</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../server-config/server-config.html">The server config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../server-config/examples.html">Server config examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../deployment.html">Deployment</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
-<li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Setting up a CTA tape emulator</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#commissioning-the-vm">Commissioning the VM</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#setting-up-cta-on-the-vm">Setting up CTA on the VM</a></li>
@@ -56,7 +55,12 @@
 <li class="toctree-l2"><a class="reference internal" href="#xrootd-python-bindings">XRootD Python Bindings</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="system-status.html">Using system status</a></li>
+<li class="toctree-l1"><a class="reference internal" href="alembic-migrations.html">Database Migrations with Alembic</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api-reference/nlds-processors.html">NLDS Processors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api-reference/nlds-server.html">NLDS Server</a></li>
 </ul>
 
         </div>
@@ -65,17 +69,17 @@
 
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">Near-line Data Store</a>
+          <a href="../index.html">Near-line Data Store</a>
       </nav>
 
       <div class="wy-nav-content">
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
       <li>CERN Tape Archive Set Up</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="_sources/cta-emulator.rst.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/development/cta-emulator.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -329,14 +333,14 @@ as an exercise to the reader.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="server-config/examples.html" class="btn btn-neutral float-left" title="Examples" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="system-status.html" class="btn btn-neutral float-right" title="The System Status Monitor" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../deployment.html" class="btn btn-neutral float-left" title="Deployment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="alembic-migrations.html" class="btn btn-neutral float-right" title="Database Migrations with Alembic" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2022, Neil Massey &amp; Jack Leland.</p>
+    <p>&#169; Copyright 2022-2024, Neil Massey &amp; Jack Leland.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
