@@ -110,11 +110,11 @@ jobs:
       with: 
         docs-folder: "docs/"
         # pre-build-command: "mkdir /tmp/sphinx-log"
-    - name: "Download coverage report"
-      uses: actions/download-artifact@v3
-      with:
-        name: "html-report"
-        path: "docs/build/html/htmlcov/"
+    # - name: "Download coverage report"
+    #   uses: actions/download-artifact@v3
+    #   with:
+    #     name: "html-report"
+    #     path: "docs/build/html/htmlcov/"
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
