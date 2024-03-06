@@ -117,8 +117,7 @@ jobs:
         path: "htmlcov/"
     - name: "Copy coverage data into html folder"
       run: |
-        mv htmlcov/ docs/build/html/htmlcov
-        mv coverage.svg docs/build/html/htmlcov/coverage.svg
+        cp -r htmlcov/ docs/build/html/htmlcov
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
