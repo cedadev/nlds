@@ -79,7 +79,7 @@ jobs:
           mkdir -p docs/build/html/htmlcov/${GITHUB_REF_NAME}
           cp -r htmlcov/ docs/build/html/htmlcov/${GITHUB_REF_NAME}
       - name: "Upload HTML report if check failed"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: html-report
           path: htmlcov
