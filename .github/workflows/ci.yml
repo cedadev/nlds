@@ -109,7 +109,7 @@ jobs:
       uses: ammaraskar/sphinx-action@master
       with: 
         docs-folder: "docs/"
-        pre-build-command: "mkdir -p docs/build/html/coverage && chmod 777 docs/build/html/coverage && chown 1001 docs/build/html/coverage"
+        pre-build-command: "mkdir -p docs/build/html/coverage && chmod -R 666 docs/build/html && chown 1001 docs/build/html/coverage"
     - name: "Download coverage report"
       uses: actions/download-artifact@v3
       with:
