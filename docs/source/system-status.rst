@@ -61,7 +61,7 @@ e.g.:
 this link does actually work even though it looks very confusing it will set the time limit to 2 and open a table with catalog, monitor, index and logger rows
 and would look like this:
 
-.. image:: status_images/short_table.png
+.. image:: _images/status/short_table.png
     :width: 400
     :alt: short table
 
@@ -153,26 +153,26 @@ representations of what the whole table will look like.
 
 When no consumers are running, the info bar is blue, and the status text is red.
 
-.. image:: status_images/all_off.png
+.. image:: _images/status/all_off.png
   :width: 600
   :alt: All consumers off
 |
 When all consumers inside a microservice are offline the info bar is red as well as the status column text for the offline microservice. The working microservices status text is green.
 
-.. image:: status_images/failed.png
+.. image:: _images/status/failed.png
   :width: 600
   :alt: A consumer failed
 |
 When some consumers inside a microservice are offline the info bar is red 
 the partially failed microservice's status text is orange.
 
-.. image:: status_images/part_failed.png
+.. image:: _images/status/part_failed.png
   :width: 600
   :alt: some consumers failed
 |
 When all consumers online the info bar is green, there is nothing in failed consumer column and all status text is green.
 
-.. image:: status_images/success.png
+.. image:: _images/status/success.png
   :width: 600
   :alt: All consumers on
 
