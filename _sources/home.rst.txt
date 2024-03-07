@@ -1,10 +1,10 @@
 CEDA Near-Line Data Store
 =========================
 
-[![Tests](https://github.com/cedadev/nlds/actions/workflows/testing.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml)
-[![Documentation](https://github.com/cedadev/nlds/actions/workflows/sphinx.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/sphinx.yml)
+[![Testing](https://github.com/cedadev/nlds/actions/workflows/ci.yml/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/ci.yml)
+[![Docs](https://github.com/cedadev/nlds/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/pages/pages-build-deployment)
 [![PEP8](https://img.shields.io/badge/code%20style-pep8-orange.svg)](https://www.python.org/dev/peps/pep-0008/)
-[![Coverage](https://github.com/cedadev/nlds/actions/workflows/testing.yml/coverage.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml/htmlcov)
+[![Coverage](https://cedadev.github.io/nlds/coverage.svg)](https://cedadev.github.io/nlds/coverage/htmlcov/)
 
 This is the HTTP API server code for the CEDA Near-Line Data Store (NLDS).
 It requires the use of the NLDS client, either the command line or library:
