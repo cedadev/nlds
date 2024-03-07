@@ -111,7 +111,7 @@ jobs:
         docs-folder: "docs/"
         pre-build-command: "mkdir -p docs/build/html/coverage && chmod 777 docs/build/html/coverage && chown 1001 docs/build/html/coverage"
     - name: "Download coverage report"
-      uses: actions/download-artifact@4
+      uses: actions/download-artifact@v3
       with:
         name: "html-report"
         path: "docs/build/html/coverage/htmlcov/"
