@@ -60,5 +60,9 @@ European Union's Horizon 2020 research and innovation programme under grant
 agreement No 823988.
 
 .. image:: _images/esiwace2.png
-   :width: 400
+   :width: 300
    :alt: ESiWACE2 Project Logo
+
+.. image:: _images/ceda.png
+   :width: 300
+   :alt: CEDA Logo
