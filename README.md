@@ -55,8 +55,19 @@ manage the dependencies.
     pip install git+https://github.com/cedadev/nlds.git
     ```
 
-4.  (Optional) There are 3 more requirements defined:
-    *   `requirements-dev.txt` - 
+4.  (Optional) There are several more requirements/dependencies defined:
+    *   `requirements-dev.txt` - contains development-specific (i.e. not 
+    production appropriate) dependencies. Currently this consists of a psycopg2 
+    binary python package for interacting with PostgeSQL from a local NLDS 
+    instance. 
+    *   `requirements-deployment.txt` - contains deployment-specific 
+    dependencies, excluding `XRootD`. Currently this consists of the psycopg2 
+    package but built from source instead of a precompiled binary. 
+    *   `requirements-tape.txt` - contains tape-specific dependencies, notably 
+    `XRootD`. 
+    *   `tests/requirements.txt` - contains the dependencies for the test suite. 
+    *   `docs/requirements.txt` - contains the dependencies required for 
+    building the documentation with sphinx.
 
 Server Config
 -------------
@@ -85,7 +96,7 @@ Running the Server
     FastAPI displays automatically generated documentation for the REST-API, to 
     browse this go to http://127.0.0.1:8000/docs/
 
-3.  To run the microservices, you have two options:
+2.  To run the microservices, you have two options:
     *   In individual terminals, after activating the virtual env, (e.g. 
         `source ~/nlds-venv/bin/activate`), start each of the microservice 
         consumers:
@@ -117,7 +128,9 @@ been installed, you can run the tests with
 pytest
 ```
 in the root directory. Pytest is also used for integration testing in the 
-separate [nlds-test repo](https://github.com/cedadev/nlds-test).
+separate [nlds-test repo](https://github.com/cedadev/nlds-test). 
+
+The `pytest` test-coverage report can (hopefully) be found [here](https://cedadev.github.io/nlds/coverage/htmlcov/).
 
 
 License
