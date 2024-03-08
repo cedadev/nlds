@@ -118,6 +118,30 @@ up to date. This will be discussed in more detail in section
 There are some slightly more complex deployment configurations involved in the 
 rest of the setup, which are described below. 
 
+.. _api_server:
+
+API Server
+----------
+
+The NLDS API server, as mentioned above, was written using FastAPI. In a local 
+development environment this is served using ``uvicorn``, but for the production 
+deployment the `base-image <https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi>` 
+base-image is used, which runs the server instead with ``guincorn``. They are 
+functionally identical so this is not a problem per se, just something to be 
+aware of. The NLDS API helm deployment is an extension of the standard `FastAPI helm chart <https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/fast-api>`_.
+
+On production, this API server sits facing the public internet behind an NGINX 
+reverse-proxy, handled by the standard `nginx helm chart <https://gitlab.ceda.ac.uk/cedaci/helm-charts/-/tree/master/nginx>`_ 
+in the ``cedaci/helm-charts`` repo. It is served to the domain 
+`https://nlds.jasmin.ac.uk <https://nlds.jasmin.ac.uk>`_, with the standard NLDS 
+API endpoints extending from that (such as ``/docs``, ``/system/status``). The 
+NLDS API also has an additional endpoint (``/probe/healthz``) for the Kubernetes 
+liveness probe to periodically ping to ensure the API is alive, and that the 
+appropriate party is notified if it goes down. Please note, this is not a 
+deployment specific endpoint and will also exist on any local development 
+instances. 
+
+
 .. _tape_keys:
 
 Tape Keys
@@ -137,7 +161,7 @@ environment variables must be created::
 
 The problem arises with the use of Kubernetes, wherein the keytab content string 
 must be kept secret. This is handled in the CEDA gitlab deployment process 
-through the use of git-crypt (see `here <https://gitlab.ceda.ac.uk/cedaci/ci-tools/-/blob/master/docs/setup-kubernetes-project.md#including-deployment-secrets-in-a-project>`_ 
+through the use of git-crypt (see `here <https://gitlab.ceda.ac.uk/cedaci/ci-tools/-/blob/master/docs/setup-kubernetes-project.md#including-deployment-secrets-in-a-project>`__
 for more details) to encrypt and Kubernetes secrets to decrypt at deployment 
 time. Unfortunately permissions can't be set, no changed, on files made by 
 Kubernetes secrets, so to get the keytab in the right place with the right 
@@ -157,7 +181,7 @@ schema before the database has been migrated, and this is implemented through
 two mechanisms in the deployment:
 
 1. An init-container on the catalog, which has the config for both the catalog 
-   and montioring dbs, which has alembic installed and calls::
+   and montioring DBs, which has alembic installed and calls::
         
         alembic upgrade head
 
@@ -258,6 +282,47 @@ to be replaced with the appropriate namespace for the cluster you are on, i.e.::
 and, as before, these will likely need to be adjusted as understanding of the 
 actual resource use of each of the microservices evolves. 
 
+.. _chowning:
+
+Changing ownership of files
+---------------------------
+
+A unique problem arose in beta testing where the NLDS was not able to change 
+ownership of the files downloaded during a ``get`` to the user that requested them
+from within a container that was not allowed to run as root. As such, a solution 
+was required which allowed a very specific set of privileges to be escalated 
+without leaving any security vulnerabilities open.
+
+The solution found was to include an additional binary in the 
+``Generic Consumer`` image - ``chown_nlds`` - which has the ``setuid`` 
+permissions bit set and is therefore able to change directories. To minimise 
+exposed attack surface, the binary was compiled from a `rust script <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/images/consumer/chown_nlds.rs?ref_type=heads>`_ 
+which allows only the ``chown``-ing of files owned by the NLDS user (on JASMIN 
+``uid=7054096``). Additionally, the target must be a file or directory and the 
+``uid`` being changed to must be greater than 1024 to avoid clashes with system 
+``uid``s. This binary will only execute on any containers where the appropriate 
+security context is set, notably::
+
+    securityContext:
+        allowPrivilegeEscalation: true
+        add:
+            - CHOWN
+
+which in the NLDS deployment helm chart is only set for the ``Transfer-Get`` 
+containers/pods.
+
+
+.. _archive_put:
+
+Archive Put Cronjob
+-------------------
+
+The process by which the archive process is started has been automated for this 
+deployment, running as a `Kubernetes cronjob <https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/>`_ 
+every 12 hours at midnight and midday. The Helm config controlling this can be 
+seen `here <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/conf/archive_put/common.yaml?ref_type=heads#L1-3>`_.
+This cronjob will simply call the ``send_archive_next()`` entry point, which 
+sends a message directly to the RabbitMQ exchange for routing to the Catalog. 
 
 
 .. _staging:
@@ -295,9 +360,3 @@ everything on this page, this was true at the time of writing (2024-03-06).
      - `https://nlds-master.130.246.130.221.nip.io/ <https://nlds-master.130.246.130.221.nip.io/docs>`_ (firewalled)
      - `https://nlds.jasmin.ac.uk/ <https://nlds.jasmin.ac.uk/docs>`_ (public, ssl secured)
 
-
-.. Possible additional sections:
-.. - Helm charts?
-.. - API Server config?    (this is related to Helm charts)
-.. - NLDS chown
-.. - 

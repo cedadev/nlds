@@ -7,7 +7,7 @@ CEDA Near-Line Data Store
 [![Coverage](https://github.com/cedadev/nlds/actions/workflows/testing.yml/coverage.svg)](https://github.com/cedadev/nlds/actions/workflows/testing.yml/htmlcov)
 
 This is the server code for the CEDA Near-Line Data Store (NLDS), consisting of 
-an HTTP API and a cluster of rabbit consumers. The 
+an HTTP API and a cluster of rabbit consumer microservices. The 
 [NLDS client](https://github.com/cedadev/nlds-client) is required to communicate 
 with the API, either via the command line interface or python client library.
 
