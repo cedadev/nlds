@@ -75,33 +75,32 @@ brokering system. The following is an outline of what is required::
 
 Here the ``user`` and ``password`` fields refer to the username and password for 
 the rabbit server you wish to connect to, which is in turn specified with 
-``server``. ``vhost`` is similarly the virtual host on the rabbit server that 
+``server``. ``vhost`` is similarly the virtualhost on the rabbit server that 
 you wish to connect to. 
 
 The next two dictionaries are context specific. All publishing elements of the 
 NLDS, i.e. parts that will send messages, will require an exchange to publish 
 messages to. ``exchange`` is determines that exchange, with three required 
 subfields: ``name``, ``type``, and ``delayed``. The former two are self 
-descriptive, they should just be the name of the exchange on the virtualhost and 
+descriptive, they should just be the name of the exchange on the `virtualhost` and 
 it's corresponding type e.g. one of fanout, direct or topic. ``delay`` is a 
 boolean (``true`` or ``false`` in json-speak) dictating whether to use the 
 delay functionality utilised within the NLDS. Note that this requires the rabbit 
 server have the DelayedRabbitExchange plugin installed.
 
-Exchanges can be declared and created if not present on the virtual host the 
-first time the NLDS is run, virtualhosts cannot and so will have to be created 
+Exchanges can be declared and created if not present on the `virtualhost` the 
+first time the NLDS is run, `virtualhosts` cannot and so will have to be created 
 beforehand manually on the server or through the admin interface. If an exchange 
 is requested but incorrect information given about either its `type` or 
 `delayed` status, then the NLDS will throw an error. 
 
 ``queues`` is a list of queue dictionaries and must be implemented on consumers, 
 i.e. message processors, to tell ``pika`` where to take messages from. Each 
-queue dictionary consists of a ``name`` and a list of `bindings`, with each 
+queue dictionary consists of a ``name`` and a list of ``bindings``, with each 
 ``binding`` being a dictionary containing the name of the ``exchange`` the queue 
 takes messages from, and the routing key that a message must have to be accepted 
 onto the queue. For more information on exchanges, routing keys, and other 
-RabbitMQ features, please see [Rabbit's excellent documentation]
-(https://www.rabbitmq.com/tutorials/tutorial-five-python.html). 
+RabbitMQ features, please see `Rabbit's excellent documentation <https://www.rabbitmq.com/tutorials/tutorial-five-python.html>`_. 
 
 
 Generic optional sections
@@ -117,13 +116,14 @@ Logging
 The logging configuration options look like the following::
 
     "logging": {
-        "enable": boolean
+        "enable": boolean,
         "log_level": str  - ("none" | "debug" | "info" | "warning" | "error" | "critical"),
         "log_format": str - see python logging docs for details,
         "add_stdout_fl": boolean,
         "stdout_log_level": str  - ("none" | "debug" | "info" | "warning" | "error" | "critical"),
         "log_files": List[str],
-        "rollover": str - see python logging docs for details
+        "max_bytes": int,
+        "backup_count": int
     }
 
 These all set default options the native python logging system, with 
@@ -137,17 +137,17 @@ to be different from the default log level.
 
 ``log_files`` is a list of strings describing the path or paths to log files 
 being written to. If no log files paths are given then no file logging will be 
-done. If active, the file logging will be done with a TimedRotatingFileHandler, 
-i.e. the files will be rotated on a rolling basis, with the rollover time 
-denoted by the ``rollover`` option, which is a time string similar to that found 
-in crontab. Please see the [python logging docs]
-(https://docs.python.org/3/library/logging.handlers.html#logging.handlers.TimedRotatingFileHandler)
-for more info on this. 
+done. If active, the file logging will be done with a RotatingFileHandler, i.e. 
+the files will be rotated when they reach a certain size. The threshold size is 
+determined by ``max_bytes`` and the maximum number of files which are kept after 
+rotation is controlled by ``backup_count``, both strings. For more information 
+on this please refer to the `python logging docs <https://docs.python.org/3/library/logging.handlers.html#logging.handlers.RotatingFileHandler>`_. 
 
 As stated, these all set the default log options for all publishers and 
 consumers within the NLDS - these can be overridden on a consumer-specific basis 
 by inserting a ``logging`` sub-dictionary into a consumer-specific optional 
-section.
+section. Each sub-dictionary has identical configuration options to those listed 
+above.
 
 General
 ^^^^^^^
@@ -181,8 +181,8 @@ The server config section is ``nlds_q``, and the following options are available
 
     "nlds_q": {
         "logging": [standard_logging_dictionary],
-        "retry_delays": List[int]
-        "print_tracebacks_fl": boolean,
+        "retry_delays": List[int],
+        "print_tracebacks_fl": boolean
     }
 
 Not much specifically happens in the NLDS worker that requires configuration, so 
@@ -256,6 +256,7 @@ The server config entry for the catalog consumer is as follows::
         "logging": {standard_logging_dictionary},
         "retry_delays": List[int],
         "print_tracebacks_fl": boolean,
+        "max_retries": int,
         "db_engine": str,
         "db_options": {
             "db_name" : str,
@@ -263,12 +264,13 @@ The server config entry for the catalog consumer is as follows::
             "db_passwd" : str,
             "echo": boolean
         },
-        "max_retries": int
+        default_tenancy: str,
+        default_tape_url: str
     }
 
 where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are, as above,
 standard configurables within the NLDS consumer ecosystem. ``max_retries`` is 
-similarly available in the cataloguer, with the same meaning as above. 
+similarly available in the cataloguer, with the same meaning as defined above. 
 
 Here we also have two keys which control database behaviour via SQLAlchemy: 
 ``db_engine`` and ``db_options``. ``db_engine`` is a string which specifies 
@@ -280,6 +282,11 @@ your chosen flavour of database), along with the database username and password
 (if in use), respectively controlled by the keys ``db_name``, ``db_user``, and 
 ``db_password``. Finally in this sub-dictionary ``echo``, an optional 
 boolean flag which controls the auto-logging of the SQLAlchemy engine. 
+
+Finally ``default_tenancy`` and ``default_tape_url`` are the default values to 
+place into the Catalog for a new Location's ``tenancy`` and ``tape_url`` values 
+if not explicitly defined before reaching the catalog. This will happen if the 
+user, for example, does not define a tenancy in their client-config. 
 
 
 Transfer-put and Transfer-get
@@ -295,20 +302,35 @@ The server entry for the transfer-put consumer is as follows::
         "filelist_max_length": int,
         "check_permissions_fl": boolean,
         "use_pwd_gid_fl": boolean,
-        "tenancy": "cedadev-o.s3.jc.rl.ac.uk",
+        "tenancy": str,
         "require_secure_fl": false
     }
 
 where we have ``logging``, ``retry_delays`` and ``print_tracebacks_fl`` as their
 standard definitions defined above, and ``max_retries``, ``filelist_max_length``
-, ``check_permissions_fl``, and ``use_pwd_gid_fl`` defined the same as for the 
-Indexer consumer. 
+, and ``check_permissions_fl`` defined the same as for the Indexer consumer. 
 
 New definitions for the transfer processor are the ``tenancy`` and 
 ``require_secure_fl``, which control ``minio`` behaviour. ``tenancy`` is a 
 string which denotes the address of the object store tenancy to upload/download 
-files to/from, and ``require_secure_fl`` which specifies whether or not you 
-require signed ssl certificates at the tenancy location. 
+files to/from (e.g. `<cedadev-o.s3.jc.rl.ac.uk>`_), and ``require_secure_fl`` 
+which specifies whether or not you require signed ssl certificates at the 
+tenancy location. 
+
+The transfer-get consumer is identical except for the addition of config 
+controlling the change-ownership functionality on downloaded files – see 
+:ref:`chowning` for details on why this is necessary. The additional config is 
+as follows::
+
+    "transfer_get_q": {
+        ...
+        "chown_fl": boolean,
+        "chown_cmd": str
+    }
+
+where ``chown_fl`` is a boolean flag to specify whether to attempt to ``chown`` 
+files back to the requesting user, and ``chown_cmd`` is the name of the 
+executable to use to ``chown`` said file. 
 
 
 Monitor
@@ -338,7 +360,7 @@ messages which failed due to an unexpected exception.
 Logger
 ^^^^^^
 
-And finally, the server config entry for the Logger consumer is as follows::
+The server config entry for the Logger consumer is as follows::
 
     "logging_q": {
         "logging": {standard_logging_dictionary},
@@ -350,3 +372,55 @@ configurable behaviour on the Logger consumer as it is simply a relay for
 redirecting logging messages into log files. It should also be noted that the 
 ``log_files`` option should be set in the logging sub-dictionary for this to 
 work properly, which may be a mandatory setting in future versions. 
+
+
+Archive-Put and Archive-Get
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+And, finally, the server config entry for the archive-put consumer is as 
+follows::
+
+    "archive_put_q": {
+        "logging": {standard_logging_dictionary}
+        "max_retries": int,
+        "retry_delays": List[int],
+        "print_tracebacks_fl": boolean,
+        "tenancy": str,
+        "check_permissions_fl": boolean,
+        "require_secure_fl": boolean,
+        "tape_url": str,
+        "tape_pool": str,
+        "query_checksum_fl": boolean,
+        "chunk_size": int
+    }
+
+which is a combination of standard configuration, object-store configuration and 
+as-yet-unseen tape configuration. Firstly, we have the standard options 
+``logging``, ``max_retries``, ``retry_delays``, and ``print_tracebacks_fl``, 
+which we have defined above. Then we have the object-store configuration options 
+which we saw previously in the :ref:`transfer_put_get` consumer config, and have 
+the same definitions. 
+
+The latter four options control tape configuration, ``taoe_url`` and 
+``tape_pool`` defining the ``xrootd`` url and tape pool at which to attempt to 
+put files onto - note that these two values are combined together into a single 
+``tape_path`` in the archiver. ``query_checksum`` is the next option, is a 
+boolean flag to control whether the ADLER32 checksum calculated during streaming 
+is used to check file integrity at the end of a write. Finally ``chunk_size`` is 
+the size, in bytes, to chunk the stream into when writing into or reading from 
+the CTA cache. This defaults to 5 MiB as this is the lower limit for 
+``part_size`` when uploading back to object-store during an archive-get, but has 
+not been properly benchmarked or optimised yet. 
+
+Note that the above has been listed for the archive-put consumer but are 
+shared by the archive-get consumer. The archive-get does have one additional 
+config option::
+
+    "archive_get_q": {
+        ...
+        "prepare_requeue": int
+    }
+
+where ``prepare_requeue`` is the prepare-requeue delay, i.e. the delay, in 
+milliseconds, before an archive recall message is requeued following a negative 
+read-preparedness query has been made. This defaults to 30 seconds.

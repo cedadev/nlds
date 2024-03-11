@@ -47,16 +47,16 @@ three specific roles:
 The string after each of these corresponds to the image's location on CEDA's 
 Harbor registry (and therefore what tag/registry address to use to ``docker 
 pull`` each of them). As may be obvious, the FastAPI server runs on the 
-``Generic Server`` image and contains an installation of asgi, building upon the 
-``asgi`` `base-image <https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi>`_, 
+``Generic Server`` image and contains an installation of ``asgi``, building upon 
+the ``asgi`` `base-image <https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi>`_, 
 to actually run the server. The rest run on the ``Generic Consumer`` image, 
 which has an installation of the NLDS repo, along with its dependencies, to 
 allow it to run a given consumer. The only dependency which isn't included is 
-xrootd as it is a very large and long installation process and unnecessary to 
-the running of the non-tape consumers. Therefore the ``Tape Consumer`` image was 
-created, which appropriately builds upon the ``Geneic Consumer`` image with an 
-additional installation of ``xrootd`` with which to run tape commands. The two 
-tape consumers, ``Archive-Put`` and ``Archive-Get``, run on containers using 
+``xrootd`` as it is a very large and long installation process and unnecessary 
+to the running of the non-tape consumers. Therefore the ``Tape Consumer`` image 
+was created, which appropriately builds upon the ``Geneic Consumer`` image with 
+an additional installation of ``xrootd`` with which to run tape commands. The 
+two tape consumers, ``Archive-Put`` and ``Archive-Get``, run on containers using 
 this image.
 
 The two consumer containers run as the user NLDS, which is an official JASMIN 
@@ -204,10 +204,10 @@ the cluster controller) and no means of attaching a more persistent volume to
 store logs in long-term. 
 
 The, relatively new, solution that exists on the CEDA cluster is the use of 
-`fluentd`, and more precisely `fluentbit <https://fluentbit.io/how-it-works/>`_, 
+``fluentd``, and more precisely `fluentbit <https://fluentbit.io/how-it-works/>`_, 
 to aggregate logs from the NLDS logging microservice and send them to a single 
-external location running `fluentd` – currently the stats-collection virtual 
-machine run on JASMIN. Each log sent to the `fluentd` service is tagged with a 
+external location running ``fluentd`` – currently the stats-collection virtual 
+machine run on JASMIN. Each log sent to the ``fluentd`` service is tagged with a 
 string representing the particular microservice log file it was collected from, 
 e.g. the logs from the indexer microservice on the staging deployment are tagged 
 as:: 
@@ -217,15 +217,15 @@ as::
 This is practically achieved through the use of a sidecar – a further container 
 running in the same pod as the logging container – running the ``fluentbit`` 
 image as defined by the `fluentbit helm chart <https://gitlab.ceda.ac.uk/cedaci/helm-charts>`_. 
-The full ``fluentbit`` config, including the full list of tags, can be found `in 
-the logging config yamls <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/tree/master/conf/logger>`_.
+The full ``fluentbit`` config, including the full list of tags, can be found 
+`in the logging config yamls <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/tree/master/conf/logger>`_.
 When received by the fluentd server, each tagged log is collated into a larger 
 log file for help with debugging at some later date. The log files on the 
 logging microservice's container are rotated according to size, and so should 
 not exceed the pod's allocated memory limit.
 
 .. note::
-    The `fluentbit` service is still in its infancy and subject to change at 
+    The ``fluentbit`` service is still in its infancy and subject to change at 
     short notice as the system & helm chart get more widely adopted. For example, 
     the length of time log files are kept on the stats machine has not been 
     finalised yet. 
@@ -258,7 +258,7 @@ where it is set to 8 and the Transfer-Get where is set to 2.
     the size of a ``Rabbit`` queue for a given microservice, and while this is 
     `in theory` `possible <https://ryanbaker.io/2019-10-07-scaling-rabbitmq-on-k8s/>`_,
     this was not possible with the current installation of Kubernetes without 
-    additional plugins, namely `Prometheus`.
+    additional plugins, namely ``Prometheus``.
 
 The other aspect of scaling is the resource requested by each of the pods, which 
 have current `default values <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/conf/common.yaml?ref_type=heads#L7>`_
