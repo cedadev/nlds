@@ -1,7 +1,7 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: tests
+name: ci
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
         if-no-files-found: ignore
 
   coverage:
-    name: "Combine and check coverage"
+    name: "coverage"
     needs: tests
     runs-on: ubuntu-latest
     steps:
@@ -90,11 +90,46 @@ jobs:
         with:
           name: covbadge
           path: coverage.svg
-      # Attempt to add the coverage badge to the gh-pages branch 
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/build/html/htmlcov
-          desination_dir: htmlcov/
-          keep_files: true
+      # # Attempt to add the coverage badge to the gh-pages branch 
+      # - name: Deploy
+      #   uses: peaceiris/actions-gh-pages@v3
+      #   with:
+      #     github_token: ${{ secrets.GITHUB_TOKEN }}
+      #     publish_dir: docs/build/html/htmlcov
+      #     desination_dir: htmlcov/
+      #     keep_files: true
+
+  sphinx-build:
+    needs: [tests, coverage]
+    runs-on: ubuntu-latest
+    steps:
+    # Checkout and build the docs with sphinx
+    - uses: actions/checkout@v2
+    - name: Build HTML
+      uses: ammaraskar/sphinx-action@master
+      with: 
+        docs-folder: "docs/"
+        pre-build-command: "mkdir -p docs/build/html/coverage/htmlcov && chmod -R 777 docs/build/html && chown 1001 docs/build/html/coverage"
+    - name: "Download coverage report"
+      uses: actions/download-artifact@v3
+      with:
+        name: "html-report"
+        path: "docs/build/html/coverage/htmlcov/"
+    - name: "Download coverage badge"
+      uses: actions/download-artifact@v3
+      with:
+        name: "covbadge"
+        path: "docs/build/html"
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: html-docs
+        path: docs/build/html/
+    # Deploys to the gh-pages branch if the commit was made to main, the 
+    # gh-pages then takes over serving the html
+    - name: Deploy
+      uses: peaceiris/actions-gh-pages@v3
+      if: github.ref == 'refs/heads/main'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: docs/build/html
