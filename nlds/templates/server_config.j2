@@ -10,6 +10,7 @@
     "rabbitMQ": {
         "user": "{{ rabbit_user }}",
         "password": "{{ rabbit_password }}",
+        "heartbeat": "{{ rabbit_heartbeat }}",
         "server": "{{ rabbit_server }}",
         "admin_port": "{{ rabbit_port }}",
         "vhost": "{{ rabbit_vhost }}",
@@ -57,7 +58,8 @@
         "filelist_max_length": "{{ index_q_filelist_max_length }}",
         "message_threshold": "{{ index_q_message_threshold }}",
         "check_permissions_fl": "{{ index_q_check_permissions_fl }}",
-        "check_filesize_fl": "{{ index_q_check_filesize_fl }}"
+        "check_filesize_fl": "{{ index_q_check_filesize_fl }}",
+        "max_filesize": "{{ index_q_max_filesize }}"
     },
     "catalog_q": {
         "logging": "{{ catalog_q_logging_dict }}",
@@ -139,5 +141,15 @@
         "query_checksum_fl": "{{ archive_get_q_query_checksum_fl }}",
         "chunk_size": "{{ archive_get_q_chunk_size }}"
         "prepare_requeue": "{{ archive_get_q_prepare_requeue }}"
+    },
+    "rpc_publisher": {
+        "time_limit": "{{ rpc_publisher_time_limit }}",
+        "queue_exclusivity_fl": "{{ rpc_publisher_queue_exclusivity_fl }}"
+    },
+    "cronjob_publisher": {
+        "access_key": "{{ cronjob_publisher_access_key }}",
+        "secret_key": "{{ cronjob_publisher_secret_key }}",
+        "tenancy": "{{ cronjob_publisher_tenancy }}",
+        "tape_url": "{{ cronjob_publisher_tape_url }}"
     }
 }

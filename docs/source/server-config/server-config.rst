@@ -9,8 +9,10 @@ server_config in the templates section of the main nlds package
 demystify the configuration needed for (a) a local development copy of the nlds, 
 and (b) a production system spread across several pods/virtual machines. 
 
-*Please note that the NLDS is in active development and all of this is subject 
-to change with no notice.*
+.. note::
+    Please note that the NLDS is still being developed and so the following is 
+    subject to change in future versions.
+
 
 Required sections
 -----------------
@@ -53,6 +55,7 @@ brokering system. The following is an outline of what is required::
     "rabbitMQ": {
         "user": "{{ rabbit_user }}",
         "password": "{{ rabbit_password }}",
+        "heartbeat": "{{ rabbit_heartbeat }}",
         "server": "{{ rabbit_server }}",
         "vhost": "{{ rabbit_vhost }}",
         "exchange": {
@@ -75,15 +78,19 @@ brokering system. The following is an outline of what is required::
 
 Here the ``user`` and ``password`` fields refer to the username and password for 
 the rabbit server you wish to connect to, which is in turn specified with 
-``server``. ``vhost`` is similarly the virtualhost on the rabbit server that 
-you wish to connect to. 
+``server``. ``vhost`` is similarly the `virtualhost` on the rabbit server that 
+you wish to connect to. ``heartbeat`` is a recent addition which determines the 
+`heartbeats` on the BlockingConnection that the NLDS makes with the rabbit 
+server. This essentially puts a hard limit on when a connection has to be 
+responsive by before it is killed by the server, see `the rabbit docs <https://www.rabbitmq.com/tutorials/tutorial-five-python.html>`_ 
+for more details. 
 
 The next two dictionaries are context specific. All publishing elements of the 
 NLDS, i.e. parts that will send messages, will require an exchange to publish 
 messages to. ``exchange`` is determines that exchange, with three required 
 subfields: ``name``, ``type``, and ``delayed``. The former two are self 
-descriptive, they should just be the name of the exchange on the `virtualhost` and 
-it's corresponding type e.g. one of fanout, direct or topic. ``delay`` is a 
+descriptive, they should just be the name of the exchange on the `virtualhost` 
+and it's corresponding type e.g. one of fanout, direct or topic. ``delay`` is a 
 boolean (``true`` or ``false`` in json-speak) dictating whether to use the 
 delay functionality utilised within the NLDS. Note that this requires the rabbit 
 server have the DelayedRabbitExchange plugin installed.
@@ -207,6 +214,7 @@ Server config section is ``index_q``, and the following options are available::
         "max_retries": int,
         "check_permissions_fl": boolean,
         "check_filesize_fl": boolean,
+        "max_filesize": int
     }
 
 where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are, as above,
@@ -236,7 +244,11 @@ list.
 
 ``check_permissions_fl`` and ``check_filesize_fl`` are commonly used boolean 
 flags to control whether the indexer checks the permissions and filesize of 
-files respectively during the indexing step.  
+files respectively during the indexing step. If the filesize is being checked, 
+``max_filesize`` determines the maximum filesize, in bytes, of an individual 
+file which can be added to any given holding. This defaults to ``500GB``, but is 
+typically determined by the size of the cache in front of the tape, which for 
+the STFC CTA instance is ``500GB`` (hence the default value).
  
 
 Cataloguer
@@ -280,6 +292,7 @@ place into the Catalog for a new Location's ``tenancy`` and ``tape_url`` values
 if not explicitly defined before reaching the catalog. This will happen if the 
 user, for example, does not define a tenancy in their client-config. 
 
+.. _transfer_put_get:
 
 Transfer-put and Transfer-get
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -364,12 +377,12 @@ redirecting logging messages into log files. It should also be noted that the
 ``log_files`` option should be set in the logging sub-dictionary for this to 
 work properly, which may be a mandatory setting in future versions. 
 
+.. _archive_put_get:
 
 Archive-Put and Archive-Get
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-And, finally, the server config entry for the archive-put consumer is as 
-follows::
+Finally, the server config entry for the archive-put consumer is as follows::
 
     "archive_put_q": {
         "logging": {standard_logging_dictionary}
@@ -415,3 +428,52 @@ config option::
 where ``prepare_requeue`` is the prepare-requeue delay, i.e. the delay, in 
 milliseconds, before an archive recall message is requeued following a negative 
 read-preparedness query has been made. This defaults to 30 seconds.
+
+
+Publisher-specific optional sections
+------------------------------------
+
+There are two, non-consumer, elements to the NLDS which can optionally be 
+configured, listed below. 
+
+RPC Publisher
+^^^^^^^^^^^^^
+
+The Remote Procedure Call (RPC) Publisher, the specific rabbit publisher which 
+sits inside the API server and makes RPCs to the databases for quick metadata 
+access from the client, has its own small config section::
+
+    "rpc_publisher": {
+        "time_limit": int,
+        "queue_exclusivity_fl": boolean
+    }
+
+where ``time_limit`` is the number of seconds the publisher waits before 
+declaring the RPC timed out and the receiving consumer non-responsive, and 
+``queue_exclusivity_fl`` controls whether the queue declared by the publisher is 
+exclusive to the publisher. These values default to ``30`` seconds and ``True`` 
+respectively.
+
+
+Cronjob Publisher
+^^^^^^^^^^^^^^^^^
+
+The Archive-Put process, as described in :ref:`archive_put`, is periodically 
+initiated by a cronjob which sends a message to the catalog to get the next, 
+unarchived holding. This requires a small amount of configuration in order to 
+(a) get access to the object store, (b) change the default ``tenancy`` or 
+``tape_url``, if necessary. As such the allowed config options look like::
+
+    "cronjob_publisher": {
+        "access_key": str,
+        "secret_key": str,
+        "tenancy": str,
+        "tape_url": str
+    }
+
+where ``tape_url`` is identical to that specified in :ref:`archive_put_get`, and 
+``access_key``, ``secret_key`` and ``tenancy`` are specified as in the 
+`client config <https://cedadev.github.io/nlds-client/configuration.html#init>`_, 
+referring to the objectstore tenancy located at ``tenancy`` and ``token`` and 
+``secret_key`` required for accessing it. In practice only the ``access_key`` 
+and ``secret_key`` are specified during deployment. 
