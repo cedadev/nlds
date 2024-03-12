@@ -129,7 +129,7 @@ jobs:
         path: "docs/build/html"
     - name: "List html dir"
       run: |
-        ls -la docs/html/html/coverage/htmlcov
+        ls -la docs/build/html/coverage/htmlcov
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
