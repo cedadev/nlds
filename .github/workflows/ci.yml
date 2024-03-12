@@ -112,7 +112,9 @@ jobs:
         pre-build-command: |
           "mkdir -p docs/build/html/coverage/htmlcov && chmod -R 777 docs/build/html && chmod -R 777 docs/build/html/cover/htmlcov && chown 1001 docs/build/html/coverage"
     - name: "Look at directory structure"
-      run: ls docs/build/html/coverage/htmlcov
+      run: |
+        ls -la docs/build/html/coverage/htmlcov
+        sudo chmod -R 777 docs/build/html/coverage
     - name: "Download coverage report"
       uses: actions/download-artifact@v3
       with:
