@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CEDA Near-Line Data Store &mdash; Near-line Data Store 1.0.0 documentation</title>
+  <title>CEDA Near-Line Data Store &mdash; Near-line Data Store Server 1.0.0 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+    <link rel="shortcut icon" href="_static/icon-black.png"/>
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -17,8 +18,8 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Near Line Data Store (NLDS)" href="specification.html" />
-    <link rel="prev" title="Near-line Data Store documentation" href="index.html" /> 
+    <link rel="next" title="The System Status Monitor" href="system-status.html" />
+    <link rel="prev" title="Near-line Data Store - Server Documentation" href="index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -26,8 +27,8 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="index.html">
-            <img src="_static/ceda.png" class="logo" alt="Logo"/>
+            <a href="index.html" class="icon icon-home"> Near-line Data Store Server
+            <img src="_static/nlds.png" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -37,16 +38,17 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Getting started</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">CEDA Near-Line Data Store</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#running-dec-2021">Running - Dec 2021</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#viewing-the-api-docs">Viewing the API docs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#server-config">Server Config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-the-server">Running the Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tests">Tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#license">License</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#acknowledgements">Acknowledgements</a></li>
 <li class="toctree-l1"><a class="reference internal" href="system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
@@ -54,8 +56,10 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Development</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coverage/coverage-report.html">Test coverage report</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -69,7 +73,7 @@
 
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">Near-line Data Store</a>
+          <a href="index.html">Near-line Data Store Server</a>
       </nav>
 
       <div class="wy-nav-content">
@@ -93,64 +97,142 @@
 [![Docs](<a class="reference external" href="https://github.com/cedadev/nlds/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/pages/pages-build-deployment">https://github.com/cedadev/nlds/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/cedadev/nlds/actions/workflows/pages/pages-build-deployment</a>)
 [![PEP8](<a class="reference external" href="https://img.shields.io/badge/code%20style-pep8-orange.svg)](https://www.python.org/dev/peps/pep-0008/">https://img.shields.io/badge/code%20style-pep8-orange.svg)](https://www.python.org/dev/peps/pep-0008/</a>)
 [![Coverage](<a class="reference external" href="https://cedadev.github.io/nlds/coverage.svg)](https://cedadev.github.io/nlds/coverage/htmlcov/">https://cedadev.github.io/nlds/coverage.svg)](https://cedadev.github.io/nlds/coverage/htmlcov/</a>)</p>
-<p>This is the HTTP API server code for the CEDA Near-Line Data Store (NLDS).
-It requires the use of the NLDS client, either the command line or library:
-[NLDS client on GitHub](<a class="reference external" href="https://github.com/cedadev/nlds-client">https://github.com/cedadev/nlds-client</a>).</p>
-<p>NLDS server is built upon [FastAPI](<a class="reference external" href="https://fastapi.tiangolo.com">https://fastapi.tiangolo.com</a>).</p>
-<p>NLDS requires Python 3.  It has been tested with Python 3.9, 3.10 and Python 3.11.</p>
+<p>This is the server code for the CEDA Near-Line Data Store (NLDS), consisting of
+an HTTP API and a cluster of rabbit consumer microservices. The
+[NLDS client](<a class="reference external" href="https://github.com/cedadev/nlds-client">https://github.com/cedadev/nlds-client</a>) is required to communicate
+with the API, either via the command line interface or python client library.</p>
+<p>The NLDS is a unified storage solution, allowing easy use of disk, s3 object
+storage, and tape from a single interface. It utilises object storage as a cache
+for the tape backend allowing for low-latency backup</p>
+<p>The NLDS server is built upon [FastAPI](<a class="reference external" href="https://fastapi.tiangolo.com">https://fastapi.tiangolo.com</a>) for the
+API, [RabbitMQ](<a class="reference external" href="https://www.rabbitmq.com/">https://www.rabbitmq.com/</a>) for the message broker,
+[minio](<a class="reference external" href="https://min.io/">https://min.io/</a>) for the s3 client,
+[SQLAlchemy](<a class="reference external" href="https://www.sqlalchemy.org/">https://www.sqlalchemy.org/</a>) for the database client and
+[xrootd](<a class="reference external" href="https://xrootd.slac.stanford.edu/">https://xrootd.slac.stanford.edu/</a>) for the tape interactions.</p>
+<p>Documentation can be found [here](<a class="reference external" href="https://cedadev.github.io/nlds/index.html">https://cedadev.github.io/nlds/index.html</a>).</p>
 <div class="section" id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline"></a></h2>
-<ol class="arabic simple">
-<li><p>Create a Python virtual environment:
-<cite>python3 -m venv ~/nlds-venv</cite></p></li>
-<li><p>Activate the nlds-venv:
-<cite>source ~/nlds-venv/bin/activate</cite></p></li>
-<li><p>Install the nlds package with editing capability:
-<cite>pip install -e ~/Coding/nlds</cite></p></li>
-</ol>
-</div>
-<div class="section" id="running-dec-2021">
-<h2>Running - Dec 2021<a class="headerlink" href="#running-dec-2021" title="Permalink to this headline"></a></h2>
-<p>1. NLDS currently uses <cite>uvicorn</cite> to run.  The command line to invoke it is:
-<code class="docutils literal notranslate"><span class="pre">`uvicorn</span> <span class="pre">nlds.main:nlds</span> <span class="pre">--reload`</span></code></p>
-<blockquote>
-<div><p>This will create the NLDS REST-API server at the IP-address: <cite>http://127.0.0.1:8000/</cite></p>
-</div></blockquote>
-<ol class="arabic" start="2">
-<li><dl>
-<dt>To run the processors, you have two options:</dt><dd><p>1. In unique terminals start each processor individually, after
-activating the virtual env, for example:</p>
-<blockquote>
-<div><p><code class="docutils literal notranslate"><span class="pre">`source</span> <span class="pre">~/nlds-venv/bin/activate;</span> <span class="pre">python</span> <span class="pre">nlds_processors/index.py`</span></code>
-This will send the output to the terminal.</p>
-</div></blockquote>
-<ol class="arabic simple" start="2">
-<li><p>Use the script <cite>test_run_processor.sh</cite>.  This will run all five processors
-in the background, sending the output to five logs in the <cite>~/nlds_log/</cite>
-directory.</p></li>
-</ol>
-</dd>
-</dl>
+<p>If installing locally we strongly recommend the use of a virtual environment to
+manage the dependencies.</p>
+<ol class="arabic">
+<li><p>Create a Python virtual environment:</p>
+<p><code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">python3</span> <span class="pre">-m</span> <span class="pre">venv</span> <span class="pre">nlds-venv</span>
+<span class="pre">`</span></code></p>
 </li>
+<li><p>Activate the nlds-venv:</p>
+<p><code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">source</span> <span class="pre">nlds-venv/bin/activate</span>
+<span class="pre">`</span></code></p>
+</li>
+<li><p>You could either install the nlds package with editing capability from a
+locally cloned copy of this repo (note the inclusion of the editable flag
+<cite>-e</cite>), e.g.</p>
+<p><code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">~/Coding/nlds</span>
+<span class="pre">`</span></code></p>
+<p>or install this repo directly from github:</p>
+<p><code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">pip</span> <span class="pre">install</span> <span class="pre">git+https://github.com/cedadev/nlds.git</span>
+<span class="pre">`</span></code></p>
+</li>
+<li><p>(Optional) There are several more requirements/dependencies defined:
+*   <cite>requirements-dev.txt</cite> - contains development-specific (i.e. not
+production appropriate) dependencies. Currently this consists of a psycopg2
+binary python package for interacting with PostgeSQL from a local NLDS
+instance.
+*   <cite>requirements-deployment.txt</cite> - contains deployment-specific
+dependencies, excluding <cite>XRootD</cite>. Currently this consists of the psycopg2
+package but built from source instead of a precompiled binary.
+*   <cite>requirements-tape.txt</cite> - contains tape-specific dependencies, notably
+<cite>XRootD</cite>.
+*   <cite>tests/requirements.txt</cite> - contains the dependencies for the test suite.
+*   <cite>docs/requirements.txt</cite> - contains the dependencies required for
+building the documentation with sphinx.</p></li>
 </ol>
-</div>
-<div class="section" id="viewing-the-api-docs">
-<h2>Viewing the API docs<a class="headerlink" href="#viewing-the-api-docs" title="Permalink to this headline"></a></h2>
-<p>FastAPI displays automatically generated documentation for the REST-API.  To browse this go to: <a class="reference external" href="http://127.0.0.1:8000/docs#/">http://127.0.0.1:8000/docs#/</a></p>
 </div>
 <div class="section" id="server-config">
 <h2>Server Config<a class="headerlink" href="#server-config" title="Permalink to this headline"></a></h2>
-<p>To interface with the JASMIN accounts portal, for the OAuth2 authentication, a <cite>.server_config</cite> file has to be created.  This contains infrastructure information and so is not included in the GitHub repository.</p>
-<p>A Jinja-2 template for the <cite>.server_config</cite> file can be found in the <cite>templates/</cite> directory.</p>
+<p>To interface with the JASMIN accounts portal, for the OAuth2 authentication, a
+<cite>.server_config</cite> file has to be created. This contains infrastructure
+information and so is not included in the GitHub repository. See the
+[relevant documentation](<a class="reference external" href="https://cedadev.github.io/nlds/server-config/server-config.html">https://cedadev.github.io/nlds/server-config/server-config.html</a>)
+and [examples](<a class="reference external" href="https://cedadev.github.io/nlds/server-config/examples.html">https://cedadev.github.io/nlds/server-config/examples.html</a>) for
+more information.</p>
+<p>A Jinja-2 template for the <cite>.server_config</cite> file can also be found in the
+<cite>templates/</cite> directory.</p>
 </div>
+<div class="section" id="running-the-server">
+<h2>Running the Server<a class="headerlink" href="#running-the-server" title="Permalink to this headline"></a></h2>
+<ol class="arabic">
+<li><p>The NLDS API requires something to serve the API, usually uvicorn in a local
+development environment:</p>
+<p><code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">uvicorn</span> <span class="pre">nlds.main:nlds</span> <span class="pre">--reload</span>
+<span class="pre">`</span></code></p>
+<p>This will create a local NLDS API server at <cite>http://127.0.0.1:8000/</cite>.
+FastAPI displays automatically generated documentation for the REST-API, to
+browse this go to <a class="reference external" href="http://127.0.0.1:8000/docs/">http://127.0.0.1:8000/docs/</a></p>
+</li>
+<li><p>To run the microservices, you have two options:
+*   In individual terminals, after activating the virtual env, (e.g.</p>
+<blockquote>
+<div><p><cite>source ~/nlds-venv/bin/activate</cite>), start each of the microservice
+consumers:
+<code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">nlds_q</span>
+<span class="pre">index_q</span>
+<span class="pre">catalog_q</span>
+<span class="pre">transfer_put_q</span>
+<span class="pre">transfer_get_q</span>
+<span class="pre">logging_q</span>
+<span class="pre">archive_put_q</span>
+<span class="pre">archive_get_q</span>
+<span class="pre">`</span></code>
+This will send the output of each consumer to its own terminal (as well
+as whatever is configured in the logger).</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>Alternatively, you can use the scripts in the <cite>test_run/</cite> directory,
+notably <cite>start_test_run.py</cite> to start and <cite>stop_test_run.py</cite> to stop.
+This will start a [screen](<a class="reference external" href="https://www.gnu.org/software/screen/manual/screen.html">https://www.gnu.org/software/screen/manual/screen.html</a>)
+session with all 8 processors (+ api server) in, sending each output to
+a log in the <cite>./nlds_log/</cite> directory.</p></li>
+</ul>
+</li>
+</ol>
+</div>
+<div class="section" id="tests">
+<h2>Tests<a class="headerlink" href="#tests" title="Permalink to this headline"></a></h2>
+<p>The NLDS uses pytest for its unit test suite. Once <cite>test/requirements.txt</cite> have
+been installed, you can run the tests with
+<code class="docutils literal notranslate"><span class="pre">`</span>
+<span class="pre">pytest</span>
+<span class="pre">`</span></code>
+in the root directory. Pytest is also used for integration testing in the
+separate [nlds-test repo](<a class="reference external" href="https://github.com/cedadev/nlds-test">https://github.com/cedadev/nlds-test</a>).</p>
+<p>The <cite>pytest</cite> test-coverage report can (hopefully) be found [here](<a class="reference external" href="https://cedadev.github.io/nlds/coverage/htmlcov/">https://cedadev.github.io/nlds/coverage/htmlcov/</a>).</p>
+</div>
+<div class="section" id="license">
+<h2>License<a class="headerlink" href="#license" title="Permalink to this headline"></a></h2>
+<p>The NLDS is available on a BSD 2-Clause License, see the [license](./LICENSE.txt)
+for more info.</p>
+</div>
+</div>
+<div class="section" id="acknowledgements">
+<h1>Acknowledgements<a class="headerlink" href="#acknowledgements" title="Permalink to this headline"></a></h1>
+<p>NLDS was developed at the Centre for Environmental Data Analysis and supported
+through the ESiWACE2 project. The project ESiWACE2 has received funding from the
+European Union’s Horizon 2020 research and innovation programme under grant
+agreement No 823988.</p>
 </div>
 
 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="index.html" class="btn btn-neutral float-left" title="Near-line Data Store documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="specification.html" class="btn btn-neutral float-right" title="Near Line Data Store (NLDS)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="index.html" class="btn btn-neutral float-left" title="Near-line Data Store - Server Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="system-status.html" class="btn btn-neutral float-right" title="The System Status Monitor" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
@@ -173,7 +255,31 @@ directory.</p></li>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script> 
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #A6C36F;
+    }
+
+    .caption-text {
+        color: #828C51
+    }
+
+    .wy-nav-side {
+        background: #1E352F;
+    }
+
+    .note {
+        background: #BEEF9E
+    }
+    .admonition-title {
+        background: #335145
+    }
+
+  </style>
+
 
 </body>
 </html>

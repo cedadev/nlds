@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Near-line Data Store documentation &mdash; Near-line Data Store 1.0.0 documentation</title>
+  <title>Near-line Data Store - Server Documentation &mdash; Near-line Data Store Server 1.0.0 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+    <link rel="shortcut icon" href="_static/icon-black.png"/>
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -25,8 +26,8 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="#">
-            <img src="_static/ceda.png" class="logo" alt="Logo"/>
+            <a href="#" class="icon icon-home"> Near-line Data Store Server
+            <img src="_static/nlds.png" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -36,10 +37,10 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="home.html">CEDA Near-Line Data Store</a></li>
+<li class="toctree-l1"><a class="reference internal" href="home.html#acknowledgements">Acknowledgements</a></li>
 <li class="toctree-l1"><a class="reference internal" href="system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
@@ -47,8 +48,10 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Development</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coverage/coverage-report.html">Test coverage report</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -62,7 +65,7 @@
 
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="#">Near-line Data Store</a>
+          <a href="#">Near-line Data Store Server</a>
       </nav>
 
       <div class="wy-nav-content">
@@ -70,7 +73,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="#" class="icon icon-home"></a> &raquo;</li>
-      <li>Near-line Data Store documentation</li>
+      <li>Near-line Data Store - Server Documentation</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -80,15 +83,19 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <div class="section" id="near-line-data-store-documentation">
-<h1>Near-line Data Store documentation<a class="headerlink" href="#near-line-data-store-documentation" title="Permalink to this headline"></a></h1>
-<p>This is the documentation for the Near-line Data Store (NLDS), a tool developed
-at JASMIN to provide a single interface for disk, object storage and tape.</p>
+  <div class="section" id="near-line-data-store-server-documentation">
+<h1>Near-line Data Store - Server Documentation<a class="headerlink" href="#near-line-data-store-server-documentation" title="Permalink to this headline"></a></h1>
+<p>This is the documentation for the Near-line Data Store (NLDS) server, a tool
+developed at JASMIN to provide a single interface for disk, object storage and
+tape. We also have separate documentation for the <a class="reference external" href="https://cedadev.github.io/nlds-client/">NLDS client</a>.</p>
+<p>These docs are split into a user-guide, if you plan on simply running the NLDS
+server; a development guide, for some of the specifics required to know about if
+you plan on contributing to the NLDS; and an API Reference.</p>
 <div class="toctree-wrapper compound">
-<p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="home.html">CEDA Near-Line Data Store</a></li>
+<li class="toctree-l1"><a class="reference internal" href="home.html#acknowledgements">Acknowledgements</a></li>
 <li class="toctree-l1"><a class="reference internal" href="system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
@@ -98,8 +105,10 @@ at JASMIN to provide a single interface for disk, object storage and tape.</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Development</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coverage/coverage-report.html">Test coverage report</a></li>
 </ul>
 </div>
 <div class="toctree-wrapper compound">
@@ -117,6 +126,15 @@ at JASMIN to provide a single interface for disk, object storage and tape.</p>
 <li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
 <li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
 </ul>
+</div>
+<div class="section" id="acknowledgements">
+<h1>Acknowledgements<a class="headerlink" href="#acknowledgements" title="Permalink to this headline"></a></h1>
+<p>NLDS was developed at the Centre for Environmental Data Analysis and supported
+through the ESiWACE2 project. The project ESiWACE2 has received funding from the
+European Union’s Horizon 2020 research and innovation programme under grant
+agreement No 823988.</p>
+<a class="reference internal image-reference" href="_images/esiwace2.png"><img alt="ESiWACE2 Project Logo" src="_images/esiwace2.png" style="width: 300px;" /></a>
+<a class="reference internal image-reference" href="_images/ceda.png"><img alt="CEDA Logo" src="_images/ceda.png" style="width: 300px;" /></a>
 </div>
 
 
@@ -146,7 +164,31 @@ at JASMIN to provide a single interface for disk, object storage and tape.</p>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script> 
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #A6C36F;
+    }
+
+    .caption-text {
+        color: #828C51
+    }
+
+    .wy-nav-side {
+        background: #1E352F;
+    }
+
+    .note {
+        background: #BEEF9E
+    }
+    .admonition-title {
+        background: #335145
+    }
+
+  </style>
+
 
 </body>
 </html>

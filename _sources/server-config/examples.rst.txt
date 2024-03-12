@@ -19,17 +19,20 @@ machine - likely a laptop or single vm. This file would be saved at
                 "oauth_token_introspect_url" : "[REDACTED]"
             }
         },
+        "general": {
+            "retry_delays": [
+                1, 5, 10, 20, 30, 60, 120, 240, 480
+            ]
+        },
         "index_q":{
             "logging":{
                 "enable": true
             },
             "filelist_threshold": 10000,
             "check_permissions_fl": true,
-            "use_pwd_gid_fl": true,
+            "max_filesize": 5000000,
             "retry_delays": [
-                0,
-                1,
-                2
+                0, 0, 0
             ]
         },
         "nlds_q":{
@@ -43,11 +46,8 @@ machine - likely a laptop or single vm. This file would be saved at
             },
             "tenancy": "example-tenancy.s3.uk",
             "require_secure_fl": false,
-            "use_pwd_gid_fl": true,
             "retry_delays": [
-                0,
-                1,
-                2
+                0, 1, 2
             ]
         },
         "transfer_get_q":{
@@ -56,12 +56,16 @@ machine - likely a laptop or single vm. This file would be saved at
             },
             "tenancy": "example-tenancy.s3.uk",
             "require_secure_fl": false,
-            "use_pwd_gid_fl": true
+            "retry_delays": [
+                10,
+                20,
+                30
+            ]
         },
         "monitor_q":{
             "db_engine": "sqlite",
             "db_options": {
-                "db_name" : "//Users/jack.leland/nlds/nlds_monitor.db",
+                "db_name" : "//home/nlds/nlds_monitor.db",
                 "db_user" : "",
                 "db_passwd" : "",
                 "echo": false
@@ -86,32 +90,69 @@ machine - likely a laptop or single vm. This file would be saved at
                     "logs/transfer_put_q.txt",
                     "logs/transfer_get_q.txt",
                     "logs/logging_q.txt",
-                    "logs/api_server.txt"
-                ]
+                    "logs/api_server.txt",
+                    "logs/archive_put_q.txt",
+                    "logs/archive_get_q.txt"
+                ],
+                "max_bytes": 33554432,
+                "backup_count": 0
             }
         },
         "catalog_q":{
             "db_engine": "sqlite",
             "db_options": {
-                "db_name" : "//Users/jack.leland/nlds/nlds_catalog.db",
+                "db_name" : "//home/nlds/nlds_catalog.db",
                 "db_user" : "",
                 "db_passwd" : "",
                 "echo": false
             },
             "retry_delays": [
                 0,
-                1,
-                2
+                0,
+                0
             ],
             "logging":{
+                "enable": true
+            },
+            "default_tape_url": "root://example-tape.endpoint.uk//eos/ctaeos/cta/nlds",
+            "default_tenancy": "example-tenancy.s3.uk",
+        },
+        "archive_get_q": {
+            "tape_url": "root://example-tape.endpoint.uk//eos/ctaeos/cta/nlds",
+            "tape_pool": "",
+            "chunk_size": 262144,
+            "tenancy": "example-tenancy.s3.uk",
+            "print_tracebacks_fl": false,
+            "check_permissions_fl": false,
+            "require_secure_fl": false,
+            "max_retries": 5,
+            "retry_delays": [0.0, 0.0, 0.0],
+            "logging": {
+                "enable": true
+            }
+        },
+        "archive_put_q": {
+            "query_checksum_fl": true,
+            "tape_url": "root://example-tape.endpoint.uk//eos/ctaeos/cta/nlds",
+            "tape_pool": "",
+            "chunk_size": 262144,
+            "tenancy": "example-tenancy.s3.uk",
+            "print_tracebacks_fl": false,
+            "check_permissions_fl": false,
+            "require_secure_fl": false,
+            "max_retries": 1,
+            "retry_delays": [0.0, 0.0, 0.0],
+            "logging": {
                 "enable": true
             }
         },
         "rabbitMQ": {
-            "user": "full_access",
-            "password": "passwordletmein123",
-            "server": "130.246.3.98",
-            "vhost": "delayed-test",
+            "user": "[REDACTED]",
+            "password": "[REDACTED]",
+            "heartbeat": 5,
+            "server": "[REDACTED]",
+            "vhost": "delayed-nlds",
+            "admin_port": 15672,
             "exchange": {
                 "name": "test_exchange",
                 "type": "topic",
@@ -128,6 +169,10 @@ machine - likely a laptop or single vm. This file would be saved at
                         {
                             "exchange": "test_exchange",
                             "routing_key": "nlds-api.*.complete"
+                        },
+                        {
+                            "exchange": "test_exchange",
+                            "routing_key": "nlds-api.*.reroute"
                         },
                         {
                             "exchange": "test_exchange",
@@ -175,6 +220,18 @@ machine - likely a laptop or single vm. This file would be saved at
                         {
                             "exchange": "test_exchange",
                             "routing_key": "*.catalog-del.start"
+                        },
+                        {
+                            "exchange": "test_exchange",
+                            "routing_key": "*.catalog-archive-next.start"
+                        },
+                        {
+                            "exchange": "test_exchange",
+                            "routing_key": "*.catalog-archive-del.start"
+                        },
+                        {
+                            "exchange": "test_exchange",
+                            "routing_key": "*.catalog-archive-update.start"
                         }
                     ]
                 },
@@ -204,21 +261,154 @@ machine - likely a laptop or single vm. This file would be saved at
                             "routing_key": "*.log.*"
                         }
                     ]
+                },
+                {
+                    "name": "archive_get_q",
+                    "bindings": [
+                        {
+                            "exchange": "test_exchange",
+                            "routing_key": "*.archive-get.start"
+                        }
+                    ]
+                },
+                {
+                    "name": "archive_put_q",
+                    "bindings": [
+                        {
+                            "exchange": "test_exchange",
+                            "routing_key": "*.archive-put.start"
+                        }
+                    ]
                 }
             ]
         },
         "rpc_publisher": {
             "queue_exclusivity_fl": true
+        },
+        "cronjob_publisher": {
+            "access_key": "[REDACTED]",
+            "secret_key": "[REDACTED]",
+            "tenancy": "example-tenancy.s3.uk"
         }
     }
 
-Note that this is purely an example and doesn't necessarily use all features 
-within the NLDS. For example, several individual consumers have ``retry_delays``
-set but not generic ``retry_delays`` is set in the ``general`` section. Note 
-also that the jasmin authenication configuration is redacted for security 
+
+Note that this is purely illustrative and doesn't necessarily use all features 
+within the NLDS - it is provided as a reference for making a new working server 
+config. Note also that certain sensitive information is redacted for security 
 purposes.
 
 Distributed NLDS
 ----------------
 
-COMING SOON
+When making the config for a distributed NLDS, the above would need to be split 
+into the appropriate sections for each of the distributed parts being run 
+separately, namely by the consumer-specific and publisher-specific sections. 
+Each consumer needs the core, required ``authentication`` and ``rabbitMQ``, 
+optionally ``logging`` or ``general`` config and then whatever consumer-specific
+values necessary to change from default values.  
+
+The following is a breakdown of how it might be achieved:
+
+API-Server
+^^^^^^^^^^
+
+This would only contain the required sections as well as, optionally, any config 
+for the ``rpc_publisher``::
+
+    {
+        "authentication": {
+            "authenticator_backend": "jasmin_authenticator",
+            "jasmin_authenticator": {
+                "user_profile_url" : "[REDACTED]",
+                "user_services_url" : "[REDACTED]",
+                "oauth_token_introspect_url" : "[REDACTED]"
+            }
+        },
+        "rabbitMQ": {
+            "user": "[REDACTED]",
+            "password": "[REDACTED]",
+            "heartbeat": 5,
+            "server": "[REDACTED]",
+            "vhost": "nlds_staging",
+            "admin_port": 15672,
+            "exchange": {
+                "name": "nlds",
+                "type": "topic",
+                "delayed": true
+            },
+            "queues": []
+        },
+        "rpc_publisher": {
+            "time_limit": 60
+        }
+    }
+
+NLDS Worker
+^^^^^^^^^^^
+
+This, again, contains the required sections, as well as consumer specific config 
+for the NLDS-Worker. In this case the additional info would be enabling the 
+logging at ``debug`` level and defining the bindings (routing keys) for the 
+consumer's queue.
+
+.. code-block:: json
+
+    {
+        "authentication": {
+            "authenticator_backend": "jasmin_authenticator",
+            "jasmin_authenticator": {
+                "user_profile_url" : "[REDACTED]",
+                "user_services_url" : "[REDACTED]",
+                "oauth_token_introspect_url" : "[REDACTED]"
+            }
+        },
+        "rabbitMQ": {
+            "user": "[REDACTED]",
+            "password": "[REDACTED]",
+            "heartbeat": 5,
+            "server": "[REDACTED]",
+            "vhost": "nlds_staging",
+            "admin_port": 15672,
+            "exchange": {
+                "name": "nlds",
+                "type": "topic",
+                "delayed": true
+            },
+            "queues": [
+                {
+                    "name": "nlds_q",
+                    "bindings": [
+                        {
+                            "exchange": "nlds",
+                            "routing_key": "nlds-api.route.*"
+                        },
+                        {
+                            "exchange": "nlds",
+                            "routing_key": "nlds-api.*.complete"
+                        },
+                        {
+                            "exchange": "nlds",
+                            "routing_key": "nlds-api.*.failed"
+                        }
+                    ]
+                }
+            ]
+        },
+        "logging": {
+            "log_level": "debug"
+        },
+        "nlds_q": {
+            "logging": {
+               "enable": true
+            }
+        }
+    }
+
+Every other consumer would be populated similarly. 
+
+.. note:: 
+    In the production deployment of NLDS, this is practically achieved through 
+    ``helm`` and the combination of different yaml config files. Please see the 
+    :doc:`../deployment` documentation for more details on the practicalities of 
+    deploying the NLDS.  

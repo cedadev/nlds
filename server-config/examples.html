@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Examples &mdash; Near-line Data Store 1.0.0 documentation</title>
+  <title>Examples &mdash; Near-line Data Store Server 1.0.0 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+    <link rel="shortcut icon" href="../_static/icon-black.png"/>
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -26,8 +27,8 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="../index.html">
-            <img src="../_static/ceda.png" class="logo" alt="Logo"/>
+            <a href="../index.html" class="icon icon-home"> Near-line Data Store Server
+            <img src="../_static/nlds.png" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -37,23 +38,29 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="../home.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../home.html">CEDA Near-Line Data Store</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../home.html#acknowledgements">Acknowledgements</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config.html">The server config file</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Server config examples</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#local-nlds">Local NLDS</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#distributed-nlds">Distributed NLDS</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#distributed-nlds">Distributed NLDS</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#api-server">API-Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#nlds-worker">NLDS Worker</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../deployment.html">Deployment</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Development</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../specification.html">Specification document</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coverage/coverage-report.html">Test coverage report</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -67,7 +74,7 @@
 
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../index.html">Near-line Data Store</a>
+          <a href="../index.html">Near-line Data Store Server</a>
       </nav>
 
       <div class="wy-nav-content">
@@ -102,17 +109,20 @@ machine - likely a laptop or single vm. This file would be saved at
             <span class="s2">&quot;oauth_token_introspect_url&quot;</span> <span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span>
         <span class="p">}</span>
     <span class="p">},</span>
+    <span class="s2">&quot;general&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">120</span><span class="p">,</span> <span class="mi">240</span><span class="p">,</span> <span class="mi">480</span>
+        <span class="p">]</span>
+    <span class="p">},</span>
     <span class="s2">&quot;index_q&quot;</span><span class="p">:{</span>
         <span class="s2">&quot;logging&quot;</span><span class="p">:{</span>
             <span class="s2">&quot;enable&quot;</span><span class="p">:</span> <span class="n">true</span>
         <span class="p">},</span>
         <span class="s2">&quot;filelist_threshold&quot;</span><span class="p">:</span> <span class="mi">10000</span><span class="p">,</span>
         <span class="s2">&quot;check_permissions_fl&quot;</span><span class="p">:</span> <span class="n">true</span><span class="p">,</span>
-        <span class="s2">&quot;use_pwd_gid_fl&quot;</span><span class="p">:</span> <span class="n">true</span><span class="p">,</span>
+        <span class="s2">&quot;max_filesize&quot;</span><span class="p">:</span> <span class="mi">5000000</span><span class="p">,</span>
         <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="p">[</span>
-            <span class="mi">0</span><span class="p">,</span>
-            <span class="mi">1</span><span class="p">,</span>
-            <span class="mi">2</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span>
         <span class="p">]</span>
     <span class="p">},</span>
     <span class="s2">&quot;nlds_q&quot;</span><span class="p">:{</span>
@@ -126,11 +136,8 @@ machine - likely a laptop or single vm. This file would be saved at
         <span class="p">},</span>
         <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="s2">&quot;example-tenancy.s3.uk&quot;</span><span class="p">,</span>
         <span class="s2">&quot;require_secure_fl&quot;</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span>
-        <span class="s2">&quot;use_pwd_gid_fl&quot;</span><span class="p">:</span> <span class="n">true</span><span class="p">,</span>
         <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="p">[</span>
-            <span class="mi">0</span><span class="p">,</span>
-            <span class="mi">1</span><span class="p">,</span>
-            <span class="mi">2</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span>
         <span class="p">]</span>
     <span class="p">},</span>
     <span class="s2">&quot;transfer_get_q&quot;</span><span class="p">:{</span>
@@ -139,12 +146,16 @@ machine - likely a laptop or single vm. This file would be saved at
         <span class="p">},</span>
         <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="s2">&quot;example-tenancy.s3.uk&quot;</span><span class="p">,</span>
         <span class="s2">&quot;require_secure_fl&quot;</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span>
-        <span class="s2">&quot;use_pwd_gid_fl&quot;</span><span class="p">:</span> <span class="n">true</span>
+        <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="mi">10</span><span class="p">,</span>
+            <span class="mi">20</span><span class="p">,</span>
+            <span class="mi">30</span>
+        <span class="p">]</span>
     <span class="p">},</span>
     <span class="s2">&quot;monitor_q&quot;</span><span class="p">:{</span>
         <span class="s2">&quot;db_engine&quot;</span><span class="p">:</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">,</span>
         <span class="s2">&quot;db_options&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;db_name&quot;</span> <span class="p">:</span> <span class="s2">&quot;//Users/jack.leland/nlds/nlds_monitor.db&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;db_name&quot;</span> <span class="p">:</span> <span class="s2">&quot;//home/nlds/nlds_monitor.db&quot;</span><span class="p">,</span>
             <span class="s2">&quot;db_user&quot;</span> <span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
             <span class="s2">&quot;db_passwd&quot;</span> <span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
             <span class="s2">&quot;echo&quot;</span><span class="p">:</span> <span class="n">false</span>
@@ -169,32 +180,69 @@ machine - likely a laptop or single vm. This file would be saved at
                 <span class="s2">&quot;logs/transfer_put_q.txt&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;logs/transfer_get_q.txt&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;logs/logging_q.txt&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;logs/api_server.txt&quot;</span>
-            <span class="p">]</span>
+                <span class="s2">&quot;logs/api_server.txt&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;logs/archive_put_q.txt&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;logs/archive_get_q.txt&quot;</span>
+            <span class="p">],</span>
+            <span class="s2">&quot;max_bytes&quot;</span><span class="p">:</span> <span class="mi">33554432</span><span class="p">,</span>
+            <span class="s2">&quot;backup_count&quot;</span><span class="p">:</span> <span class="mi">0</span>
         <span class="p">}</span>
     <span class="p">},</span>
     <span class="s2">&quot;catalog_q&quot;</span><span class="p">:{</span>
         <span class="s2">&quot;db_engine&quot;</span><span class="p">:</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">,</span>
         <span class="s2">&quot;db_options&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;db_name&quot;</span> <span class="p">:</span> <span class="s2">&quot;//Users/jack.leland/nlds/nlds_catalog.db&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;db_name&quot;</span> <span class="p">:</span> <span class="s2">&quot;//home/nlds/nlds_catalog.db&quot;</span><span class="p">,</span>
             <span class="s2">&quot;db_user&quot;</span> <span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
             <span class="s2">&quot;db_passwd&quot;</span> <span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
             <span class="s2">&quot;echo&quot;</span><span class="p">:</span> <span class="n">false</span>
         <span class="p">},</span>
         <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="p">[</span>
             <span class="mi">0</span><span class="p">,</span>
-            <span class="mi">1</span><span class="p">,</span>
-            <span class="mi">2</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="mi">0</span>
         <span class="p">],</span>
         <span class="s2">&quot;logging&quot;</span><span class="p">:{</span>
+            <span class="s2">&quot;enable&quot;</span><span class="p">:</span> <span class="n">true</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;default_tape_url&quot;</span><span class="p">:</span> <span class="s2">&quot;root://example-tape.endpoint.uk//eos/ctaeos/cta/nlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;default_tenancy&quot;</span><span class="p">:</span> <span class="s2">&quot;example-tenancy.s3.uk&quot;</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;archive_get_q&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;tape_url&quot;</span><span class="p">:</span> <span class="s2">&quot;root://example-tape.endpoint.uk//eos/ctaeos/cta/nlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;tape_pool&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;chunk_size&quot;</span><span class="p">:</span> <span class="mi">262144</span><span class="p">,</span>
+        <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="s2">&quot;example-tenancy.s3.uk&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;print_tracebacks_fl&quot;</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span>
+        <span class="s2">&quot;check_permissions_fl&quot;</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span>
+        <span class="s2">&quot;require_secure_fl&quot;</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span>
+        <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+        <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span>
+        <span class="s2">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;enable&quot;</span><span class="p">:</span> <span class="n">true</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;archive_put_q&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;query_checksum_fl&quot;</span><span class="p">:</span> <span class="n">true</span><span class="p">,</span>
+        <span class="s2">&quot;tape_url&quot;</span><span class="p">:</span> <span class="s2">&quot;root://example-tape.endpoint.uk//eos/ctaeos/cta/nlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;tape_pool&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;chunk_size&quot;</span><span class="p">:</span> <span class="mi">262144</span><span class="p">,</span>
+        <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="s2">&quot;example-tenancy.s3.uk&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;print_tracebacks_fl&quot;</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span>
+        <span class="s2">&quot;check_permissions_fl&quot;</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span>
+        <span class="s2">&quot;require_secure_fl&quot;</span><span class="p">:</span> <span class="n">false</span><span class="p">,</span>
+        <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span>
+        <span class="s2">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s2">&quot;enable&quot;</span><span class="p">:</span> <span class="n">true</span>
         <span class="p">}</span>
     <span class="p">},</span>
     <span class="s2">&quot;rabbitMQ&quot;</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="s2">&quot;full_access&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="s2">&quot;passwordletmein123&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;server&quot;</span><span class="p">:</span> <span class="s2">&quot;130.246.3.98&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;vhost&quot;</span><span class="p">:</span> <span class="s2">&quot;delayed-test&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;heartbeat&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+        <span class="s2">&quot;server&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;vhost&quot;</span><span class="p">:</span> <span class="s2">&quot;delayed-nlds&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;admin_port&quot;</span><span class="p">:</span> <span class="mi">15672</span><span class="p">,</span>
         <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
             <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;topic&quot;</span><span class="p">,</span>
@@ -211,6 +259,10 @@ machine - likely a laptop or single vm. This file would be saved at
                     <span class="p">{</span>
                         <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
                         <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds-api.*.complete&quot;</span>
+                    <span class="p">},</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds-api.*.reroute&quot;</span>
                     <span class="p">},</span>
                     <span class="p">{</span>
                         <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
@@ -258,6 +310,18 @@ machine - likely a laptop or single vm. This file would be saved at
                     <span class="p">{</span>
                         <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
                         <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;*.catalog-del.start&quot;</span>
+                    <span class="p">},</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;*.catalog-archive-next.start&quot;</span>
+                    <span class="p">},</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;*.catalog-archive-del.start&quot;</span>
+                    <span class="p">},</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;*.catalog-archive-update.start&quot;</span>
                     <span class="p">}</span>
                 <span class="p">]</span>
             <span class="p">},</span>
@@ -287,24 +351,153 @@ machine - likely a laptop or single vm. This file would be saved at
                         <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;*.log.*&quot;</span>
                     <span class="p">}</span>
                 <span class="p">]</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;archive_get_q&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;bindings&quot;</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;*.archive-get.start&quot;</span>
+                    <span class="p">}</span>
+                <span class="p">]</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;archive_put_q&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;bindings&quot;</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;test_exchange&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;*.archive-put.start&quot;</span>
+                    <span class="p">}</span>
+                <span class="p">]</span>
             <span class="p">}</span>
         <span class="p">]</span>
     <span class="p">},</span>
     <span class="s2">&quot;rpc_publisher&quot;</span><span class="p">:</span> <span class="p">{</span>
         <span class="s2">&quot;queue_exclusivity_fl&quot;</span><span class="p">:</span> <span class="n">true</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;cronjob_publisher&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;access_key&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;secret_key&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="s2">&quot;example-tenancy.s3.uk&quot;</span>
     <span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
 </div>
-<p>Note that this is purely an example and doesn’t necessarily use all features
-within the NLDS. For example, several individual consumers have <code class="docutils literal notranslate"><span class="pre">retry_delays</span></code>
-set but not generic <code class="docutils literal notranslate"><span class="pre">retry_delays</span></code> is set in the <code class="docutils literal notranslate"><span class="pre">general</span></code> section. Note
-also that the jasmin authenication configuration is redacted for security
+<p>Note that this is purely illustrative and doesn’t necessarily use all features
+within the NLDS - it is provided as a reference for making a new working server
+config. Note also that certain sensitive information is redacted for security
 purposes.</p>
 </div>
 <div class="section" id="distributed-nlds">
 <h2>Distributed NLDS<a class="headerlink" href="#distributed-nlds" title="Permalink to this headline"></a></h2>
-<p>COMING SOON</p>
+<p>When making the config for a distributed NLDS, the above would need to be split
+into the appropriate sections for each of the distributed parts being run
+separately, namely by the consumer-specific and publisher-specific sections.
+Each consumer needs the core, required <code class="docutils literal notranslate"><span class="pre">authentication</span></code> and <code class="docutils literal notranslate"><span class="pre">rabbitMQ</span></code>,
+optionally <code class="docutils literal notranslate"><span class="pre">logging</span></code> or <code class="docutils literal notranslate"><span class="pre">general</span></code> config and then whatever consumer-specific
+values necessary to change from default values.</p>
+<p>The following is a breakdown of how it might be achieved:</p>
+<div class="section" id="api-server">
+<h3>API-Server<a class="headerlink" href="#api-server" title="Permalink to this headline"></a></h3>
+<p>This would only contain the required sections as well as, optionally, any config
+for the <code class="docutils literal notranslate"><span class="pre">rpc_publisher</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;authentication&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;authenticator_backend&quot;</span><span class="p">:</span> <span class="s2">&quot;jasmin_authenticator&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;jasmin_authenticator&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;user_profile_url&quot;</span> <span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;user_services_url&quot;</span> <span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;oauth_token_introspect_url&quot;</span> <span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;rabbitMQ&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;heartbeat&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+        <span class="s2">&quot;server&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;vhost&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds_staging&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;admin_port&quot;</span><span class="p">:</span> <span class="mi">15672</span><span class="p">,</span>
+        <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;topic&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;delayed&quot;</span><span class="p">:</span> <span class="n">true</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;queues&quot;</span><span class="p">:</span> <span class="p">[]</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;rpc_publisher&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;time_limit&quot;</span><span class="p">:</span> <span class="mi">60</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="nlds-worker">
+<h3>NLDS Worker<a class="headerlink" href="#nlds-worker" title="Permalink to this headline"></a></h3>
+<p>This, again, contains the required sections, as well as consumer specific config
+for the NLDS-Worker. In this case the additional info would be enabling the
+logging at <code class="docutils literal notranslate"><span class="pre">debug</span></code> level and defining the bindings (routing keys) for the
+consumer’s queue.</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="nt">&quot;authentication&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="nt">&quot;authenticator_backend&quot;</span><span class="p">:</span> <span class="s2">&quot;jasmin_authenticator&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;jasmin_authenticator&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="nt">&quot;user_profile_url&quot;</span> <span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+            <span class="nt">&quot;user_services_url&quot;</span> <span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+            <span class="nt">&quot;oauth_token_introspect_url&quot;</span> <span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+    <span class="nt">&quot;rabbitMQ&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="nt">&quot;user&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;password&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;heartbeat&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+        <span class="nt">&quot;server&quot;</span><span class="p">:</span> <span class="s2">&quot;[REDACTED]&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;vhost&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds_staging&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;admin_port&quot;</span><span class="p">:</span> <span class="mi">15672</span><span class="p">,</span>
+        <span class="nt">&quot;exchange&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds&quot;</span><span class="p">,</span>
+            <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;topic&quot;</span><span class="p">,</span>
+            <span class="nt">&quot;delayed&quot;</span><span class="p">:</span> <span class="kc">true</span>
+        <span class="p">},</span>
+        <span class="nt">&quot;queues&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds_q&quot;</span><span class="p">,</span>
+                <span class="nt">&quot;bindings&quot;</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="nt">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds&quot;</span><span class="p">,</span>
+                        <span class="nt">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds-api.route.*&quot;</span>
+                    <span class="p">},</span>
+                    <span class="p">{</span>
+                        <span class="nt">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds&quot;</span><span class="p">,</span>
+                        <span class="nt">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds-api.*.complete&quot;</span>
+                    <span class="p">},</span>
+                    <span class="p">{</span>
+                        <span class="nt">&quot;exchange&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds&quot;</span><span class="p">,</span>
+                        <span class="nt">&quot;routing_key&quot;</span><span class="p">:</span> <span class="s2">&quot;nlds-api.*.failed&quot;</span>
+                    <span class="p">}</span>
+                <span class="p">]</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
+    <span class="p">},</span>
+    <span class="nt">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="nt">&quot;log_level&quot;</span><span class="p">:</span> <span class="s2">&quot;debug&quot;</span>
+    <span class="p">},</span>
+    <span class="nt">&quot;nlds_q&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="nt">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span>
+           <span class="nt">&quot;enable&quot;</span><span class="p">:</span> <span class="kc">true</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Every other consumer would be populated similarly.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In the production deployment of NLDS, this is practically achieved through
+<code class="docutils literal notranslate"><span class="pre">helm</span></code> and the combination of different yaml config files. Please see the
+<a class="reference internal" href="../deployment.html"><span class="doc">Deployment</span></a> documentation for more details on the practicalities of
+deploying the NLDS.</p>
+</div>
+</div>
 </div>
 </div>
 
@@ -336,7 +529,31 @@ purposes.</p>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script> 
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #A6C36F;
+    }
+
+    .caption-text {
+        color: #828C51
+    }
+
+    .wy-nav-side {
+        background: #1E352F;
+    }
+
+    .note {
+        background: #BEEF9E
+    }
+    .admonition-title {
+        background: #335145
+    }
+
+  </style>
+
 
 </body>
 </html>

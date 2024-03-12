@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment &mdash; Near-line Data Store 1.0.0 documentation</title>
+  <title>Deployment &mdash; Near-line Data Store Server 1.0.0 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+    <link rel="shortcut icon" href="_static/icon-black.png"/>
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -17,7 +18,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="CERN Tape Archive Set Up" href="development/cta-emulator.html" />
+    <link rel="next" title="Near Line Data Store (NLDS)" href="specification.html" />
     <link rel="prev" title="Examples" href="server-config/examples.html" /> 
 </head>
 
@@ -26,8 +27,8 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="index.html">
-            <img src="_static/ceda.png" class="logo" alt="Logo"/>
+            <a href="index.html" class="icon icon-home"> Near-line Data Store Server
+            <img src="_static/nlds.png" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -37,28 +38,33 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="home.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="home.html">CEDA Near-Line Data Store</a></li>
+<li class="toctree-l1"><a class="reference internal" href="home.html#acknowledgements">Acknowledgements</a></li>
 <li class="toctree-l1"><a class="reference internal" href="system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Deployment</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#images">Images</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#common-deployment-configurations">Common Deployment Configurations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#api-server">API Server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#tape-keys">Tape Keys</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#migrations">Migrations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#logging-with-fluentbit">Logging with Fluentbit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#scaling">Scaling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#changing-ownership-of-files">Changing ownership of files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#archive-put-cronjob">Archive Put Cronjob</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#staging-deployment">Staging Deployment</a></li>
 </ul>
 </li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Development</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="specification.html">Specification document</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coverage/coverage-report.html">Test coverage report</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -72,7 +78,7 @@
 
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">Near-line Data Store</a>
+          <a href="index.html">Near-line Data Store Server</a>
       </nav>
 
       <div class="wy-nav-content">
@@ -134,18 +140,19 @@ three specific roles:</p>
 <p>The string after each of these corresponds to the image’s location on CEDA’s
 Harbor registry (and therefore what tag/registry address to use to <code class="docutils literal notranslate"><span class="pre">docker</span>
 <span class="pre">pull</span></code> each of them). As may be obvious, the FastAPI server runs on the
-<code class="docutils literal notranslate"><span class="pre">Generic</span> <span class="pre">Server</span></code> image and contains an installation of asgi, building upon the
-<code class="docutils literal notranslate"><span class="pre">asgi</span></code> [base-image], to actually run the server. The rest run on the <code class="docutils literal notranslate"><span class="pre">Generic</span>
-<span class="pre">Consumer</span></code> image, which has an installation of the NLDS repo, along
-with its dependencies, to allow it to run a given consumer. The only dependency
-which isn’t included is xrootd as it is a very large and long installation
-process and unnecessary to the running of the non-tape consumers. Therefore the
-<code class="docutils literal notranslate"><span class="pre">Tape</span> <span class="pre">Consumer</span></code> image was created, which appropriately builds upon the
-<code class="docutils literal notranslate"><span class="pre">Geneic</span> <span class="pre">Consumer</span></code> image with an additional installation of <code class="docutils literal notranslate"><span class="pre">xrootd</span></code> with
-which to run tape commands. The two tape consumers, <code class="docutils literal notranslate"><span class="pre">Archive-Put</span></code> and
-<code class="docutils literal notranslate"><span class="pre">Archive-Get</span></code>, run on containers using this image.</p>
+<code class="docutils literal notranslate"><span class="pre">Generic</span> <span class="pre">Server</span></code> image and contains an installation of <code class="docutils literal notranslate"><span class="pre">asgi</span></code>, building upon
+the <code class="docutils literal notranslate"><span class="pre">asgi</span></code> <a class="reference external" href="https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi">base-image</a>,
+to actually run the server. The rest run on the <code class="docutils literal notranslate"><span class="pre">Generic</span> <span class="pre">Consumer</span></code> image,
+which has an installation of the NLDS repo, along with its dependencies, to
+allow it to run a given consumer. The only dependency which isn’t included is
+<code class="docutils literal notranslate"><span class="pre">xrootd</span></code> as it is a very large and long installation process and unnecessary
+to the running of the non-tape consumers. Therefore the <code class="docutils literal notranslate"><span class="pre">Tape</span> <span class="pre">Consumer</span></code> image
+was created, which appropriately builds upon the <code class="docutils literal notranslate"><span class="pre">Geneic</span> <span class="pre">Consumer</span></code> image with
+an additional installation of <code class="docutils literal notranslate"><span class="pre">xrootd</span></code> with which to run tape commands. The
+two tape consumers, <code class="docutils literal notranslate"><span class="pre">Archive-Put</span></code> and <code class="docutils literal notranslate"><span class="pre">Archive-Get</span></code>, run on containers using
+this image.</p>
 <p>The two consumer containers run as the user NLDS, which is an official JASMIN
-user at uid=7054096 and is baked into the container (i.e. unconfigurable).
+user at <code class="docutils literal notranslate"><span class="pre">uid=7054096</span></code> and is baked into the container (i.e. unconfigurable).
 Relatedly, every container runs with config associating the NLDS user with
 supplemental groups, the list of which constitutes every group-workspace on
 JASMIN. The list was generated with the command:</p>
@@ -153,7 +160,7 @@ JASMIN. The list was generated with the command:</p>
 </pre></div>
 </div>
 <p>This will need to be periodically rerun and the output reformatted to update the
-list of <code class="docutils literal notranslate"><span class="pre">supplementalGroups</span></code> in [this config file].</p>
+list of <code class="docutils literal notranslate"><span class="pre">supplementalGroups</span></code> in <a class="reference external" href="https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/conf/common.yaml?ref_type=heads#L14-515">this config file</a>.</p>
 <p>Each of the containers will also have specific config and specific deployment
 setup to help the container perform its particular task its particular task.</p>
 </div>
@@ -163,8 +170,9 @@ setup to help the container perform its particular task its particular task.</p>
 tasks, which some, or all, of the containers make use of to function.</p>
 <p>The most commonly used is the <code class="docutils literal notranslate"><span class="pre">nslcd</span></code> pod which provides the containers with
 up-to-date uid and gid information from the LDAP servers. This directly uses the
-[<code class="docutils literal notranslate"><span class="pre">nslcd</span></code>] image developed for the notebook server, and runs as a side-car in
-every deployed pod to periodically poll the LDAP servers to provide names and
+<a class="reference external" href="https://gitlab.ceda.ac.uk/jasmin-notebooks/jasmin-notebooks/-/tree/master/images/nslcd">nslcd</a>
+image developed for the notebook server, and runs as a side-car in every
+deployed pod to periodically poll the LDAP servers to provide names and
 permissions information to the main container in the pod (the consumer) so that
 file permissions can be handled properly. In other words, it ensures the
 <code class="docutils literal notranslate"><span class="pre">passwd</span></code> file on the consumer container is up to date, and therefore that the
@@ -197,8 +205,27 @@ up to date. This will be discussed in more detail in section
 <p>There are some slightly more complex deployment configurations involved in the
 rest of the setup, which are described below.</p>
 </div>
+<div class="section" id="api-server">
+<span id="id1"></span><h2>API Server<a class="headerlink" href="#api-server" title="Permalink to this headline"></a></h2>
+<p>The NLDS API server, as mentioned above, was written using FastAPI. In a local
+development environment this is served using <code class="docutils literal notranslate"><span class="pre">uvicorn</span></code>, but for the production
+deployment the <cite>base-image &lt;https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi&gt;</cite>
+base-image is used, which runs the server instead with <code class="docutils literal notranslate"><span class="pre">guincorn</span></code>. They are
+functionally identical so this is not a problem per se, just something to be
+aware of. The NLDS API helm deployment is an extension of the standard <a class="reference external" href="https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/fast-api">FastAPI helm chart</a>.</p>
+<p>On production, this API server sits facing the public internet behind an NGINX
+reverse-proxy, handled by the standard <a class="reference external" href="https://gitlab.ceda.ac.uk/cedaci/helm-charts/-/tree/master/nginx">nginx helm chart</a>
+in the <code class="docutils literal notranslate"><span class="pre">cedaci/helm-charts</span></code> repo. It is served to the domain
+<a class="reference external" href="https://nlds.jasmin.ac.uk">https://nlds.jasmin.ac.uk</a>, with the standard NLDS
+API endpoints extending from that (such as <code class="docutils literal notranslate"><span class="pre">/docs</span></code>, <code class="docutils literal notranslate"><span class="pre">/system/status</span></code>). The
+NLDS API also has an additional endpoint (<code class="docutils literal notranslate"><span class="pre">/probe/healthz</span></code>) for the Kubernetes
+liveness probe to periodically ping to ensure the API is alive, and that the
+appropriate party is notified if it goes down. Please note, this is not a
+deployment specific endpoint and will also exist on any local development
+instances.</p>
+</div>
 <div class="section" id="tape-keys">
-<span id="id1"></span><h2>Tape Keys<a class="headerlink" href="#tape-keys" title="Permalink to this headline"></a></h2>
+<span id="id2"></span><h2>Tape Keys<a class="headerlink" href="#tape-keys" title="Permalink to this headline"></a></h2>
 <p>The CERN Tape Archive (CTA) instance at STFC requires the use of authentication
 to access the different tape pools and tape instances. This is done through
 Kerberos on the backend and requires the use of a forwardable keytab file with
@@ -229,7 +256,7 @@ schema before the database has been migrated, and this is implemented through
 two mechanisms in the deployment:</p>
 <ol class="arabic">
 <li><p>An init-container on the catalog, which has the config for both the catalog
-and montioring dbs, which has alembic installed and calls:</p>
+and montioring DBs, which has alembic installed and calls:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">alembic</span> <span class="n">upgrade</span> <span class="n">head</span>
 </pre></div>
 </div>
@@ -249,10 +276,10 @@ container has only limited, temporary storage capacity (the memory assigned from
 the cluster controller) and no means of attaching a more persistent volume to
 store logs in long-term.</p>
 <p>The, relatively new, solution that exists on the CEDA cluster is the use of
-<cite>fluentd</cite>, and more precisely <a class="reference external" href="https://fluentbit.io/how-it-works/">fluentbit</a>,
+<code class="docutils literal notranslate"><span class="pre">fluentd</span></code>, and more precisely <a class="reference external" href="https://fluentbit.io/how-it-works/">fluentbit</a>,
 to aggregate logs from the NLDS logging microservice and send them to a single
-external location running <cite>fluentd</cite> – currently the stats-collection virtual
-machine run on JASMIN. Each log sent to the <cite>fluentd`</cite> service is tagged with a
+external location running <code class="docutils literal notranslate"><span class="pre">fluentd</span></code> – currently the stats-collection virtual
+machine run on JASMIN. Each log sent to the <code class="docutils literal notranslate"><span class="pre">fluentd</span></code> service is tagged with a
 string representing the particular microservice log file it was collected from,
 e.g. the logs from the indexer microservice on the staging deployment are tagged
 as:</p>
@@ -260,18 +287,18 @@ as:</p>
 </pre></div>
 </div>
 <p>This is practically achieved through the use of a sidecar – a further container
-running in teh same pod as the logging container – running the fluentbit image
-as defined by the <a class="reference external" href="https://gitlab.ceda.ac.uk/cedaci/helm-charts">fluentbit helm chart</a>.
-The full <cite>fluentbit`</cite> config, including the full list of tags, can be found <a class="reference external" href="https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/tree/master/conf/logger">in
-the logging config yamls</a>.
+running in the same pod as the logging container – running the <code class="docutils literal notranslate"><span class="pre">fluentbit</span></code>
+image as defined by the <a class="reference external" href="https://gitlab.ceda.ac.uk/cedaci/helm-charts">fluentbit helm chart</a>.
+The full <code class="docutils literal notranslate"><span class="pre">fluentbit</span></code> config, including the full list of tags, can be found
+<a class="reference external" href="https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/tree/master/conf/logger">in the logging config yamls</a>.
 When received by the fluentd server, each tagged log is collated into a larger
 log file for help with debugging at some later date. The log files on the
 logging microservice’s container are rotated according to size, and so should
 not exceed the pod’s allocated memory limit.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The <cite>fluentbit</cite> service is still in its infancy and subject to change at
-short notice as the system &amp; helm chart get more widely adopted. For example
+<p>The <code class="docutils literal notranslate"><span class="pre">fluentbit</span></code> service is still in its infancy and subject to change at
+short notice as the system &amp; helm chart get more widely adopted. For example,
 the length of time log files are kept on the stats machine has not been
 finalised yet.</p>
 </div>
@@ -280,7 +307,7 @@ Kubernetes cluster can still be used to check the output logs of each consumer
 in the standard way for quick diagnosis of problems with the NLDS.</p>
 </div>
 <div class="section" id="scaling">
-<span id="id2"></span><h2>Scaling<a class="headerlink" href="#scaling" title="Permalink to this headline"></a></h2>
+<span id="id3"></span><h2>Scaling<a class="headerlink" href="#scaling" title="Permalink to this headline"></a></h2>
 <p>A core part of the design philosophy of the NLDS was its microservice
 architecture, which allows for any of the microservices to be scaled out in an
 embarrassingly parallelisable way to meet changing demand. This is easily
@@ -298,7 +325,7 @@ above do not require as many replicas as currently allocated.</p>
 the size of a <code class="docutils literal notranslate"><span class="pre">Rabbit</span></code> queue for a given microservice, and while this is
 <cite>in theory</cite> <a class="reference external" href="https://ryanbaker.io/2019-10-07-scaling-rabbitmq-on-k8s/">possible</a>,
 this was not possible with the current installation of Kubernetes without
-additional plugins, namely <cite>Prometheus</cite>.</p>
+additional plugins, namely <code class="docutils literal notranslate"><span class="pre">Prometheus</span></code>.</p>
 </div>
 <p>The other aspect of scaling is the resource requested by each of the pods, which
 have current <a class="reference external" href="https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/conf/common.yaml?ref_type=heads#L7">default values</a>
@@ -308,7 +335,7 @@ these were arrived at by using the command:</p>
 </pre></div>
 </div>
 <p>within the kubectl shell on the appropriate rancher cluster (accessible via the
-shell button in the top right, or shortcut <code class="code docutils literal notranslate">Ctrl + `</code>). <a href="#id3"><span class="problematic" id="id4">``</span></a>{NLDS_NAMESPACE}``will need
+shell button in the top right, or shortcut <code class="code docutils literal notranslate">Ctrl + `</code>). <code class="docutils literal notranslate"><span class="pre">{NLDS_NAMESPACE}</span></code> will need
 to be replaced with the appropriate namespace for the cluster you are on, i.e.:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">kubectl</span> <span class="n">top</span> <span class="n">pod</span> <span class="o">-</span><span class="n">n</span> <span class="n">nlds</span>                     <span class="c1"># on wigbiorg</span>
 <span class="n">kubectl</span> <span class="n">top</span> <span class="n">pod</span> <span class="o">-</span><span class="n">n</span> <span class="n">nlds</span><span class="o">-</span><span class="n">consumers</span><span class="o">-</span><span class="n">master</span>    <span class="c1"># for consumers on staging cluster</span>
@@ -318,6 +345,40 @@ to be replaced with the appropriate namespace for the cluster you are on, i.e.:<
 <p>and, as before, these will likely need to be adjusted as understanding of the
 actual resource use of each of the microservices evolves.</p>
 </div>
+<div class="section" id="changing-ownership-of-files">
+<span id="chowning"></span><h2>Changing ownership of files<a class="headerlink" href="#changing-ownership-of-files" title="Permalink to this headline"></a></h2>
+<p>A unique problem arose in beta testing where the NLDS was not able to change
+ownership of the files downloaded during a <code class="docutils literal notranslate"><span class="pre">get</span></code> to the user that requested them
+from within a container that was not allowed to run as root. As such, a solution
+was required which allowed a very specific set of privileges to be escalated
+without leaving any security vulnerabilities open.</p>
+<p>The solution found was to include an additional binary in the
+<code class="docutils literal notranslate"><span class="pre">Generic</span> <span class="pre">Consumer</span></code> image - <code class="docutils literal notranslate"><span class="pre">chown_nlds</span></code> - which has the <code class="docutils literal notranslate"><span class="pre">setuid</span></code>
+permissions bit set and is therefore able to change directories. To minimise
+exposed attack surface, the binary was compiled from a <a class="reference external" href="https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/images/consumer/chown_nlds.rs?ref_type=heads">rust script</a>
+which allows only the <code class="docutils literal notranslate"><span class="pre">chown</span></code>-ing of files owned by the NLDS user (on JASMIN
+<code class="docutils literal notranslate"><span class="pre">uid=7054096</span></code>). Additionally, the target must be a file or directory and the
+<code class="docutils literal notranslate"><span class="pre">uid</span></code> being changed to must be greater than 1024 to avoid clashes with system
+<a href="#id4"><span class="problematic" id="id5">``</span></a>uid``s. This binary will only execute on any containers where the appropriate
+security context is set, notably:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">securityContext</span><span class="p">:</span>
+    <span class="n">allowPrivilegeEscalation</span><span class="p">:</span> <span class="n">true</span>
+    <span class="n">add</span><span class="p">:</span>
+        <span class="o">-</span> <span class="n">CHOWN</span>
+</pre></div>
+</div>
+<p>which in the NLDS deployment helm chart is only set for the <code class="docutils literal notranslate"><span class="pre">Transfer-Get</span></code>
+containers/pods.</p>
+</div>
+<div class="section" id="archive-put-cronjob">
+<span id="archive-put"></span><h2>Archive Put Cronjob<a class="headerlink" href="#archive-put-cronjob" title="Permalink to this headline"></a></h2>
+<p>The process by which the archive process is started has been automated for this
+deployment, running as a <a class="reference external" href="https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/">Kubernetes cronjob</a>
+every 12 hours at midnight and midday. The Helm config controlling this can be
+seen <a class="reference external" href="https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy/-/blob/master/conf/archive_put/common.yaml?ref_type=heads#L1-3">here</a>.
+This cronjob will simply call the <code class="docutils literal notranslate"><span class="pre">send_archive_next()</span></code> entry point, which
+sends a message directly to the RabbitMQ exchange for routing to the Catalog.</p>
+</div>
 <div class="section" id="staging-deployment">
 <span id="staging"></span><h2>Staging Deployment<a class="headerlink" href="#staging-deployment" title="Permalink to this headline"></a></h2>
 <p>As alluded to earlier, there are two versions of the NLDS running: (a) the
@@ -325,8 +386,8 @@ production system on wigbiorg, and (b) the staging/beta testing system on the
 staging cluster (<code class="docutils literal notranslate"><span class="pre">ceda-k8s</span></code>). These have similar but slightly different
 configurations, the details of which are summarised in the below table. Like
 everything on this page, this was true at the time of writing (2024-03-06).</p>
-<table class="colwidths-given docutils align-default" id="id5">
-<caption><span class="caption-text">Staging vs. Production Config</span><a class="headerlink" href="#id5" title="Permalink to this table"></a></caption>
+<table class="colwidths-given docutils align-default" id="id7">
+<caption><span class="caption-text">Staging vs. Production Config</span><a class="headerlink" href="#id7" title="Permalink to this table"></a></caption>
 <colgroup>
 <col style="width: 20%" />
 <col style="width: 40%" />
@@ -369,7 +430,7 @@ everything on this page, this was true at the time of writing (2024-03-06).</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="server-config/examples.html" class="btn btn-neutral float-left" title="Examples" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="development/cta-emulator.html" class="btn btn-neutral float-right" title="CERN Tape Archive Set Up" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="specification.html" class="btn btn-neutral float-right" title="Near Line Data Store (NLDS)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
@@ -392,7 +453,31 @@ everything on this page, this was true at the time of writing (2024-03-06).</p>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script> 
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #A6C36F;
+    }
+
+    .caption-text {
+        color: #828C51
+    }
+
+    .wy-nav-side {
+        background: #1E352F;
+    }
+
+    .note {
+        background: #BEEF9E
+    }
+    .admonition-title {
+        background: #335145
+    }
+
+  </style>
+
 
 </body>
 </html>

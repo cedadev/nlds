@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Server config &mdash; Near-line Data Store 1.0.0 documentation</title>
+  <title>Server config &mdash; Near-line Data Store Server 1.0.0 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+    <link rel="shortcut icon" href="../_static/icon-black.png"/>
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -26,8 +27,8 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="../index.html">
-            <img src="../_static/ceda.png" class="logo" alt="Logo"/>
+            <a href="../index.html" class="icon icon-home"> Near-line Data Store Server
+            <img src="../_static/nlds.png" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -37,10 +38,10 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="../home.html">Getting started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../specification.html">Specification document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../home.html">CEDA Near-Line Data Store</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../home.html#acknowledgements">Acknowledgements</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../system-status.html">Using the system status page</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">The server config file</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#required-sections">Required sections</a><ul>
@@ -60,6 +61,12 @@
 <li class="toctree-l3"><a class="reference internal" href="#transfer-put-and-transfer-get">Transfer-put and Transfer-get</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#monitor">Monitor</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#logger">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#archive-put-and-archive-get">Archive-Put and Archive-Get</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#publisher-specific-optional-sections">Publisher-specific optional sections</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#rpc-publisher">RPC Publisher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cronjob-publisher">Cronjob Publisher</a></li>
 </ul>
 </li>
 </ul>
@@ -69,8 +76,10 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Development</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../specification.html">Specification document</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coverage/coverage-report.html">Test coverage report</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
 <ul>
@@ -84,7 +93,7 @@
 
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../index.html">Near-line Data Store</a>
+          <a href="../index.html">Near-line Data Store Server</a>
       </nav>
 
       <div class="wy-nav-content">
@@ -111,8 +120,11 @@ server_config in the templates section of the main nlds package
 (<code class="docutils literal notranslate"><span class="pre">nlds.templates.server_config</span></code>) to get you started, but this page will
 demystify the configuration needed for (a) a local development copy of the nlds,
 and (b) a production system spread across several pods/virtual machines.</p>
-<p><em>Please note that the NLDS is in active development and all of this is subject
-to change with no notice.</em></p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Please note that the NLDS is still being developed and so the following is
+subject to change in future versions.</p>
+</div>
 <div class="section" id="required-sections">
 <h2>Required sections<a class="headerlink" href="#required-sections" title="Permalink to this headline"></a></h2>
 <p>There are two required sections for every server_config: <code class="docutils literal notranslate"><span class="pre">authentication</span></code> and
@@ -149,6 +161,7 @@ brokering system. The following is an outline of what is required:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;rabbitMQ&quot;</span><span class="p">:</span> <span class="p">{</span>
     <span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="s2">&quot;{{ rabbit_user }}&quot;</span><span class="p">,</span>
     <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="s2">&quot;{{ rabbit_password }}&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;heartbeat&quot;</span><span class="p">:</span> <span class="s2">&quot;{{ rabbit_heartbeat }}&quot;</span><span class="p">,</span>
     <span class="s2">&quot;server&quot;</span><span class="p">:</span> <span class="s2">&quot;{{ rabbit_server }}&quot;</span><span class="p">,</span>
     <span class="s2">&quot;vhost&quot;</span><span class="p">:</span> <span class="s2">&quot;{{ rabbit_vhost }}&quot;</span><span class="p">,</span>
     <span class="s2">&quot;exchange&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -172,30 +185,33 @@ brokering system. The following is an outline of what is required:</p>
 </div>
 <p>Here the <code class="docutils literal notranslate"><span class="pre">user</span></code> and <code class="docutils literal notranslate"><span class="pre">password</span></code> fields refer to the username and password for
 the rabbit server you wish to connect to, which is in turn specified with
-<code class="docutils literal notranslate"><span class="pre">server</span></code>. <code class="docutils literal notranslate"><span class="pre">vhost</span></code> is similarly the virtual host on the rabbit server that
-you wish to connect to.</p>
+<code class="docutils literal notranslate"><span class="pre">server</span></code>. <code class="docutils literal notranslate"><span class="pre">vhost</span></code> is similarly the <cite>virtualhost</cite> on the rabbit server that
+you wish to connect to. <code class="docutils literal notranslate"><span class="pre">heartbeat</span></code> is a recent addition which determines the
+<cite>heartbeats</cite> on the BlockingConnection that the NLDS makes with the rabbit
+server. This essentially puts a hard limit on when a connection has to be
+responsive by before it is killed by the server, see <a class="reference external" href="https://www.rabbitmq.com/tutorials/tutorial-five-python.html">the rabbit docs</a>
+for more details.</p>
 <p>The next two dictionaries are context specific. All publishing elements of the
 NLDS, i.e. parts that will send messages, will require an exchange to publish
 messages to. <code class="docutils literal notranslate"><span class="pre">exchange</span></code> is determines that exchange, with three required
 subfields: <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">type</span></code>, and <code class="docutils literal notranslate"><span class="pre">delayed</span></code>. The former two are self
-descriptive, they should just be the name of the exchange on the virtualhost and
-it’s corresponding type e.g. one of fanout, direct or topic. <code class="docutils literal notranslate"><span class="pre">delay</span></code> is a
+descriptive, they should just be the name of the exchange on the <cite>virtualhost</cite>
+and it’s corresponding type e.g. one of fanout, direct or topic. <code class="docutils literal notranslate"><span class="pre">delay</span></code> is a
 boolean (<code class="docutils literal notranslate"><span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">false</span></code> in json-speak) dictating whether to use the
 delay functionality utilised within the NLDS. Note that this requires the rabbit
 server have the DelayedRabbitExchange plugin installed.</p>
-<p>Exchanges can be declared and created if not present on the virtual host the
-first time the NLDS is run, virtualhosts cannot and so will have to be created
+<p>Exchanges can be declared and created if not present on the <cite>virtualhost</cite> the
+first time the NLDS is run, <cite>virtualhosts</cite> cannot and so will have to be created
 beforehand manually on the server or through the admin interface. If an exchange
 is requested but incorrect information given about either its <cite>type</cite> or
 <cite>delayed</cite> status, then the NLDS will throw an error.</p>
 <p><code class="docutils literal notranslate"><span class="pre">queues</span></code> is a list of queue dictionaries and must be implemented on consumers,
 i.e. message processors, to tell <code class="docutils literal notranslate"><span class="pre">pika</span></code> where to take messages from. Each
-queue dictionary consists of a <code class="docutils literal notranslate"><span class="pre">name</span></code> and a list of <cite>bindings</cite>, with each
+queue dictionary consists of a <code class="docutils literal notranslate"><span class="pre">name</span></code> and a list of <code class="docutils literal notranslate"><span class="pre">bindings</span></code>, with each
 <code class="docutils literal notranslate"><span class="pre">binding</span></code> being a dictionary containing the name of the <code class="docutils literal notranslate"><span class="pre">exchange</span></code> the queue
 takes messages from, and the routing key that a message must have to be accepted
 onto the queue. For more information on exchanges, routing keys, and other
-RabbitMQ features, please see [Rabbit’s excellent documentation]
-(<a class="reference external" href="https://www.rabbitmq.com/tutorials/tutorial-five-python.html">https://www.rabbitmq.com/tutorials/tutorial-five-python.html</a>).</p>
+RabbitMQ features, please see <a class="reference external" href="https://www.rabbitmq.com/tutorials/tutorial-five-python.html">Rabbit’s excellent documentation</a>.</p>
 </div>
 </div>
 <div class="section" id="generic-optional-sections">
@@ -207,13 +223,14 @@ if not specified. These are <code class="docutils literal notranslate"><span cla
 <h3>Logging<a class="headerlink" href="#logging" title="Permalink to this headline"></a></h3>
 <p>The logging configuration options look like the following:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span>
-    <span class="s2">&quot;enable&quot;</span><span class="p">:</span> <span class="n">boolean</span>
+    <span class="s2">&quot;enable&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
     <span class="s2">&quot;log_level&quot;</span><span class="p">:</span> <span class="nb">str</span>  <span class="o">-</span> <span class="p">(</span><span class="s2">&quot;none&quot;</span> <span class="o">|</span> <span class="s2">&quot;debug&quot;</span> <span class="o">|</span> <span class="s2">&quot;info&quot;</span> <span class="o">|</span> <span class="s2">&quot;warning&quot;</span> <span class="o">|</span> <span class="s2">&quot;error&quot;</span> <span class="o">|</span> <span class="s2">&quot;critical&quot;</span><span class="p">),</span>
     <span class="s2">&quot;log_format&quot;</span><span class="p">:</span> <span class="nb">str</span> <span class="o">-</span> <span class="n">see</span> <span class="n">python</span> <span class="n">logging</span> <span class="n">docs</span> <span class="k">for</span> <span class="n">details</span><span class="p">,</span>
     <span class="s2">&quot;add_stdout_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
     <span class="s2">&quot;stdout_log_level&quot;</span><span class="p">:</span> <span class="nb">str</span>  <span class="o">-</span> <span class="p">(</span><span class="s2">&quot;none&quot;</span> <span class="o">|</span> <span class="s2">&quot;debug&quot;</span> <span class="o">|</span> <span class="s2">&quot;info&quot;</span> <span class="o">|</span> <span class="s2">&quot;warning&quot;</span> <span class="o">|</span> <span class="s2">&quot;error&quot;</span> <span class="o">|</span> <span class="s2">&quot;critical&quot;</span><span class="p">),</span>
     <span class="s2">&quot;log_files&quot;</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-    <span class="s2">&quot;rollover&quot;</span><span class="p">:</span> <span class="nb">str</span> <span class="o">-</span> <span class="n">see</span> <span class="n">python</span> <span class="n">logging</span> <span class="n">docs</span> <span class="k">for</span> <span class="n">details</span>
+    <span class="s2">&quot;max_bytes&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="s2">&quot;backup_count&quot;</span><span class="p">:</span> <span class="nb">int</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -227,16 +244,16 @@ controlling log output to files and <code class="docutils literal notranslate"><
 to be different from the default log level.</p>
 <p><code class="docutils literal notranslate"><span class="pre">log_files</span></code> is a list of strings describing the path or paths to log files
 being written to. If no log files paths are given then no file logging will be
-done. If active, the file logging will be done with a TimedRotatingFileHandler,
-i.e. the files will be rotated on a rolling basis, with the rollover time
-denoted by the <code class="docutils literal notranslate"><span class="pre">rollover</span></code> option, which is a time string similar to that found
-in crontab. Please see the [python logging docs]
-(<a class="reference external" href="https://docs.python.org/3/library/logging.handlers.html#logging.handlers.TimedRotatingFileHandler">https://docs.python.org/3/library/logging.handlers.html#logging.handlers.TimedRotatingFileHandler</a>)
-for more info on this.</p>
+done. If active, the file logging will be done with a RotatingFileHandler, i.e.
+the files will be rotated when they reach a certain size. The threshold size is
+determined by <code class="docutils literal notranslate"><span class="pre">max_bytes</span></code> and the maximum number of files which are kept after
+rotation is controlled by <code class="docutils literal notranslate"><span class="pre">backup_count</span></code>, both strings. For more information
+on this please refer to the <a class="reference external" href="https://docs.python.org/3/library/logging.handlers.html#logging.handlers.RotatingFileHandler">python logging docs</a>.</p>
 <p>As stated, these all set the default log options for all publishers and
 consumers within the NLDS - these can be overridden on a consumer-specific basis
 by inserting a <code class="docutils literal notranslate"><span class="pre">logging</span></code> sub-dictionary into a consumer-specific optional
-section.</p>
+section. Each sub-dictionary has identical configuration options to those listed
+above.</p>
 </div>
 <div class="section" id="general">
 <h3>General<a class="headerlink" href="#general" title="Permalink to this headline"></a></h3>
@@ -267,8 +284,8 @@ options for each consumer.</p>
 <p>The server config section is <code class="docutils literal notranslate"><span class="pre">nlds_q</span></code>, and the following options are available:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;nlds_q&quot;</span><span class="p">:</span> <span class="p">{</span>
     <span class="s2">&quot;logging&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">standard_logging_dictionary</span><span class="p">],</span>
-    <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
-    <span class="s2">&quot;print_tracebacks_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
+    <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="s2">&quot;print_tracebacks_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -292,7 +309,7 @@ unexpectedly wrong.</p>
     <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="s2">&quot;check_permissions_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
     <span class="s2">&quot;check_filesize_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
-    <span class="s2">&quot;use_pwd_gid_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span>
+    <span class="s2">&quot;max_filesize&quot;</span><span class="p">:</span> <span class="nb">int</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -321,13 +338,11 @@ an explicit retry delay to use will use the final element in the <code class="do
 list.</p>
 <p><code class="docutils literal notranslate"><span class="pre">check_permissions_fl</span></code> and <code class="docutils literal notranslate"><span class="pre">check_filesize_fl</span></code> are commonly used boolean
 flags to control whether the indexer checks the permissions and filesize of
-files respectively during the indexing step.</p>
-<p><code class="docutils literal notranslate"><span class="pre">use_pwd_gid_fl</span></code> is a final boolean flag which controls how permissions
-checking goes about getting the gid to check group permissions against. If True,
-it will _just_ use the gid found in the <code class="docutils literal notranslate"><span class="pre">pwd</span></code> table on whichever machine the
-indexer is running on. If false, then this gid is used <cite>as well as</cite> all of those
-found using the <code class="docutils literal notranslate"><span class="pre">os.groups</span></code> command - which will read all groups found on the
-machine the indexer is running on.</p>
+files respectively during the indexing step. If the filesize is being checked,
+<code class="docutils literal notranslate"><span class="pre">max_filesize</span></code> determines the maximum filesize, in bytes, of an individual
+file which can be added to any given holding. This defaults to <code class="docutils literal notranslate"><span class="pre">500GB</span></code>, but is
+typically determined by the size of the cache in front of the tape, which for
+the STFC CTA instance is <code class="docutils literal notranslate"><span class="pre">500GB</span></code> (hence the default value).</p>
 </div>
 <div class="section" id="cataloguer">
 <h3>Cataloguer<a class="headerlink" href="#cataloguer" title="Permalink to this headline"></a></h3>
@@ -336,6 +351,7 @@ machine the indexer is running on.</p>
     <span class="s2">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">standard_logging_dictionary</span><span class="p">},</span>
     <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
     <span class="s2">&quot;print_tracebacks_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
+    <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="s2">&quot;db_engine&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="s2">&quot;db_options&quot;</span><span class="p">:</span> <span class="p">{</span>
         <span class="s2">&quot;db_name&quot;</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -343,13 +359,14 @@ machine the indexer is running on.</p>
         <span class="s2">&quot;db_passwd&quot;</span> <span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="s2">&quot;echo&quot;</span><span class="p">:</span> <span class="n">boolean</span>
     <span class="p">},</span>
-    <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">default_tenancy</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">default_tape_url</span><span class="p">:</span> <span class="nb">str</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p>where <code class="docutils literal notranslate"><span class="pre">logging</span></code>, <code class="docutils literal notranslate"><span class="pre">retry_delays</span></code>, and <code class="docutils literal notranslate"><span class="pre">print_tracebacks_fl</span></code> are, as above,
 standard configurables within the NLDS consumer ecosystem. <code class="docutils literal notranslate"><span class="pre">max_retries</span></code> is
-similarly available in the cataloguer, with the same meaning as above.</p>
+similarly available in the cataloguer, with the same meaning as defined above.</p>
 <p>Here we also have two keys which control database behaviour via SQLAlchemy:
 <code class="docutils literal notranslate"><span class="pre">db_engine</span></code> and <code class="docutils literal notranslate"><span class="pre">db_options</span></code>. <code class="docutils literal notranslate"><span class="pre">db_engine</span></code> is a string which specifies
 which SQL flavour you would like SQLAlchemy. Currently this has been tried with
@@ -360,9 +377,13 @@ your chosen flavour of database), along with the database username and password
 (if in use), respectively controlled by the keys <code class="docutils literal notranslate"><span class="pre">db_name</span></code>, <code class="docutils literal notranslate"><span class="pre">db_user</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">db_password</span></code>. Finally in this sub-dictionary <code class="docutils literal notranslate"><span class="pre">echo</span></code>, an optional
 boolean flag which controls the auto-logging of the SQLAlchemy engine.</p>
+<p>Finally <code class="docutils literal notranslate"><span class="pre">default_tenancy</span></code> and <code class="docutils literal notranslate"><span class="pre">default_tape_url</span></code> are the default values to
+place into the Catalog for a new Location’s <code class="docutils literal notranslate"><span class="pre">tenancy</span></code> and <code class="docutils literal notranslate"><span class="pre">tape_url</span></code> values
+if not explicitly defined before reaching the catalog. This will happen if the
+user, for example, does not define a tenancy in their client-config.</p>
 </div>
 <div class="section" id="transfer-put-and-transfer-get">
-<h3>Transfer-put and Transfer-get<a class="headerlink" href="#transfer-put-and-transfer-get" title="Permalink to this headline"></a></h3>
+<span id="transfer-put-get"></span><h3>Transfer-put and Transfer-get<a class="headerlink" href="#transfer-put-and-transfer-get" title="Permalink to this headline"></a></h3>
 <p>The server entry for the transfer-put consumer is as follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;transfer_put_q&quot;</span><span class="p">:</span> <span class="p">{</span>
     <span class="s2">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">standard_logging_dictionary</span><span class="p">},</span>
@@ -371,21 +392,34 @@ boolean flag which controls the auto-logging of the SQLAlchemy engine.</p>
     <span class="s2">&quot;print_tracebacks_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
     <span class="s2">&quot;filelist_max_length&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="s2">&quot;check_permissions_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
-    <span class="s2">&quot;use_pwd_gid_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
-    <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="s2">&quot;cedadev-o.s3.jc.rl.ac.uk&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="s2">&quot;require_secure_fl&quot;</span><span class="p">:</span> <span class="n">false</span>
 <span class="p">}</span>
 </pre></div>
 </div>
 <p>where we have <code class="docutils literal notranslate"><span class="pre">logging</span></code>, <code class="docutils literal notranslate"><span class="pre">retry_delays</span></code> and <code class="docutils literal notranslate"><span class="pre">print_tracebacks_fl</span></code> as their
 standard definitions defined above, and <code class="docutils literal notranslate"><span class="pre">max_retries</span></code>, <code class="docutils literal notranslate"><span class="pre">filelist_max_length</span></code>
-, <code class="docutils literal notranslate"><span class="pre">check_permissions_fl</span></code>, and <code class="docutils literal notranslate"><span class="pre">use_pwd_gid_fl</span></code> defined the same as for the
-Indexer consumer.</p>
+, and <code class="docutils literal notranslate"><span class="pre">check_permissions_fl</span></code> defined the same as for the Indexer consumer.</p>
 <p>New definitions for the transfer processor are the <code class="docutils literal notranslate"><span class="pre">tenancy</span></code> and
 <code class="docutils literal notranslate"><span class="pre">require_secure_fl</span></code>, which control <code class="docutils literal notranslate"><span class="pre">minio</span></code> behaviour. <code class="docutils literal notranslate"><span class="pre">tenancy</span></code> is a
 string which denotes the address of the object store tenancy to upload/download
-files to/from, and <code class="docutils literal notranslate"><span class="pre">require_secure_fl</span></code> which specifies whether or not you
-require signed ssl certificates at the tenancy location.</p>
+files to/from (e.g. <a class="reference external" href="cedadev-o.s3.jc.rl.ac.uk">cedadev-o.s3.jc.rl.ac.uk</a>), and <code class="docutils literal notranslate"><span class="pre">require_secure_fl</span></code>
+which specifies whether or not you require signed ssl certificates at the
+tenancy location.</p>
+<p>The transfer-get consumer is identical except for the addition of config
+controlling the change-ownership functionality on downloaded files – see
+<a class="reference internal" href="../deployment.html#chowning"><span class="std std-ref">Changing ownership of files</span></a> for details on why this is necessary. The additional config is
+as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;transfer_get_q&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="o">...</span>
+    <span class="s2">&quot;chown_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
+    <span class="s2">&quot;chown_cmd&quot;</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">chown_fl</span></code> is a boolean flag to specify whether to attempt to <code class="docutils literal notranslate"><span class="pre">chown</span></code>
+files back to the requesting user, and <code class="docutils literal notranslate"><span class="pre">chown_cmd</span></code> is the name of the
+executable to use to <code class="docutils literal notranslate"><span class="pre">chown</span></code> said file.</p>
 </div>
 <div class="section" id="monitor">
 <h3>Monitor<a class="headerlink" href="#monitor" title="Permalink to this headline"></a></h3>
@@ -412,7 +446,7 @@ messages which failed due to an unexpected exception.</p>
 </div>
 <div class="section" id="logger">
 <h3>Logger<a class="headerlink" href="#logger" title="Permalink to this headline"></a></h3>
-<p>And finally, the server config entry for the Logger consumer is as follows:</p>
+<p>The server config entry for the Logger consumer is as follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;logging_q&quot;</span><span class="p">:</span> <span class="p">{</span>
     <span class="s2">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">standard_logging_dictionary</span><span class="p">},</span>
     <span class="s2">&quot;print_tracebacks_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
@@ -424,6 +458,97 @@ configurable behaviour on the Logger consumer as it is simply a relay for
 redirecting logging messages into log files. It should also be noted that the
 <code class="docutils literal notranslate"><span class="pre">log_files</span></code> option should be set in the logging sub-dictionary for this to
 work properly, which may be a mandatory setting in future versions.</p>
+</div>
+<div class="section" id="archive-put-and-archive-get">
+<span id="archive-put-get"></span><h3>Archive-Put and Archive-Get<a class="headerlink" href="#archive-put-and-archive-get" title="Permalink to this headline"></a></h3>
+<p>Finally, the server config entry for the archive-put consumer is as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;archive_put_q&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;logging&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">standard_logging_dictionary</span><span class="p">}</span>
+    <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="s2">&quot;retry_delays&quot;</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="s2">&quot;print_tracebacks_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
+    <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="s2">&quot;check_permissions_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
+    <span class="s2">&quot;require_secure_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
+    <span class="s2">&quot;tape_url&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="s2">&quot;tape_pool&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="s2">&quot;query_checksum_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span><span class="p">,</span>
+    <span class="s2">&quot;chunk_size&quot;</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>which is a combination of standard configuration, object-store configuration and
+as-yet-unseen tape configuration. Firstly, we have the standard options
+<code class="docutils literal notranslate"><span class="pre">logging</span></code>, <code class="docutils literal notranslate"><span class="pre">max_retries</span></code>, <code class="docutils literal notranslate"><span class="pre">retry_delays</span></code>, and <code class="docutils literal notranslate"><span class="pre">print_tracebacks_fl</span></code>,
+which we have defined above. Then we have the object-store configuration options
+which we saw previously in the <a class="reference internal" href="#transfer-put-get"><span class="std std-ref">Transfer-put and Transfer-get</span></a> consumer config, and have
+the same definitions.</p>
+<p>The latter four options control tape configuration, <code class="docutils literal notranslate"><span class="pre">taoe_url</span></code> and
+<code class="docutils literal notranslate"><span class="pre">tape_pool</span></code> defining the <code class="docutils literal notranslate"><span class="pre">xrootd</span></code> url and tape pool at which to attempt to
+put files onto - note that these two values are combined together into a single
+<code class="docutils literal notranslate"><span class="pre">tape_path</span></code> in the archiver. <code class="docutils literal notranslate"><span class="pre">query_checksum</span></code> is the next option, is a
+boolean flag to control whether the ADLER32 checksum calculated during streaming
+is used to check file integrity at the end of a write. Finally <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> is
+the size, in bytes, to chunk the stream into when writing into or reading from
+the CTA cache. This defaults to 5 MiB as this is the lower limit for
+<code class="docutils literal notranslate"><span class="pre">part_size</span></code> when uploading back to object-store during an archive-get, but has
+not been properly benchmarked or optimised yet.</p>
+<p>Note that the above has been listed for the archive-put consumer but are
+shared by the archive-get consumer. The archive-get does have one additional
+config option:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;archive_get_q&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="o">...</span>
+    <span class="s2">&quot;prepare_requeue&quot;</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">prepare_requeue</span></code> is the prepare-requeue delay, i.e. the delay, in
+milliseconds, before an archive recall message is requeued following a negative
+read-preparedness query has been made. This defaults to 30 seconds.</p>
+</div>
+</div>
+<div class="section" id="publisher-specific-optional-sections">
+<h2>Publisher-specific optional sections<a class="headerlink" href="#publisher-specific-optional-sections" title="Permalink to this headline"></a></h2>
+<p>There are two, non-consumer, elements to the NLDS which can optionally be
+configured, listed below.</p>
+<div class="section" id="rpc-publisher">
+<h3>RPC Publisher<a class="headerlink" href="#rpc-publisher" title="Permalink to this headline"></a></h3>
+<p>The Remote Procedure Call (RPC) Publisher, the specific rabbit publisher which
+sits inside the API server and makes RPCs to the databases for quick metadata
+access from the client, has its own small config section:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;rpc_publisher&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;time_limit&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="s2">&quot;queue_exclusivity_fl&quot;</span><span class="p">:</span> <span class="n">boolean</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">time_limit</span></code> is the number of seconds the publisher waits before
+declaring the RPC timed out and the receiving consumer non-responsive, and
+<code class="docutils literal notranslate"><span class="pre">queue_exclusivity_fl</span></code> controls whether the queue declared by the publisher is
+exclusive to the publisher. These values default to <code class="docutils literal notranslate"><span class="pre">30</span></code> seconds and <code class="docutils literal notranslate"><span class="pre">True</span></code>
+respectively.</p>
+</div>
+<div class="section" id="cronjob-publisher">
+<h3>Cronjob Publisher<a class="headerlink" href="#cronjob-publisher" title="Permalink to this headline"></a></h3>
+<p>The Archive-Put process, as described in <a class="reference internal" href="../deployment.html#archive-put"><span class="std std-ref">Archive Put Cronjob</span></a>, is periodically
+initiated by a cronjob which sends a message to the catalog to get the next,
+unarchived holding. This requires a small amount of configuration in order to
+(a) get access to the object store, (b) change the default <code class="docutils literal notranslate"><span class="pre">tenancy</span></code> or
+<code class="docutils literal notranslate"><span class="pre">tape_url</span></code>, if necessary. As such the allowed config options look like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;cronjob_publisher&quot;</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">&quot;access_key&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="s2">&quot;secret_key&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="s2">&quot;tenancy&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="s2">&quot;tape_url&quot;</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where <code class="docutils literal notranslate"><span class="pre">tape_url</span></code> is identical to that specified in <a class="reference internal" href="#archive-put-get"><span class="std std-ref">Archive-Put and Archive-Get</span></a>, and
+<code class="docutils literal notranslate"><span class="pre">access_key</span></code>, <code class="docutils literal notranslate"><span class="pre">secret_key</span></code> and <code class="docutils literal notranslate"><span class="pre">tenancy</span></code> are specified as in the
+<a class="reference external" href="https://cedadev.github.io/nlds-client/configuration.html#init">client config</a>,
+referring to the objectstore tenancy located at <code class="docutils literal notranslate"><span class="pre">tenancy</span></code> and <code class="docutils literal notranslate"><span class="pre">token</span></code> and
+<code class="docutils literal notranslate"><span class="pre">secret_key</span></code> required for accessing it. In practice only the <code class="docutils literal notranslate"><span class="pre">access_key</span></code>
+and <code class="docutils literal notranslate"><span class="pre">secret_key</span></code> are specified during deployment.</p>
 </div>
 </div>
 </div>
@@ -456,7 +581,31 @@ work properly, which may be a mandatory setting in future versions.</p>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script> 
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #A6C36F;
+    }
+
+    .caption-text {
+        color: #828C51
+    }
+
+    .wy-nav-side {
+        background: #1E352F;
+    }
+
+    .note {
+        background: #BEEF9E
+    }
+    .admonition-title {
+        background: #335145
+    }
+
+  </style>
+
 
 </body>
 </html>
