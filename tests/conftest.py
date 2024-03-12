@@ -11,13 +11,14 @@ from nlds.details import PathDetails, Retries
 
 
 TEMPLATE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 
-                                    'server-config.json')
+                                    'req-config-template.json')
 
 @pytest.fixture
 def template_config():
     config_path = TEMPLATE_CONFIG_PATH
-    fh = open(config_path)
-    return json.load(fh)
+    with open(config_path) as fh:
+        config_dict = json.load(fh)
+    return config_dict
 
 @pytest.fixture
 def test_uuid():
