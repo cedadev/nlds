@@ -1,0 +1,34 @@
+{
+    "authentication" : {
+        "authenticator_backend" : "jasmin_authenticator",
+        "jasmin_authenticator" : {
+            "user_profile_url" : "{{ user_profile_url }}",
+            "user_services_url" : "{{ user_services_url }}",
+            "oauth_token_introspect_url" : "{{ token_introspect_url }}"
+        }
+    },
+    "rabbitMQ": {
+        "user": "{{ rabbit_user }}",
+        "password": "{{ rabbit_password }}",
+        "heartbeat": "{{ rabbit_heartbeat }}", 
+        "server": "{{ rabbit_server }}",
+        "admin_port": "{{ rabbit_port }}",
+        "vhost": "{{ rabbit_vhost }}",
+        "exchange": {
+            "name": "{{ rabbit_exchange_name }}",
+            "type": "{{ rabbit_exchange_type }}",
+            "delayed": "{{ rabbit_exchange_delayed }}"
+        },
+        "queues": [
+            {
+                "name": "{{ rabbit_queue_name }}",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "{{ rabbit_queue_routing_key }}"
+                    }
+                ]
+            }
+        ]
+    }
+}
