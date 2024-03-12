@@ -207,7 +207,6 @@ Server config section is ``index_q``, and the following options are available::
         "max_retries": int,
         "check_permissions_fl": boolean,
         "check_filesize_fl": boolean,
-        "use_pwd_gid_fl": boolean
     }
 
 where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are, as above,
@@ -237,14 +236,7 @@ list.
 
 ``check_permissions_fl`` and ``check_filesize_fl`` are commonly used boolean 
 flags to control whether the indexer checks the permissions and filesize of 
-files respectively during the indexing step. 
-
-``use_pwd_gid_fl`` is a final boolean flag which controls how permissions 
-checking goes about getting the gid to check group permissions against. If True, 
-it will _just_ use the gid found in the ``pwd`` table on whichever machine the 
-indexer is running on. If false, then this gid is used `as well as` all of those 
-found using the ``os.groups`` command - which will read all groups found on the 
-machine the indexer is running on. 
+files respectively during the indexing step.  
  
 
 Cataloguer
@@ -301,7 +293,6 @@ The server entry for the transfer-put consumer is as follows::
         "print_tracebacks_fl": boolean,
         "filelist_max_length": int,
         "check_permissions_fl": boolean,
-        "use_pwd_gid_fl": boolean,
         "tenancy": str,
         "require_secure_fl": false
     }
