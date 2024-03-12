@@ -73,8 +73,8 @@
             "db_passwd" : "{{ catalog_q_db_options_db_passwd }}",
             "echo": "{{ catalog_q_db_options_echo }}"
         },
-        default_tenancy: "{{ catalog_q_default_tenancy }}",
-        default_tape_url: "{{ catalog_q_default_tape_url }}"
+        "default_tenancy": "{{ catalog_q_default_tenancy }}",
+        "default_tape_url": "{{ catalog_q_default_tape_url }}"
     },
     "monitor_q": {
         "logging": "{{ monitor_q_logging_dict }}",
@@ -139,7 +139,7 @@
         "tape_url": "{{ archive_get_q_tape_url }}",
         "tape_pool": "{{ archive_get_q_tape_pool }}",
         "query_checksum_fl": "{{ archive_get_q_query_checksum_fl }}",
-        "chunk_size": "{{ archive_get_q_chunk_size }}"
+        "chunk_size": "{{ archive_get_q_chunk_size }}",
         "prepare_requeue": "{{ archive_get_q_prepare_requeue }}"
     },
     "rpc_publisher": {
