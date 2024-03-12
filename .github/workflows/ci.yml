@@ -111,10 +111,12 @@ jobs:
         docs-folder: "docs/"
         pre-build-command: |
           "mkdir -p docs/build/html/coverage/htmlcov && chmod -R 777 docs/build/html && chmod -R 777 docs/build/html/cover/htmlcov && chown 1001 docs/build/html/coverage"
-    - name: "Look at directory structure"
+    - name: "Chmod directory structure"
       run: |
+        sudo chmod -R 777 docs/build/html
+        # sudo chmod -R 777 docs/build/html/coverage
+        # sudo chmod -R 777 docs/build/html/coverage/htmlcov
         ls -la docs/build/html/coverage/htmlcov
-        sudo chmod -R 777 docs/build/html/coverage
     - name: "Download coverage report"
       uses: actions/download-artifact@v3
       with:
@@ -125,6 +127,9 @@ jobs:
       with:
         name: "covbadge"
         path: "docs/build/html"
+    - name: "List html dir"
+      run: |
+        ls -la docs/html/html/coverage/htmlcov
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
