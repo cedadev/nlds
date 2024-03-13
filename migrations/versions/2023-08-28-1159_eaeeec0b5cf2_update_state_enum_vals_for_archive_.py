@@ -144,6 +144,9 @@ class Warning(Base):
     transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
                                    index=True, nullable=False)
 
+# Create ENUM types, one for old, one for new, one for temp
+old_enum = sa.Enum(OldState, name='state')
+new_enum = sa.Enum(NewState, name='state')
 
 def upgrade(engine_name: str) -> None:
     globals()["upgrade_%s" % engine_name]()
@@ -185,7 +188,12 @@ state_map = {
 }
 
 def upgrade_monitor() -> None:
-    # No schema changes to make for this upgrade.
+    # Here, we wrap in a batch context manager so SQLite can be migrated/altered 
+    # too (see https://alembic.sqlalchemy.org/en/latest/batch.html for details)
+    with op.batch_alter_table("sub_record") as bop:
+        # Change the column type from enum to string 
+        bop.alter_column("state", existing_server_default=None,
+                         existing_nullable=False, type_=sa.String(length=32))
 
     # Get the session to update the database values with 
     session = Session(bind=op.get_bind())
@@ -197,12 +205,29 @@ def upgrade_monitor() -> None:
         # Assing the state to the new value
         for sr in sub_records:
             sr.state = new_state
+    
+    # Remove the old enum type and create the new one
+    old_enum.drop(op.get_bind(), checkfirst=False)
+    new_enum.create(op.get_bind(), checkfirst=False)
+            
+    # Change the column type to the new ENUM 
+    with op.batch_alter_table("sub_record") as bop:
+        # Change the column type back to enum, but use the new one 
+        bop.alter_column("state", existing_server_default=None,
+                         existing_nullable=False, type_=new_enum,
+                         postgresql_using='state::text::state')
         
     # Commit the changes to the db.  
     session.commit()
 
 def downgrade_monitor() -> None:
-    # No schema changes to make for this downgrade either.
+    # Here, we wrap in a batch context manager so SQLite can be migrated/altered 
+    # too (see https://alembic.sqlalchemy.org/en/latest/batch.html for details)
+    with op.batch_alter_table("sub_record") as bop:
+        # Change the column type from enum to string 
+        bop.alter_column("state", existing_server_default=None,
+                         existing_nullable=False, type_=sa.String(length=32))
+    op.alter_column
 
     # Get the session to update the database values with 
     session = Session(bind=op.get_bind())
@@ -214,6 +239,17 @@ def downgrade_monitor() -> None:
         # Assing the state to the old value. 
         for sr in sub_records:
             sr.state = old_state
+
+    # Remove the old enum type and create the new one
+    new_enum.drop(op.get_bind(), checkfirst=False)
+    old_enum.create(op.get_bind(), checkfirst=False)
+            
+    # Change the column type to the new ENUM 
+    with op.batch_alter_table("sub_record") as bop:
+        # Change the column type back to the old enum  
+        bop.alter_column("state", existing_server_default=None,
+                         existing_nullable=False, type_=old_enum, 
+                         postgresql_using='state::text::state')
         
     # Commit the changes to the db.  
     session.commit()
