@@ -25,6 +25,8 @@ from ..server_config import (
     load_config, 
     GENERAL_CONFIG_SECTION,
     RABBIT_CONFIG_SECTION, 
+    RABBIT_CONFIG_TIMEOUT,
+    RABBIT_CONFIG_HEARTBEAT,
     LOGGING_CONFIG_SECTION, 
     LOGGING_CONFIG_MAX_BYTES, 
     LOGGING_CONFIG_FILES, 
@@ -197,6 +199,7 @@ class RabbitMQPublisher():
         self.connection = None
         self.channel = None
         self.heartbeat = self.config.get("heartbeat") or 300
+        self.timeout = self.config.get("timeout") or 1800 # 30 mins in seconds
         self.keepalive = None
 
         try:
@@ -241,6 +244,7 @@ class RabbitMQPublisher():
                                                           rabbit_password),
                         virtual_host=self.config["vhost"],
                         heartbeat=self.heartbeat,
+                        blocked_connection_timeout=self.timeout,
                     )
                 )
                 self.keepalive = KeepaliveDaemon(connection, self.heartbeat)
