@@ -198,8 +198,8 @@ class RabbitMQPublisher():
       
         self.connection = None
         self.channel = None
-        self.heartbeat = self.config.get("heartbeat") or 300
-        self.timeout = self.config.get("timeout") or 1800 # 30 mins in seconds
+        self.heartbeat = self.config.get(RABBIT_CONFIG_HEARTBEAT) or 300
+        self.timeout = self.config.get(RABBIT_CONFIG_TIMEOUT) or 1800 # 30 mins
         self.keepalive = None
 
         try:
