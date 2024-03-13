@@ -26,8 +26,8 @@ def send_archive_next():
         RMQP.MSG_DETAILS: {
             RMQP.MSG_TRANSACT_ID: str(uuid4()),
             RMQP.MSG_SUB_ID: str(uuid4()),
-            RMQP.MSG_USER: None,
-            RMQP.MSG_GROUP: None,
+            RMQP.MSG_USER: "admin-placeholder",
+            RMQP.MSG_GROUP: "admin-placeholder",
             RMQP.MSG_TARGET: None,
             RMQP.MSG_API_ACTION: "archive-put",
             RMQP.MSG_JOB_LABEL: "archive-next",
