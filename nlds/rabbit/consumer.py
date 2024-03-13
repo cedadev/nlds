@@ -683,10 +683,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # Begin the 
         self.keepalive.start_polling()
 
-        # Get and log thread info
-        thread_id = thr.get_ident()
-        self.log(f"Callback started in thread {thread_id}", self.RK_LOG_INFO)
-
         # Wrap callback with a try-except catching a selection of common 
         # errors which can be caught without stopping consumption.
         try:
