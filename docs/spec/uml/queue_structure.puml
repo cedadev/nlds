@@ -30,10 +30,10 @@ together {
     queue cq as "Catalog Q" #springgreen
 }
 
-pex --> sq : key=#.index.init
-pex --> sq : key=#.index.start
-pex --> tq : key=#.tran.*
-pex --> cq : key=#.cat.*
+pex --> sq : key=*.index.init
+pex --> sq : key=*.index.start
+pex --> tq : key=*.tran.*
+pex --> cq : key=*.cat.*
 
 work --> pex : key=nlds-api.index.*
 work --> pex : key=nlds-api.tran.*
@@ -42,8 +42,8 @@ work --> pex : key=nlds-api.cat.*
 
 queue lq as "Logging Q" #hotpink
 
-pex --> mq : key=#.mon.*
-pex --> lq : key=#.log.*
+pex --> mq : key=*.mon.*
+pex --> lq : key=*.log.*
 
 together {
     component scan1 as "Indexer 1" #lightblue
@@ -69,8 +69,8 @@ mon1 -> mon_db
 mon_db -> mon1
 ' mon1 -> pex
 
-api_server <-> mon1
-api_server <-> cat1
+api_server <-> mon1 : RPC call
+api_server <-> cat1 : RPC call
 
 together {
     component log1 as "Logging" #hotpink
@@ -90,11 +90,11 @@ lq --> log1
 ' mon1 -> user
 sysadmin <- log1
 
-scan1 --> pex : key=#.index.complete
-scan1 --> pex : key=(#).index.init
+scan1 --> pex : key=*.index.complete
+scan1 --> pex : key=*.index.init
 
 note right of scan1
-    (#) here denotes the application
+    `*` here denotes the application
     part of the calling key, which 
     is used by the worker to form 
     the application part of the
