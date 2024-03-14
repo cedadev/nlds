@@ -38,6 +38,7 @@ note over qt
 end note
 collections transfer_get as "Transfer Get" #gold
 
+participant disk as "POSIX\nDisk" #GhostWhite
 participant obj as "Object\nStore" #GhostWhite
 
 queue qag as "Archive Get Q" #MistyRose
@@ -84,31 +85,32 @@ note right of qc
 end note
 
 activate catalog_get
-loop #LightPink for file in //filelist//
+loop #SpringGreen for file in //filelist//
     catalog_get -> catalog_db : get file record from catalog holding
     catalog_db -> catalog_get
-    alt #MistyRose the file exists on the object storage
-        catalog_get->catalog_get : add file record to //transfer_list//
+    alt #LightGreen the file exists on the object storage
+        catalog_get->catalog_get : add file record to //transferable_list//
     else else
-        alt #FFF8F8 the file exists on the tape
+        alt #MintCream the file exists on the tape
             catalog_get->catalog_get : add file record to //archive_list//
         else else
             catalog_get->catalog_get : add file record to //failed_list//
         end
     end
-end
-loop #LightPink for file in //archive_list//
+end 
+
+loop #SpringGreen for file in //archive_list//
     catalog_get -> catalog_db : get //aggregation// record from catalog
     catalog_db -> catalog_get 
-    alt #MistyRose catalog configured for full unpack?
-        loop #FFF8F8 for location in //aggregation//
-            catalog_get->catalog_db: add TAPE Location to catalog
+    alt #LightGreen catalog configured for full unpack?
+        loop #MintCream for location in //aggregation//
+            catalog_get->catalog_db: add OBJECT_STORE Location to catalog
             catalog_get->catalog_get: add //aggregation//: //location// to //retrieval_dict//
         end
         ' catalog_get->catalog_get: get the //aggregate_list//
     else else
-        loop #FFF8F8 for location in //filelist//
-            catalog_get->catalog_db: add TAPE Location to catalog
+        loop #MintCream for location in //filelist//
+            catalog_get->catalog_db: add OBJECT_STORE Location to catalog
             catalog_get->catalog_get: add //aggregation//: //location// to //retrieval_dict//
         end
     end
@@ -155,7 +157,7 @@ loop #LightPink for aggregate in //aggregate_list//
             archive_gets->obj : Extract file from aggregate
             obj->archive_gets
             alt #FFFDFD Extract succeeded
-                archive_gets->archive_gets : Add file record to //transferred_list//
+                archive_gets->archive_gets : Add file record to //transferable_list//
             else
                 archive_gets->archive_gets : Add file record to //failed_list//
             end
@@ -165,8 +167,18 @@ loop #LightPink for aggregate in //aggregate_list//
     end
 end
 
-archive_gets -> wex : key=""nlds-api.archive-get.failed""
+' catalog_get failed block
+catalog_get -> wex : key=""nlds-api.catalog-get.failed""
+activate wex
+wex -> qw : key=""nlds-api.catalog-get.failed""
+deactivate wex
 
+activate qw
+qw -> work : key=""nlds-api.catalog-get.failed""
+deactivate qw
+
+' archive_get failed block
+archive_gets -> wex : key=""nlds-api.archive-get.failed""
 activate wex
 wex -> qw : key=""nlds-api.archive-get.failed""
 deactivate wex
@@ -174,30 +186,9 @@ deactivate wex
 activate qw
 qw -> work : key=""nlds-api.archive-get.failed""
 deactivate qw
-activate work
 
-catalog_get -> wex : key=""nlds-api.catalog-get.failed""
-activate wex
-wex -> qw : key=""nlds-api.catalog-get.failed""
-deactivate wex
-activate qw
-qw -> work : key=""nlds-api.catalog-get.failed""
-deactivate qw
-
-deactivate work
-
-archive_gets -> wex : key=""nlds-api.archive-get.complete""
-deactivate archive_gets
-
-activate wex
-wex -> qw : key=""nlds-api.archive-get.complete""
-deactivate wex
-activate qw
-qw -> work : key=""nlds-api.archive-get.complete""
-deactivate qw
-activate work
+' catalog_get completed block
 catalog_get -> wex : key=""nlds-api.catalog-get.complete""
-
 deactivate catalog_get
 
 activate wex
@@ -208,22 +199,59 @@ activate qw
 qw -> work : key=""nlds-api.catalog-get.complete""
 deactivate qw
 
-work -> wex : key=""nlds-api.transfer-get.start""
+
+activate work
+
+' archive_get completed block
+archive_gets -> wex : key=""nlds-api.archive-get.complete""
+deactivate archive_gets
+
+activate wex
+wex -> qw : key=""nlds-api.archive-get.complete""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.archive-get.complete""
+deactivate qw
+
+work -> wex : key=""nlds-api.transfer-get.init""
 deactivate work
 
 activate wex
+wex -> qt : key=""nlds-api.transfer-get.init""
+deactivate wex
+
+activate qt
+qt -> transfer_get : key=""nlds-api.transfer-get.init""
+deactivate qt
+
+activate transfer_get
+
+loop #Gold for file in transferable_list[::1000]
+transfer_get -> transfer_get : add file to transfer_list
+transfer_get -> wex : key=""nlds-api.transfer-get.start""
+activate wex
+end
+deactivate transfer_get
+
 wex -> qt : key=""nlds-api.transfer-get.start""
 deactivate wex
 
 activate qt
 qt -> transfer_get : key=""nlds-api.transfer-get.start""
 deactivate qt
+
 activate transfer_get
 
-loop #LightPink for file in //transferred_list//
+loop #Gold for file in //transfer_list//
     transfer_get -> obj : copy file to target
-    obj -> transfer_get : 
-    transfer_get->transfer_get : add file record to //completed_list//
+    obj -> disk : copy file
+    disk -> transfer_get
+    alt #PaleGoldenRod the copy succeeded
+        transfer_get -> transfer_get : add file record to //completed_list//
+    else else
+        transfer_get -> transfer_get : add file record to //failed_list//
+    end
 end
 transfer_get -> wex : key=""nlds-api.transfer-get.complete""
 activate wex
@@ -232,10 +260,6 @@ deactivate wex
 activate qw
 qw -> work : key=""nlds-api.transfer-get.complete""
 deactivate qw
-
-loop #LightPink for file, aggregation in //failed_list//
-    transfer_get->transfer_get : add file record(s) to //failed_list//
-end
 
 transfer_get -> wex : key=""nlds-api.transfer-get.failed""
 deactivate transfer_get
@@ -246,5 +270,9 @@ deactivate wex
 activate qw
 qw -> work : key=""nlds-api.transfer-get.failed""
 deactivate qw
+
+deactivate transfer_get
+
+
 
 @enduml

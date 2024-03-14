@@ -83,7 +83,7 @@ activate qs
 qs -> index : key=""nlds-api.index.init""
 deactivate qs
 activate index
-loop #lightgrey for subfile in filelist[::1000]
+loop #lightblue for subfile in filelist[::1000]
     index -> wex : key=""nlds-api.index.start""
     activate wex
 end
@@ -96,10 +96,10 @@ activate qs
 qs -> index : key=""nlds-api.index.start""
 deactivate qs
 activate index
-loop #lightgrey for file in subfilelist
+loop #lightblue for file in subfilelist
     index -> disk : get file type
     disk -> index
-    alt #Gainsboro file is a directory
+    alt #azure file is a directory
         index -> wex : key=""nlds-api.index.start""
     else else
         index -> index : add file record to\n//indexed_list//
@@ -129,10 +129,10 @@ qc -> catalog : key=""nlds-api.catalog-put.start""
 deactivate qc
 
 activate catalog
-loop #lightgrey for file in //indexed_list//
+loop #LightGreen for file in //indexed_list//
     catalog -> catalog_db : get file record from catalog holding
     catalog_db -> catalog
-    alt #Gainsboro file exists in catalog holding
+    alt #MintCream file exists in catalog holding
         catalog -> catalog : add file record to //failed_list//
     else else
         catalog -> catalog_db : add file record to catalog holding
@@ -166,11 +166,11 @@ qt -> transfer_puts : key=""nlds-api.transfer-put.start""
 deactivate qt
 
 activate transfer_puts
-loop #lightgrey for file in //catalogued_list//
+loop #Gold for file in //catalogued_list//
     transfer_puts -> disk : copy file to storage
     disk -> obj : copy file
     obj -> transfer_puts 
-    alt #Gainsboro the copy succeeded
+    alt #PaleGoldenRod the copy succeeded
         transfer_puts -> transfer_puts : add file record to //transfer_list//
     else else
         transfer_puts -> transfer_puts : add file record to //failed_list//
@@ -211,7 +211,7 @@ qc -> catalog : key=""nlds-api.catalog-del.start""
 deactivate qc
 
 activate catalog
-loop #lightgrey for file in //failed_list//
+loop #LightGreen for file in //failed_list//
     catalog -> catalog_db : remove file record from catalog holding
 end
 

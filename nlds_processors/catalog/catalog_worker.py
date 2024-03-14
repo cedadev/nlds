@@ -679,7 +679,10 @@ class CatalogConsumer(RMQC):
                     self.reroutelist.append(file_details)
                 self.retrievedict[aggregation.tarname] = retrievelist
 
-        # log the successful and non-successful catalog puts
+        # log and route the successful and non-successful catalog gets
+        # we could split up using the code:
+        # j=5 # size of each transfer
+        # [x[i*j:i*j+j] for i in range(0,int(len(x)/j)+1)]
         # SUCCESS
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin,

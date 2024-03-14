@@ -50,13 +50,13 @@ qc -> catalog : key=""nlds-api.catalog-archive.next""
 deactivate qc
 
 activate catalog
-opt #lightblue
+opt #SpringGreen
     catalog -> catalog_db : get_unarchived_holdings()
     catalog_db -> catalog : holding = unarchived_holdings[0]
-    loop #PaleTurquoise for file in holding
+    loop #LightGreen for file in holding
         catalog -> catalog_db : is file archived?
         catalog_db -> catalog
-        alt #lightcyan NO
+        alt #MintCream NO
             catalog -> catalog_db : set file as archived
             catalog -> catalog : add file record to\n//archive_list//
         else YES
@@ -88,10 +88,10 @@ qap -> archive_puts : key=""nlds-api.archive-put.start""
 deactivate qap
 
 activate archive_puts
-loop #PaleTurquoise for file in //archive_list//
+loop #LightPink for file in //archive_list//
     archive_puts -> obj : stream file
     obj -> archive_puts 
-    alt #lightcyan the stream succeeded
+    alt #MistyRose the stream succeeded
         archive_puts->archive_puts : 1. add file to aggregate\n2. add file record to //aggregate_list//
     else else
         archive_puts->archive_puts : add file record to //failed_list//
@@ -100,10 +100,10 @@ end
 
 archive_puts -> tape : copy aggregate to tape
 tape -> archive_puts
-alt #PaleTurquoise the copy succeeded
+alt #LightPink the copy succeeded
     archive_puts -> archive_puts : add file record to //completed_list//
 else else
-    loop #lightcyan for file in //aggregate_list//
+    loop #MistyRose for file in //aggregate_list//
         archive_puts -> archive_puts : add file record to //failed_list//
     end
 end
@@ -140,7 +140,7 @@ qc -> catalog : key=""nlds-api.catalog-archive.failed""
 deactivate qc
 
 activate catalog
-loop #PaleTurquoise for file in failed_list
+loop #LightGreen for file in failed_list
 catalog -> catalog_db : set file as unarchived
 end
 catalog -> wex : key=""nlds-api.catalog-archive.failed-complete""
