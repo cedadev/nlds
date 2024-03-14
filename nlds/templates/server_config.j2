@@ -10,6 +10,7 @@
     "rabbitMQ": {
         "user": "{{ rabbit_user }}",
         "password": "{{ rabbit_password }}",
+        "heartbeat": "{{ rabbit_heartbeat }}",
         "server": "{{ rabbit_server }}",
         "admin_port": "{{ rabbit_port }}",
         "vhost": "{{ rabbit_vhost }}",
@@ -29,5 +30,126 @@
                 ]
             }
         ]
+    },
+    "logging": {
+        "enable": "{{ logging_enable }}",
+        "log_level": "{{ logging_log_level }}",
+        "log_format": "{{ logging_log_format }}",
+        "add_stdout_fl": "{{ logging_add_stdout_fl }}",
+        "stdout_log_level": "{{ logging_stdout_log_level }}",
+        "log_files": "{{ logging_log_files }}",
+        "max_bytes": "{{ logging_max_bytes }}",
+        "backup_count": "{{ logging_backup_count }}"
+    },
+    "general": {
+        "retry_delays": "{{ general_retry }}"
+    },
+    "nlds_q": {
+        "logging": "{{ nlds_q_logging_dict }}",
+        "max_retries": "{{ nlds_q_max_retries }}",
+        "retry_delays": "{{ nlds_q_retry_delays }}",
+        "print_tracebacks_fl": "{{ nlds_q_print_tracebacks_fl }}"
+    },
+    "index_q": {
+        "logging": "{{ index_q_logging_dict }}",
+        "max_retries": "{{ index_q_max_retries }}",
+        "retry_delays": "{{ index_q_retry_delays }}",
+        "print_tracebacks_fl": "{{ index_q_print_tracebacks_fl }}",
+        "filelist_max_length": "{{ index_q_filelist_max_length }}",
+        "message_threshold": "{{ index_q_message_threshold }}",
+        "check_permissions_fl": "{{ index_q_check_permissions_fl }}",
+        "check_filesize_fl": "{{ index_q_check_filesize_fl }}",
+        "max_filesize": "{{ index_q_max_filesize }}"
+    },
+    "catalog_q": {
+        "logging": "{{ catalog_q_logging_dict }}",
+        "max_retries": "{{ catalog_q_max_retries }}",
+        "retry_delays": "{{ catalog_q_retry_delays }}",
+        "print_tracebacks_fl": "{{ catalog_q_print_tracebacks_fl }}",
+        "db_engine": "{{ catalog_q_db_engine }}",
+        "db_options": {
+            "db_name" : "{{ catalog_q_db_options_db_name }}",
+            "db_user" : "{{ catalog_q_db_options_db_user }}",
+            "db_passwd" : "{{ catalog_q_db_options_db_passwd }}",
+            "echo": "{{ catalog_q_db_options_echo }}"
+        },
+        "default_tenancy": "{{ catalog_q_default_tenancy }}",
+        "default_tape_url": "{{ catalog_q_default_tape_url }}"
+    },
+    "monitor_q": {
+        "logging": "{{ monitor_q_logging_dict }}",
+        "max_retries": "{{ monitor_q_max_retries }}",
+        "retry_delays": "{{ monitor_q_retry_delays }}",
+        "print_tracebacks_fl": "{{ monitor_q_print_tracebacks_fl }}",
+        "db_engine": "{{ monitor_q_db_engine }}",
+        "db_options": {
+            "db_name" : "{{ monitor_q_db_options_db_name }}",
+            "db_user" : "{{ monitor_q_db_options_db_user }}",
+            "db_passwd" : "{{ monitor_q_db_options_db_passwd }}",
+            "echo": "{{ monitor_q_db_options_echo }}"
+        }
+    },
+    "transfer_put_q": {
+        "logging": "{{ transfer_put_q_logging_dict }}",
+        "max_retries": "{{ transfer_put_q_max_retries }}",
+        "retry_delays": "{{ transfer_put_q_retry_delays }}",
+        "print_tracebacks_fl": "{{ transfer_put_q_print_tracebacks_fl }}",
+        "filelist_max_length": "{{ transfer_put_q_filelist_max_length }}",
+        "check_permissions_fl": "{{ transfer_put_q_check_permissions_fl }}",
+        "tenancy": "{{ transfer_put_q_tenancy }}",
+        "require_secure_fl": "{{ transfer_put_q_require_secure_fl }}"
+    },
+    "transfer_get_q": {
+        "logging": "{{ transfer_put_q_logging_dict }}",
+        "max_retries": "{{ transfer_put_q_max_retries }}",
+        "retry_delays": "{{ transfer_put_q_retry_delays }}",
+        "print_tracebacks_fl": "{{ transfer_put_q_print_tracebacks_fl }}",
+        "filelist_max_length": "{{ transfer_put_q_filelist_max_length }}",
+        "check_permissions_fl": "{{ transfer_put_q_check_permissions_fl }}",
+        "tenancy": "{{ transfer_put_q_tenancy }}",
+        "require_secure_fl": "{{ transfer_put_q_require_secure_fl }}",
+        "chown_fl": "{{ transfer_put_q_chown_fl }}",
+        "chown_cmd": "{{ transfer_put_q_chown_cmd }}"
+    },
+    "logging_q": {
+        "logging": "{{ logging_q_logging_dict }}",
+        "print_tracebacks_fl": "{{ logging_q_print_tracebacks_fl }}"
+    },
+    "archive_put_q": {
+        "logging": "{{ archive_put_q_logging_dict }}",
+        "max_retries": "{{ archive_put_q_max_retries }}",
+        "retry_delays": "{{ archive_put_q_retry_delays }}",
+        "print_tracebacks_fl": "{{ archive_put_q_print_tracebacks_fl }}",
+        "tenancy": "{{ archive_put_q_tenancy }}",
+        "check_permissions_fl": "{{ archive_put_q_check_permissions_fl }}",
+        "require_secure_fl": "{{ archive_put_q_require_secure_fl }}",
+        "tape_url": "{{ archive_put_q_tape_url }}",
+        "tape_pool": "{{ archive_put_q_tape_pool }}",
+        "query_checksum_fl": "{{ archive_put_q_query_checksum_fl }}",
+        "chunk_size": "{{ archive_put_q_chunk_size }}"
+    },
+    "archive_get_q": {
+        "logging": "{{ archive_get_q_logging_dict }}",
+        "max_retries": "{{ archive_get_q_max_retries }}",
+        "retry_delays": "{{ archive_get_q_retry_delays }}",
+        "print_tracebacks_fl": "{{ archive_get_q_print_tracebacks_fl }}",
+        "tenancy": "{{ archive_get_q_tenancy }}",
+        "check_permissions_fl": "{{ archive_get_q_check_permissions_fl }}",
+        "require_secure_fl": "{{ archive_get_q_require_secure_fl }}",
+        "tape_url": "{{ archive_get_q_tape_url }}",
+        "tape_pool": "{{ archive_get_q_tape_pool }}",
+        "query_checksum_fl": "{{ archive_get_q_query_checksum_fl }}",
+        "chunk_size": "{{ archive_get_q_chunk_size }}",
+        "prepare_requeue": "{{ archive_get_q_prepare_requeue }}"
+    },
+    "rpc_publisher": {
+        "time_limit": "{{ rpc_publisher_time_limit }}",
+        "queue_exclusivity_fl": "{{ rpc_publisher_queue_exclusivity_fl }}"
+    },
+    "cronjob_publisher": {
+        "access_key": "{{ cronjob_publisher_access_key }}",
+        "secret_key": "{{ cronjob_publisher_secret_key }}",
+        "tenancy": "{{ cronjob_publisher_tenancy }}",
+        "tape_url": "{{ cronjob_publisher_tape_url }}"
     }
 }

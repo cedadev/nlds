@@ -1,3 +1,5 @@
 pytest==7.1.2
 pyfakefs==4.6.3
 coverage==6.4.2
+pytest-cov==4.1.0
+coverage-badge==1.1.0

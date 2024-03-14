@@ -7,9 +7,12 @@ import functools
 
 from nlds.rabbit import publisher as publ
 from nlds.rabbit.publisher import RabbitMQPublisher
-from nlds.server_config import LOGGING_CONFIG_ENABLE, LOGGING_CONFIG_FORMAT, \
-                               LOGGING_CONFIG_LEVEL, LOGGING_CONFIG_SECTION, \
-                               LOGGING_CONFIG_STDOUT, LOGGING_CONFIG_STDOUT_LEVEL
+from nlds.server_config import (
+    LOGGING_CONFIG_FORMAT, 
+    LOGGING_CONFIG_LEVEL, 
+    LOGGING_CONFIG_STDOUT, 
+    LOGGING_CONFIG_STDOUT_LEVEL,
+)
 
 def mock_load_config(template_config):
     return template_config
@@ -62,8 +65,11 @@ def test_publish_message(default_publisher):
 
     # Attempting to establish a connection with the template config should also 
     # fail with a socket error
-    with pytest.raises(gaierror):
-        default_publisher.get_connection()
+    # NOTE: (2024-03-12) Commented this out as the new daemon thread logic and 
+    # perma-retries keep the connection from dying. No longer a useful test.
+    # TODO: rewrite but force close it?
+    # with pytest.raises(gaierror):
+    #     default_publisher.get_connection()
 
     # TODO: Make mock connection object and send messages through it?
 
