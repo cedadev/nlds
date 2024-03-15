@@ -747,7 +747,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         """
         super().declare_bindings()
         for queue in self.queues:
-            self.channel.queue_declare(queue=queue.name)
+            self.channel.queue_declare(queue=queue.name, durable=True)
             for binding in queue.bindings:
                 self.channel.queue_bind(exchange=binding.exchange, 
                                         queue=queue.name, 
