@@ -18,6 +18,7 @@ from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.details import PathDetails
 from nlds.rabbit.consumer import FilelistType, State
+from ..utils.aggregations import aggregate_files
 
 
 class TransferError(Exception):
@@ -162,16 +163,32 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         if self.check_permissions_fl:
             self.set_ids(body_json)
 
-        self.log(f"Starting object store transfer with {tenancy}", 
-                 self.RK_LOG_INFO)
-
         # Append route info to message to track the route of the message
         body_json = self.append_route_info(body_json)
 
-        # Start transfer - this is implementation specific and handled by child 
-        # classes 
-        self.transfer(transaction_id, tenancy, access_key, secret_key, 
-                      filelist, rk_parts[0], body_json)
+        if rk_parts[2] == self.RK_INITIATE:
+            self.log("Aggregating list into more appropriately sized sub-lists "
+                     "for parallelised uploads.", self.RK_LOG_INFO)
+
+            # Make a new routing key which returns message to this queue
+            rk_transfer_start = ".".join([
+                rk_parts[0], 
+                rk_parts[1], 
+                self.RK_START
+            ])
+            # Aggregate files into bins of approximately equal size and split 
+            # the transaction into subtransactions for parallelisability
+            sub_lists = aggregate_files(filelist)
+            for sub_list in sub_lists:
+                self.send_pathlist(sub_list, rk_transfer_start, body_json, 
+                                   state=State.CATALOG_GETTING)
+        else:
+            # Start transfer - this is implementation specific and handled by 
+            # child classes 
+            self.log(f"Starting object store transfer with {tenancy}", 
+                     self.RK_LOG_INFO)
+            self.transfer(transaction_id, tenancy, access_key, secret_key, 
+                          filelist, rk_parts[0], body_json)
         
 
     def get_objectstore_config(self, body_dict) -> Tuple:
