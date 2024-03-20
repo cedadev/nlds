@@ -167,9 +167,9 @@ retry_delays list::
     }
 
 This retry delays list gives the delay applied to retried messages in seconds, 
-with the `n`th element being the delay for the `n`th retry. Setting the value 
-here sets a default for _all_ consumers, but the retry_delays option can be 
-inserted into any consumer-specific config section to override this. 
+with the ``n``th element being the delay for the ``n``th retry. Setting the 
+value here sets a default for `all` consumers, but the retry_delays option can 
+be inserted into any consumer-specific config section to override this. 
 
 Consumer-specific optional sections
 -----------------------------------
