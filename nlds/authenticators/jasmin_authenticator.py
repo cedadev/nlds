@@ -10,9 +10,6 @@ __contact__ = 'neil.massey@stfc.ac.uk'
 
 from .base_authenticator import BaseAuthenticator
 from ..server_config import load_config
-from ..errors import ResponseError
-from fastapi import status
-from fastapi.exceptions import HTTPException
 import requests
 import json
 
