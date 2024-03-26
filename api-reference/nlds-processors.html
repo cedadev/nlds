@@ -40,8 +40,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../home.html">CEDA Near-Line Data Store</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../home.html#acknowledgements">Acknowledgements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../server-config/examples.html">Server config examples</a></li>
@@ -660,18 +659,6 @@ which point the</p>
 <dt class="sig sig-object py" id="nlds_processors.catalog.catalog_worker.CatalogConsumer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">nlds_processors.catalog.catalog_worker.</span></span><span class="sig-name descname"><span class="pre">CatalogConsumer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'catalog_q'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_worker.CatalogConsumer" title="Permalink to this definition"></a></dt>
 <dd><dl class="py method">
-<dt class="sig sig-object py" id="nlds_processors.catalog.catalog_worker.CatalogConsumer.aggregate_files">
-<span class="sig-name descname"><span class="pre">aggregate_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filelist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#nlds_processors.catalog.catalog_models.File" title="nlds_processors.catalog.catalog_models.File"><span class="pre">nlds_processors.catalog.catalog_models.File</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_agg_count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#nlds_processors.catalog.catalog_models.File" title="nlds_processors.catalog.catalog_models.File"><span class="pre">nlds_processors.catalog.catalog_models.File</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#nlds_processors.catalog.catalog_worker.CatalogConsumer.aggregate_files" title="Permalink to this definition"></a></dt>
-<dd><p>Creates a list of suitable aggregations from a given list of files. A
-few algorithms for this were explored, with some suiting different 
-distributions of file sizes better, so the most generic solution is 
-provided. This implementation calculates a target value for aggregation 
-size, configurable through server-config, and then iterates through the 
-Files and sorts each into the smallest aggregation available at that 
-iteration.</p>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="nlds_processors.catalog.catalog_worker.CatalogConsumer.attach_database">
 <span class="sig-name descname"><span class="pre">attach_database</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">create_db_fl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nlds_processors.catalog.catalog_worker.CatalogConsumer.attach_database" title="Permalink to this definition"></a></dt>
 <dd><p>Attach the Catalog to the consumer</p>

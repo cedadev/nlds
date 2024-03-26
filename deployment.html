@@ -40,8 +40,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="home.html">CEDA Near-Line Data Store</a></li>
-<li class="toctree-l1"><a class="reference internal" href="home.html#acknowledgements">Acknowledgements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
 <li class="toctree-l1"><a class="reference internal" href="system-status.html">Using the system status page</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/server-config.html">The server config file</a></li>
 <li class="toctree-l1"><a class="reference internal" href="server-config/examples.html">Server config examples</a></li>
@@ -56,6 +55,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#changing-ownership-of-files">Changing ownership of files</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#archive-put-cronjob">Archive Put Cronjob</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#staging-deployment">Staging Deployment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#updating-the-deployment">Updating the deployment</a></li>
 </ul>
 </li>
 </ul>
@@ -99,7 +99,7 @@
   <div class="section" id="deployment">
 <h1>Deployment<a class="headerlink" href="#deployment" title="Permalink to this headline"></a></h1>
 <p>The NLDS is deployed as a collection of containers on the JASMIN rancher cluster
-‘wigbiorg’, a public-facing Kubernetes cluster hosted by JASMIN.</p>
+<code class="docutils literal notranslate"><span class="pre">wigbiorg</span></code>, a public-facing Kubernetes cluster hosted by JASMIN.</p>
 <p>Due to the microservice architecture the level to apply the containerisation was
 immediately clear - each microservice sits in its own container. There are
 therefore nine different containers that make up the deployment of the NLDS,
@@ -119,7 +119,7 @@ eight for the consumers and one additional container for the FastAPI server:</p>
 repository in gitlab and the latter 8 are similarly defined and deployed in
 the <a class="reference external" href="https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy">nlds-consumers-deploy</a>
 repository. All have subtly different configurations and dependencies, which can
-be gleamed in detail by looking at the configuration yaml files and helm chart
+be gleaned in detail by looking at the configuration yaml files and helm chart
 in the repos, but are also, mercifully, described below.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -199,8 +199,8 @@ the database-interacting consumers (Catalog and Monitor) and, again, fully
 described in <a class="reference internal" href="server-config/server-config.html"><span class="doc">Server config</span></a>. The production system uses the
 databases <code class="docutils literal notranslate"><span class="pre">nlds_catalog</span></code> and <code class="docutils literal notranslate"><span class="pre">nlds_monitor</span></code> on the Postgres server
 <code class="docutils literal notranslate"><span class="pre">db5.ceda.ac.uk</span></code> hosted and maintained by CEDA. However, an additional part of
-this configuration is running any database migrations to the database schema is
-up to date. This will be discussed in more detail in section
+this configuration is running any database migrations so the database schema is
+kept up to date. This will be discussed in more detail in section
 <a class="reference internal" href="#db-migration"><span class="std std-ref">Migrations</span></a>.</p>
 <p>There are some slightly more complex deployment configurations involved in the
 rest of the setup, which are described below.</p>
@@ -209,8 +209,8 @@ rest of the setup, which are described below.</p>
 <span id="id1"></span><h2>API Server<a class="headerlink" href="#api-server" title="Permalink to this headline"></a></h2>
 <p>The NLDS API server, as mentioned above, was written using FastAPI. In a local
 development environment this is served using <code class="docutils literal notranslate"><span class="pre">uvicorn</span></code>, but for the production
-deployment the <cite>base-image &lt;https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi&gt;</cite>
-base-image is used, which runs the server instead with <code class="docutils literal notranslate"><span class="pre">guincorn</span></code>. They are
+deployment the <a class="reference external" href="https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi">base-image</a>
+base-image is used, which runs the server instead with <code class="docutils literal notranslate"><span class="pre">gunicorn</span></code>. They are
 functionally identical so this is not a problem per se, just something to be
 aware of. The NLDS API helm deployment is an extension of the standard <a class="reference external" href="https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/fast-api">FastAPI helm chart</a>.</p>
 <p>On production, this API server sits facing the public internet behind an NGINX
@@ -225,7 +225,7 @@ deployment specific endpoint and will also exist on any local development
 instances.</p>
 </div>
 <div class="section" id="tape-keys">
-<span id="id2"></span><h2>Tape Keys<a class="headerlink" href="#tape-keys" title="Permalink to this headline"></a></h2>
+<span id="id3"></span><h2>Tape Keys<a class="headerlink" href="#tape-keys" title="Permalink to this headline"></a></h2>
 <p>The CERN Tape Archive (CTA) instance at STFC requires the use of authentication
 to access the different tape pools and tape instances. This is done through
 Kerberos on the backend and requires the use of a forwardable keytab file with
@@ -242,7 +242,7 @@ environment variables must be created:</p>
 must be kept secret. This is handled in the CEDA gitlab deployment process
 through the use of git-crypt (see <a class="reference external" href="https://gitlab.ceda.ac.uk/cedaci/ci-tools/-/blob/master/docs/setup-kubernetes-project.md#including-deployment-secrets-in-a-project">here</a>
 for more details) to encrypt and Kubernetes secrets to decrypt at deployment
-time. Unfortunately permissions can’t be set, no changed, on files made by
+time. Unfortunately permissions can’t be set, or changed, on files made by
 Kubernetes secrets, so to get the keytab in the right place with the right
 permissions the deployment utilises an init-container to copy the secret key to
 a new file and then alter permissions on it to 600.</p>
@@ -307,7 +307,7 @@ Kubernetes cluster can still be used to check the output logs of each consumer
 in the standard way for quick diagnosis of problems with the NLDS.</p>
 </div>
 <div class="section" id="scaling">
-<span id="id3"></span><h2>Scaling<a class="headerlink" href="#scaling" title="Permalink to this headline"></a></h2>
+<span id="id4"></span><h2>Scaling<a class="headerlink" href="#scaling" title="Permalink to this headline"></a></h2>
 <p>A core part of the design philosophy of the NLDS was its microservice
 architecture, which allows for any of the microservices to be scaled out in an
 embarrassingly parallelisable way to meet changing demand. This is easily
@@ -359,7 +359,7 @@ exposed attack surface, the binary was compiled from a <a class="reference exter
 which allows only the <code class="docutils literal notranslate"><span class="pre">chown</span></code>-ing of files owned by the NLDS user (on JASMIN
 <code class="docutils literal notranslate"><span class="pre">uid=7054096</span></code>). Additionally, the target must be a file or directory and the
 <code class="docutils literal notranslate"><span class="pre">uid</span></code> being changed to must be greater than 1024 to avoid clashes with system
-<a href="#id4"><span class="problematic" id="id5">``</span></a>uid``s. This binary will only execute on any containers where the appropriate
+<a href="#id5"><span class="problematic" id="id6">``</span></a>uid``s. This binary will only execute on any containers where the appropriate
 security context is set, notably:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">securityContext</span><span class="p">:</span>
     <span class="n">allowPrivilegeEscalation</span><span class="p">:</span> <span class="n">true</span>
@@ -386,8 +386,8 @@ production system on wigbiorg, and (b) the staging/beta testing system on the
 staging cluster (<code class="docutils literal notranslate"><span class="pre">ceda-k8s</span></code>). These have similar but slightly different
 configurations, the details of which are summarised in the below table. Like
 everything on this page, this was true at the time of writing (2024-03-06).</p>
-<table class="colwidths-given docutils align-default" id="id7">
-<caption><span class="caption-text">Staging vs. Production Config</span><a class="headerlink" href="#id7" title="Permalink to this table"></a></caption>
+<table class="colwidths-given docutils align-default" id="id8">
+<caption><span class="caption-text">Staging vs. Production Config</span><a class="headerlink" href="#id8" title="Permalink to this table"></a></caption>
 <colgroup>
 <col style="width: 20%" />
 <col style="width: 40%" />
@@ -422,6 +422,18 @@ everything on this page, this was true at the time of writing (2024-03-06).</p>
 </tr>
 </tbody>
 </table>
+</div>
+<div class="section" id="updating-the-deployment">
+<h2>Updating the deployment<a class="headerlink" href="#updating-the-deployment" title="Permalink to this headline"></a></h2>
+<p>Updating instuctions can be found on the READMEs in the deployment repos, but
+essentially boil down to changing the git hash in the relevant Dockerfiles, i.e.</p>
+<ol class="arabic simple">
+<li><p>Finalise and commit your changes to the <a class="reference external" href="https://github.com/cedadev/nlds">nlds github repo</a>.</p></li>
+<li><p>Take the hash from that commit (the first 8 characters is fine) and replace the value already at <code class="docutils literal notranslate"><span class="pre">ARG</span> <span class="pre">GIT_VERSION=</span></code> in the Dockerfile under <code class="docutils literal notranslate"><span class="pre">/images</span></code></p></li>
+<li><p>Commit the changes and let the CI pipeline do its magic.</p></li>
+</ol>
+<p>If this doesn’t work then larger changes have likely been made that require
+changes to the helm chart.</p>
 </div>
 </div>
 
