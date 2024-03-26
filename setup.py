@@ -19,7 +19,8 @@ setup(
         'retry',
         'pika',
         'minio',
-        'sqlalchemy'
+        'sqlalchemy',
+        'cryptography'
     ],
     include_package_data=True,
     package_data={

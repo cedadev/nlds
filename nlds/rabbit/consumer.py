@@ -683,10 +683,6 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         # Begin the 
         self.keepalive.start_polling()
 
-        # Get and log thread info
-        thread_id = thr.get_ident()
-        self.log(f"Callback started in thread {thread_id}", self.RK_LOG_INFO)
-
         # Wrap callback with a try-except catching a selection of common 
         # errors which can be caught without stopping consumption.
         try:
@@ -751,7 +747,7 @@ class RabbitMQConsumer(ABC, RabbitMQPublisher):
         """
         super().declare_bindings()
         for queue in self.queues:
-            self.channel.queue_declare(queue=queue.name)
+            self.channel.queue_declare(queue=queue.name, durable=True)
             for binding in queue.bindings:
                 self.channel.queue_bind(exchange=binding.exchange, 
                                         queue=queue.name, 

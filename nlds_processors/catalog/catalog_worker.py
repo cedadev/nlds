@@ -42,9 +42,10 @@ from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog, CatalogError
-from nlds_processors.catalog.catalog_models import Storage, Location, File
+from nlds_processors.catalog.catalog_models import Storage, Location
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
+from nlds_processors.utils.aggregations import aggregate_files
 
 
 class Metadata():
@@ -679,7 +680,10 @@ class CatalogConsumer(RMQC):
                     self.reroutelist.append(file_details)
                 self.retrievedict[aggregation.tarname] = retrievelist
 
-        # log the successful and non-successful catalog puts
+        # log and route the successful and non-successful catalog gets
+        # we could split up using the code:
+        # j=5 # size of each transfer
+        # [x[i*j:i*j+j] for i in range(0,int(len(x)/j)+1)]
         # SUCCESS
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin,
@@ -696,8 +700,9 @@ class CatalogConsumer(RMQC):
             rk_reroute = ".".join([rk_origin,
                                    self.RK_CATALOG_GET, 
                                    self.RK_REROUTE])
+            # TODO (2024-03-14): This probably needs to be split, definitely 
+            # into cache-appropriate chunks of less than 500GB 
             # Ensure the holding_id is present as we'll need it during retrieval 
-            # TODO: double check both that it's included and whether you need it!
             body[self.MSG_META][self.MSG_HOLDING_ID] = holding_id # Ensure this is actually populated
             # Include the original files requested in the message body so they 
             # can be moved to disk after retrieval
@@ -785,57 +790,6 @@ class CatalogConsumer(RMQC):
         return path_details
 
 
-    def aggregate_files(
-            self, 
-            filelist: List[File], 
-            target_agg_count: int = None
-        ) -> List[List[File]]:
-        """Creates a list of suitable aggregations from a given list of files. A
-        few algorithms for this were explored, with some suiting different 
-        distributions of file sizes better, so the most generic solution is 
-        provided. This implementation calculates a target value for aggregation 
-        size, configurable through server-config, and then iterates through the 
-        Files and sorts each into the smallest aggregation available at that 
-        iteration. """
-        # Calculate a target aggregation count if one is not given
-        if target_agg_count is None:
-            filesizes = [f.size for f in filelist]
-            total_size = sum(filesizes)
-            count = len(filesizes)
-            mean_size = total_size / count
-            if total_size < self.target_aggregation_size:
-                # If it's less that a single target agg size then just do a single 
-                # aggregation
-                return [filelist, ]
-            # TODO: Need to think this conditional through a bit more. This is 
-            # the condition for if all the files are about the size of the 
-            # target_aggregation_size, in which case we could end up with 
-            # len(filelist) aggregations each with one file in them, which is 
-            # maximally inefficient for the tape? 
-            elif mean_size > self.target_aggregation_size:
-                # For now we'll just set it to 5 in this particular case.
-                target_agg_count = 5
-            else:
-                # Otherwise we're going for the number of target sizes that fit 
-                # into our total size. 
-                target_agg_count = total_size / self.target_aggregation_size
-
-        assert target_agg_count is not None
-
-        # Make 2 lists, one being a list of lists dictating the aggregates, the 
-        # other being their sizes, so we're not continually recalculating it
-        aggregates = [[] for _ in range(count)]
-        sizes = [0 for _ in range(count)]
-        filelist_sorted = sorted(filelist, reverse=True, key=lambda f: f.size)
-        for fs in filelist_sorted:
-            # Get the index of the smallest aggregate
-            agg_index = min(range(len(aggregates)), key=lambda i: sizes[i])
-            aggregates[agg_index].append(fs)
-            sizes[agg_index] += fs.size
-
-        return aggregates
-
-
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location and 
         aggregation for it and pass to for writing to tape."""   
@@ -873,7 +827,9 @@ class CatalogConsumer(RMQC):
         # make a distinction between aggregates, being just groups of files, and 
         # aggregations, being the database object / table 
         filelist = self.catalog.get_unarchived_files(next_holding)
-        aggregates = self.aggregate_files(filelist)
+        aggregates = aggregate_files(
+            filelist, target_agg_size=self.target_aggregation_size
+        )
 
         # Create the aggragation and respective locations for each file in each 
         # aggregate

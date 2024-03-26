@@ -18,7 +18,7 @@ you plan on contributing to the NLDS; and an API Reference.
    :maxdepth: 1
    :caption: User Guide
 
-   Getting started <home>
+   Getting started <getting-started>
    Using the system status page <system-status>
    The server config file <server-config/server-config>
    Server config examples <server-config/examples>

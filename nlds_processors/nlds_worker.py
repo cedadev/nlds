@@ -171,7 +171,7 @@ class NLDSWorkerConsumer(RabbitMQConsumer):
         queue = f"{self.RK_TRANSFER_GET}"
         new_routing_key = ".".join([self.RK_ROOT, 
                                     queue, 
-                                    self.RK_START])
+                                    self.RK_INITIATE])
         self.log(f"Sending  message to {queue} queue with routing "
                  f"key {new_routing_key}", self.RK_LOG_INFO)
         self.publish_and_log_message(new_routing_key, body_json)

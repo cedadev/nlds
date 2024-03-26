@@ -3,7 +3,7 @@ Deployment
 ==========
 
 The NLDS is deployed as a collection of containers on the JASMIN rancher cluster 
-'wigbiorg', a public-facing Kubernetes cluster hosted by JASMIN.
+``wigbiorg``, a public-facing Kubernetes cluster hosted by JASMIN.
 
 Due to the microservice architecture the level to apply the containerisation was
 immediately clear - each microservice sits in its own container. There are 
@@ -24,7 +24,7 @@ The FastAPI server is defined and deployed in the `nlds-server-deploy <https://g
 repository in gitlab and the latter 8 are similarly defined and deployed in 
 the `nlds-consumers-deploy <https://gitlab.ceda.ac.uk/cedadev/nlds-consumers-deploy>`_ 
 repository. All have subtly different configurations and dependencies, which can 
-be gleamed in detail by looking at the configuration yaml files and helm chart 
+be gleaned in detail by looking at the configuration yaml files and helm chart 
 in the repos, but are also, mercifully, described below.
 
 .. note::
@@ -111,8 +111,8 @@ the database-interacting consumers (Catalog and Monitor) and, again, fully
 described in :doc:`server-config/server-config`. The production system uses the 
 databases ``nlds_catalog`` and ``nlds_monitor`` on the Postgres server 
 ``db5.ceda.ac.uk`` hosted and maintained by CEDA. However, an additional part of 
-this configuration is running any database migrations to the database schema is 
-up to date. This will be discussed in more detail in section 
+this configuration is running any database migrations so the database schema is 
+kept up to date. This will be discussed in more detail in section 
 :ref:`db_migration`.
 
 There are some slightly more complex deployment configurations involved in the 
@@ -125,8 +125,8 @@ API Server
 
 The NLDS API server, as mentioned above, was written using FastAPI. In a local 
 development environment this is served using ``uvicorn``, but for the production 
-deployment the `base-image <https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi>` 
-base-image is used, which runs the server instead with ``guincorn``. They are 
+deployment the `base-image <https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/asgi>`_
+base-image is used, which runs the server instead with ``gunicorn``. They are 
 functionally identical so this is not a problem per se, just something to be 
 aware of. The NLDS API helm deployment is an extension of the standard `FastAPI helm chart <https://gitlab.ceda.ac.uk/cedaci/base-images/-/tree/main/fast-api>`_.
 
@@ -163,7 +163,7 @@ The problem arises with the use of Kubernetes, wherein the keytab content string
 must be kept secret. This is handled in the CEDA gitlab deployment process 
 through the use of git-crypt (see `here <https://gitlab.ceda.ac.uk/cedaci/ci-tools/-/blob/master/docs/setup-kubernetes-project.md#including-deployment-secrets-in-a-project>`__
 for more details) to encrypt and Kubernetes secrets to decrypt at deployment 
-time. Unfortunately permissions can't be set, no changed, on files made by 
+time. Unfortunately permissions can't be set, or changed, on files made by 
 Kubernetes secrets, so to get the keytab in the right place with the right 
 permissions the deployment utilises an init-container to copy the secret key to 
 a new file and then alter permissions on it to 600.
@@ -360,3 +360,16 @@ everything on this page, this was true at the time of writing (2024-03-06).
      - `https://nlds-master.130.246.130.221.nip.io/ <https://nlds-master.130.246.130.221.nip.io/docs>`_ (firewalled)
      - `https://nlds.jasmin.ac.uk/ <https://nlds.jasmin.ac.uk/docs>`_ (public, ssl secured)
 
+
+Updating the deployment
+-----------------------
+
+Updating instuctions can be found on the READMEs in the deployment repos, but 
+essentially boil down to changing the git hash in the relevant Dockerfiles, i.e.
+
+1. Finalise and commit your changes to the `nlds github repo <https://github.com/cedadev/nlds>`_.
+2. Take the hash from that commit (the first 8 characters is fine) and replace the value already at ``ARG GIT_VERSION=`` in the Dockerfile under ``/images``
+3. Commit the changes and let the CI pipeline do its magic. 
+
+If this doesn't work then larger changes have likely been made that require 
+changes to the helm chart. 
