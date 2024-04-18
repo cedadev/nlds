@@ -485,10 +485,10 @@ Acknowledgement
 
 NLDS was supported through the ESiWACE2 project. The project ESiWACE2 has received funding from the European Union's Horizon 2020 research and innovation programme under grant agreement No 823988.
 
-.. image:: _images/esiwace2.png
+.. image:: ../_images/esiwace2.png
    :width: 300
    :alt: ESiWACE2 Project Logo
 
-.. image:: _images/ceda.png
+.. image:: ../_images/ceda.png
    :width: 300
    :alt: CEDA Logo
