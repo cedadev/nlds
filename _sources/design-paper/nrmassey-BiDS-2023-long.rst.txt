@@ -479,3 +479,16 @@ is robust, scalable, extendable, user-friendly and secure. The Near-Line
 Data Store (NLDS) is currently in beta test, with a roll out to more
 users of JASMIN planned for later in the year. An extensive user guide
 and tutorial can be found at `nlds-client <https://cedadev.github.io/nlds-client/>`_
+
+Acknowledgement
+---------------
+
+NLDS was supported through the ESiWACE2 project. The project ESiWACE2 has received funding from the European Union's Horizon 2020 research and innovation programme under grant agreement No 823988.
+
+.. image:: _images/esiwace2.png
+   :width: 300
+   :alt: ESiWACE2 Project Logo
+
+.. image:: _images/ceda.png
+   :width: 300
+   :alt: CEDA Logo
