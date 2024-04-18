@@ -63,7 +63,7 @@ User criteria
 .. _`sec:system_criteria`:
 
 System criteria
----------------
+~~~~~~~~~~~~~~~
 
 -  User interactions are secure and authenticated.
 
@@ -80,7 +80,7 @@ System criteria
 
 -  Open Source.
 
-.. _`sec:user_view`:
+.. _`user-view`:
 
 User view and interaction
 -------------------------
@@ -188,9 +188,9 @@ message that is then dispatched to the message broker.
 .. _`sec:auth`:
 
 Authentication and authorisation
---------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As mentioned in Section `3 <#sec:user_view>`__, NLDS is secured using
+As mentioned in Section :ref:`user-view`, NLDS is secured using
 the OAuth2 password flow. The authentication layer consists of a plug-in
 architecture, with a ``BaseAuthenticator`` class, which is purely
 abstract. To define an authenticator, the ``BaseAuthenticator`` must be
@@ -210,7 +210,7 @@ message formed and sent to the message broker.
 .. _`sec:catalog`:
 
 Catalog
--------
+~~~~~~~
 
 When a user PUTs ``files`` into NLDS, the ``files`` are recorded in a
 catalog on their behalf. The user can then list which ``files`` they
@@ -298,7 +298,7 @@ must know so that it can invoke the correct microservice to fetch the
 .. _`sec:message_broker`:
 
 Message broker, exchange and queues
------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 NLDS uses `RabbitMQ <https://www.rabbitmq.com>`_  as the message broker to
 facilitate communication between the API server and the microservices
@@ -360,7 +360,7 @@ effect on performance.
 .. _`sec:microservices`:
 
 Microservices
--------------
+~~~~~~~~~~~~~
 
 The microservices that NLDS uses to carry out users requests are
 designed to be robust, minimal and scalable. Each one is designed to
@@ -423,7 +423,7 @@ to define the database schemas and carry out the queries.
 .. _`sec:policies`:
 
 Management of object storage
-----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 It is inevitable that the object storage used by NLDS will become full.
 To mitigate this, NLDS has a number of policies that determine which

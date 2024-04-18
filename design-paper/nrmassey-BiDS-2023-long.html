@@ -52,20 +52,20 @@
 <li class="toctree-l2"><a class="reference internal" href="#introduction">Introduction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#design-criteria">Design Criteria</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#user-criteria">User criteria</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#system-criteria">System criteria</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#system-criteria">System criteria</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#user-view-and-interaction">User view and interaction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#implementation-details">Implementation details</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#api-server">API server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#authentication-and-authorisation">Authentication and authorisation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#catalog">Catalog</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#message-broker-exchange-and-queues">Message broker, exchange and queues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#microservices">Microservices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#management-of-object-storage">Management of object storage</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#authentication-and-authorisation">Authentication and authorisation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#catalog">Catalog</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#message-broker-exchange-and-queues">Message broker, exchange and queues</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#microservices">Microservices</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#management-of-object-storage">Management of object storage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#deployment">Deployment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#conclusion">Conclusion</a></li>
 </ul>
@@ -144,9 +144,8 @@ asynchronous. The user does not have to maintain a connection for the
 commands to complete.</p></li>
 </ul>
 </div>
-</div>
 <div class="section" id="system-criteria">
-<span id="sec-system-criteria"></span><h2>System criteria<a class="headerlink" href="#system-criteria" title="Permalink to this headline"></a></h2>
+<span id="sec-system-criteria"></span><h3>System criteria<a class="headerlink" href="#system-criteria" title="Permalink to this headline"></a></h3>
 <ul class="simple">
 <li><p>User interactions are secure and authenticated.</p></li>
 <li><p>Robust, no user transactions should be lost.</p></li>
@@ -158,8 +157,9 @@ systems.</p></li>
 <li><p>Open Source.</p></li>
 </ul>
 </div>
+</div>
 <div class="section" id="user-view-and-interaction">
-<span id="sec-user-view"></span><h2>User view and interaction<a class="headerlink" href="#user-view-and-interaction" title="Permalink to this headline"></a></h2>
+<span id="user-view"></span><h2>User view and interaction<a class="headerlink" href="#user-view-and-interaction" title="Permalink to this headline"></a></h2>
 <p>Users interact with NLDS via a web-server that exposes a RESTful HTTP
 API (<a class="reference external" href="https://www.ics.uci.edu/~fielding/pubs/dissertation/top.htm">REST</a>). A Python library is available, as well as
 a command line client, which itself is built upon the Python library. As
@@ -239,10 +239,9 @@ performs authentication, followed by validity checking of the
 information contained in the header and body and, finally, forms a
 message that is then dispatched to the message broker.</p>
 </div>
-</div>
 <div class="section" id="authentication-and-authorisation">
-<span id="sec-auth"></span><h2>Authentication and authorisation<a class="headerlink" href="#authentication-and-authorisation" title="Permalink to this headline"></a></h2>
-<p>As mentioned in Section <a class="reference external" href="#sec:user_view">3</a>, NLDS is secured using
+<span id="sec-auth"></span><h3>Authentication and authorisation<a class="headerlink" href="#authentication-and-authorisation" title="Permalink to this headline"></a></h3>
+<p>As mentioned in Section <a class="reference internal" href="#user-view"><span class="std std-ref">User view and interaction</span></a>, NLDS is secured using
 the OAuth2 password flow. The authentication layer consists of a plug-in
 architecture, with a <code class="docutils literal notranslate"><span class="pre">BaseAuthenticator</span></code> class, which is purely
 abstract. To define an authenticator, the <code class="docutils literal notranslate"><span class="pre">BaseAuthenticator</span></code> must be
@@ -259,7 +258,7 @@ firstly, in the HTTP request sent to the API server, and then in the
 message formed and sent to the message broker.</p>
 </div>
 <div class="section" id="catalog">
-<span id="sec-catalog"></span><h2>Catalog<a class="headerlink" href="#catalog" title="Permalink to this headline"></a></h2>
+<span id="sec-catalog"></span><h3>Catalog<a class="headerlink" href="#catalog" title="Permalink to this headline"></a></h3>
 <p>When a user PUTs <code class="docutils literal notranslate"><span class="pre">files</span></code> into NLDS, the <code class="docutils literal notranslate"><span class="pre">files</span></code> are recorded in a
 catalog on their behalf. The user can then list which <code class="docutils literal notranslate"><span class="pre">files</span></code> they
 have in the catalog and also search for <code class="docutils literal notranslate"><span class="pre">files</span></code> based on regular
@@ -332,7 +331,7 @@ storage.</p></li>
 </ol>
 </div>
 <div class="section" id="message-broker-exchange-and-queues">
-<span id="sec-message-broker"></span><h2>Message broker, exchange and queues<a class="headerlink" href="#message-broker-exchange-and-queues" title="Permalink to this headline"></a></h2>
+<span id="sec-message-broker"></span><h3>Message broker, exchange and queues<a class="headerlink" href="#message-broker-exchange-and-queues" title="Permalink to this headline"></a></h3>
 <p>NLDS uses <a class="reference external" href="https://www.rabbitmq.com">RabbitMQ</a>  as the message broker to
 facilitate communication between the API server and the microservices
 and communication between the microservices themselves. RabbitMQ was
@@ -384,7 +383,7 @@ due to FastAPI’s use of AsyncIO and so should not have a detrimental
 effect on performance.</p>
 </div>
 <div class="section" id="microservices">
-<span id="sec-microservices"></span><h2>Microservices<a class="headerlink" href="#microservices" title="Permalink to this headline"></a></h2>
+<span id="sec-microservices"></span><h3>Microservices<a class="headerlink" href="#microservices" title="Permalink to this headline"></a></h3>
 <p>The microservices that NLDS uses to carry out users requests are
 designed to be robust, minimal and scalable. Each one is designed to
 perform a minimum number of tasks, related to just one aspect of NLDS.
@@ -436,7 +435,7 @@ the catalog database. <a class="reference external" href="https://www.sqlalchemy
 to define the database schemas and carry out the queries.</p>
 </div>
 <div class="section" id="management-of-object-storage">
-<span id="sec-policies"></span><h2>Management of object storage<a class="headerlink" href="#management-of-object-storage" title="Permalink to this headline"></a></h2>
+<span id="sec-policies"></span><h3>Management of object storage<a class="headerlink" href="#management-of-object-storage" title="Permalink to this headline"></a></h3>
 <p>It is inevitable that the object storage used by NLDS will become full.
 To mitigate this, NLDS has a number of policies that determine which
 files should be deleted from the object storage, while remaining on
@@ -450,6 +449,7 @@ done by issuing the same command, and the only difference the user will
 notice is the extra time the request will take to complete. Requests are
 handled asynchronously, so it will not tie up their session by blocking.
 They can check the progress of the request using the <code class="docutils literal notranslate"><span class="pre">stat</span></code> command.</p>
+</div>
 </div>
 <div class="section" id="deployment">
 <span id="sec-deployment"></span><h2>Deployment<a class="headerlink" href="#deployment" title="Permalink to this headline"></a></h2>
