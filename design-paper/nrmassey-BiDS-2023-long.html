@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A SCALABLE NEAR-LINE STORAGE SOLUTION FOR VERY BIG DATA &mdash; Near-line Data Store Server 1.0.0 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+    <link rel="shortcut icon" href="../_static/icon-black.png"/>
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="CERN Tape Archive Set Up" href="../development/cta-emulator.html" />
+    <link rel="prev" title="Deployment" href="../deployment.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> Near-line Data Store Server
+            <img src="../_static/nlds.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../system-status.html">Using the system status page</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../server-config/server-config.html">The server config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../server-config/examples.html">Server config examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../deployment.html">Deployment</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Development</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Design paper</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#introduction">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#design-criteria">Design Criteria</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#user-criteria">User criteria</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#system-criteria">System criteria</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#user-view-and-interaction">User view and interaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#implementation-details">Implementation details</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api-server">API server</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#authentication-and-authorisation">Authentication and authorisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#catalog">Catalog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#message-broker-exchange-and-queues">Message broker, exchange and queues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#microservices">Microservices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#management-of-object-storage">Management of object storage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deployment">Deployment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#conclusion">Conclusion</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../development/cta-emulator.html">Setting up a CTA tape emulator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../development/alembic-migrations.html">Database Migrations with Alembic</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../coverage/coverage-report.html">Test coverage report</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../api-reference/nlds-processors.html">NLDS Processors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api-reference/nlds-server.html">NLDS Server</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Near-line Data Store Server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>A SCALABLE NEAR-LINE STORAGE SOLUTION FOR VERY BIG DATA</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/design-paper/nrmassey-BiDS-2023-long.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="a-scalable-near-line-storage-solution-for-very-big-data">
+<h1>A SCALABLE NEAR-LINE STORAGE SOLUTION FOR VERY BIG DATA<a class="headerlink" href="#a-scalable-near-line-storage-solution-for-very-big-data" title="Permalink to this headline"></a></h1>
+<p><em>Neil Massey</em><sup>1</sup>
+<em>Jack Leland</em><sup>1</sup>
+<em>Bryan Lawrence</em><sup>2</sup></p>
+<p>1: Centre for Environmental Data Analysis, RAL Space STFC Rutherford Appleton Laboratory, Chilton, Didcot, UK. and National Centre for Atmospheric Science, UK.</p>
+<p>2: Departments of Meteorology and Computer Science, University of Reading, Reading, UK. and National Centre for Atmospheric Science, UK.</p>
+<p>This is an expanded version of the paper that appears in <a href="#id5"><span class="problematic" id="id6">`Proceedings of the 2023 conference on Big Data from Space, Soille, P., Lumnitz, S. and Albani, S. editor(s), Publications Office of the European Union, Luxembourg, 2023, doi:10.2760/46796, JRC135493.&lt;https://publications.jrc.ec.europa.eu/repository/handle/JRC135493&gt;`_</span></a></p>
+<div class="section" id="introduction">
+<span id="sec-intro"></span><h2>Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline"></a></h2>
+<p>The Centre for Environmental Data Analysis (<a class="reference external" href="https://www.ceda.ac.uk">CEDA</a>) is a division of <a class="reference external" href="https://www.ralspace.stfc.ac.uk/">RAL Space</a>, which itself is a department of the Science and Technology Facilities Council (<a class="reference external" href="https://www.ukri.org/councils/stfc/">STFC</a>), a member of UK Research and Innovation (<a class="reference external" href="https://www.ukri.org">UKRI</a>). CEDA is the UK data centre for environmental data and currently has over 50PB of data stored on a range of disk based storage systems. These systems are chosen on cost, power usage and accessibility via a network, and include three different types of POSIX disk and object storage. Tens of PB of additional data are also stored on tape. Each of these systems has different workflows, interfaces and latencies, causing difficulties for users of <a class="reference external" href="https://www.jasmin.ac.uk">JASMIN</a>, the data analysis facility hosted and maintained by the Scientific Computing Department (<a class="reference external" href="https://scd.stfc.ac.uk">SCD</a>) of STFC, and CEDA.</p>
+<p>The Near-Line Data Store (NLDS), developed with ESIWACE2 and other funding, is a multi-tiered storage solution using object storage as a front end to a tape library. Users interact with NLDS via a HTTP API, with a Python library and command-line client provided to support both programmatic and interactive use. Files transferred to NLDS are first written to the object storage, and a backup is made to tape. When the object storage is approaching capacity, a set of policies is interrogated to determine which files will be removed from it. Upon retrieving a file, NLDS may have to first transfer the file from tape to the object storage, if it has been deleted by the policies. This implements a multi-tier of hot (disk), warm (object storage) and cold (tape) storage via a single interface. While systems like this are not novel, NLDS is open source, designed for ease of redeployment elsewhere, and for use from both local storage and remote sites.</p>
+<p>NLDS is based around a microservice architecture, with a message exchange brokering communication between the microservices, the HTTP API and the storage solutions. The system is deployed via Kubernetes, with each microservice in its own Docker container, allowing the number of services to be scaled up or down, depending on the current load of NLDS. This provides a scalable, power efficient system while ensuring that no messages between microservices are lost. OAuth is used to authenticate and authorise users via a pluggable authentication layer. The use of object storage as the front end to the tape allows both local and remote cloud-based services to access the data, via a URL, so long as the user has the required credentials.</p>
+<p>NLDS is a a scalable solution to storing very large data for many users, with a user-friendly front end that is easily accessed via cloud computing. This paper will detail the design, architecture and deployment of NLDS.</p>
+</div>
+<div class="section" id="design-criteria">
+<span id="sec-design"></span><h2>Design Criteria<a class="headerlink" href="#design-criteria" title="Permalink to this headline"></a></h2>
+<p>Before designing and implementing NLDS, an analysis of the previous
+system, the Joint Data Migration Application (<a class="reference external" href="https://cedadev.github.io/jdma_client/">JDMA</a>), was undertaken to determine its successes and
+shortcomings. These were used to inform the design criteria for NLDS,
+with the criteria being split into “user criteria” and “system
+criteria”.</p>
+<div class="section" id="user-criteria">
+<span id="sec-user-criteria"></span><h3>User criteria<a class="headerlink" href="#user-criteria" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p>User writes files to a single endpoint, agnostic as to whether the
+file will eventually reside on disk or tape.</p></li>
+<li><p>User reads files with the same command, from the same endpoint, not
+knowing whether the file resides on disk or tape.</p></li>
+<li><p>User interacts with NLDS via a RESTful HTTP API. File URIs are
+exposed so that they can be read by cloud services.</p></li>
+<li><p>Command line client and Python libraries available for different
+levels of user.</p></li>
+<li><p>Implements CRUD (Create, Read, Update, Delete), and user interactions
+are phrased in these terms.</p></li>
+<li><p>Ingest and retrieval are carried out on behalf of the user, and are
+asynchronous. The user does not have to maintain a connection for the
+commands to complete.</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="system-criteria">
+<span id="sec-system-criteria"></span><h2>System criteria<a class="headerlink" href="#system-criteria" title="Permalink to this headline"></a></h2>
+<ul class="simple">
+<li><p>User interactions are secure and authenticated.</p></li>
+<li><p>Robust, no user transactions should be lost.</p></li>
+<li><p>Scalable as number of users and volume of data increases.</p></li>
+<li><p>No proprietary formats for data.</p></li>
+<li><p>Flexible and extensible, with the potential to replace several legacy
+systems.</p></li>
+<li><p>Portable, able to be installed at other institutions, not just CEDA.</p></li>
+<li><p>Open Source.</p></li>
+</ul>
+</div>
+<div class="section" id="user-view-and-interaction">
+<span id="sec-user-view"></span><h2>User view and interaction<a class="headerlink" href="#user-view-and-interaction" title="Permalink to this headline"></a></h2>
+<p>Users interact with NLDS via a web-server that exposes a RESTful HTTP
+API (<a class="reference external" href="https://www.ics.uci.edu/~fielding/pubs/dissertation/top.htm">REST</a>). A Python library is available, as well as
+a command line client, which itself is built upon the Python library. As
+the interface is a REST API, a user could also form their own, correct,
+HTTP requests and send them to the server.</p>
+<p>Figure 1 shows the multi-layered architecture of NLDS. The user will only be exposed to
+the top two layers, being the client API (or command line program) and the API server.</p>
+<div class="figure align-default" id="id3">
+<img alt="../_images/userview.png" src="../_images/userview.png" />
+<p class="caption"><span class="caption-text">User view of the NLDS system</span><a class="headerlink" href="#id3" title="Permalink to this image"></a></p>
+</div>
+<p>The first time a user interacts with the NLDS they have to go through
+the authentication procedure. This uses the <a class="reference external" href="https://www.oauth.com/oauth2-servers/access-tokens/password-grant/">OAuth2 password flow</a>
+to exchange a user’s username and password for a token that is used for subsequent calls to the HTTP API. This
+token is stored in the user’s home directory and contains a refresh
+token that can be exchanged for a new token when the existing token
+expires.</p>
+<p>The user has a number of commands available to them which implement the
+CRUD design requirement and also allows them to query the files they
+hold on NLDS and the metadata associated with those files. These
+commands are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">put</span></code> and <code class="docutils literal notranslate"><span class="pre">putlist</span></code>. <code class="docutils literal notranslate"><span class="pre">put</span></code> ingests a single file into NLDS,
+whereas <code class="docutils literal notranslate"><span class="pre">putlist</span></code> ingests multiple files, the paths of which are
+stored in a plain text file. This corresponds to the Create in CRUD.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">get</span></code> and <code class="docutils literal notranslate"><span class="pre">getlist</span></code>. Retrieve a single file, or a list of files.
+This corresponds to the Read in CRUD.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">del</span></code> and <code class="docutils literal notranslate"><span class="pre">dellist</span></code>. Delete a single file, or a list of files.
+This corresponds to the Delete in CRUD.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">meta</span></code>. Update metadata for a collection of files, by adding (or
+changing) the label or tags.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">list</span></code>. Show and search the collections of files that belong to the
+user.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">find</span></code>. Show and search the files that belong to the user. Regular
+expressions can be used to find file paths, and the collections they
+belong to.</p></li>
+</ul>
+</div>
+<div class="section" id="implementation-details">
+<h2>Implementation details<a class="headerlink" href="#implementation-details" title="Permalink to this headline"></a></h2>
+<div class="section" id="overview">
+<span id="sec-overview"></span><h3>Overview<a class="headerlink" href="#overview" title="Permalink to this headline"></a></h3>
+<p>NLDS is built upon a number of free, open-source software technologies
+in a multi-layered architecture that uses message passing to communicate
+between the different layers.
+Figure 2 shows
+the different layers in the system and the interaction, via the
+messages, between them.</p>
+<div class="figure align-default">
+<img alt="../_images/overview.png" src="../_images/overview.png" />
+</div>
+</div>
+<div class="section" id="api-server">
+<span id="sec-webserver"></span><h3>API server<a class="headerlink" href="#api-server" title="Permalink to this headline"></a></h3>
+<p>The NLDS HTTP API is implemented in <a class="reference external" href="https://fastapi.tiangolo.com">FastAPI</a> in Python 3, and runs in a <a class="reference external" href="https://www.uvicorn.org">Uvicorn ASGI</a>
+server. FastAPI is a Python framework for developing RESTful APIs and
+was selected as the framework for NLDS for the following reasons:</p>
+<ul class="simple">
+<li><p>Fully supports <a class="reference external" href="https://docs.python.org/3/library/asyncio.html">Python AsyncIO</a> for
+asynchronously dealing with user requests.</p></li>
+<li><p>Automatically produces <a class="reference external" href="https://www.openapis.org">OpenAPI</a>
+documentation.</p></li>
+<li><p>Is quick to develop for, fast execution of queries and robust.</p></li>
+<li><p>Has an easy to understand framework for developing RESTful APIs via
+the concept of routers.</p></li>
+<li><p>Integrates well with OAuth2 authentication by allowing routers to be
+dependent on a function that carries out the authentication of the
+HTTP request.</p></li>
+</ul>
+<p>NLDS’s API consists of a number of endpoints which accept the standard
+HTTP methods of GET, PUT, POST and DELETE, with information contained in
+the header and body of the request. These endpoints, and the expected
+values in the header and body, are discoverable and documented by
+automatically generated OpenAPI documentation. In the Python code, each
+endpoint has a router to deal with the HTTP request. Each router
+performs authentication, followed by validity checking of the
+information contained in the header and body and, finally, forms a
+message that is then dispatched to the message broker.</p>
+</div>
+</div>
+<div class="section" id="authentication-and-authorisation">
+<span id="sec-auth"></span><h2>Authentication and authorisation<a class="headerlink" href="#authentication-and-authorisation" title="Permalink to this headline"></a></h2>
+<p>As mentioned in Section <a class="reference external" href="#sec:user_view">3</a>, NLDS is secured using
+the OAuth2 password flow. The authentication layer consists of a plug-in
+architecture, with a <code class="docutils literal notranslate"><span class="pre">BaseAuthenticator</span></code> class, which is purely
+abstract. To define an authenticator, the <code class="docutils literal notranslate"><span class="pre">BaseAuthenticator</span></code> must be
+inherited from and three class methods must be overloaded. For the
+deployment on JASMIN, a <code class="docutils literal notranslate"><span class="pre">JasminAuthenticator</span></code> has been written which
+contacts a JASMIN accounts service that can generate and authenticate
+OAuth2 tokens. Deploying NLDS to a different infrastructure will require
+an authenticator for that system to be written.</p>
+<p>In addition to the OAuth2 authentication, the object storage that NLDS
+writes to and reads from also requires access credentials, in the form
+of the <code class="docutils literal notranslate"><span class="pre">access_key</span></code> and <code class="docutils literal notranslate"><span class="pre">secret_access_key</span></code>. These are stored in the
+user’s NLDS config file, in their home directory and are embedded,
+firstly, in the HTTP request sent to the API server, and then in the
+message formed and sent to the message broker.</p>
+</div>
+<div class="section" id="catalog">
+<span id="sec-catalog"></span><h2>Catalog<a class="headerlink" href="#catalog" title="Permalink to this headline"></a></h2>
+<p>When a user PUTs <code class="docutils literal notranslate"><span class="pre">files</span></code> into NLDS, the <code class="docutils literal notranslate"><span class="pre">files</span></code> are recorded in a
+catalog on their behalf. The user can then list which <code class="docutils literal notranslate"><span class="pre">files</span></code> they
+have in the catalog and also search for <code class="docutils literal notranslate"><span class="pre">files</span></code> based on regular
+expressions. Additionally, users can associate a <code class="docutils literal notranslate"><span class="pre">label</span></code> and <code class="docutils literal notranslate"><span class="pre">tags</span></code>,
+in the form of <code class="docutils literal notranslate"><span class="pre">key:value</span></code> pairs, with a collection of <code class="docutils literal notranslate"><span class="pre">files</span></code>.</p>
+<div class="figure align-default" id="id4">
+<img alt="../_images/catalog_db.png" src="../_images/catalog_db.png" />
+<p class="caption"><span class="caption-text">NLDS catalog database schema</span><a class="headerlink" href="#id4" title="Permalink to this image"></a></p>
+</div>
+<p>Figure 3 shows the database schema of the
+catalog. It consists of several tables, each one having a relationship
+to at least one other table.</p>
+<p><strong>Holdings</strong> are collections of <code class="docutils literal notranslate"><span class="pre">files</span></code>, that the user has chosen to
+group together and assign a <code class="docutils literal notranslate"><span class="pre">label</span></code> to that collection. A reason to
+collect <code class="docutils literal notranslate"><span class="pre">files</span></code> might be that they are from the same experiment, or
+climate model run, or measuring campaign.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">holding</span></code> is created when a user PUTs <code class="docutils literal notranslate"><span class="pre">files</span></code> into NLDS. Users can
+give the <code class="docutils literal notranslate"><span class="pre">holding</span></code> a <code class="docutils literal notranslate"><span class="pre">label</span></code> but, if they do not, a <code class="docutils literal notranslate"><span class="pre">label</span></code>
+derived from the <code class="docutils literal notranslate"><span class="pre">id</span></code> of the first <code class="docutils literal notranslate"><span class="pre">transaction</span></code> will be assigned
+instead.</p>
+<p>New <code class="docutils literal notranslate"><span class="pre">holdings</span></code> are created if the <code class="docutils literal notranslate"><span class="pre">label</span></code> does not already exist and
+users can add <code class="docutils literal notranslate"><span class="pre">files</span></code> to an existing <code class="docutils literal notranslate"><span class="pre">holding</span></code> by specifying a
+<code class="docutils literal notranslate"><span class="pre">label</span></code> that does exist.</p>
+<p>Users can add <code class="docutils literal notranslate"><span class="pre">files</span></code> into NLDS that already exist in the system, so
+long as the <code class="docutils literal notranslate"><span class="pre">original_path</span></code> is unique within a <code class="docutils literal notranslate"><span class="pre">holding</span></code>. This
+allows users to use NLDS as an iterative backup solution, by PUTting
+<code class="docutils literal notranslate"><span class="pre">files</span></code> with the same <code class="docutils literal notranslate"><span class="pre">original_path</span></code> into differently labelled
+<code class="docutils literal notranslate"><span class="pre">holdings</span></code> at different times. GETting the <code class="docutils literal notranslate"><span class="pre">files</span></code> will return the
+latest <code class="docutils literal notranslate"><span class="pre">files</span></code>, while leaving the older <code class="docutils literal notranslate"><span class="pre">files</span></code> still accessible by
+specifying the <code class="docutils literal notranslate"><span class="pre">holding’s</span></code> <code class="docutils literal notranslate"><span class="pre">label</span></code>.</p>
+<p><strong>Transactions</strong> record the user’s action when PUTting a <code class="docutils literal notranslate"><span class="pre">file</span></code> into
+NLDS. Each <code class="docutils literal notranslate"><span class="pre">holding</span></code> can contain numerous <code class="docutils literal notranslate"><span class="pre">transactions</span></code> and a
+<code class="docutils literal notranslate"><span class="pre">transaction</span></code> is created every time a user PUTs <code class="docutils literal notranslate"><span class="pre">files</span></code> into NLDS.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">transaction’s</span></code> <code class="docutils literal notranslate"><span class="pre">id</span></code> is a UUID generated on the client when
+submitting a request to NLDS. This UUID stays with the transaction
+throughout the fulfillment of the request. Requests may be split into
+multiple sub-requests, and the UUID is used to group these sub-requests
+together upon completion.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">transaction</span></code> is assigned to a <code class="docutils literal notranslate"><span class="pre">holding</span></code> based on the <code class="docutils literal notranslate"><span class="pre">label</span></code>
+supplied. If the same <code class="docutils literal notranslate"><span class="pre">label</span></code> is specified for a number of PUT
+actions, then the <code class="docutils literal notranslate"><span class="pre">holding</span></code> with that <code class="docutils literal notranslate"><span class="pre">label</span></code> will contain all the
+<code class="docutils literal notranslate"><span class="pre">transactions</span></code> arising from the PUT actions.</p>
+<p><strong>Tags</strong> can be associated with a <code class="docutils literal notranslate"><span class="pre">holding</span></code>, in a <code class="docutils literal notranslate"><span class="pre">key:value</span></code>
+format. For example, a series of <code class="docutils literal notranslate"><span class="pre">holding</span></code> could have <code class="docutils literal notranslate"><span class="pre">tags</span></code> with
+the <code class="docutils literal notranslate"><span class="pre">key</span></code> as <strong>experiment</strong> and <code class="docutils literal notranslate"><span class="pre">value</span></code> as the experiment name or
+number. A <code class="docutils literal notranslate"><span class="pre">holding</span></code> can contain numerous <code class="docutils literal notranslate"><span class="pre">tags</span></code>, in addition to
+<code class="docutils literal notranslate"><span class="pre">label</span></code>. <code class="docutils literal notranslate"><span class="pre">Tags</span></code> can be used for searching for <code class="docutils literal notranslate"><span class="pre">files</span></code> or
+<code class="docutils literal notranslate"><span class="pre">holdings</span></code> with the <code class="docutils literal notranslate"><span class="pre">list</span></code> and <code class="docutils literal notranslate"><span class="pre">find</span></code> commands.</p>
+<p><strong>File</strong> objects record the details of <code class="docutils literal notranslate"><span class="pre">files</span></code>, including the
+<code class="docutils literal notranslate"><span class="pre">original_path</span></code> of the <code class="docutils literal notranslate"><span class="pre">file</span></code>, its size and the ownership and
+permissions of the <code class="docutils literal notranslate"><span class="pre">file</span></code>. Users can GET <code class="docutils literal notranslate"><span class="pre">files</span></code> in a number of
+ways, including by using just the <code class="docutils literal notranslate"><span class="pre">original_path</span></code> where NLDS will
+return the most recent <code class="docutils literal notranslate"><span class="pre">file</span></code> with that path. NLDS supports different
+methods of calculating <code class="docutils literal notranslate"><span class="pre">checksums</span></code>, and so more than one <code class="docutils literal notranslate"><span class="pre">checksum</span></code>
+can be associated with a single file.</p>
+<p><strong>Location</strong> objects record the actual location of a file. A user does
+not care whether a <code class="docutils literal notranslate"><span class="pre">file</span></code> is on the object storage, or tape, but NLDS
+must know so that it can invoke the correct microservice to fetch the
+<code class="docutils literal notranslate"><span class="pre">file</span></code>. The <code class="docutils literal notranslate"><span class="pre">location</span></code> can have one of three states:</p>
+<ol class="arabic simple">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">file</span></code> is held on the object storage only. It will be backed up
+to the tape storage later.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">file</span></code> is held on both the object storage and tape storage.
+Users can access the <code class="docutils literal notranslate"><span class="pre">file</span></code> without any staging required by NLDS.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">file</span></code> is held on the tape storage only. If a user accesses the
+<code class="docutils literal notranslate"><span class="pre">file</span></code> then the NLDS will stage it to the object storage, before
+completing the GET on behalf of the user. Accessing a <code class="docutils literal notranslate"><span class="pre">file</span></code> that
+is stored only on tape will take longer than if it was held on object
+storage.</p></li>
+</ol>
+</div>
+<div class="section" id="message-broker-exchange-and-queues">
+<span id="sec-message-broker"></span><h2>Message broker, exchange and queues<a class="headerlink" href="#message-broker-exchange-and-queues" title="Permalink to this headline"></a></h2>
+<p>NLDS uses <a class="reference external" href="https://www.rabbitmq.com">RabbitMQ</a>  as the message broker to
+facilitate communication between the API server and the microservices
+and communication between the microservices themselves. RabbitMQ was
+chosen for this due to its maturity, flexibility, ease of use and
+existing experience within the CEDA development team.</p>
+<p>RabbitMQ has a publisher-consumer model, where one process will publish
+a message to be consumed by another process. In NLDS, the API server is
+the main publisher and the originator of all messages in the RabbitMQ
+exchange. The NLDS worker is the main consumer and will schedule extra
+messages depending on the content of the message received. The NLDS
+worked can be thought of as the “marshall” or “controller”. It knows the
+message order that tasks have to follow and schedule the next message in
+the task when a completion message is received from the previous process
+in the task.</p>
+<p>The microservices are the consumers of the messages but they are also
+publishers, so that they can indicate to the NLDS when the process has
+finished. This system of completion messages, and the NLDS worker
+scheduling messages, allows NLDS to be stateless.</p>
+<p>NLDS has a RabbitMQ topic exchange with a queue for each microservice. A
+topic exchange uses a routing key, and queues can subscribe to accept
+messages with a particular key. The routing keys for the messages have
+three components: the calling application, the worker to act upon and
+the state or command for the worker. These are separated by a dot
+(<code class="docutils literal notranslate"><span class="pre">.</span></code>): <code class="docutils literal notranslate"><span class="pre">application.worker.state</span></code></p>
+<p>The calling application part of the routing key will remain constant
+throughout the operations lifecycle. This allows multiple applications
+to use the worker processes without interpreting messages destined for
+the other applications. NLDS uses the application key <code class="docutils literal notranslate"><span class="pre">nlds-api</span></code>.</p>
+<p>The worker part of the routing key is just the name of the worker, and
+the state or command has, for example, the value of <code class="docutils literal notranslate"><span class="pre">init</span></code>, <code class="docutils literal notranslate"><span class="pre">start</span></code>,
+<code class="docutils literal notranslate"><span class="pre">completed</span></code>, etc. When a queue is bound to a topic, it can use a
+wildcard in the place of each dot separated part of the routing key. For
+example the catalog queue contains the bindings: <code class="docutils literal notranslate"><span class="pre">*.catalog.start</span></code> and
+<code class="docutils literal notranslate"><span class="pre">*.catalog.complete</span></code>. When a wildcard occurs, any message produced by
+the consumer retains the value that the wildcard expanded to, for
+example, <code class="docutils literal notranslate"><span class="pre">nlds-api</span></code>. This is the mechanism that allows generalised
+workers to send their output to the originating producer/consumer.</p>
+<p>NLDS uses delayed retry queues. If a process fails then it will resubmit
+the message to the exchange with a delay, so that it can be processed
+again later. This gives the system the ability to be more fault tolerant
+by retaining, and automatically retrying, messages until after a problem
+with the system is fixed. There are a configurable number of retries and
+the delays increase exponentially for each retry.</p>
+<p>The asynchronous nature of the message passing means that it is
+unsuitable for user interactions that require an immediate response,
+such as the <code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">meta</span></code> and <code class="docutils literal notranslate"><span class="pre">find</span></code> commands. To facilitate
+these, remote procedure calls (RPCs) are used. These are non-blocking
+due to FastAPI’s use of AsyncIO and so should not have a detrimental
+effect on performance.</p>
+</div>
+<div class="section" id="microservices">
+<span id="sec-microservices"></span><h2>Microservices<a class="headerlink" href="#microservices" title="Permalink to this headline"></a></h2>
+<p>The microservices that NLDS uses to carry out users requests are
+designed to be robust, minimal and scalable. Each one is designed to
+perform a minimum number of tasks, related to just one aspect of NLDS.
+The previous system, JDMA, was somewhat monolithic which, when a part of
+the system failed, required re-running user tasks from the very
+beginning. By using microservices, NLDS is interruptible and
+recoverable. It is also extendable as new microservices can be written
+to transfer to new storage types, or from different sites, just by
+defining a routing key and implementing the microservice.</p>
+<p>From Figure 2 the microservices are:</p>
+<p><strong>NLDS</strong>: This is the “NLDS worker” which accepts messages from the API
+server and co-ordinates message passing between the other microservices.
+By having a marshalling process, NLDS can remain stateless.</p>
+<p><strong>Monitor</strong>: The monitor keeps track of the progress of all
+transactions, whether they are GET or PUT transactions and updates their
+status in a Postgres database via the <a class="reference external" href="https://www.sqlalchemy.org">SQLalchemy</a>
+library. Each microservice sends a
+message to the monitor at the start and end of the task it is
+undertaking. Users can then query the progress of their task using the
+<code class="docutils literal notranslate"><span class="pre">stat</span></code> command, upon which the API server contacts the monitor via a
+RPC call, which reports the status of a transaction to the user.</p>
+<p><strong>Logger</strong>: The logger is distinct from the monitor in that it is
+concerned with logging the state of the NLDS system, rather than the
+state of the user transactions in NLDS.</p>
+<p><strong>Indexer</strong>: This builds lists of files based on the filepath or file
+list supplied by the user in a PUT request. This filepath (or multiple
+filepaths in a file list) may be a directory, or contain a wildcard. The
+indexer expands these to build a list of files that should be PUT into
+NLDS. To maintain recoverability, the indexer will split requests into
+sub-requests based on number of files and sum of file sizes. When an
+index process has reached a (configurable) maximum number of files or
+sum of file sizes, it will break from indexing and submit a new message
+to the exchange to continue indexing where it left off. The
+<code class="docutils literal notranslate"><span class="pre">transaction</span> <span class="pre">id</span></code> is maintained across the sub-requests so that NLDS
+can group them together in the cataloging stage. Splitting requests like
+this means that the transfer process, and subsequently the archive
+process, will have smaller batches of files to transfer and will be more
+recoverable from faults.</p>
+<p><strong>Transfer</strong>: This transfers the files from POSIX disk to object
+storage, using the standard S3 transport protocol. Currently the <a class="reference external" href="https://min.io/docs/minio/linux/developers/python/minio-py.html">min.io</a>
+Python library is used, but the <a class="reference external" href="https://botocore.amazonaws.com/v1/documentation/api/latest/index.html">Amazon botocore</a> library could be substituted.</p>
+<p><strong>Archiver</strong>: This writes files from object storage to tape by directly
+streaming, using the <a class="reference external" href="https://xrootd.slac.stanford.edu">xrootd</a> protocol. The
+tape system used is the Cern Tape Archive (<a class="reference external" href="https://cta.web.cern.ch/cta/">CTA</a>).
+All files in the object store are written to tape shortly after
+ingestion.</p>
+<p><strong>Catalog</strong>: This writes and retrieves the details of a users files to
+the catalog database. <a class="reference external" href="https://www.sqlalchemy.org">SQLalchemy</a> is used
+to define the database schemas and carry out the queries.</p>
+</div>
+<div class="section" id="management-of-object-storage">
+<span id="sec-policies"></span><h2>Management of object storage<a class="headerlink" href="#management-of-object-storage" title="Permalink to this headline"></a></h2>
+<p>It is inevitable that the object storage used by NLDS will become full.
+To mitigate this, NLDS has a number of policies that determine which
+files should be deleted from the object storage, while remaining on
+tape. These policies are expressed in terms of the last access, the file
+size, any substrings contained in the holding name, and any tags present
+in the holding.</p>
+<p>If a user requests a file that has been deleted from the object storage
+then it will be retrieved from tape, staged on the object storage and
+then copied to the target directory that the user requested. This is
+done by issuing the same command, and the only difference the user will
+notice is the extra time the request will take to complete. Requests are
+handled asynchronously, so it will not tie up their session by blocking.
+They can check the progress of the request using the <code class="docutils literal notranslate"><span class="pre">stat</span></code> command.</p>
+</div>
+<div class="section" id="deployment">
+<span id="sec-deployment"></span><h2>Deployment<a class="headerlink" href="#deployment" title="Permalink to this headline"></a></h2>
+<p>NLDS is currently deployed on JASMIN hosted at the STFC
+Rutherford-Appleton Lab, with users from CEDA, JASMIN and the JASMIN
+user community conducting beta tests. The deployment uses a mixture of
+free, open-source technology:</p>
+<p>The <strong>API server</strong> is deployed in a <a class="reference external" href="https://www.docker.com">Docker</a>
+container within a load-balanced <a class="reference external" href="https://kubernetes.io">Kubernetes</a>
+orchestration on JASMIN.</p>
+<p>The <strong>microservices</strong> are deployed in Docker containers that are
+orchestrated by Kubernetes. This allows more instances of a microservice
+to be “spun-up” when necessary.</p>
+<p>The <strong>monitor and catalog databases</strong> are running on a dedicated, bare
+metal <a class="reference external" href="https://www.postgresql.org">PostgreSQL</a> server.</p>
+<p>The JASMIN accounts <strong>authenticator</strong> and the <strong>RabbitMQ</strong> server are
+running on Virtual Machines (VMs), hosted on JASMIN.</p>
+<p><strong>Object storage</strong> is provided by <a class="reference external" href="https://www.datacore.com/products/swarm-object-storage/">DataCore Swarm</a>, but any S3 compatible object storage could
+be used.</p>
+<p>The <strong>tape system</strong> is the Cern Tape Archive (<a class="reference external" href="https://cta.web.cern.ch/cta/">CTA</a>).</p>
+</div>
+<div class="section" id="conclusion">
+<span id="sec-conclusion"></span><h2>Conclusion<a class="headerlink" href="#conclusion" title="Permalink to this headline"></a></h2>
+<p>This paper has described a new scalable near-line storage solution that
+is robust, scalable, extendable, user-friendly and secure. The Near-Line
+Data Store (NLDS) is currently in beta test, with a roll out to more
+users of JASMIN planned for later in the year. An extensive user guide
+and tutorial can be found at <a class="reference external" href="https://cedadev.github.io/nlds-client/">nlds-client</a></p>
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../deployment.html" class="btn btn-neutral float-left" title="Deployment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../development/cta-emulator.html" class="btn btn-neutral float-right" title="CERN Tape Archive Set Up" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022-2024, Neil Massey &amp; Jack Leland.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #A6C36F;
+    }
+
+    .caption-text {
+        color: #828C51
+    }
+
+    .wy-nav-side {
+        background: #1E352F;
+    }
+
+    .note {
+        background: #BEEF9E
+    }
+    .admonition-title {
+        background: #335145
+    }
+
+  </style>
+
+
+</body>
+</html>

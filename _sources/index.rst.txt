@@ -29,7 +29,7 @@ you plan on contributing to the NLDS; and an API Reference.
    :maxdepth: 1
    :caption: Development
 
-   Specification document <specification>
+   Design paper <design-paper/nrmassey-BiDS-2023-long>
    Setting up a CTA tape emulator <development/cta-emulator>
    Database Migrations with Alembic <development/alembic-migrations>
    Test coverage report <coverage/coverage-report>
