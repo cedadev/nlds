@@ -1,6 +1,6 @@
 from collections import namedtuple
 from enum import Enum
-from typing import NamedTuple, Optional, List, Dict, TypeVar, Any
+from typing import Optional, List, Dict, TypeVar, Any
 from json import JSONEncoder
 from pathlib import Path
 import stat

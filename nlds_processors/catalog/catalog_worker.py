@@ -3,7 +3,7 @@
 """
 __author__ = 'Neil Massey and Jack Leland'
 __date__ = '15 Sep 2022'
-__copyright__ = 'Copyright 2022 United Kingdom Research and Innovation'
+__copyright__ = 'Copyright 2024 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
@@ -27,7 +27,7 @@ import json
 from typing import Dict, Tuple, List
 from hashlib import shake_256
 
-from urllib.parse import urlunsplit, urljoin
+from urllib.parse import urlunsplit
 
 # Typing imports
 from pika.channel import Channel
@@ -323,7 +323,7 @@ class CatalogConsumer(RMQC):
                 self.log(e.message, RMQC.RK_LOG_ERROR)
                 return
         else:
-            holding = holding[0]
+            holding = holding.first()
 
         # try to get the transaction to see if it already exists and can be 
         # added to

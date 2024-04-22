@@ -2,16 +2,12 @@ import asyncio
 import requests
 import socket
 import os
-import json
-from typing import Annotated
 
-from fastapi import Depends, APIRouter, status, Query, FastAPI, Request
-from fastapi.exceptions import HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
+from fastapi import APIRouter, status, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 #from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.responses import FileResponse
 from requests.auth import HTTPBasicAuth
 
 from . import rpc_publisher

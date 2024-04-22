@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
     NoResultFound
 
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
-     Location, Transaction, Aggregation, Storage, Checksum, Tag
+     Location, Transaction, Aggregation, Storage, Tag
 from nlds_processors.db_mixin import DBMixin
 
 class CatalogError(Exception):
@@ -85,7 +85,7 @@ class Catalog(DBMixin):
                     Tag.key.in_(tag.keys())
                 )
                 # check for zero
-                if holding_q.count == 0:
+                if holding_q.count() == 0:
                     holding = []
                 else:
                     # we have now got a subset of holdings with a tag that has 
@@ -425,7 +425,7 @@ class Catalog(DBMixin):
                 # First get parent transaction and holding
                 transaction = self.get_transaction(f.transaction_id)
                 holding = self.get_holding(user, group, 
-                                           holding_id=transaction.holding_id)[0]
+                                           holding_id=transaction.holding_id).first()
                 self.session.delete(f)
                 if len(transaction.files) == 0:
                     self.session.delete(transaction)

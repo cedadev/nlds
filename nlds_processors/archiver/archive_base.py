@@ -5,7 +5,7 @@ with how it imports external modules (like xrootd).
 """
 __author__ = 'Jack Leland and Neil Massey'
 __date__ = '30 Nov 2021'
-__copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
+__copyright__ = 'Copyright 2024 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 

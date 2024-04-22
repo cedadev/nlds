@@ -4,7 +4,7 @@
 """
 __author__ = 'Neil Massey and Jack Leland'
 __date__ = '16 Nov 2022'
-__copyright__ = 'Copyright 2022 United Kingdom Research and Innovation'
+__copyright__ = 'Copyright 2024 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
@@ -12,12 +12,10 @@ from fastapi import Depends, APIRouter, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import json
 
 from typing import Optional, List, Dict
 
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
-from ..rabbit.rpc_publisher import RabbitMQRPCPublisher
 from ..routers import rpc_publisher
 from ..errors import ResponseError
 from ..authenticators.authenticate_methods import authenticate_token, \

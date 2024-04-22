@@ -4,18 +4,17 @@
 """
 __author__ = 'Neil Massey and Jack Leland'
 __date__ = '30 Nov 2021'
-__copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
+__copyright__ = 'Copyright 2024 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
-from fastapi import Depends, APIRouter, status, Query
+from fastapi import Depends, APIRouter, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from uuid import UUID, uuid4
 from typing import Optional, List, Dict
-from copy import deepcopy
 
 from ..routers import rabbit_publisher
 from ..rabbit.publisher import RabbitMQPublisher as RMQP

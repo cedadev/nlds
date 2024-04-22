@@ -2,7 +2,6 @@ from typing import List, Dict, Any
 from pathlib import Path
 import os
 import subprocess
-import stat
 
 import minio
 from minio.error import S3Error

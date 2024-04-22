@@ -6,7 +6,6 @@ from retry import retry
 import pika
 from pika.frame import Method, Header
 from pika.channel import Channel
-from pika.connection import Connection
 from pika.exceptions import ChannelClosedByBroker
 
 from .publisher import RabbitMQPublisher
