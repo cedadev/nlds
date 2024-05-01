@@ -175,8 +175,6 @@ This will require adding the interface to do so to the object storage.
 
 ### PUTLIST command
 
-The `PUT
-
 | API endpoint | /files |
 |---|---|
 | HTTP method  | PUT |
@@ -856,9 +854,6 @@ be used scenario.
 ### Database on PostgreSQL server
 
 The boring / safe option
-
-### SQLlite database on Object Store
-
 
 ## Retry mechanism
 At any stage in the transaction, one component of the storage hierarchy may not 
