@@ -1,0 +1,13 @@
+@startuml consumer_classes
+    class ABC
+    class RabbitMQPublisher
+    class RabbitMQConsumer
+    class RabbitMQRPCPublisher
+    class StattingConsumer
+
+    ABC <-- RabbitMQConsumer
+    RabbitMQPublisher <-- RabbitMQConsumer
+    RabbitMQPublisher <-- RabbitMQRPCPublisher
+    RabbitMQConsumer <-- StattingConsumer
+
+@enduml

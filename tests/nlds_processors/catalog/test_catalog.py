@@ -477,5 +477,5 @@ class TestCatalog:
     def test_modify_tag(self):
         pass
 
-    def test_del_tag(self):
+    def test_delete_tag(self):
         pass

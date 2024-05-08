@@ -2,16 +2,16 @@
 """
 
 """
-__author__ = 'Neil Massey and Jack Leland'
-__date__ = '30 Nov 2021'
-__copyright__ = 'Copyright 2024 United Kingdom Research and Innovation'
-__license__ = 'BSD - see LICENSE file in top-level package directory'
-__contact__ = 'neil.massey@stfc.ac.uk'
+__author__ = "Neil Massey and Jack Leland"
+__date__ = "30 Nov 2021"
+__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__license__ = "BSD - see LICENSE file in top-level package directory"
+__contact__ = "neil.massey@stfc.ac.uk"
 
 import json
 import os.path
 
-from .nlds_setup import CONFIG_FILE_LOCATION
+from nlds.nlds_setup import CONFIG_FILE_LOCATION
 
 # Config file section strings
 AUTH_CONFIG_SECTION = "authentication"
@@ -39,19 +39,22 @@ GENERAL_CONFIG_SECTION = "general"
 
 # Defines the compulsory server config file sections
 CONFIG_SCHEMA = (
-    (AUTH_CONFIG_SECTION, ("authenticator_backend", )),
-    (RABBIT_CONFIG_SECTION, ("user", "password", "server", "admin_port", "vhost", "exchange", 
-                             "queues"))
+    (AUTH_CONFIG_SECTION, ("authenticator_backend",)),
+    (
+        RABBIT_CONFIG_SECTION,
+        ("user", "password", "server", "admin_port", "vhost", "exchange", "queues"),
+    ),
 )
+
 
 def validate_config_file(json_config: dict) -> None:
     """
-    Validate the JSON config file matches the schema defined in nlds_setup.     
-    Currently only checks that required headings and subheadings exist, i.e. 
-    only scans one layer deep and does no value checking. 
+    Validate the JSON config file matches the schema defined in nlds_setup.
+    Currently only checks that required headings and subheadings exist, i.e.
+    only scans one layer deep and does no value checking.
 
     :param json_config:     Config file loaded using json.load()
-    
+
     """
     # Convert defined schema into a dictionary for ease of iteration
     schema = dict(CONFIG_SCHEMA)
@@ -76,9 +79,9 @@ def validate_config_file(json_config: dict) -> None:
 def load_config(config_file_path: str = CONFIG_FILE_LOCATION) -> dict:
     """
     Config file for the server contains authentication and rabbitMQ sections,
-    the required contents of which are set by the schema in utils.constants. 
-    This function opens the config file (at a preset, configurable location) 
-    then verifies it. 
+    the required contents of which are set by the schema in utils.constants.
+    This function opens the config file (at a preset, configurable location)
+    then verifies it.
 
     :parameter config_file_path:
     :type str:
@@ -90,8 +93,7 @@ def load_config(config_file_path: str = CONFIG_FILE_LOCATION) -> dict:
         fh = open(os.path.abspath(f"{config_file_path}"))
     except FileNotFoundError:
         raise FileNotFoundError(
-            f"{config_file_path}",
-            "The config file cannot be found."
+            f"{config_file_path}", "The config file cannot be found."
         )
 
     # Load the JSON file, ensuring it is correctly formatted

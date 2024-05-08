@@ -551,7 +551,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 objects = [obj.object_name for obj in objects_iter]
                 # Look for object in bucket, continue if not present
                 assert object_name not in objects
-        except (HTTPError, S3Error) as e:   
+        except (HTTPError, S3Error) as e:
             # If bucket can't be created then pass for retry and continue
             self.log(f"Bucket {bucket_name} could not be validated due to error "
                      f"connecting with tenancy. ({e})")

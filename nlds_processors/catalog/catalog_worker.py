@@ -380,7 +380,11 @@ class CatalogConsumer(RMQC):
                 # fine as-is for now as the object name will always be 
                 # equivalent to original path, but this may change in the future 
                 # and require an extra step in the workflow to update the 
-                # Location with the appropriate object name. 
+                # Location with the appropriate object name.
+                # NRM - I want to change this so that the location is created after
+                # the transfer has completed - then we know if the file succeeded
+                # in its transfer and we can select only those that succeeded for
+                # archiving
                 if pd.object_name is None:
                     object_name = pd.original_path
                 else:
