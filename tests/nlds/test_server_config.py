@@ -6,12 +6,19 @@ from typing import Iterable
 import pytest
 
 # from fixtures import template_config, TEMPLATE_CONFIG_PATH
-from nlds.server_config import load_config, validate_config_file, \
-                               RABBIT_CONFIG_SECTION, AUTH_CONFIG_SECTION, CONFIG_SCHEMA
+from nlds.server_config import (
+    load_config,
+    validate_config_file,
+    RABBIT_CONFIG_SECTION,
+    AUTH_CONFIG_SECTION,
+    CONFIG_SCHEMA,
+)
 
 
-TEMPLATE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 
-                                    '../../nlds/templates/server_config.j2')
+TEMPLATE_CONFIG_PATH = os.path.join(
+    os.path.dirname(__file__), "../../nlds/templates/server_config.j2"
+)
+
 
 def test_load_config():
     # Check that the template can be effectively loaded, as expected
@@ -19,12 +26,13 @@ def test_load_config():
 
     # Check that appropriate errors are raised if erroneous paths are given.
     with pytest.raises(IsADirectoryError):
-        load_config('/')
+        load_config("/")
     with pytest.raises(FileNotFoundError):
-        load_config('/.server_config')
+        load_config("/.server_config")
+
 
 def test_validate_config_file(template_config):
-    # Make a copy of the template config so we can edit it 
+    # Make a copy of the template config so we can edit it
     json_config = copy.deepcopy(template_config)
     assert isinstance(json_config, dict)
 
@@ -39,7 +47,7 @@ def test_validate_config_file(template_config):
 
     with pytest.raises(RuntimeError):
         # Try validating only one section at a time
-        
+
         validate_config_file(json_config[AUTH_CONFIG_SECTION])
         validate_config_file(json_config[RABBIT_CONFIG_SECTION])
 
@@ -47,5 +55,3 @@ def test_validate_config_file(template_config):
         validate_config_file(json_config)
         json_config.pop(RABBIT_CONFIG_SECTION)
         validate_config_file(json_config)
-
-    

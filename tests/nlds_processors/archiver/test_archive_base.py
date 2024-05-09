@@ -1,4 +1,5 @@
 import pytest
+
 pyxrootd = pytest.importorskip("pyxrootd")
 from nlds_processors.archiver.archive_base import ArchiveError, BaseArchiveConsumer
 
@@ -8,7 +9,7 @@ class TestSplitTapeUrl:
     def setup_method(self):
         # Assign the static method split_tape_url as a method on the test class
         self.split_tape_url = BaseArchiveConsumer.split_tape_url
-    
+
     def test_valid_tape_url(self):
         # Test a valid tape URL
         tape_url = "root://server1//path/to/archive"
@@ -42,7 +43,7 @@ class TestSplitTapeUrl:
         # Test a tape URL missing the server component
         tape_url = "root://path/to/archive"
         with pytest.raises(ArchiveError) as exc_info:
-            self.split_tape_url(tape_url)       
+            self.split_tape_url(tape_url)
         expected_error_msg = (
             f"Tape URL given was invalid. Must be of the form: "
             f"root://{{server}}//{{archive/path}}, was given as {tape_url}."
@@ -77,4 +78,3 @@ class TestSplitTapeUrl:
             f"root://{{server}}//{{archive/path}}, was given as {tape_url}."
         )
         assert str(exc_info.value) == expected_error_msg
-

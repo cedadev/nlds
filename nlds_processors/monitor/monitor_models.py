@@ -1,4 +1,5 @@
 """Declare the SQLAlchemy ORM models for the NLDS Monitoring database"""
+
 from sqlalchemy import Integer, String, Column, Enum, ForeignKey, DateTime
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
@@ -9,8 +10,10 @@ from nlds.rabbit.consumer import State
 """Declarative base class, containing the Metadata object"""
 MonitorBase = declarative_base()
 
+
 class TransactionRecord(MonitorBase):
     """Class containing the details of the state of a transaction"""
+
     __tablename__ = "transaction_record"
     # primary key / integer id / batch id
     id = Column(Integer, primary_key=True)
@@ -30,6 +33,7 @@ class TransactionRecord(MonitorBase):
     sub_records = relationship("SubRecord")
     # relationship for Warnings (One to many)
     warnings = relationship("Warning", cascade="delete, delete-orphan")
+
     def get_warnings(self):
         warnings = []
         for w in self.warnings:
@@ -48,26 +52,29 @@ class SubRecord(MonitorBase):
     # count of how many times the subrecord has been retried
     retry_count = Column(Integer, nullable=False)
     # timestamp of last update
-    last_updated = Column(DateTime, nullable=False, default=func.now(), 
-                          onupdate=func.now())
+    last_updated = Column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
     # relationship for failed files (zero to many)
     failed_files = relationship("FailedFile")
 
     # transaction_record_id as ForeignKey
-    transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
-                                   index=True, nullable=False)
+    transaction_record_id = Column(
+        Integer, ForeignKey("transaction_record.id"), index=True, nullable=False
+    )
 
     def has_finished(self):
-        """Convenience method for checking whether a given SubRecord is in a 
-        'final' state, i.e. is no longer going to change and the transaction can 
+        """Convenience method for checking whether a given SubRecord is in a
+        'final' state, i.e. is no longer going to change and the transaction can
         therefore be marked as COMPLETE.
 
-        Checks whether all states have gotten to the final stage of a workflow 
+        Checks whether all states have gotten to the final stage of a workflow
         (CATALOG_PUT or TRANSFER_GET) and are not retrying, OR have failed. This
-        should cover all bases. 
+        should cover all bases.
         """
-        return ((self.state in State.get_final_states() and self.retry_count == 0) 
-                or self.state == State.FAILED)
+        return (
+            self.state in State.get_final_states() and self.retry_count == 0
+        ) or self.state == State.FAILED
 
 
 class FailedFile(MonitorBase):
@@ -80,8 +87,10 @@ class FailedFile(MonitorBase):
     # final reason for failure
     reason = Column(String)
     # sub_record_id as ForeignKey
-    sub_record_id = Column(Integer, ForeignKey("sub_record.id"), 
-                           index=True, nullable=False)
+    sub_record_id = Column(
+        Integer, ForeignKey("sub_record.id"), index=True, nullable=False
+    )
+
 
 class Warning(MonitorBase):
     __tablename__ = "warning"
@@ -90,8 +99,10 @@ class Warning(MonitorBase):
     id = Column(Integer, primary_key=True)
     warning = Column(String)
     # link to transaction record warning about
-    transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
-                                   index=True, nullable=False)
+    transaction_record_id = Column(
+        Integer, ForeignKey("transaction_record.id"), index=True, nullable=False
+    )
+
 
 def orm_to_dict(obj):
     retdict = obj.__dict__

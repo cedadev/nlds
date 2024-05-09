@@ -2,8 +2,10 @@ import pytest
 
 from nlds_processors.db_mixin import DBMixin, DBError
 
+
 class MockDBMixinInheritor(DBMixin):
     """Mock class for testing DBMixin functions in isolation"""
+
     def __init__(self, db_engine, db_options):
         # Create minimum required attributes to create a working inherited class
         # of DBMixin
@@ -12,16 +14,17 @@ class MockDBMixinInheritor(DBMixin):
         self.db_options = db_options
         self.sessions = None
 
-class TestCatalogCreation():
+
+class TestCatalogCreation:
 
     def test_connect(self):
         # Use non-sensical db_engine
         db_engine = "gibberish"
         db_options = {
-            "db_name" : "/test.db",
-            "db_user" : "",
-            "db_passwd" : "",
-            "echo": False
+            "db_name": "/test.db",
+            "db_user": "",
+            "db_passwd": "",
+            "echo": False,
         }
         mock_dbmixin = MockDBMixinInheritor(db_engine, db_options)
         # Should not work as we're trying to use non-sensical db config options
@@ -32,7 +35,7 @@ class TestCatalogCreation():
         db_engine = "sqlite"
         db_options = list()
         mock_dbmixin = MockDBMixinInheritor(db_engine, db_options)
-        # Should not work, but should break when the db_string is made through 
+        # Should not work, but should break when the db_string is made through
         # trying to index like a dictionary and then subsequently calling len()
         with pytest.raises((KeyError, TypeError)):
             mock_dbmixin.connect()
@@ -44,33 +47,28 @@ class TestCatalogCreation():
         with pytest.raises(KeyError):
             mock_dbmixin.connect()
 
-        # Try creating a database with functional parameters (no username or 
-        # password) in memory 
+        # Try creating a database with functional parameters (no username or
+        # password) in memory
         db_engine = "sqlite"
-        db_options = {
-            "db_name" : "",
-            "db_user" : "",
-            "db_passwd" : "",
-            "echo": False
-        }
+        db_options = {"db_name": "", "db_user": "", "db_passwd": "", "echo": False}
         mock_dbmixin = MockDBMixinInheritor(db_engine, db_options)
         # Should not work as we've not got a Base to create tables from
         with pytest.raises((AttributeError)):
             mock_dbmixin.connect()
 
-        # Try creating a local database with username and password 
+        # Try creating a local database with username and password
         db_engine = "sqlite"
         db_options = {
-            "db_name" : "/test.db",
-            "db_user" : "test-un",
-            "db_passwd" : "test-pwd",
-            "echo": False
+            "db_name": "/test.db",
+            "db_user": "test-un",
+            "db_passwd": "test-pwd",
+            "echo": False,
         }
         mock_dbmixin = MockDBMixinInheritor(db_engine, db_options)
-        # Should not work as we can't create a db file with a password or 
+        # Should not work as we can't create a db file with a password or
         # username using pysqlite (the default sqlite engine)
         with pytest.raises((DBError)):
             mock_dbmixin.connect()
 
-        # TODO: Test with a mock SQLAlchemy.Base and see if we can break it in 
+        # TODO: Test with a mock SQLAlchemy.Base and see if we can break it in
         # any interesting ways

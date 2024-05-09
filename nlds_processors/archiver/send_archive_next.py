@@ -10,6 +10,7 @@ from nlds.details import Retries
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 
+
 @click.command()
 def send_archive_next():
     CRONJOB_CONFIG_SECTION = "cronjob_publisher"
@@ -23,7 +24,7 @@ def send_archive_next():
     cronjob_config = DEFAULT_CONFIG
     if CRONJOB_CONFIG_SECTION in rabbit_publisher.whole_config:
         cronjob_config |= rabbit_publisher.whole_config[CRONJOB_CONFIG_SECTION]
-    
+
     msg_dict = {
         MSG.DETAILS: {
             MSG.TRANSACT_ID: str(uuid4()),
@@ -35,23 +36,23 @@ def send_archive_next():
             MSG.JOB_LABEL: "archive-next",
             MSG.STATE: State.ARCHIVE_INIT.value,
             **cronjob_config,
-        }, 
+        },
         MSG.DATA: {
             # Convert to PathDetails for JSON serialisation
             MSG.FILELIST: [],
-        }, 
+        },
         **Retries().to_dict(),
         MSG.META: {
             # Insert an empty meta dict
         },
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
-    routing_key = f'{RK.ROOT}.{RK.CATALOG_ARCHIVE_NEXT}.{RK.START}'
+    routing_key = f"{RK.ROOT}.{RK.CATALOG_ARCHIVE_NEXT}.{RK.START}"
 
     print(f"Sending message to {routing_key}: \n{json.dumps(msg_dict, indent=4)}")
     rabbit_publisher.publish_message(routing_key, msg_dict)
     print("Message sent!")
 
-if __name__ == '__main__':
-    send_archive_next()
 
+if __name__ == "__main__":
+    send_archive_next()

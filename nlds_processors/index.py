@@ -4,14 +4,16 @@ import pathlib as pth
 from typing import List, NamedTuple, Dict, Any
 
 from nlds.rabbit.statting_consumer import StattingConsumer
-from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.rabbit.consumer import State, FilelistType
 from nlds.details import PathDetails
+import nlds.rabbit.routing_keys as RK
+import nlds.rabbit.message_keys as MSG
+import nlds.rabbit.delays as DLY
 
 
 class IndexerConsumer(StattingConsumer):
     DEFAULT_QUEUE_NAME = "index_q"
-    DEFAULT_ROUTING_KEY = f"{RMQP.RK_ROOT}.{RMQP.RK_INDEX}.{RMQP.RK_WILD}"
+    DEFAULT_ROUTING_KEY = f"{RK.ROOT}.{RK.INDEX}.{RK.WILD}"
     DEFAULT_REROUTING_INFO = f"->INDEX_Q"
     DEFAULT_STATE = State.INDEXING
 
@@ -32,7 +34,7 @@ class IndexerConsumer(StattingConsumer):
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
         _MAX_FILESIZE: (500 * 1000 * 1000),  # in kB, default=500GB
-        RMQP.RETRY_DELAYS: RMQP.DEFAULT_RETRY_DELAYS,
+        DLY.RETRY_DELAYS: DLY.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -46,7 +48,7 @@ class IndexerConsumer(StattingConsumer):
         self.check_permissions_fl = self.load_config_value(self._CHECK_PERMISSIONS)
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
         self.max_filesize = self.load_config_value(self._MAX_FILESIZE)
-        self.retry_delays = self.load_config_value(self.RETRY_DELAYS)
+        self.retry_delays = self.load_config_value(DLY.RETRY_DELAYS)
 
         self.reset()
 
@@ -54,9 +56,9 @@ class IndexerConsumer(StattingConsumer):
         """Check whether the body_json contains a message to check for system status"""
         # This checks if the message was for a system status check
         try:
-            api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
+            api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
         except KeyError:
-            self.log(f"Message did not contain api_method", self.RK_LOG_INFO)
+            self.log(f"Message did not contain api_method", RK.LOG_INFO)
             api_method = None
 
         # If received system test message, reply to it (this is for system status check)
@@ -86,7 +88,7 @@ class IndexerConsumer(StattingConsumer):
         length and resubmit each to exchange for indexing proper.
 
         """
-        rk_index = ".".join([rk_origin, self.RK_INDEX, self.RK_START])
+        rk_index = ".".join([rk_origin, RK.INDEX, RK.START])
 
         # Checking the length shouldn't fail as it's already been tested
         # earlier in the callback
@@ -96,7 +98,7 @@ class IndexerConsumer(StattingConsumer):
             self.log(
                 f"Filelist longer than allowed maximum length, splitting into "
                 "batches of {self.filelist_max_len}",
-                self.RK_LOG_DEBUG,
+                RK.LOG_DEBUG,
             )
 
         # For each 1000 files in the list resubmit with index as the action
@@ -119,7 +121,7 @@ class IndexerConsumer(StattingConsumer):
         self.log(
             f"Received {json.dumps(body_json, indent=4)} from "
             f"{self.queues[0].name} ({method.routing_key})",
-            self.RK_LOG_DEBUG,
+            RK.LOG_DEBUG,
         )
 
         # Check for system status
@@ -131,7 +133,7 @@ class IndexerConsumer(StattingConsumer):
             rk_parts = self.split_routing_key(method.routing_key)
         except ValueError as e:
             self.log(
-                "Routing key inappropriate length, exiting callback.", self.RK_LOG_ERROR
+                "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
             return
 
@@ -139,11 +141,11 @@ class IndexerConsumer(StattingConsumer):
         filelist_len = len(filelist)
 
         # Upon initiation, split the filelist into manageable chunks
-        if rk_parts[2] == self.RK_INITIATE:
+        if rk_parts[2] == RK.INITIATE:
             self._split(filelist, rk_parts[0], body_json)
         # If for some reason a list which is too long has been submitted for
         # indexing, split it and resubmit it.
-        elif rk_parts[2] == self.RK_START:
+        elif rk_parts[2] == RK.START:
             if filelist_len > self.filelist_max_len:
                 self._split(filelist, rk_parts[0], body_json)
             else:
@@ -154,13 +156,13 @@ class IndexerConsumer(StattingConsumer):
 
                 # Append routing info and then run the index
                 body_json = self.append_route_info(body_json)
-                self.log("Starting index scan", self.RK_LOG_INFO)
+                self.log("Starting index scan", RK.LOG_INFO)
 
                 # Index the entirety of the passed filelist and check for
                 # permissions. The size of the packet will also be evaluated
                 # and used to send lists of roughly equal size.
                 self._index(filelist, rk_parts[0], body_json)
-                self.log(f"Scan finished.", self.RK_LOG_INFO)
+                self.log(f"Scan finished.", RK.LOG_INFO)
 
     def _index(
         self, raw_filelist: List[NamedTuple], rk_origin: str, body_json: Dict[str, Any]
@@ -190,9 +192,9 @@ class IndexerConsumer(StattingConsumer):
         :param dict body_json:  The message body in dict form.
 
         """
-        rk_complete = ".".join([rk_origin, self.RK_INDEX, self.RK_COMPLETE])
-        rk_retry = ".".join([rk_origin, self.RK_INDEX, self.RK_START])
-        rk_failed = ".".join([rk_origin, self.RK_INDEX, self.RK_FAILED])
+        rk_complete = ".".join([rk_origin, RK.INDEX, RK.COMPLETE])
+        rk_retry = ".".join([rk_origin, RK.INDEX, RK.START])
+        rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 
         # Checking the lengths of file- and reset- lists is no longer necessary
 
@@ -207,7 +209,7 @@ class IndexerConsumer(StattingConsumer):
                 self.log(
                     f"{path_details.path} has exceeded max retry count, "
                     "adding to failed list.",
-                    self.RK_LOG_DEBUG,
+                    RK.LOG_DEBUG,
                 )
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="failed"
@@ -227,7 +229,7 @@ class IndexerConsumer(StattingConsumer):
             if not self.check_path_access(item_p):
                 # Increment retry counter and add to retry list
                 reason = f"Path:{path_details.path} is inaccessible."
-                self.log(reason, self.RK_LOG_DEBUG)
+                self.log(reason, RK.LOG_DEBUG)
                 path_details.retries.increment(reason=reason)
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
@@ -287,7 +289,7 @@ class IndexerConsumer(StattingConsumer):
                             # can't check the size of the problem list as files
                             # may not exist
                             reason = f"Path:{walk_path_details.path} is inaccessible."
-                            self.log(reason, self.RK_LOG_DEBUG)
+                            self.log(reason, RK.LOG_DEBUG)
                             walk_path_details.retries.increment(reason=reason)
                             self.append_and_send(
                                 walk_path_details,
@@ -317,7 +319,7 @@ class IndexerConsumer(StattingConsumer):
                 )
             else:
                 reason = f"Path:{path_details.path} is of unknown type."
-                self.log(reason, self.RK_LOG_DEBUG)
+                self.log(reason, RK.LOG_DEBUG)
                 path_details.retries.increment(reason=reason)
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
@@ -349,7 +351,7 @@ class IndexerConsumer(StattingConsumer):
                 f"File too large for the NLDS tape system ({filesize / 1000}MB)."
                 f" The max allowed file size is {self.max_filesize / 1000}MB."
             )
-            self.log(reason, self.RK_LOG_DEBUG)
+            self.log(reason, RK.LOG_DEBUG)
             path_details.retries.increment(reason=reason)
             self.append_and_send(path_details, rk_retry, body_json, list_type="retry")
             return None

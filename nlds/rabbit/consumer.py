@@ -754,10 +754,10 @@ class RabbitMQConsumer(ABC, RMQP):
     def append_route_info(cls, body: Dict[str, Any], route_info: str = None) -> Dict:
         if route_info is None:
             route_info = cls.DEFAULT_REROUTING_INFO
-        if cls.MSG_ROUTE in body[cls.MSG_DETAILS]:
-            body[cls.MSG_DETAILS][cls.MSG_ROUTE] += route_info
+        if MSG.ROUTE in body[MSG.DETAILS]:
+            body[MSG.DETAILS][MSG.ROUTE] += route_info
         else:
-            body[cls.MSG_DETAILS][cls.MSG_ROUTE] = route_info
+            body[MSG.DETAILS][MSG.ROUTE] = route_info
         return body
 
     def exit(self, *args):

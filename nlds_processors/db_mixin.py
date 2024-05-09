@@ -2,12 +2,12 @@ from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from nlds_processors.catalog.catalog_models import CatalogBase
 
 class DBError(Exception):
     def __init__(self, message, *args):
         super().__init__(args)
         self.message = message
+
 
 class DBMixin:
     """Mixin refactored from monitor and catalog classes"""
@@ -26,7 +26,6 @@ class DBMixin:
         # add the database name
         db_connect += self.db_options["db_name"]
         return db_connect
-    
 
     def connect(self, create_db_fl: bool = True):
         # connect to the database using the information in the config
@@ -38,11 +37,9 @@ class DBMixin:
 
         # connect to the database
         try:
-            self.db_engine  = create_engine(
-                                db_connect, 
-                                echo=self.db_options["echo"],
-                                future=True
-                            )
+            self.db_engine = create_engine(
+                db_connect, echo=self.db_options["echo"], future=True
+            )
         except ArgumentError as e:
             raise DBError("Could not create database engine")
 
@@ -55,7 +52,6 @@ class DBMixin:
         # return db_connect string to log
         return db_connect
 
-
     def start_session(self):
         """Create a SQL alchemy session"""
         # Check if there is an existing open session
@@ -66,11 +62,9 @@ class DBMixin:
             self.session = None
         self.session = Session(bind=self.db_engine, future=True)
 
-
     def save(self):
         """Commit all pending transactions"""
         self.session.commit()
-
 
     def end_session(self):
         """Close the SQL alchemy session"""

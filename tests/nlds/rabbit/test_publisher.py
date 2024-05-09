@@ -6,13 +6,14 @@ import pytest
 import functools
 
 from nlds.rabbit import publisher as publ
-from nlds.rabbit.publisher import RabbitMQPublisher
+from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.server_config import (
     LOGGING_CONFIG_FORMAT, 
     LOGGING_CONFIG_LEVEL, 
     LOGGING_CONFIG_STDOUT, 
     LOGGING_CONFIG_STDOUT_LEVEL,
 )
+import nlds.rabbit.message_keys as MSG
 
 def mock_load_config(template_config):
     return template_config
@@ -23,7 +24,7 @@ def default_publisher(monkeypatch, template_config):
     monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
     
     # Check that the publisher with callback can be created
-    return RabbitMQPublisher()
+    return RMQP()
 
 def message_assertions(message):
     # Test message output format is correct
@@ -31,22 +32,22 @@ def message_assertions(message):
     message = json.loads(message)
 
     # Check message contains expected details
-    assert RabbitMQPublisher.MSG_DETAILS in message
-    message_details = message[RabbitMQPublisher.MSG_DETAILS]
-    assert RabbitMQPublisher.MSG_TRANSACT_ID in message_details
-    assert RabbitMQPublisher.MSG_TIMESTAMP in message_details
-    assert RabbitMQPublisher.MSG_USER in message_details
-    assert RabbitMQPublisher.MSG_GROUP in message_details
-    assert RabbitMQPublisher.MSG_ACCESS_KEY in message_details
-    assert RabbitMQPublisher.MSG_SECRET_KEY in message_details
-    assert RabbitMQPublisher.MSG_TENANCY in message_details
+    assert MSG.DETAILS in message
+    message_details = message[MSG.DETAILS]
+    assert MSG.TRANSACT_ID in message_details
+    assert MSG.TIMESTAMP in message_details
+    assert MSG.USER in message_details
+    assert MSG.GROUP in message_details
+    assert MSG.ACCESS_KEY in message_details
+    assert MSG.SECRET_KEY in message_details
+    assert MSG.TENANCY in message_details
 
     # Check message contains expected data
-    assert RabbitMQPublisher.MSG_DATA in message
-    message_data = message[RabbitMQPublisher.MSG_DATA]
-    assert RabbitMQPublisher.MSG_FILELIST in message_data
+    assert MSG.DATA in message
+    message_data = message[MSG.DATA]
+    assert MSG.FILELIST in message_data
 
-    assert RabbitMQPublisher.MSG_TYPE in message
+    assert MSG.TYPE in message
 
 def test_constructor(default_publisher):
     # Check that the publisher with callback can be created
