@@ -38,6 +38,7 @@ from pika.frame import Header
 
 from datetime import datetime, timezone
 
+from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
