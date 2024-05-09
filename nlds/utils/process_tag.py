@@ -4,8 +4,7 @@ def process_tag(tag):
     if True:
         tag_dict = {}
         # strip "{" "}" symbolsfirst
-        tag_list = (tag.replace("{", "").replace("}", "")
-                    ).split(",")
+        tag_list = (tag.replace("{", "").replace("}", "")).split(",")
         for tag_i in tag_list:
             tag_kv = tag_i.split(":")
             if len(tag_kv) < 2:

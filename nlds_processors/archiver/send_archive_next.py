@@ -4,18 +4,20 @@ import json
 import click
 
 from nlds.routers import rabbit_publisher
-from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 from nlds.rabbit.consumer import State
 from nlds.details import Retries
+
+import nlds.rabbit.routing_keys as RK
+import nlds.rabbit.message_keys as MSG
 
 @click.command()
 def send_archive_next():
     CRONJOB_CONFIG_SECTION = "cronjob_publisher"
     DEFAULT_CONFIG = {
-        RMQP.MSG_ACCESS_KEY: None,
-        RMQP.MSG_SECRET_KEY: None,
-        RMQP.MSG_TAPE_URL: None,
-        RMQP.MSG_TENANCY: None,
+        MSG.ACCESS_KEY: None,
+        MSG.SECRET_KEY: None,
+        MSG.TAPE_URL: None,
+        MSG.TENANCY: None,
     }
     # Load any cronjob config, if present
     cronjob_config = DEFAULT_CONFIG
@@ -23,28 +25,28 @@ def send_archive_next():
         cronjob_config |= rabbit_publisher.whole_config[CRONJOB_CONFIG_SECTION]
     
     msg_dict = {
-        RMQP.MSG_DETAILS: {
-            RMQP.MSG_TRANSACT_ID: str(uuid4()),
-            RMQP.MSG_SUB_ID: str(uuid4()),
-            RMQP.MSG_USER: "admin-placeholder",
-            RMQP.MSG_GROUP: "admin-placeholder",
-            RMQP.MSG_TARGET: None,
-            RMQP.MSG_API_ACTION: "archive-put",
-            RMQP.MSG_JOB_LABEL: "archive-next",
-            RMQP.MSG_STATE: State.ARCHIVE_INIT.value,
+        MSG.DETAILS: {
+            MSG.TRANSACT_ID: str(uuid4()),
+            MSG.SUB_ID: str(uuid4()),
+            MSG.USER: "admin-placeholder",
+            MSG.GROUP: "admin-placeholder",
+            MSG.TARGET: None,
+            MSG.API_ACTION: "archive-put",
+            MSG.JOB_LABEL: "archive-next",
+            MSG.STATE: State.ARCHIVE_INIT.value,
             **cronjob_config,
         }, 
-        RMQP.MSG_DATA: {
+        MSG.DATA: {
             # Convert to PathDetails for JSON serialisation
-            RMQP.MSG_FILELIST: [],
+            MSG.FILELIST: [],
         }, 
         **Retries().to_dict(),
-        RMQP.MSG_META: {
+        MSG.META: {
             # Insert an empty meta dict
         },
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
+        MSG.TYPE: MSG.TYPE_STANDARD,
     }
-    routing_key = f'{RMQP.RK_ROOT}.{RMQP.RK_CATALOG_ARCHIVE_NEXT}.{RMQP.RK_START}'
+    routing_key = f'{RK.ROOT}.{RK.CATALOG_ARCHIVE_NEXT}.{RK.START}'
 
     print(f"Sending message to {routing_key}: \n{json.dumps(msg_dict, indent=4)}")
     rabbit_publisher.publish_message(routing_key, msg_dict)
