@@ -62,14 +62,15 @@ class IndexerConsumer(StattingConsumer):
             api_method = None
 
         # If received system test message, reply to it (this is for system status check)
-        if api_method == "system_stat":
+        if api_method == RK.STAT:
             if (
                 properties.correlation_id is not None
                 and properties.correlation_id != self.channel.consumer_tags[0]
             ):
                 return False
+
             if (body_json["details"]["ignore_message"]) == True:
-                return
+                return False
             else:
                 self.publish_message(
                     properties.reply_to,
@@ -78,8 +79,7 @@ class IndexerConsumer(StattingConsumer):
                     correlation_id=properties.correlation_id,
                 )
             return True
-        else:
-            return False
+        return False
 
     def _split(
         self, filelist: List[PathDetails], rk_origin: str, body_json: Dict[str, Any]
@@ -112,6 +112,22 @@ class IndexerConsumer(StattingConsumer):
                 mode=FilelistType.processed,
                 state=State.SPLITTING,
             )
+
+    def _scan(self, filelist, rk_parts):
+        # First change user and group so file permissions can be
+        # checked. This should be deactivated when testing locally.
+        if self.check_permissions_fl:
+            self._set_ids(body_json)
+
+        # Append routing info and then run the index
+        body_json = self.append_route_info(body_json)
+        self.log("Starting index scan", RK.LOG_INFO)
+
+        # Index the entirety of the passed filelist and check for
+        # permissions. The size of the packet will also be evaluated
+        # and used to send lists of roughly equal size.
+        self._index(filelist, rk_parts[0], body_json)
+        self.log(f"Scan finished.", RK.LOG_INFO)
 
     def callback(self, ch, method, properties, body, connection):
         self.reset()
@@ -149,20 +165,7 @@ class IndexerConsumer(StattingConsumer):
             if filelist_len > self.filelist_max_len:
                 self._split(filelist, rk_parts[0], body_json)
             else:
-                # First change user and group so file permissions can be
-                # checked. This should be deactivated when testing locally.
-                if self.check_permissions_fl:
-                    self._set_ids(body_json)
-
-                # Append routing info and then run the index
-                body_json = self.append_route_info(body_json)
-                self.log("Starting index scan", RK.LOG_INFO)
-
-                # Index the entirety of the passed filelist and check for
-                # permissions. The size of the packet will also be evaluated
-                # and used to send lists of roughly equal size.
-                self._index(filelist, rk_parts[0], body_json)
-                self.log(f"Scan finished.", RK.LOG_INFO)
+                self._scan()
 
     def _index(
         self, raw_filelist: List[NamedTuple], rk_origin: str, body_json: Dict[str, Any]
