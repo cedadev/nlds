@@ -40,7 +40,7 @@ class FileModel(BaseModel):
     holding_id: int = None
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "filelist": [
                     "/datacentre/archvol5/qb139/archive/spot-9693-piControl/r1i1p1f1/Amon/tasmin/gn/files/d20190628/tasmin_Amon_HadGEM3-GC31-LL_piControl_r1i1p1f1_gn_185001-194912.nc",

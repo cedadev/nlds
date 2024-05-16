@@ -388,7 +388,7 @@ class CatalogConsumer(RMQC):
                 if pd.retries.count > self.max_retries:
                     self.failedlist.append(pd)
                 else:
-                    pd.retries.increment(reason=f"{e.message}")
+                    pd.retries.add(reason=f"{e.message}")
                     self.retrylist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
@@ -552,7 +552,7 @@ class CatalogConsumer(RMQC):
                             self.failedlist.append(file_details)
                         else:
                             self.retrylist.append(file_details)
-                            file_details.retries.increment(reason=f"{e.message}")
+                            file_details.retries.add(reason=f"{e.message}")
                         self.log(e.message, RK.LOG_ERROR)
                         continue
                     # Make the object name. (2023-09) As of now the root will
@@ -622,7 +622,7 @@ class CatalogConsumer(RMQC):
                 if file_details.retries.count > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
-                    file_details.retries.increment(reason=f"{e.message}")
+                    file_details.retries.add(reason=f"{e.message}")
                     self.retrylist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
@@ -653,7 +653,7 @@ class CatalogConsumer(RMQC):
                     if file_details.retries.count > self.max_retries:
                         self.failedlist.append(file_details)
                     else:
-                        file_details.retries.increment(reason=f"{e.message}")
+                        file_details.retries.add(reason=f"{e.message}")
                         self.retrylist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
@@ -1075,7 +1075,7 @@ class CatalogConsumer(RMQC):
                 if file_details.retries.count > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
-                    file_details.retries.increment(reason=f"{e.message}")
+                    file_details.retries.add(reason=f"{e.message}")
                     self.retrylist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
@@ -1182,7 +1182,7 @@ class CatalogConsumer(RMQC):
                         if file_details.retries.count > self.max_retries:
                             self.failedlist.append(file_details)
                         else:
-                            file_details.retries.increment(reason=f"{e.message}")
+                            file_details.retries.add(reason=f"{e.message}")
                             self.retrylist.append(file_details)
                         self.log(e.message, RK.LOG_ERROR)
                         continue
@@ -1190,7 +1190,7 @@ class CatalogConsumer(RMQC):
                 if file_details.retries.count > self.max_retries:
                     self.failedlist.append(file_details)
                 else:
-                    file_details.retries.increment(reason=f"{e.message}")
+                    file_details.retries.add(reason=f"{e.message}")
                     self.retrylist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
@@ -1282,7 +1282,11 @@ class CatalogConsumer(RMQC):
             ret_list = []
             for h in holdings:
                 # get the first transaction
-                t = h.transactions[0]
+                if len(h.transactions) > 0:
+                    t = h.transactions[0]
+                    date_str = t.ingest_time.isoformat()
+                else:
+                    date_str = ""
                 ret_dict = {
                     "id": h.id,
                     "label": h.label,
@@ -1290,7 +1294,7 @@ class CatalogConsumer(RMQC):
                     "group": h.group,
                     "tags": h.get_tags(),
                     "transactions": h.get_transaction_ids(),
-                    "date": t.ingest_time.isoformat(),
+                    "date": date_str,
                 }
                 ret_list.append(ret_dict)
             # add the return list to successfully completed holding listings

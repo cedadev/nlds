@@ -87,10 +87,7 @@ class RabbitMQConsumer(ABC, RMQP):
     # overridden
     DEFAULT_STATE = State.ROUTING
 
-    def __init__(self, queue: str = None, setup_logging_fl=False):
-        super().__init__(name=queue, setup_logging_fl=False)
-        self.loop = True
-
+    def __setup_queues(self, queue: str = None):
         # TODO: (2021-12-21) Only one queue can be specified at the moment,
         # should be able to specify multiple queues to subscribe to but this
         # isn't a priority.
@@ -124,6 +121,12 @@ class RabbitMQConsumer(ABC, RMQP):
                     self.DEFAULT_ROUTING_KEY,
                 )
             ]
+
+    def __init__(self, queue: str = None, setup_logging_fl=False):
+        super().__init__(name=queue, setup_logging_fl=False)
+        self.loop = True
+
+        self.__setup_queues(queue)
 
         # Load consumer-specific config
         if self.name in self.whole_config:
@@ -534,7 +537,7 @@ class RabbitMQConsumer(ABC, RMQP):
         routing_key"""
         # Delay the retry message depending on how many retries have been
         # accumulated - using simply the transaction-level retries
-        retries.increment(reason=f"Exception during callback: {error}")
+        retries.add(reason=f"Exception during callback: {error}")
         body_json.update(retries.to_dict())
         delay = self.get_retry_delay(retries.count)
         self.log(

@@ -32,6 +32,18 @@ from nlds.errors import RabbitRetryError
 logger = logging.getLogger("nlds.root")
 
 class RabbitMQPublisher:
+    def __define_delays(self):
+        try:
+            # Do some basic verification of the general retry delays.
+            self.retry_delays = self.general_config[DLY.RETRY_DELAYS]
+            assert isinstance(self.retry_delays, Sequence) and not isinstance(
+                self.retry_delays, str
+            )
+            assert len(self.retry_delays) > 0
+            assert isinstance(self.retry_delays[0], int)
+        except (KeyError, TypeError, AssertionError):
+            self.retry_delays = DLY.DEFAULT_RETRY_DELAYS
+
     def __init__(self, name="publisher", setup_logging_fl=False):
         # Get rabbit-specific section of config file
         self.whole_config = CFG.load_config()
@@ -62,17 +74,7 @@ class RabbitMQPublisher:
         self.timeout = self.config.get(CFG.RABBIT_CONFIG_TIMEOUT) or 1800  # 30 mins
         self.keepalive = None
 
-        try:
-            # Do some basic verification of the general retry delays.
-            self.retry_delays = self.general_config[DLY.RETRY_DELAYS]
-            assert isinstance(self.retry_delays, Sequence) and not isinstance(
-                self.retry_delays, str
-            )
-            assert len(self.retry_delays) > 0
-            assert isinstance(self.retry_delays[0], int)
-        except (KeyError, TypeError, AssertionError):
-            self.retry_delays = DLY.DEFAULT_RETRY_DELAYS
-
+        self.__define_delays()
         # setup the logger
         if setup_logging_fl:
             self.setup_logging()
@@ -446,17 +448,17 @@ class RabbitMQPublisher:
                                     to logging.log()
         """
         # Check that given log level is appropriate
-        if log_level.lower() not in CFG.LOG_RKS:
+        if log_level.lower() not in RK.LOG_RKS:
             logger.error(
                 f"Given log level ({log_level}) not in approved list "
                 f"of logging levels. \n"
-                f"One of {CFG.LOG_RKS} must be used instead."
+                f"One of {RK.LOG_RKS} must be used instead."
             )
             return
 
         # Check format of given target
-        if not (target[:5] == CFG.LOGGER_PREFIX):
-            target = f"{CFG.LOGGER_PREFIX}{target}"
+        if not (target[:5] == RK.LOGGER_PREFIX):
+            target = f"{RK.LOGGER_PREFIX}{target}"
 
         # First log message with local logger
         log_level_int = getattr(logging, log_level.upper())

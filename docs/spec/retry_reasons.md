@@ -151,3 +151,68 @@ New retry / error classifications:
     * Tape not available
     * Disk not available
     * Object store not available
+
+
+4 things to change:
+
+1. Make PathDetails mirror catalogue database more closely, by adding Storage locations
+2. Derive tape location and object storage location via a function in PathDetails, rather than munging strings
+3. Only add StorageLocation to catalog after transfer is complete - can now base it on what is in PathDetails
+4. Retry mechanism - add instant fail via different Exceptions, factor out into classes
+
+
+Error handling in consumer.py
+    def _retry_transaction(
+        self,
+        body_json: Dict[str, Any],
+        retries: Retries,
+        original_rk: str,
+        monitoring_rk: str,
+        error: Exception,
+    ) -> None:
+
+    def _fail_transaction(
+        self, 
+        body_json: Dict[str, Any], 
+        monitoring_rk: str
+    ):
+
+    def _handle_expected_error(
+        self, body: bytes, routing_key: str, original_error: Any
+    ):
+
+        EXPECTED_EXCEPTIONS = (
+        ValueError,
+        TypeError,
+        KeyError,
+        PermissionError,
+        RabbitRetryError,
+        CallbackError,
+        JSONDecodeError,
+        HTTPError,
+        S3Error,
+    )
+
+    def _log_errored_transaction(self, body, exception):
+
+    def send_pathlist(
+        self,
+        pathlist: List[PathDetails],
+        routing_key: str,
+        body_json: Dict[str, Any],
+        state: State = None,
+        mode: FilelistType = FilelistType.processed,
+        warning: List[str] = None,
+        delay: int = None,
+        save_reasons_fl: bool = False,
+    ) -> None:
+
+Pathlists for retry etc:
+    def __init__(self, queue: str = None, setup_logging_fl=False):
+        # (re)Declare the pathlists here to make them available without having
+        # to pass them through every function call.
+        self.completelist: List[PathDetails] = []
+        self.retrylist: List[PathDetails] = []
+        self.failedlist: List[PathDetails] = []
+        self.max_retries = 5
+

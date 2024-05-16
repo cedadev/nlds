@@ -1,6 +1,7 @@
 """
 state.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "08 Apr 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -10,6 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 # Refactored State into its own file
 
 from enum import Enum
+
 
 class State(Enum):
     # Generic states
@@ -34,6 +36,8 @@ class State(Enum):
     CATALOG_ARCHIVE_UPDATING = 23
     # Shared ARCHIVE states
     CATALOG_ARCHIVE_ROLLBACK = 40
+    CATALOG_DELETE_ROLLBACK = 41
+    CATALOG_RESTORING = 42
 
     @classmethod
     def has_value(cls, value):
@@ -51,6 +55,7 @@ class State(Enum):
             cls.CATALOG_ARCHIVE_UPDATING,
             cls.CATALOG_ROLLBACK,
             cls.CATALOG_ARCHIVE_ROLLBACK,
+            cls.CATALOG_RESTORING,
             cls.FAILED,
         )
         return final_states

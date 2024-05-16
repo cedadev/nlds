@@ -62,23 +62,23 @@ async def get(
     routing_key = f"{RK.ROOT}.{RK.ROUTE}.{RK.FIND}"
     api_action = f"{RK.FIND}"
     msg_dict = {
-        MSG._DETAILS: {
-            MSG._USER: user,
-            MSG._GROUP: group,
-            MSG._GROUPALL: groupall,
-            MSG._API_ACTION: api_action,
+        MSG.DETAILS: {
+            MSG.USER: user,
+            MSG.GROUP: group,
+            MSG.GROUPALL: groupall,
+            MSG.API_ACTION: api_action,
         },
-        MSG._DATA: {},
-        MSG._TYPE: MSG._TYPE_STANDARD,
+        MSG.DATA: {},
+        MSG.TYPE: MSG.TYPE_STANDARD,
     }
     # add the metadata
     meta_dict = {}
     if label:
-        meta_dict[MSG._LABEL] = label
+        meta_dict[MSG.LABEL] = label
     if holding_id:
-        meta_dict[MSG._HOLDING_ID] = holding_id
+        meta_dict[MSG.HOLDING_ID] = holding_id
     if transaction_id:
-        meta_dict[MSG._TRANSACT_ID] = transaction_id
+        meta_dict[MSG.TRANSACT_ID] = transaction_id
     if tag:
         # convert the string into a dictionary
         try:
@@ -93,11 +93,11 @@ async def get(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=response_error.json()
             )
         else:
-            meta_dict[MSG._TAG] = tag_dict
+            meta_dict[MSG.TAG] = tag_dict
     if path:
-        meta_dict[MSG._PATH] = path
+        meta_dict[MSG.PATH] = path
     if len(meta_dict) > 0:
-        msg_dict[MSG._META] = meta_dict
+        msg_dict[MSG.META] = meta_dict
 
     # call RPC function
     routing_key = "catalog_q"

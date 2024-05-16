@@ -20,7 +20,7 @@ from pydantic import BaseModel
 import nlds.rabbit.message_keys as MSG
 import nlds.rabbit.routing_keys as RK
 from nlds.rabbit.consumer import State
-import nlds.rabbit.rpc_publisher as rpc_publisher
+from nlds.routers import rpc_publisher
 from nlds.errors import ResponseError
 from nlds.authenticators.authenticate_methods import (
     authenticate_token,

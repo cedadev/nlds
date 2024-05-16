@@ -221,19 +221,12 @@ class IndexerConsumer(StattingConsumer):
                 # Skip to next item and avoid access logic
                 continue
 
-            # Check if item is (a) fully resolved, and (b) exists
-            # TODO: I think this is, at best, redundant and, at worst,
-            # dangerous. Should be removed in a future commit.
-            root = pth.Path("/")
-            if root not in item_p.parents:
-                item_p = item_p.resolve()
-
             # If item does not exist, or is not accessible, add to problem list
             if not self.check_path_access(item_p):
                 # Increment retry counter and add to retry list
                 reason = f"Path:{path_details.path} is inaccessible."
                 self.log(reason, RK.LOG_DEBUG)
-                path_details.retries.increment(reason=reason)
+                path_details.retries.add(reason=reason)
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
                 )
@@ -293,7 +286,7 @@ class IndexerConsumer(StattingConsumer):
                             # may not exist
                             reason = f"Path:{walk_path_details.path} is inaccessible."
                             self.log(reason, RK.LOG_DEBUG)
-                            walk_path_details.retries.increment(reason=reason)
+                            walk_path_details.retries.add(reason=reason)
                             self.append_and_send(
                                 walk_path_details,
                                 rk_retry,
@@ -323,7 +316,7 @@ class IndexerConsumer(StattingConsumer):
             else:
                 reason = f"Path:{path_details.path} is of unknown type."
                 self.log(reason, RK.LOG_DEBUG)
-                path_details.retries.increment(reason=reason)
+                path_details.retries.add(reason=reason)
                 self.append_and_send(
                     path_details, rk_retry, body_json, list_type="retry"
                 )
@@ -333,8 +326,10 @@ class IndexerConsumer(StattingConsumer):
             self.send_pathlist(
                 self.completelist, rk_complete, body_json, mode="indexed"
             )
+
         if len(self.retrylist) > 0:
             self.send_pathlist(self.retrylist, rk_retry, body_json, mode="retry")
+
         if len(self.failedlist) > 0:
             self.send_pathlist(self.failedlist, rk_failed, body_json, mode="failed")
 
@@ -355,7 +350,7 @@ class IndexerConsumer(StattingConsumer):
                 f" The max allowed file size is {self.max_filesize / 1000}MB."
             )
             self.log(reason, RK.LOG_DEBUG)
-            path_details.retries.increment(reason=reason)
+            path_details.retries.add(reason=reason)
             self.append_and_send(path_details, rk_retry, body_json, list_type="retry")
             return None
         return filesize
