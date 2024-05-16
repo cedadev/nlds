@@ -20,6 +20,7 @@ LIST = "list"
 STAT = "stat"
 FIND = "find"
 META = "meta"
+SYSTEM_STAT = "system-stat"
 
 # Exchange routing key parts – root
 ROOT = "nlds-api"

@@ -13,7 +13,7 @@ from requests.auth import HTTPBasicAuth
 
 import nlds.rabbit.rpc_publisher as rpc_publisher
 from nlds.errors import ResponseError
-
+import nlds.rabbit.routing_keys as RK
 
 router = APIRouter()
 
@@ -221,7 +221,7 @@ async def get(
 
     msg_dict = {
         "details": {
-            "api_action": "system_stat",
+            "api_action": RK.SYSTEM_STAT,
             "target_consumer": "",
             "ignore_message": False,
         }
@@ -425,7 +425,7 @@ async def get_service_json(
 
         msg_dict = {
             "details": {
-                "api_action": "system_stat",
+                "api_action": RK.SYSTEM_STAT,
                 "target_consumer": "",
                 "ignore_message": False,
             }
