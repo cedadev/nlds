@@ -26,9 +26,8 @@ JSONEncoder.default = _default
 class PathType(Enum):
     FILE = 0
     DIRECTORY = 1
-    LINK_UNCLASSIFIED = 2
-    LINK_COMMON_PATH = 3
-    LINK_ABSOLUTE_PATH = 4
+    LINK = 2
+    # maintaining Enum numbering for database compatibility
     NOT_RECOGNISED = 5
     UNINDEXED = 6
 
@@ -36,9 +35,10 @@ class PathType(Enum):
         return [
             "FILE",
             "DIRECTORY",
-            "LINK_UNCLASSIFIED",
-            "LINK_COMMON_PATH",
-            "LINK_ABSOLUTE_PATH",
+            "LINK",
+            # empty strings to maintain DB compatibility
+            "",
+            "",
             "NOT_RECOGNISED",
             "UNINDEXED",
         ][self.value]
@@ -47,17 +47,13 @@ class PathType(Enum):
 class Retries(BaseModel):
     count: Optional[int] = 0
     reasons: Optional[List[str]] = []
-    saved_reasons: Optional[List[str]] = []
 
-    def increment(self, reason: str = None) -> None:
+    def add(self, reason: str = None) -> None:
         self.count += 1
         if reason:
             self.reasons.append(reason)
 
-    def reset(self, save_reasons_fl=False) -> None:
-        # Load the last reasons into old reasons for later access if needed
-        if len(self.reasons) > 0:
-            self.saved_reasons.append(self.reasons[-1])
+    def reset(self) -> None:
         self.count = 0
         self.reasons = []
 
@@ -66,7 +62,6 @@ class Retries(BaseModel):
             MSG.RETRIES: {
                 MSG.RETRIES_COUNT: self.count,
                 MSG.RETRIES_REASONS: self.reasons,
-                MSG.RETRIES_SAVED_REASONS: self.saved_reasons,
             }
         }
 
@@ -77,29 +72,87 @@ class Retries(BaseModel):
         return cls(
             count=dictionary[MSG.RETRIES][MSG.RETRIES_COUNT],
             reasons=dictionary[MSG.RETRIES][MSG.RETRIES_REASONS],
-            saved_reasons=dictionary[MSG.RETRIES][MSG.RETRIES_SAVED_REASONS],
         )
 
 
+class PathLocation(BaseModel):
+    storage_type: Optional[str] = None
+    url_scheme: Optional[str] = None
+    url_netloc: Optional[str] = None
+    root: Optional[str] = None
+    path: Optional[str] = None
+    access_time: Optional[str] = None
+
+    def to_dict(self) -> Dict:
+        return {
+            "storage_type": self.storage_type,  # e.g. OBJECT_STORAGE or TAPE
+            "url_scheme": self.url_scheme,  # e.g. http://
+            "url_netloc": self.url_netloc,  # e.g. cedadev-o (tenancy)
+            "root": self.root,  # e.g. <bucket_name>
+            "path": self.path,  # e.g. /gws/cedaproc/file1.txt
+            "access_time": self.access_time,
+        }
+
+    @classmethod
+    def from_dict(cls, dictionary: Dict[str, Any]):
+        return cls(
+            storage_type=dictionary["storage_type"],
+            url_scheme=dictionary["url_scheme"],
+            url_netloc=dictionary["url_netloc"],
+            root=dictionary["root"],
+            path=dictionary["path"],
+            access_time=dictionary["access_time"]
+        )
+
+
+LocationType = TypeVar("LocationType", bound=PathLocation)
+
+
+class PathLocations(BaseModel):
+    count: Optional[int] = 0
+    locations: Optional[List[LocationType]] = []
+
+    def add(self, location: PathLocation) -> None:
+        assert location.storage_type not in self.locations
+        self.count += 1
+        self.locations.append(location)
+
+    def reset(self) -> None:
+        self.count = 0
+        self.locations = []
+
+    def to_json(self) -> Dict:
+        out_dict = {}
+        for l in self.locations:
+            out_dict[l.storage_type] = l.to_dict()
+        return {MSG.STORAGE_LOCATIONS : out_dict}
+
+    @classmethod
+    def from_dict(cls, dictionary: Dict[str, Any]) -> None:
+        pl = cls()
+        d2 = dictionary[MSG.STORAGE_LOCATIONS]
+        for d in d2:
+            pl.add(PathLocation.from_dict(d2[d]))
+        return pl
+
+
 RetriesType = TypeVar("RetriesType", bound=Retries)
+LocationsType = TypeVar("LocationsType", bound=PathLocations)
 
 
 class PathDetails(BaseModel):
     original_path: Optional[str] = None
-    object_name: Optional[str] = None
-    tenancy: Optional[str] = None
-    tape_path: Optional[str] = None
-    tape_url: Optional[str] = None
-    size: Optional[float] = None
+    path_type: Optional[PathType] = PathType.UNINDEXED
+    link_path: Optional[str] = None
+    size: Optional[int] = None
     user: Optional[int] = None
     group: Optional[int] = None
     mode: Optional[int] = None
     permissions: Optional[int] = None
     access_time: Optional[float] = None
-    modify_time: Optional[float] = None
-    path_type: Optional[PathType] = PathType.UNINDEXED
-    link_path: Optional[str] = None
+
     retries: Optional[RetriesType] = Retries()
+    locations: Optional[LocationsType] = PathLocations()
 
     @property
     def path(self) -> str:
@@ -109,30 +162,32 @@ class PathDetails(BaseModel):
         return {
             "file_details": {
                 "original_path": self.original_path,
-                "object_name": self.object_name,
-                "tenancy": self.tenancy,
-                "tape_path": self.tape_path,
-                "tape_url": self.tape_url,
+                "path_type": self.path_type.value,
+                "link_path": self.link_path,
                 "size": self.size,
                 "user": self.user,
                 "group": self.group,
-                "mode": self.mode,
                 "permissions": self.permissions,
+                "mode": self.mode,
                 "access_time": self.access_time,
-                "modify_time": self.modify_time,
-                "path_type": self.path_type.value,
-                "link_path": self.link_path,
             },
             **self.retries.to_dict(),
+            **self.locations.to_json(),
         }
 
     @classmethod
     def from_dict(cls, json_contents: Dict[str, Any]):
-        if "retries" in json_contents:
-            retries = Retries(**json_contents["retries"])
+        if MSG.RETRIES in json_contents:
+            retries = Retries.from_dict(json_contents)
         else:
             retries = Retries()
-        return cls(**json_contents["file_details"], retries=retries)
+        if MSG.STORAGE_LOCATIONS in json_contents:
+            locations = PathLocations.from_dict(json_contents)
+        else:
+            locations = PathLocations()
+        return cls(
+            **json_contents["file_details"], retries=retries, locations=locations
+        )
 
     @classmethod
     def from_path(cls, path: str):
@@ -153,23 +208,21 @@ class PathDetails(BaseModel):
         # Include this assertion so mypy knows it's definitely a stat_result
         assert stat_result is not None
 
-        self.mode = stat_result.st_mode
+        self.mode = stat_result.st_mode  # only for internal use
 
-        self.size = stat_result.st_size / 1000  # in kB
+        self.size = stat_result.st_size
         self.permissions = self.mode & 0o777
         self.user = stat_result.st_uid
         self.group = stat_result.st_gid
         self.access_time = stat_result.st_atime
-        self.modify_time = stat_result.st_mtime
         self.link_path = None
         if stat.S_ISLNK(self.mode):
-            self.path_type = PathType.LINK_UNCLASSIFIED
+            self.path_type = PathType.LINK
             self.link_path = self.path.resolve()
         elif stat.S_ISDIR(self.mode):
             self.path_type = PathType.DIRECTORY
         elif stat.S_ISREG(self.mode):
             self.path_type = PathType.FILE
-        # TODO (2022-08-18): Implement a way of detecting absolute/common paths
         else:
             # Might be worth throwing an error here?
             self.path_type = PathType.NOT_RECOGNISED
@@ -180,7 +233,7 @@ class PathDetails(BaseModel):
         self.permissions will be returned instead.
         """
         StatResult = namedtuple(
-            "StatResult", "st_mode st_uid st_gid st_atime st_mtime " "st_size"
+            "StatResult", "st_mode st_uid st_gid st_atime " "st_size"
         )
         if not self.mode:
             mode = self.permissions
@@ -191,8 +244,7 @@ class PathDetails(BaseModel):
             self.user,
             self.group,
             self.access_time,
-            self.modify_time,
-            self.size * 1000,
+            self.size,
         )
 
     def check_permissions(self, uid: int, gid: int, access=os.R_OK):
