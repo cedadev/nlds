@@ -54,11 +54,12 @@ AGGREGATION_ID = "aggregation_id"
 CHECKSUM = "checksum"
 NEW_TARNAME = "new_tarname"
 PREPARE_ID = "prepare_id"
+STORAGE_LOCATIONS = "storage_locations"
+STORAGE_COUNT = "storage_count"
 
 RETRIES = "retries"
 RETRIES_COUNT = "count"
 RETRIES_REASONS = "reasons"
-RETRIES_SAVED_REASONS = "saved_reasons"
 
 TYPE = "type"
 TYPE_STANDARD = "standard"
