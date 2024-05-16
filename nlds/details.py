@@ -101,7 +101,7 @@ class PathLocation(BaseModel):
             url_netloc=dictionary["url_netloc"],
             root=dictionary["root"],
             path=dictionary["path"],
-            access_time=dictionary["access_time"]
+            access_time=dictionary["access_time"],
         )
 
 
@@ -125,7 +125,7 @@ class PathLocations(BaseModel):
         out_dict = {}
         for l in self.locations:
             out_dict[l.storage_type] = l.to_dict()
-        return {MSG.STORAGE_LOCATIONS : out_dict}
+        return {MSG.STORAGE_LOCATIONS: out_dict}
 
     @classmethod
     def from_dict(cls, dictionary: Dict[str, Any]) -> None:
