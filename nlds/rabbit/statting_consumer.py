@@ -158,9 +158,7 @@ class StattingConsumer(RMQC):
             pwd_uid = pwddata.pw_uid
             pwd_gid = pwddata.pw_gid
         except KeyError as e:
-            self.log(
-                f"Problem fetching uid using username {username}", RK.LOG_ERROR
-            )
+            self.log(f"Problem fetching uid using username {username}", RK.LOG_ERROR)
             raise e
 
         # Get list of groups containing the given username
