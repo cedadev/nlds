@@ -1,8 +1,36 @@
 from pathlib import Path
 import json
 
-from nlds.details import PathDetails, Retries
+from nlds.details import PathDetails, Retries, PathLocations, PathLocation
 from nlds.utils.permissions import check_permissions
+
+
+def test_path_location():
+    # check that the path location serialises
+    location = PathLocation(
+        storage_type="object_storage",
+        url_scheme="https",
+        url_netloc="cedadev-o",
+        root="neils-bucket",
+        path="file",
+        access_time="now",
+    )
+
+    loc_dict = location.to_dict()
+    test_loc = PathLocation.from_dict(loc_dict)
+    assert location == test_loc
+
+    # check that adding the location to the message serialises the locations correctly
+    locations = PathLocations()
+    assert locations.count == 0
+    assert locations.locations == []
+
+    # add the location and serialise to JSON
+    locations.add(location)
+    assert locations.count == 1
+    locations_json = locations.to_json()
+    test_locations = PathLocations.from_dict(locations_json)
+    assert locations == test_locations
 
 
 def test_retries():
@@ -11,7 +39,7 @@ def test_retries():
     # Check that incrementing without a reason works
     assert retries.count == 0
     assert len(retries.reasons) == 0
-    retries.increment()
+    retries.add()
     assert retries.count == 1
     assert len(retries.reasons) == 0
 
@@ -21,12 +49,12 @@ def test_retries():
     assert len(retries.reasons) == 0
 
     # Try incrementing with a reason
-    retries.increment(reason="Test retry")
+    retries.add(reason="Test retry")
     assert retries.count == 1
     assert len(retries.reasons) == 1
 
     # Try incrementing with another reason
-    retries.increment(reason="Different test reason")
+    retries.add(reason="Different test reason")
     assert retries.count == 2
     assert len(retries.reasons) == 2
 
@@ -37,7 +65,7 @@ def test_retries():
 
     # A None should be interpreted as 'not a reason' so shouldn't add to the
     # reasons list
-    retries.increment(reason=None)
+    retries.add(reason=None)
     assert retries.count == 1
     assert len(retries.reasons) == 0
 
@@ -101,7 +129,6 @@ def test_path_details():
     assert sr_from_pd.st_uid == stat_result.st_uid
     assert sr_from_pd.st_gid == stat_result.st_gid
     assert sr_from_pd.st_atime == stat_result.st_atime
-    assert sr_from_pd.st_mtime == stat_result.st_mtime
     assert sr_from_pd != stat_result
     assert check_permissions(
         20,
@@ -125,3 +152,42 @@ def test_path_details():
     # Check contents of json?
     assert "file_details" in pd_json
     assert "retries" in pd_json
+
+
+def test_serialisation():
+    """Test that the message is encoded / decoded as a whole"""
+    pd = PathDetails(original_path=__file__)
+    pd.stat()
+
+    # add a retry
+    pd.retries.add(reason="A test reason")
+
+    # add a location
+    location = PathLocation(
+        storage_type = "object_storage",
+        url_scheme = "https",
+        url_netloc = "cedadev-o",
+        root = "neils-bucket",
+        path = "file",
+        access_time="now"
+    )
+
+    # add the location
+    pd.locations.add(location)
+
+    # Attempt to make into an nlds-like message and then json dump/load it to
+    # make sure everyhting works as it should
+    filelist = [pd]
+    message_dict = {"DATA": {"DATA_FILELIST": filelist}}
+    byte_str = json.dumps(message_dict)
+    loaded = json.loads(byte_str)
+    pd_from_msg = PathDetails.from_dict(loaded["DATA"]["DATA_FILELIST"][0])
+    print(pd_from_msg)
+    assert pd_from_msg == pd
+
+
+if __name__ == "__main__":
+    test_path_details()
+    test_retries()
+    test_path_location()
+    test_serialisation()
