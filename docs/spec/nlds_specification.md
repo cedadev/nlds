@@ -407,15 +407,7 @@ optional for each processor.  The `json` document looks like this:
 
 which mostly consists of the result of a stat call on the path/file in question, 
 as well as some useful metadata. The file type is included, which can be one of 
-a few options: FILE, DIRECTORY, LINK_COMMON_PATH, LINK_ABSOLUTE_PATH. The 
-distinction between these latter 2 options is whether the path of a given 
-symlink lies within the 'common path' of the files given in the transaction and 
-can therefore be stored as a relative link_path, or whether it lies outside of 
-the 'common path' and therefore must be stored as an absolute link_path. Note 
-that a symlink given as an absolute path to somewhere within the common path 
-should be stored as a LINK_COMMON_PATH - and therefore as a relative link_path - 
-and conversely a symlink given as a relative path to somewhere outside the 
-'common path' should be stored as an absolute LINK_ABSOLUTE_PATH.
+a few options: FILE, DIRECTORY, LINK.
 
 `object_name` in the above json document refers to the name of the object once 
 written to the object store. 
