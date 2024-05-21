@@ -23,7 +23,6 @@ from retry import retry
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-import nlds.rabbit.delays as DLY
 import nlds.server_config as CFG
 
 from nlds.rabbit.keepalive import KeepaliveDaemon
@@ -31,18 +30,8 @@ from nlds.errors import RabbitRetryError
 
 logger = logging.getLogger("nlds.root")
 
+
 class RabbitMQPublisher:
-    def __define_delays(self):
-        try:
-            # Do some basic verification of the general retry delays.
-            self.retry_delays = self.general_config[DLY.RETRY_DELAYS]
-            assert isinstance(self.retry_delays, Sequence) and not isinstance(
-                self.retry_delays, str
-            )
-            assert len(self.retry_delays) > 0
-            assert isinstance(self.retry_delays[0], int)
-        except (KeyError, TypeError, AssertionError):
-            self.retry_delays = DLY.DEFAULT_RETRY_DELAYS
 
     def __init__(self, name="publisher", setup_logging_fl=False):
         # Get rabbit-specific section of config file
@@ -74,7 +63,6 @@ class RabbitMQPublisher:
         self.timeout = self.config.get(CFG.RABBIT_CONFIG_TIMEOUT) or 1800  # 30 mins
         self.keepalive = None
 
-        self.__define_delays()
         # setup the logger
         if setup_logging_fl:
             self.setup_logging()
@@ -234,16 +222,6 @@ class RabbitMQPublisher:
             # NOTE: don't reraise in this case, can cause an infinite loop as
             # the message will never be sent.
             # raise RabbitRetryError(str(e), ampq_exception=e)
-
-    def get_retry_delay(self, retries: int):
-        """Simple convenience function for getting the delay (in seconds) for an
-        indexlist with a given number of retries. Works off of the member
-        variable self.retry_delays, maxing out at its final value i.e. if there
-        are 5 elements in self.retry_delays, and 7 retries requested, then the
-        5th element is returned.
-        """
-        retries = min(retries, len(self.retry_delays) - 1)
-        return int(self.retry_delays[retries])
 
     def close_connection(self) -> None:
         self.connection.close()

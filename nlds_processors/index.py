@@ -1,14 +1,22 @@
 import json
 import os
-import pathlib as pth
+import pathlib
 from typing import List, NamedTuple, Dict, Any
 
 from nlds.rabbit.statting_consumer import StattingConsumer
-from nlds.rabbit.consumer import State, FilelistType
+from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-import nlds.rabbit.delays as DLY
+
+
+class IndexError(Exception):
+    def __init__(self, message, *args):
+        super().__init__(args)
+        self.message = message
+
+    def __str__(self):
+        return self.message
 
 
 class IndexerConsumer(StattingConsumer):
@@ -21,7 +29,6 @@ class IndexerConsumer(StattingConsumer):
     _FILELIST_MAX_LENGTH = "filelist_max_length"
     _MESSAGE_MAX_SIZE = "message_threshold"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
-    _MAX_RETRIES = "max_retries"
     _CHECK_PERMISSIONS = "check_permissions_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
     _MAX_FILESIZE = "max_filesize"
@@ -30,11 +37,9 @@ class IndexerConsumer(StattingConsumer):
         _FILELIST_MAX_LENGTH: 1000,
         _MESSAGE_MAX_SIZE: 16 * 1000 * 1000,  # in kB
         _PRINT_TRACEBACKS: False,
-        _MAX_RETRIES: 5,
         _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
         _MAX_FILESIZE: (500 * 1000 * 1000),  # in kB, default=500GB
-        DLY.RETRY_DELAYS: DLY.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -44,11 +49,9 @@ class IndexerConsumer(StattingConsumer):
         self.filelist_max_len = self.load_config_value(self._FILELIST_MAX_LENGTH)
         self.message_max_size = self.load_config_value(self._MESSAGE_MAX_SIZE)
         self.print_tracebacks_fl = self.load_config_value(self._PRINT_TRACEBACKS)
-        self.max_retries = self.load_config_value(self._MAX_RETRIES)
         self.check_permissions_fl = self.load_config_value(self._CHECK_PERMISSIONS)
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
         self.max_filesize = self.load_config_value(self._MAX_FILESIZE)
-        self.retry_delays = self.load_config_value(DLY.RETRY_DELAYS)
 
         self.reset()
 
@@ -109,7 +112,6 @@ class IndexerConsumer(StattingConsumer):
                 filelist[slc],
                 rk_index,
                 body_json,
-                mode=FilelistType.processed,
                 state=State.SPLITTING,
             )
 
@@ -153,6 +155,7 @@ class IndexerConsumer(StattingConsumer):
             )
             return
 
+        # parse the input filelist from the JSON passed in via the HTTP body
         filelist = self.parse_filelist(body_json)
         filelist_len = len(filelist)
 
@@ -167,193 +170,115 @@ class IndexerConsumer(StattingConsumer):
             else:
                 self._scan()
 
+    def _index_r(
+        self,
+        item_path: PathDetails,
+        rk_complete: str,
+        rk_failed: str,
+        body_json: Dict[str, str],
+    ):
+        """Recursively index the item_path"""
+        # check that there is sufficient permission to access the item_path
+        try:
+            if not self.check_path_access(item_path.path):
+                error_reason = f"Path:{item_path.path} is inaccessible."
+                raise IndexError(message=error_reason)
+            if item_path.path.is_dir():
+                # item is a directory - list what is in the directory
+                sub_file_list = os.listdir(item_path.path)
+                # process and send via recursion
+                for sf in sub_file_list:
+                    root_path = pathlib.Path(item_path.path)
+                    new_item_path = PathDetails(original_path=str(root_path / sf))
+                    self._index_r(new_item_path)
+
+            elif item_path.path.is_file():
+                # item is a file - stat it
+                item_path.stat()
+                # check the filesize
+                if self.check_filesize_fl and item_path.size > self.max_filesize:
+                    error_reason = (
+                        f"Filesize: {item_path.size / 1000}MB for path: {item_path.path}"
+                        f"is too big for the NLDS tape system."
+                        f" The max allowed file size is {self.max_filesize / 1000}MB."
+                    )
+                    raise IndexError(message=error_reason)
+                # add to the complete list - use append_and_send to subdivide if
+                # necessary
+                self.append_and_send(
+                    self.completelist,  # the list to add to
+                    item_path,
+                    routing_key=rk_complete,
+                    body_json=body_json,
+                    state=State.INDEXING,
+                )
+            else:
+                # item is unknown
+                error_reason = f"Path:{item_path.path} is of unknown type."
+                raise IndexError(message=error_reason)
+        except IndexError as ie:
+            # add to the failed list - use append_and_send to subdivide if necessary
+            item_path.failure_reason = ie.message
+            # this should be append and send
+            self.append_and_send(
+                self.failedlist,
+                item_path,
+                routing_key=rk_failed,
+                body_json=body_json,
+                state=State.FAILED,
+            )
+
     def _index(
-        self, raw_filelist: List[NamedTuple], rk_origin: str, body_json: Dict[str, Any]
+        self, raw_filelist: List[PathDetails], rk_origin: str, body_json: Dict[str, Any]
     ):
         """Indexes a list of PathDetails.
-
-        Each IndexItem is a named tuple consisting of an item (a file or
-        directory) and an associated number of attempted accesses. This function
-        checks if each item exists, fully walking any directories and
+            :param List[PathDetails] raw_filelist:  List of PathDetails containing
+                paths to files or indexable directories and the number of times each
+                has been attempted to be indexed.
+            :param str rk_origin:   The first section of the received message's
+                routing key which designates its origin.
+            :param dict body_json:  The message body in dict form.
+        This function checks if each item exists, fully walking any directories and
         subdirectories in the process, and then checks permissions on each
         available file. All accessible files are added to an 'indexed' list and
         sent back to the exchange for transfer once that list has reached a
-        pre-configured size (default 1000MB) or the end of IndexItem list has
+        pre-configured size (default 1000MB) or the end of PathDetails list has
         been reached, whichever comes first.
 
         If any item cannot be found, indexed or accessed then it is added to a
-        'problem' list for another attempt at indexing. If a maximum number of
-        retries is reached and the item has still not been indexed then it is
-        added to a final 'failed' list which is sent back to the exchange so the
-        user can be informed via monitoring.
-
-        :param List[NamedTuple] raw_filelist:  List of IndexItems containing
-            paths to files or indexable directories and the number of times each
-            has been attempted to be indexed.
-        :param str rk_origin:   The first section of the received message's
-            routing key which designates its origin.
-        :param dict body_json:  The message body in dict form.
-
+        'failed' list to inform the user that it failed.
         """
         rk_complete = ".".join([rk_origin, RK.INDEX, RK.COMPLETE])
-        rk_retry = ".".join([rk_origin, RK.INDEX, RK.START])
         rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 
-        # Checking the lengths of file- and reset- lists is no longer necessary
+        for item_path in raw_filelist:
+            # all errors will now be handled by raising an IndexError in the _index_r
+            # function
+            self._index_r(item_path)
 
-        for path_details in raw_filelist:
-            item_p = path_details.path
-
-            # If any items has exceeded the maximum number of retries we add it
-            # to the dead-end failed list
-            if path_details.retries.count > self.max_retries:
-                # Append to failed list (in self) and send back to exchange if
-                # the appropriate size.
-                self.log(
-                    f"{path_details.path} has exceeded max retry count, "
-                    "adding to failed list.",
-                    RK.LOG_DEBUG,
-                )
-                self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="failed"
-                )
-
-                # Skip to next item and avoid access logic
-                continue
-
-            # If item does not exist, or is not accessible, add to problem list
-            if not self.check_path_access(item_p):
-                # Increment retry counter and add to retry list
-                reason = f"Path:{path_details.path} is inaccessible."
-                self.log(reason, RK.LOG_DEBUG)
-                path_details.retries.add(reason=reason)
-                self.append_and_send(
-                    path_details, rk_retry, body_json, list_type="retry"
-                )
-
-            elif item_p.is_dir():
-                # Index directories by walking them
-                for directory, dirs, subfiles in os.walk(item_p):
-                    # Loop through dirs and remove from walk if not accessible
-                    directory_path = pth.Path(directory)
-                    dirs[:] = [
-                        d for d in dirs if self.check_path_access(directory_path / d)
-                    ]
-
-                    # Loop through subfiles and append each to appropriate
-                    # output filelist
-                    for f in subfiles:
-                        f_path = directory_path / f
-
-                        # We create a new PathDetails for each walked file
-                        # with a zeroed retry counter.
-                        walk_path_details = PathDetails(original_path=str(f_path))
-
-                        # Grab stat early - we need it later if checking file
-                        # sizes
-                        stat_result = None
-                        if self.check_filesize_fl:
-                            stat_result = f_path.stat()
-                            walk_path_details.stat(stat_result=stat_result)
-
-                        # Check if given user has read or write access
-                        if self.check_path_access(f_path, stat_result=stat_result):
-                            # Use the stat_results to check for filesize size
-                            # (in kilobytes)
-                            filesize = None
-                            if self.check_filesize_fl:
-                                filesize = self.get_filesize(
-                                    walk_path_details, rk_retry, body_json
-                                )
-                                if filesize is None:
-                                    continue
-
-                            # Pass the size through to ensure maximum size is
-                            # used as the partitioning metric (if checking file
-                            # size)
-                            self.append_and_send(
-                                walk_path_details,
-                                rk_complete,
-                                body_json,
-                                list_type="indexed",
-                                filesize=filesize,
-                            )
-                        else:
-                            # If file is not valid, not accessible with uid and
-                            # gid if checking permissions, and not existing
-                            # otherwise, then add to problem list. Note that we
-                            # can't check the size of the problem list as files
-                            # may not exist
-                            reason = f"Path:{walk_path_details.path} is inaccessible."
-                            self.log(reason, RK.LOG_DEBUG)
-                            walk_path_details.retries.add(reason=reason)
-                            self.append_and_send(
-                                walk_path_details,
-                                rk_retry,
-                                body_json,
-                                list_type="retry",
-                            )
-
-            # Index files directly in exactly the same way as above
-            elif item_p.is_file():
-                # Stat the file to check for size, if checking (in kilobytes)
-                filesize = None
-                if self.check_filesize_fl:
-                    path_details.stat()
-                    filesize = self.get_filesize(path_details, rk_retry, body_json)
-                    if filesize is None:
-                        continue
-
-                # Pass the size through to ensure maximum size is
-                # used as the partitioning metric
-                self.append_and_send(
-                    path_details,
-                    rk_complete,
-                    body_json,
-                    list_type="indexed",
-                    filesize=filesize,
-                )
-            else:
-                reason = f"Path:{path_details.path} is of unknown type."
-                self.log(reason, RK.LOG_DEBUG)
-                path_details.retries.add(reason=reason)
-                self.append_and_send(
-                    path_details, rk_retry, body_json, list_type="retry"
-                )
-
-        # Send whatever remains after all directories have been walked
+        # finalise the pathlists - anything left in the completed and failed lists
         if len(self.completelist) > 0:
             self.send_pathlist(
-                self.completelist, rk_complete, body_json, mode="indexed"
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body_json,
+                state=State.INDEXING,
             )
 
-        if len(self.retrylist) > 0:
-            self.send_pathlist(self.retrylist, rk_retry, body_json, mode="retry")
-
         if len(self.failedlist) > 0:
-            self.send_pathlist(self.failedlist, rk_failed, body_json, mode="failed")
+            self.send_pathlist(
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body_json,
+                state=State.FAILED,
+            )
 
     def check_path_access(
-        self, path: pth.Path, stat_result: NamedTuple = None, access: int = os.R_OK
+        self, path: pathlib.Path, stat_result: NamedTuple = None, access: int = os.R_OK
     ) -> bool:
         return super().check_path_access(
             path, stat_result, access, self.check_permissions_fl
         )
-
-    def get_filesize(
-        self, path_details: PathDetails, rk_retry: str, body_json: Dict[str, Any]
-    ) -> bool:
-        filesize = path_details.size
-        if filesize >= self.max_filesize:
-            reason = (
-                f"File too large for the NLDS tape system ({filesize / 1000}MB)."
-                f" The max allowed file size is {self.max_filesize / 1000}MB."
-            )
-            self.log(reason, RK.LOG_DEBUG)
-            path_details.retries.add(reason=reason)
-            self.append_and_send(path_details, rk_retry, body_json, list_type="retry")
-            return None
-        return filesize
 
 
 def main():

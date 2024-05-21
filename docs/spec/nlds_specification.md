@@ -155,8 +155,12 @@ on the POSIX filesystem, object storage and tape storage:
 * access_key : the user's access key for the object storage
 * secret_key : the user's secret key for the object storage
 
-** NOTE ** it is unsatisfactory sending the access_key and secret_key in the parameters, even over HTTPS.  We will probably instigate a service that will exchange a user token for the access key at the point of transfer, using OAuth2.
+---
+
+**NOTE** it is unsatisfactory sending the access_key and secret_key in the parameters, even over HTTPS.  We will probably instigate a service that will exchange a user token for the access key at the point of transfer, using OAuth2.
 This will require adding the interface to do so to the object storage.
+
+---
 
 ### PUT command
 
@@ -407,7 +411,7 @@ optional for each processor.  The `json` document looks like this:
 
 which mostly consists of the result of a stat call on the path/file in question, 
 as well as some useful metadata. The file type is included, which can be one of 
-a few options: FILE, DIRECTORY, LINK.
+three options: FILE, DIRECTORY, LINK.
 
 `object_name` in the above json document refers to the name of the object once 
 written to the object store. 
@@ -853,6 +857,15 @@ The boring / safe option
 
 
 ## Retry mechanism
+
+---
+
+**NOTE**
+
+The retry mechanism went through a massive overhaul in May 2024, to simplify and remove a lot of it.
+
+---
+
 At any stage in the transaction, one component of the storage hierarchy may not 
 be available.  This could be during a PUT, where the disk that the user's files
 reside on is not available, or the object storage target may not be available.
@@ -912,6 +925,14 @@ configuration of:
 
 Subsequent retries will continue to wait 5 days, until the maximum retry limit 
 is reached (default = 5).
+
+---
+
+**NOTE**
+
+Retries should only occur for timeouts - i.e. we should fail immediately if something goes wrong that is not a timeout.
+
+---
 
 ## Monitoring
 Important!

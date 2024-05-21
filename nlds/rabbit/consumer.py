@@ -37,8 +37,7 @@ import nlds.rabbit.message_keys as MSG
 from nlds.rabbit.state import State
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 import nlds.server_config as CFG
-from nlds.details import PathDetails, Retries
-from nlds.errors import RabbitRetryError, CallbackError
+from nlds.details import PathDetails
 
 logger = logging.getLogger("nlds.root")
 
@@ -60,15 +59,14 @@ class RabbitQueue(BaseModel):
         )
 
 
-class FilelistType(Enum):
-    raw = 0
-    processed = 1
-    retry = 2
-    failed = 3
-    indexed = 1
-    transferred = 1
-    catalogued = 1
-    archived = 1
+# class FilelistType(Enum):
+#     raw = 0
+#     processed = 1
+#     failed = 3
+#     indexed = 1
+#     transferred = 1
+#     catalogued = 1
+#     archived = 1
 
 
 class SigTermError(Exception):
@@ -141,9 +139,7 @@ class RabbitMQConsumer(ABC, RMQP):
         # (re)Declare the pathlists here to make them available without having
         # to pass them through every function call.
         self.completelist: List[PathDetails] = []
-        self.retrylist: List[PathDetails] = []
         self.failedlist: List[PathDetails] = []
-        self.max_retries = 5
 
         # Controls default behaviour of logging when certain exceptions are
         # caught in the callback.
@@ -158,7 +154,6 @@ class RabbitMQConsumer(ABC, RMQP):
     def reset(self) -> None:
         self.sent_message_count = 0
         self.completelist = []
-        self.retrylist = []
         self.failedlist = []
 
     def load_config_value(self, config_option: str, path_listify_fl: bool = False):
@@ -251,17 +246,11 @@ class RabbitMQConsumer(ABC, RMQP):
         routing_key: str,
         body_json: Dict[str, Any],
         state: State = None,
-        mode: FilelistType = FilelistType.processed,
         warning: List[str] = None,
-        delay: int = None,
-        save_reasons_fl: bool = False,
     ) -> None:
         """Convenience function which sends the given list of PathDetails
         objects to the exchange with the given routing key and message body.
-        Mode specifies what to put into the log message, as well as determining
-        whether the list should be retry-reset and whether the message should be
-        delayed. Optionally, when resetting the retries the retry-reasons can be
-        saved for later perusal by setting the save_reasons_fl.
+        Mode specifies what to put into the log message.
 
         Additionally forwards transaction state info on to the monitor. As part
         of this it keeps track of the number of messages sent and reassigns
@@ -269,79 +258,15 @@ class RabbitMQConsumer(ABC, RMQP):
         transaction's state more easily.
 
         """
-        # If list_type given as a string then attempt to cast it into an
-        # appropriate enum
-        if not isinstance(mode, FilelistType):
-            try:
-                mode = FilelistType[mode]
-            except KeyError:
-                raise ValueError(
-                    "mode value invalid, must be a FilelistType "
-                    "enum or a string capabale of being cast to "
-                    f"such (mode={mode})"
-                )
-
-        self.log(
-            f"Sending list back to exchange (routing_key = {routing_key})",
-            RK.LOG_INFO,
-        )
-
-        # Get the current state to use in case of retrying with no state set
-        try:
-            current_state = State(body_json[MSG.DETAILS][MSG.STATE])
-        except (ValueError, KeyError) as e:
-            self.log(
-                "Couldn't retrieve current state from message, continuing "
-                "with default state.",
-                RK.LOG_WARNING,
-            )
-            self.log(f"Exception raised during state retrieval: {e}", RK.LOG_DEBUG)
-            current_state = self.DEFAULT_STATE
-
-        body_json[MSG.DETAILS][MSG.RETRY] = False
-        if mode == FilelistType.processed:
-            # Reset the retries (both transaction-level and file-level) upon
-            # successful completion of processing.
-            trans_retries = Retries.from_dict(body_json)
-            trans_retries.reset(save_reasons_fl=save_reasons_fl)
-            body_json.update(trans_retries.to_dict())
-            for path_details in pathlist:
-                path_details.retries.reset(save_reasons_fl=save_reasons_fl)
-            if state is None:
-                state = self.DEFAULT_STATE
-        elif mode == FilelistType.retry:
-            # Delay the retry message depending on how many retries have been
-            # accumulated. All retries in a retry list _should_ be the same so
-            # base it off of the first one.
-            if delay is None:
-                delay = self.get_retry_delay(pathlist[0].retries.count)
-                arrival_time = datetime.now() + timedelta(milliseconds=delay)
-                self.log(
-                    f"Adding {delay / 1000}s delay to retry. Should be "
-                    f"sent at {arrival_time}",
-                    RK.LOG_DEBUG,
-                )
-            body_json[MSG.DETAILS][MSG.RETRY] = True
-            if state is None:
-                state = current_state
-        elif mode == FilelistType.failed:
-            state = State.FAILED
-
         # If necessary values not set at this point then use default values
         if state is None:
             state = self.DEFAULT_STATE
-        if delay is None:
-            delay = 0
-
-        # Create new sub_id for each extra subrecord created.
-        if self.sent_message_count >= 1:
-            body_json[MSG.DETAILS][MSG.SUB_ID] = str(uuid.uuid4())
 
         # Send message to next part of workflow
         body_json[MSG.DATA][MSG.FILELIST] = pathlist
         body_json[MSG.DETAILS][MSG.STATE] = state.value
 
-        self.publish_message(routing_key, body_json, delay=delay)
+        self.publish_message(routing_key, body_json)
 
         # Send message to monitoring to keep track of state
         # add any warning
@@ -351,21 +276,6 @@ class RabbitMQConsumer(ABC, RMQP):
         monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
         self.publish_message(monitoring_rk, body_json)
         self.sent_message_count += 1
-
-    def get_retries(self, body: Dict) -> Retries:
-        """Retrieve the retries from a message. If no present or inaccessible
-        then add new ones."""
-        try:
-            retries = Retries.from_dict(body)
-        except KeyError as e:
-            self.log(
-                f"Could not retrieve message retry information ({e}). "
-                f"Inserting a new Retries dict back into the message.",
-                RK.LOG_INFO,
-            )
-            retries = Retries()
-            body |= retries.to_dict()
-        return retries
 
     def setup_logging(
         self,
@@ -440,72 +350,11 @@ class RabbitMQConsumer(ABC, RMQP):
         )
         self.log(f"Failed message content: {body}", RK.LOG_DEBUG)
 
-    def _handle_expected_error(
-        self, body: bytes, routing_key: str, original_error: Any
-    ):
-        """Handle the workflow of an expected error - attempt to retry the
-        transaction or fail it as apparopriate. Given we don't know exactly what
-        is wrong with the message we need to be quite defensive with error
-        handling here so as to avoid breaking the consumption loop.
-
-        """
-        # First we log the expected error
-        self._log_errored_transaction(body, original_error)
-
-        # Then we try to parse its source and retry information from the message
-        # body.
-        retries = None
-        try:
-            # First try to parse message body for retry information
-            body_json = json.loads(body)
-            retries = Retries.from_dict(body_json)
-        except (JSONDecodeError, KeyError) as e:
-            self.log(
-                "Could not retrieve failed message retry information "
-                f"{e}, will now attempt to fail message in monitoring.",
-                RK.LOG_INFO,
-            )
-        try:
-            # Get message source from routing key, if possible
-            rk_parts = self.split_routing_key(routing_key)
-            rk_source = rk_parts[0]
-        except Exception as e:
-            self.log(
-                "Could not retrieve routing key source, reverting to "
-                "default NLDS value.",
-                RK.LOG_WARNING,
-            )
-            rk_source = RK.ROOT
-
-        monitoring_rk = ".".join([rk_source, RK.MONITOR_PUT, RK.START])
-
-        if retries is not None and retries.count <= self.max_retries:
-            # Retry the job
-            self.log(
-                f"Retrying errored job with routing key {routing_key}", RK.LOG_INFO
-            )
-            try:
-                self._retry_transaction(
-                    body_json, retries, routing_key, monitoring_rk, original_error
-                )
-            except Exception as e:
-                self.log(
-                    f"Failed attempt to retry transaction that failed "
-                    f"during callback. Error: {e}.",
-                    RK.LOG_WARNING,
-                )
-                # Fail the job if at any point the attempt to retry fails.
-                self._fail_transaction(body_json, monitoring_rk)
-        else:
-            # Fail the job
-            self._fail_transaction(body_json, monitoring_rk)
-
     def _fail_transaction(self, body_json: Dict[str, Any], monitoring_rk: str):
         """Attempt to mark transaction as failed in monitoring db"""
         try:
             # Send message to monitoring to keep track of state
             body_json[MSG.DETAILS][MSG.STATE] = State.FAILED
-            body_json[MSG.DETAILS][MSG.RETRY] = False
             self.publish_message(monitoring_rk, body_json)
         except Exception as e:
             # If this fails there's not much we can do at this stage...
@@ -524,33 +373,6 @@ class RabbitMQConsumer(ABC, RMQP):
                 f"Message that couldn't be failed: " f"{json.dumps(body_json)}",
                 RK.LOG_DEBUG,
             )
-
-    def _retry_transaction(
-        self,
-        body_json: Dict[str, Any],
-        retries: Retries,
-        original_rk: str,
-        monitoring_rk: str,
-        error: Exception,
-    ) -> None:
-        """Attempt to retry the message with a retry delay, back to the original
-        routing_key"""
-        # Delay the retry message depending on how many retries have been
-        # accumulated - using simply the transaction-level retries
-        retries.add(reason=f"Exception during callback: {error}")
-        body_json.update(retries.to_dict())
-        delay = self.get_retry_delay(retries.count)
-        self.log(
-            f"Adding {delay / 1000}s delay to retry. Should be sent at"
-            f" {datetime.now() + timedelta(milliseconds=delay)}",
-            RK.LOG_DEBUG,
-        )
-        body_json[MSG.DETAILS][MSG.RETRY] = True
-
-        # Send to original routing key (i.e. retry it) with the requisite delay
-        # and also update the monitoring db.
-        self.publish_message(original_rk, body_json, delay=delay)
-        self.publish_message(monitoring_rk, body_json)
 
     @staticmethod
     def _acknowledge_message(channel: Channel, delivery_tag: str) -> None:
@@ -629,18 +451,6 @@ class RabbitMQConsumer(ABC, RMQP):
         """
         NotImplementedError
 
-    EXPECTED_EXCEPTIONS = (
-        ValueError,
-        TypeError,
-        KeyError,
-        PermissionError,
-        RabbitRetryError,
-        CallbackError,
-        JSONDecodeError,
-        HTTPError,
-        S3Error,
-    )
-
     def _wrapped_callback(
         self,
         ch: Channel,
@@ -665,21 +475,9 @@ class RabbitMQConsumer(ABC, RMQP):
         # errors which can be caught without stopping consumption.
         try:
             ack_fl = self.callback(ch, method, properties, body, connection)
-        except self.EXPECTED_EXCEPTIONS as original_error:
-            self._handle_expected_error(body, method.routing_key, original_error)
         except Exception as e:
-            # NOTE: why are we making this distinction? We can attempt to retry
-            # any message that fails and the worst that can happen is what
-            # already happens now
-            self.log(
-                f"Unexpected exception encountered! The current list of "
-                f"expected exceptions is: {self.EXPECTED_EXCEPTIONS}. Consider "
-                f"adding this exception type ({type(e).__name__}) to the list "
-                f"and accounting for it more specifically. Now attempting to "
-                f"handle message with standard retry/fail mechanism.",
-                RK.LOG_WARNING,
-            )
-            self._handle_expected_error(body, method.routing_key, e)
+            # this is very unsatisfactory!
+            pass
         finally:
             # Only ack message if the message has not been flagged for nacking
             # in the callback with a `return False`

@@ -20,7 +20,7 @@ from nlds.routers import rabbit_publisher
 import nlds.rabbit.message_keys as MSG
 import nlds.rabbit.routing_keys as RK
 from nlds.errors import ResponseError
-from nlds.details import PathDetails, Retries
+from nlds.details import PathDetails
 from nlds.authenticators.authenticate_methods import (
     authenticate_token,
     authenticate_group,
@@ -140,7 +140,6 @@ async def get(
             # Convert to PathDetails for JSON serialisation
             MSG.FILELIST: [PathDetails(original_path=item) for item in contents],
         },
-        **Retries().to_dict(),
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
     response.user = user
@@ -223,7 +222,6 @@ async def put(
             # Convert to PathDetails for JSON serialisation
             MSG.FILELIST: [PathDetails(original_path=item) for item in contents],
         },
-        **Retries().to_dict(),
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
     response.user = user
@@ -317,7 +315,6 @@ async def put(
             # Convert to PathDetails for JSON serialisation
             MSG.FILELIST: [PathDetails(original_path=item) for item in contents],
         },
-        **Retries().to_dict(),
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
     response.user = user
@@ -423,7 +420,6 @@ async def put(
             # Convert to PathDetails for JSON serialisation
             MSG.FILELIST: [PathDetails(original_path=item) for item in contents],
         },
-        **Retries().to_dict(),
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
     response.user = user
