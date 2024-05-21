@@ -50,7 +50,6 @@ from nlds_processors.utils.aggregations import aggregate_files
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-import nlds.rabbit.delays as DLY
 
 
 class Metadata:
@@ -105,7 +104,6 @@ class CatalogConsumer(RMQC):
     _DB_OPTIONS_USER = "db_user"
     _DB_OPTIONS_PASSWD = "db_passwd"
     _DB_ECHO = "echo"
-    _MAX_RETRIES = "max_retries"
     _DEFAULT_TENANCY = "default_tenancy"
     _DEFAULT_TAPE_URL = "default_tape_url"
     _TARGET_AGGREGATION_SIZE = "target_aggregation_size"
@@ -119,19 +117,15 @@ class CatalogConsumer(RMQC):
             _DB_OPTIONS_PASSWD: "",
             _DB_ECHO: True,
         },
-        _MAX_RETRIES: 5,
         _DEFAULT_TENANCY: None,
         _DEFAULT_TAPE_URL: None,
         _TARGET_AGGREGATION_SIZE: 5 * (1024**3),  # Default to 5 GB
         _FULLY_UNPACK_TAR: False,
-        DLY.RETRY_DELAYS: DLY.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-        self.max_retries = self.load_config_value(self._MAX_RETRIES)
-        self.retry_delays = self.load_config_value(DLY.RETRY_DELAYS)
         self.default_tape_url = self.load_config_value(self._DEFAULT_TAPE_URL)
         self.default_tenancy = self.load_config_value(self._DEFAULT_TENANCY)
         self.target_aggregation_size = self.load_config_value(

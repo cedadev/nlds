@@ -4,10 +4,11 @@ import os
 import pytest
 import functools
 
-from nlds.rabbit import publisher as publ
-import nlds.rabbit.statting_consumer as scons
-from nlds.details import PathDetails, Retries
+from nlds.rabbit import publisher as RMQP
+import nlds.rabbit.statting_consumer as RMQSC
+from nlds.details import PathDetails
 from nlds_processors.index import IndexerConsumer
+import nlds.server_config as CFG
 
 
 def mock_load_config(template_config):
@@ -18,7 +19,7 @@ def mock_load_config(template_config):
 def default_indexer(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
     monkeypatch.setattr(
-        publ, "load_config", functools.partial(mock_load_config, template_config)
+        CFG, "load_config", functools.partial(mock_load_config, template_config)
     )
     return IndexerConsumer()
 
@@ -30,9 +31,17 @@ def test_callback(monkeypatch, default_indexer, default_rmq_method, default_rmq_
     default_indexer.callback(None, default_rmq_method, None, default_rmq_body, None)
 
 
+class fs:
+    def create_dir(dirname):
+        os.mkdir(dirname)
+
+    def create_file(filename, filesize):
+        pass
+
+
 @pytest.mark.parametrize("file_size", [0, 1e3, 1e6, 1e9])
 def test_index(
-    monkeypatch, caplog, default_indexer, default_rmq_message_dict, fs, file_size
+    monkeypatch, caplog, default_indexer, default_rmq_message_dict, file_size
 ):
     # Deactivate messaging for test environment and initialise uid and gid
     monkeypatch.setattr(
@@ -82,12 +91,11 @@ def test_index(
     ]
 
     # Should work with any number of retries under the limit
-    for i in range(default_indexer.max_retries):
-        test_filelist = [PathDetails(original_path="/test/", retries=Retries(count=i))]
+    for i in range(0, 5):
+        test_filelist = [PathDetails(original_path="/test/")]
         default_indexer.index(test_filelist, "test", default_rmq_message_dict)
 
         assert len(default_indexer.completelist) == len(expected_filelist)
-        assert len(default_indexer.retrylist) == 0
         assert len(default_indexer.failedlist) == 0
 
         default_indexer.reset()
@@ -96,12 +104,11 @@ def test_index(
 
     # All files should be in failed list with any number of retries over the
     # limit
-    for i in range(default_indexer.max_retries + 1, 10):
-        test_filelist = [PathDetails(original_path="/test/", retries=Retries(count=i))]
+    for i in range(5, 10):
+        test_filelist = [PathDetails(original_path="/test/")]
         default_indexer.index(test_filelist, "test", default_rmq_message_dict)
 
         assert len(default_indexer.completelist) == 0
-        assert len(default_indexer.retrylist) == 0
         assert len(default_indexer.failedlist) == 1  # length of initial list!
 
         default_indexer.reset()
@@ -155,7 +162,7 @@ def test_check_path_access(monkeypatch, default_indexer):
 
     # If exists and has permissions, should be true
     monkeypatch.setattr(
-        scons, "check_permissions", lambda uid, gid, access=None, stat_result=None: True
+        RMQSC, "check_permissions", lambda uid, gid, access=None, stat_result=None: True
     )
     monkeypatch.setattr(Path, "exists", lambda *_: True)
     mp_exists = Path("test.py")
@@ -164,7 +171,7 @@ def test_check_path_access(monkeypatch, default_indexer):
     # If exists and doesn't have permissions, should be false as we're checking
     # permissions!
     monkeypatch.setattr(
-        scons,
+        RMQSC,
         "check_permissions",
         lambda uid, gid, access=None, stat_result=None: False,
     )

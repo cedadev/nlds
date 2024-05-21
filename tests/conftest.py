@@ -8,7 +8,7 @@ import pytest
 
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 import nlds.rabbit.message_keys as MSG
-from nlds.details import PathDetails, Retries
+from nlds.details import PathDetails
 
 
 TEMPLATE_CONFIG_PATH = os.path.join(
@@ -63,7 +63,6 @@ def default_rmq_body(test_uuid):
                 PathDetails(original_path="item_path"),
             ],
         },
-        **Retries().to_dict(),
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
     return json.dumps(msg_dict)

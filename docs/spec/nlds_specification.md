@@ -405,8 +405,6 @@ optional for each processor.  The `json` document looks like this:
             filetype            : <str>, (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
             link_path           : <str>, (link position,path of link, related to either root or common path)
         }
-        retries             : <int>,
-        retry_reasons       : <list<str>>
     }
 
 which mostly consists of the result of a stat call on the path/file in question, 

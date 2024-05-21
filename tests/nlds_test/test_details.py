@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-from nlds.details import PathDetails, Retries, PathLocations, PathLocation
+from nlds.details import PathDetails, PathLocations, PathLocation
 from nlds.utils.permissions import check_permissions
 
 
@@ -31,67 +31,6 @@ def test_path_location():
     locations_json = locations.to_json()
     test_locations = PathLocations.from_dict(locations_json)
     assert locations == test_locations
-
-
-def test_retries():
-    retries = Retries()
-
-    # Check that incrementing without a reason works
-    assert retries.count == 0
-    assert len(retries.reasons) == 0
-    retries.add()
-    assert retries.count == 1
-    assert len(retries.reasons) == 0
-
-    # Check that reset actually resets the count
-    retries.reset()
-    assert retries.count == 0
-    assert len(retries.reasons) == 0
-
-    # Try incrementing with a reason
-    retries.add(reason="Test retry")
-    assert retries.count == 1
-    assert len(retries.reasons) == 1
-
-    # Try incrementing with another reason
-    retries.add(reason="Different test reason")
-    assert retries.count == 2
-    assert len(retries.reasons) == 2
-
-    # Check that reset does indeed work for a list of 2 reasons
-    retries.reset()
-    assert retries.count == 0
-    assert len(retries.reasons) == 0
-
-    # A None should be interpreted as 'not a reason' so shouldn't add to the
-    # reasons list
-    retries.add(reason=None)
-    assert retries.count == 1
-    assert len(retries.reasons) == 0
-
-    # Convert to dict and check integrity of output.
-    # Should be in an outer dict called 'retries'
-    r_dict = retries.to_dict()
-    assert "retries" in r_dict
-
-    # Should contain a count and a reasons list
-    assert "count" in r_dict["retries"]
-    assert isinstance(r_dict["retries"]["count"], int)
-
-    assert "reasons" in r_dict["retries"]
-    assert isinstance(r_dict["retries"]["reasons"], list)
-
-    # Attempt to make a Retries object from the dictionary
-    new_retries = Retries.from_dict(r_dict)
-    assert new_retries.count == 1
-    assert len(new_retries.reasons) == 0
-
-    # Attempt alternative constructor usage
-    alt_retries = Retries(**r_dict["retries"])
-    assert alt_retries.count == 1
-    assert len(alt_retries.reasons) == 0
-
-    assert new_retries == alt_retries
 
 
 def test_path_details():
@@ -164,12 +103,12 @@ def test_serialisation():
 
     # add a location
     location = PathLocation(
-        storage_type = "object_storage",
-        url_scheme = "https",
-        url_netloc = "cedadev-o",
-        root = "neils-bucket",
-        path = "file",
-        access_time="now"
+        storage_type="object_storage",
+        url_scheme="https",
+        url_netloc="cedadev-o",
+        root="neils-bucket",
+        path="file",
+        access_time="now",
     )
 
     # add the location

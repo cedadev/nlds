@@ -128,7 +128,7 @@ class IndexerConsumer(StattingConsumer):
         # Index the entirety of the passed filelist and check for
         # permissions. The size of the packet will also be evaluated
         # and used to send lists of roughly equal size.
-        self._index(filelist, rk_parts[0], body_json)
+        self.index(filelist, rk_parts[0], body_json)
         self.log(f"Scan finished.", RK.LOG_INFO)
 
     def callback(self, ch, method, properties, body, connection):
@@ -143,7 +143,7 @@ class IndexerConsumer(StattingConsumer):
         )
 
         # Check for system status
-        if self._is_system_status_check(properties):
+        if self._is_system_status_check(body_json=body_json, properties=properties):
             return
 
         # Verify routing key is appropriate
@@ -228,7 +228,7 @@ class IndexerConsumer(StattingConsumer):
                 state=State.FAILED,
             )
 
-    def _index(
+    def index(
         self, raw_filelist: List[PathDetails], rk_origin: str, body_json: Dict[str, Any]
     ):
         """Indexes a list of PathDetails.
@@ -254,7 +254,12 @@ class IndexerConsumer(StattingConsumer):
         for item_path in raw_filelist:
             # all errors will now be handled by raising an IndexError in the _index_r
             # function
-            self._index_r(item_path)
+            self._index_r(
+                item_path,
+                rk_complete,
+                rk_failed,
+                body_json=body_json
+            )
 
         # finalise the pathlists - anything left in the completed and failed lists
         if len(self.completelist) > 0:

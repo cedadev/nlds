@@ -156,28 +156,12 @@ by inserting a ``logging`` sub-dictionary into a consumer-specific optional
 section. Each sub-dictionary has identical configuration options to those listed 
 above.
 
-General
-^^^^^^^
-
-The general config, as of writing this page, only covers one option: the 
-retry_delays list::
-
-    "general": {
-        "retry_delays": List[int]
-    }
-
-This retry delays list gives the delay applied to retried messages in seconds, 
-with the ``n``th element being the delay for the ``n``th retry. Setting the 
-value here sets a default for `all` consumers, but the retry_delays option can 
-be inserted into any consumer-specific config section to override this. 
-
 Consumer-specific optional sections
 -----------------------------------
 
 Each of the consumers have their own configuration dictionary, named by 
 convention as ``{consumername}_q``, e.g. ``transfer_put_q``. Each has a set of 
-default options and will accept both a logging dictionary and a retry_delays 
-list for consumer-specific override of the default options, mentioned above. 
+default options and will accept a logging dictionary in addition to other options. 
 Each consumer also has a specific set of config options, some shared, which will 
 control its behaviour. The following is a brief rundown of the server config 
 options for each consumer. 
@@ -188,7 +172,6 @@ The server config section is ``nlds_q``, and the following options are available
 
     "nlds_q": {
         "logging": [standard_logging_dictionary],
-        "retry_delays": List[int],
         "print_tracebacks_fl": boolean
     }
 
@@ -196,9 +179,7 @@ Not much specifically happens in the NLDS worker that requires configuration, so
 it basically just has the default settings. One that has not been covered yet, 
 ``print_tracebacks_fl``, is a boolean flag to control whether the full 
 stacktrace of any caught exception is sent to the logger. This is a standard 
-across all consumers. You may set retry_delays if you wish but the NLDS worker 
-doesn't retry messages specifically, only in the case of something going 
-unexpectedly wrong.
+across all consumers.
 
 Indexer
 ^^^^^^^
@@ -207,17 +188,15 @@ Server config section is ``index_q``, and the following options are available::
 
     "index_q": {
         "logging": {standard_logging_dictionary},
-        "retry_delays": List[int],
         "print_tracebacks_fl": boolean,
         "filelist_max_length": int,
         "message_threshold": int,
-        "max_retries": int,
         "check_permissions_fl": boolean,
         "check_filesize_fl": boolean,
         "max_filesize": int
     }
 
-where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are, as above,
+where ``logging`` and ``print_tracebacks_fl`` are, as above,
 standard configurables within the NLDS consumer ecosystem. 
 ``filelist_maxlength`` determines the maximum length that any file-list provided 
 to the indexer consumer during the `init` (i.e. `split`) step can be. Any 
@@ -232,15 +211,7 @@ sub-transaction.
 size of files within a given filelist. It is applied at the indexing 
 (`nlds.index`) step when files have actually been statted, and so will further 
 sub-divide any sub-transactions at that point if they are too large or are 
-revealed to contain lots of folders with files in upon indexing. ``max_retries``
-control the maximum number of times an entry in a filelist can be attempted to 
-be indexed, either because it doesn't exist or the user doesn't have the 
-appropriate permissions to access it at time of indexing. This feeds into retry 
-delays, as each subsequent time a sub-transaction is retried it will be delayed 
-by the amount specified at that index within the ``retry_delays`` list. If 
-``max_retries`` exceeds ``len(retry_delays)``, then any retries which don't have 
-an explicit retry delay to use will use the final element in the ``retry_delays`` 
-list.
+revealed to contain lots of folders with files in upon indexing.
 
 ``check_permissions_fl`` and ``check_filesize_fl`` are commonly used boolean 
 flags to control whether the indexer checks the permissions and filesize of 
@@ -258,9 +229,7 @@ The server config entry for the catalog consumer is as follows::
 
     "catalog_q": {
         "logging": {standard_logging_dictionary},
-        "retry_delays": List[int],
         "print_tracebacks_fl": boolean,
-        "max_retries": int,
         "db_engine": str,
         "db_options": {
             "db_name" : str,
@@ -272,9 +241,8 @@ The server config entry for the catalog consumer is as follows::
         default_tape_url: str
     }
 
-where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` are, as above,
-standard configurables within the NLDS consumer ecosystem. ``max_retries`` is 
-similarly available in the cataloguer, with the same meaning as defined above. 
+where ``logging``, and ``print_tracebacks_fl`` are, as above,
+standard configurables within the NLDS consumer ecosystem. 
 
 Here we also have two keys which control database behaviour via SQLAlchemy: 
 ``db_engine`` and ``db_options``. ``db_engine`` is a string which specifies 
@@ -301,8 +269,6 @@ The server entry for the transfer-put consumer is as follows::
 
     "transfer_put_q": {
         "logging": {standard_logging_dictionary},
-        "max_retries": int,
-        "retry_delays": List[int],
         "print_tracebacks_fl": boolean,
         "filelist_max_length": int,
         "check_permissions_fl": boolean,
@@ -310,9 +276,9 @@ The server entry for the transfer-put consumer is as follows::
         "require_secure_fl": false
     }
 
-where we have ``logging``, ``retry_delays`` and ``print_tracebacks_fl`` as their
-standard definitions defined above, and ``max_retries``, ``filelist_max_length``
-, and ``check_permissions_fl`` defined the same as for the Indexer consumer. 
+where we have ``logging``, and ``print_tracebacks_fl`` as their
+standard definitions defined above, and ``filelist_max_length``,
+and ``check_permissions_fl`` defined the same as for the Indexer consumer. 
 
 New definitions for the transfer processor are the ``tenancy`` and 
 ``require_secure_fl``, which control ``minio`` behaviour. ``tenancy`` is a 
@@ -344,7 +310,6 @@ The server config entry for the monitor consumer is as follows::
 
     "monitor_q": {
         "logging": {standard_logging_dictionary},
-        "retry_delays": List[int],
         "print_tracebacks_fl": boolean,
         "db_engine": str,
         "db_options": {
@@ -355,11 +320,10 @@ The server config entry for the monitor consumer is as follows::
         }
     }
 
-where ``logging``, ``retry_delays``, and ``print_tracebacks_fl`` have the 
+where ``logging``,  and ``print_tracebacks_fl`` have the 
 standard, previously stated definitions, and ``db_engine`` and ``db_options`` 
 are as defined for the Catalog consumer - due to the use of an SQL database on 
-the Monitor. Note the minimal retry control, as the monitor only retries 
-messages which failed due to an unexpected exception. 
+the Monitor.
 
 Logger
 ^^^^^^
@@ -386,8 +350,6 @@ Finally, the server config entry for the archive-put consumer is as follows::
 
     "archive_put_q": {
         "logging": {standard_logging_dictionary}
-        "max_retries": int,
-        "retry_delays": List[int],
         "print_tracebacks_fl": boolean,
         "tenancy": str,
         "check_permissions_fl": boolean,
@@ -400,7 +362,7 @@ Finally, the server config entry for the archive-put consumer is as follows::
 
 which is a combination of standard configuration, object-store configuration and 
 as-yet-unseen tape configuration. Firstly, we have the standard options 
-``logging``, ``max_retries``, ``retry_delays``, and ``print_tracebacks_fl``, 
+``logging``, and ``print_tracebacks_fl``, 
 which we have defined above. Then we have the object-store configuration options 
 which we saw previously in the :ref:`transfer_put_get` consumer config, and have 
 the same definitions. 
