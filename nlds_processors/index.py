@@ -190,7 +190,12 @@ class IndexerConsumer(StattingConsumer):
                 for sf in sub_file_list:
                     root_path = pathlib.Path(item_path.path)
                     new_item_path = PathDetails(original_path=str(root_path / sf))
-                    self._index_r(new_item_path)
+                    self._index_r(
+                        new_item_path,
+                        rk_complete=rk_complete,
+                        rk_failed=rk_failed,
+                        body_json=body_json
+                    )
 
             elif item_path.path.is_file():
                 # item is a file - stat it

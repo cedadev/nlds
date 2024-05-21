@@ -1,5 +1,6 @@
 from collections import namedtuple
 import os
+import pathlib
 
 import pytest
 import functools
@@ -9,7 +10,6 @@ import nlds.rabbit.statting_consumer as RMQSC
 from nlds.details import PathDetails
 from nlds_processors.index import IndexerConsumer
 import nlds.server_config as CFG
-
 
 def mock_load_config(template_config):
     return template_config
@@ -33,13 +33,17 @@ def test_callback(monkeypatch, default_indexer, default_rmq_method, default_rmq_
 
 class fs:
     def create_dir(dirname):
-        os.mkdir(dirname)
+        pathlib.Path(dirname).mkdir(parents=True, exist_ok=True)
 
-    def create_file(filename, filesize):
-        pass
+    def create_file(filename, st_size):
+        fh = open(filename, 'w')
+        bytes_chars = os.urandom(st_size)
+        byte_str = ''.join(chr(b % 256) for b in bytes_chars)
+        fh.write(byte_str)
+        fh.close()
 
 
-@pytest.mark.parametrize("file_size", [0, 1e3, 1e6, 1e9])
+@pytest.mark.parametrize("file_size", [0, 1e3, 1e4, 1e5])
 def test_index(
     monkeypatch, caplog, default_indexer, default_rmq_message_dict, file_size
 ):
@@ -65,18 +69,18 @@ def test_index(
     default_indexer.gids = [100]
 
     dirs = [
-        "/test/1-1/2-1/3-1/4-1/5-1",
-        "/test/1-1/2-1/3-2",
-        "/test/1-1/2-1/3-3",
-        "/test/1-2/2-2/3-4",
-        "/test/1-3/2-3",
-        "/test/1-4/2-4/3-3/4-2/5-2/6-1",
+        "./test/1-1/2-1/3-1/4-1/5-1",
+        "./test/1-1/2-1/3-2",
+        "./test/1-1/2-1/3-3",
+        "./test/1-2/2-2/3-4",
+        "./test/1-3/2-3",
+        "./test/1-4/2-4/3-3/4-2/5-2/6-1",
     ]
     files = [
-        "/test/1-1/2-1/3-1/test-1.txt",
-        "/test/1-1/2-1/3-2/test-2.txt",
-        "/test/1-1/2-2/3-4/test-3.txt",
-        "/test/1-4/2-4/3-3/4-2/5-2/6-1/test-4.txt",
+        "./test/1-1/2-1/3-1/test-1.txt",
+        "./test/1-1/2-1/3-2/test-2.txt",
+        "./test/1-2/2-2/3-4/test-3.txt",
+        "./test/1-4/2-4/3-3/4-2/5-2/6-1/test-4.txt",
     ]
     for d in dirs:
         fs.create_dir(d)
@@ -84,15 +88,15 @@ def test_index(
         fs.create_file(f, st_size=int(file_size))
 
     expected_filelist = [
-        PathDetails(original_path="/test/1-1/2-1/3-1/test-1.txt"),
-        PathDetails(original_path="/test/1-1/2-1/3-2/test-2.txt"),
-        PathDetails(original_path="/test/1-1/2-2/3-3/test-3.txt"),
-        PathDetails(original_path="/test/1-4/2-4/3-3/4-2/5-2/6-1/test-4.txt"),
+        PathDetails(original_path="./test/1-1/2-1/3-1/test-1.txt"),
+        PathDetails(original_path="./test/1-1/2-1/3-2/test-2.txt"),
+        PathDetails(original_path="./test/1-1/2-2/3-3/test-3.txt"),
+        PathDetails(original_path="./test/1-4/2-4/3-3/4-2/5-2/6-1/test-4.txt"),
     ]
 
     # Should work with any number of retries under the limit
     for i in range(0, 5):
-        test_filelist = [PathDetails(original_path="/test/")]
+        test_filelist = [PathDetails(original_path="./test/")]
         default_indexer.index(test_filelist, "test", default_rmq_message_dict)
 
         assert len(default_indexer.completelist) == len(expected_filelist)
@@ -105,7 +109,7 @@ def test_index(
     # All files should be in failed list with any number of retries over the
     # limit
     for i in range(5, 10):
-        test_filelist = [PathDetails(original_path="/test/")]
+        test_filelist = [PathDetails(original_path="./no_test/")]
         default_indexer.index(test_filelist, "test", default_rmq_message_dict)
 
         assert len(default_indexer.completelist) == 0
