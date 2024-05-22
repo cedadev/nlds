@@ -145,34 +145,12 @@ class CatalogConsumer(RMQC):
         super().reset()
 
         self.completelist = []
-        self.retrylist = []
         self.failedlist = []
         # New list for rerouting to archive if not found on object store
         self.reroutelist = []
         self.retrievedict = {}
 
-    def _parse_required_vars(self, body: Dict) -> Tuple:
-        """Refactored out of each catalog function, this is merely a collection
-        of try-except statments to extract required variables from the message
-        body. Returns a tuple of filelist (a list of PathDetails objects), user
-        and group if successful, None if not.
-        """
-        filelist = self._parse_filelist(body)
-        if filelist is None:
-            # No need to log as it would have been logged in the parse function
-            return
-
-        user_vars = self._parse_user_vars(body)
-        if user_vars is None:
-            # No need to log as it would have been logged above
-            return
-        else:
-            # Unpack assuming nothing bad has happened
-            user, group = user_vars
-
-        return filelist, user, group
-
-    def _parse_filelist(self, body: Dict):
+    def _parse_filelist(self, body: Dict) -> list[str]:
         # get the filelist from the data section of the message
         try:
             filelist = body[MSG.DATA][MSG.FILELIST]
@@ -189,7 +167,7 @@ class CatalogConsumer(RMQC):
             _ = filelist[0]
         except TypeError as e:
             self.log(f"filelist field must contain a list", RK.LOG_ERROR)
-            return
+            raise CatalogError
 
         return filelist
 
@@ -199,16 +177,35 @@ class CatalogConsumer(RMQC):
             user = body[MSG.DETAILS][MSG.USER]
         except KeyError:
             self.log("User not in message, exiting callback.", RK.LOG_ERROR)
-            return
+            raise CatalogError
 
         # get the group from the details section of the message
         try:
             group = body[MSG.DETAILS][MSG.GROUP]
         except KeyError:
             self.log("Group not in message, exiting callback.", RK.LOG_ERROR)
-            return
+            raise CatalogError
 
         return user, group
+
+    def _parse_transaction_id(self, body: Dict) -> str:
+        # get the transaction id from the details section of the message. It is
+        # a mandatory variable for the PUT workflow
+        try:
+            transaction_id = body[MSG.DETAILS][MSG.TRANSACT_ID]
+        except KeyError:
+            self.log("Transaction id not in message, exiting callback.", RK.LOG_ERROR)
+            raise CatalogError
+        return transaction_id
+
+    def _parse_tenancy(self, body: Dict) -> str:
+        # Get the tenancy from message, if none found then use the configured default
+        tenancy = self.default_tenancy
+        try:
+            tenancy = body[MSG.DETAILS][MSG.TENANCY]
+        except KeyError:
+            pass
+        return tenancy
 
     def _parse_metadata_vars(self, body: Dict) -> Tuple:
         """Convenience function to prevent unnecessary code replication for
@@ -218,50 +215,110 @@ class CatalogConsumer(RMQC):
         tags, with each being None if not found.
         """
         md = Metadata(body)
-        return md.unpack
+        return md.label, md.holding_id, md.tags, md.transaction_id
+
+    def _parse_groupall(self, body: Dict) -> str:
+        try:
+            groupall = body[MSG.DETAILS][MSG.GROUPALL]
+        except:
+            groupall = False
+        return groupall
+
+    def _parse_tape_url(self, body: Dict) -> str:
+        # Get the tape_url from message, if none found then use the configured default
+        tape_url = self.default_tape_url
+        try:
+            tape_url = body[MSG.DETAILS][MSG.TAPE_URL]
+        except KeyError:
+            pass
+        return tape_url
+
+    def _parse_aggregation_id(self, body: Dict) -> str:
+        # Parse aggregation and checksum info from message.
+        try:
+            aggregation_id = body[MSG.META][MSG.AGGREGATION_ID]
+        except KeyError:
+            self.log(
+                "Aggregation id not in message, continuing without.", RK.LOG_WARNING
+            )
+            aggregation_id = None
+        return aggregation_id
+
+    def _parse_transaction_records(self, body: dict) -> list[str]:
+        # get the transaction_ids from the metadata section of the message
+        try:
+            transaction_records = body[MSG.DATA][MSG.RECORD_LIST]
+        except KeyError:
+            self.log("Transaction ids not in message, exiting callback.", RK.LOG_ERROR)
+            raise CatalogError
+
+        # Verify transaction list
+        if transaction_records is None or len(transaction_records) <= 0:
+            self.log(
+                "Passed list of transactions is not valid, check message "
+                "contents. Exiting callback",
+                RK.LOG_ERROR,
+            )
+            raise CatalogError
+        return transaction_records
+
+    def _parse_path(self, body: dict) -> str:
+        # get the path from the details section of the message
+        try:
+            path = body[MSG.META][MSG.PATH]
+        except KeyError:
+            path = None
+        return path
+
+    def _parse_new_metadata_variables(self, body: dict) -> tuple:
+        # get the new label from the new meta section of the message
+        try:
+            new_label = body[MSG.META][MSG.NEW_META][MSG.LABEL]
+        except KeyError:
+            new_label = None
+
+        # get the new tag(s) from the new meta section of the message
+        try:
+            new_tag = body[MSG.META][MSG.NEW_META][MSG.TAG]
+        except KeyError:
+            new_tag = None
+
+        # get the deleted tag(s) from the new_meta section of the message
+        try:
+            del_tag = body[MSG.META][MSG.NEW_META][MSG.DEL_TAG]
+        except KeyError:
+            del_tag = None
+
+        return new_label, new_tag, del_tag
+
+    def _get_search_label(self, holding_label, holding_id):
+        """Determine the search label, this is a regex and depends on whether the
+        holding_label and/or holding_id has been supplied"""
+        if holding_label:
+            search_label = holding_label
+        elif holding_id:
+            search_label = ".*"  # match all labels if holding id given
+        else:
+            search_label = "^$"  # match nothing if no label or holding id
+            # this will produce a new holding
+        return search_label
 
     def _catalog_put(self, body: Dict, rk_origin: str) -> None:
         """Put a file record into the catalog - end of a put transaction"""
         # Parse the message body for required variables
-        message_vars = self._parse_required_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
-            )
-            return
-        else:
-            # Unpack if no problems found in parsing
-            filelist, user, group = message_vars
-
-        # get the transaction id from the details section of the message. It is
-        # a mandatory variable for the PUT workflow
         try:
-            transaction_id = body[MSG.DETAILS][MSG.TRANSACT_ID]
-        except KeyError:
-            self.log("Transaction id not in message, exiting callback.", RK.LOG_ERROR)
+            filelist = self._parse_filelist(body)
+            user, group = self._parse_user_vars(body)
+            transaction_id = self._parse_transaction_id(body)
+            tenancy = self._parse_tenancy(body)
+            label, holding_id, tags, _ = self._parse_metadata_vars(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
             return
 
-        tenancy = None
-        # Get the tenancy from message, if none found then use the configured
-        # default
-        try:
-            tenancy = body[MSG.DETAILS][MSG.TENANCY]
-        except KeyError:
-            pass
-        if tenancy is None:
-            tenancy = self.default_tenancy
-
-        # Extract variables from the metadata section of the message body
-        md = Metadata(body)
-        label, holding_id, tags, _ = md.unpack
         if label is None:
             # No label given so if holding_id not given the subset of
             # transaction id is used as new label
-            # TODO: (2023-07-21) should loop here to make sure we get a unique
-            # label
             new_label = transaction_id[0:8]
         else:
             # If holding id not given then new_label used to create holding
@@ -270,19 +327,12 @@ class CatalogConsumer(RMQC):
         # Start the database transactions
         self.catalog.start_session()
 
-        # determine the search label
-        if label:
-            search_label = label
-        elif holding_id:
-            search_label = ".*"  # match all labels if holding id given
-        else:
-            search_label = "^$"  # match nothing if no label or holding id
-            # this will produce a new holding
+        # get the (regex) search label
+        search_label = self._get_search_label(label, holding_id)
 
         # try to get the holding to see if it already exists and can be added to
         try:
-            # don't use tags to search - they are strictly for adding to the
-            # holding
+            # don't use tags to search - they are strictly for adding to the holding
             holding = self.catalog.get_holding(
                 user, group, label=search_label, holding_id=holding_id
             )
@@ -328,8 +378,7 @@ class CatalogConsumer(RMQC):
             # convert to PathDetails class
             pd = PathDetails.from_dict(f)
             try:
-                # Search first for file existence within holding, retry/fail if
-                # present
+                # Search first for file existence within holding, fail if present
                 try:
                     files = self.catalog.get_files(
                         user,
@@ -352,38 +401,10 @@ class CatalogConsumer(RMQC):
                     pd.size,
                     pd.permissions,
                 )
-
-                # NOTE: This is an approximation/quick hack to get a value for
-                # object_name before we have created the actual object. This is
-                # fine as-is for now as the object name will always be
-                # equivalent to original path, but this may change in the future
-                # and require an extra step in the workflow to update the
-                # Location with the appropriate object name.
-                # NRM - I want to change this so that the location is created after
-                # the transfer has completed - then we know if the file succeeded
-                # in its transfer and we can select only those that succeeded for
-                # archiving
-                if pd.object_name is None:
-                    object_name = pd.original_path
-                else:
-                    object_name = pd.object_name
-                location = self.catalog.create_location(
-                    file_,
-                    Storage.OBJECT_STORAGE,
-                    url_scheme="http",
-                    url_netloc=tenancy,
-                    root=transaction.transaction_id,
-                    path=object_name,
-                    # access time is passed in the file details
-                    access_time=datetime.fromtimestamp(pd.access_time, tz=timezone.utc),
-                )
                 self.completelist.append(pd)
             except CatalogError as e:
-                if pd.retries.count > self.max_retries:
-                    self.failedlist.append(pd)
-                else:
-                    pd.retries.add(reason=f"{e.message}")
-                    self.retrylist.append(pd)
+                pd.failure_reason = e.message
+                self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
 
@@ -419,23 +440,8 @@ class CatalogConsumer(RMQC):
             )
             self.send_pathlist(
                 self.completelist,
-                rk_complete,
-                body,
-                state=State.CATALOG_PUTTING,
-                warning=warnings,
-            )
-        # RETRY
-        if len(self.retrylist) > 0:
-            rk_retry = ".".join([rk_origin, RK.CATALOG_PUT, RK.START])
-            self.log(
-                f"Sending retry PathList from CATALOG_PUT {self.retrylist}",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(
-                self.retrylist,
-                rk_retry,
-                body,
-                mode="retry",
+                routing_key=rk_complete,
+                body_json=body,
                 state=State.CATALOG_PUTTING,
                 warning=warnings,
             )
@@ -447,7 +453,11 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.failedlist, rk_failed, body, mode="failed", warning=warnings
+                self.failedlist,
+                routing_keu=rk_failed,
+                body_json=body,
+                state=State.FAILED,
+                warning=warnings,
             )
 
     def _catalog_get(self, body: Dict, rk_origin: str) -> None:
@@ -456,37 +466,16 @@ class CatalogConsumer(RMQC):
         found on tape then it will be first rerouted to the archive processor
         for retrieval to object store cache."""
         # Parse the message body for required variables
-        message_vars = self._parse_required_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
-            )
+        try:
+            filelist = self._parse_filelist(body)
+            user, group = self._parse_user_vars(body)
+            transaction_id = self._parse_transaction_id(body)
+            tenancy = self._parse_tenancy(body)
+            holding_label, holding_id, holding_tag, _ = self._parse_metadata_vars(body)
+            groupall = self._parse_groupall(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
             return
-        else:
-            # Unpack if no problems found in parsing
-            filelist, user, group = message_vars
-
-        tenancy = None
-        # Get the tenancy from message, if none found then use the configured
-        # default
-        try:
-            tenancy = body[MSG.DETAILS][MSG.TENANCY]
-        except KeyError:
-            pass
-        if tenancy is None:
-            tenancy = self.default_tenancy
-
-        try:
-            groupall = body[MSG.DETAILS][MSG.GROUPALL]
-        except:
-            groupall = False
-
-        # Extract variables from the metadata section of the message body
-        md = Metadata(body)
-        (holding_label, holding_id, holding_tag, transaction_id) = md.unpack
 
         # Start a set of the aggregations we need to retrieve
         aggs_to_retrieve: Dict[int, List] = dict()
@@ -542,13 +531,11 @@ class CatalogConsumer(RMQC):
                                 f"original path {file_details.original_path}."
                             )
                     except CatalogError as e:
-                        if file_details.retries.count > self.max_retries:
-                            self.failedlist.append(file_details)
-                        else:
-                            self.retrylist.append(file_details)
-                            file_details.retries.add(reason=f"{e.message}")
+                        file_details.failure_reason = e.message
+                        self.failedlist.append(file_details)
                         self.log(e.message, RK.LOG_ERROR)
                         continue
+                    # NRM - TODO - this needs sorting out
                     # Make the object name. (2023-09) As of now the root will
                     # always be the transaction id, so files are retrieved from
                     # tape into the same original bucket name (for URIs).
@@ -557,7 +544,7 @@ class CatalogConsumer(RMQC):
                     # create a new PathDetails with all the info from the DB
                     new_file = PathDetails(
                         original_path=file_.original_path,
-                        object_name=object_name,
+                        path_type=file_.path_type,
                         size=file_.size,
                         user=file_.user,
                         group=file_.group,
@@ -566,6 +553,7 @@ class CatalogConsumer(RMQC):
                         path_type=file_.path_type,
                         link_path=file_.link_path,
                     )
+                    # NRM - TODO - this all needs revisiting
                     # Assign to the appropriate queue for retrieval from archive
                     # or object store. Additional information is required
                     # depending on where it's going
@@ -613,11 +601,8 @@ class CatalogConsumer(RMQC):
                                 ]
 
             except CatalogError as e:
-                if file_details.retries.count > self.max_retries:
-                    self.failedlist.append(file_details)
-                else:
-                    file_details.retries.add(reason=f"{e.message}")
-                    self.retrylist.append(file_details)
+                file_details.failure_reason = e.message
+                self.failedlist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
 
@@ -641,14 +626,11 @@ class CatalogConsumer(RMQC):
                     retrievelist.append(path_details)
             except CatalogError as e:
                 # In the event of a failure we rollback all the added locations
-                # and add the original file_details to the retry/fail list
+                # and add the original file_details to the fail list
                 checkpoint.rollback()
                 for file_details in details_list:
-                    if file_details.retries.count > self.max_retries:
-                        self.failedlist.append(file_details)
-                    else:
-                        file_details.retries.add(reason=f"{e.message}")
-                        self.retrylist.append(file_details)
+                    file_details.failure_reason = e.message
+                    self.failedlist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
             else:
@@ -669,7 +651,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.completelist, rk_complete, body, state=State.CATALOG_GETTING
+                self.completelist, 
+                routing_key=rk_complete, 
+                body_json=body, 
+                state=State.CATALOG_GETTING
             )
         # REROUTE
         if len(self.reroutelist) > 0:
@@ -689,21 +674,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.reroutelist, rk_reroute, body, state=State.CATALOG_GETTING
-            )
-        # RETRY
-        if len(self.retrylist) > 0:
-            rk_retry = ".".join([rk_origin, RK.CATALOG_GET, RK.START])
-            self.log(
-                f"Sending retry PathList from CATALOG_GET {self.retrylist}",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(
-                self.retrylist,
-                rk_retry,
-                body,
-                mode="retry",
-                state=State.CATALOG_GETTING,
+                self.reroutelist, 
+                pouting_key= rk_reroute, 
+                body_json=body, 
+                state=State.CATALOG_GETTING
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -712,7 +686,7 @@ class CatalogConsumer(RMQC):
                 f"Sending failed PathList from CATALOG_GET {self.failedlist}",
                 RK.LOG_DEBUG,
             )
-            self.send_pathlist(self.failedlist, rk_failed, body, mode="failed")
+            self.send_pathlist(self.failedlist, rk_failed, body, state=State.FAILED)
 
         # stop db transistions and commit
         self.catalog.save()
@@ -745,6 +719,7 @@ class CatalogConsumer(RMQC):
         # Also need to make a path_details object for each of the
         # files within the same aggregation and add it to the
         # retrieve list.
+        # NRM - TODO this needs changing to new structure - and don't munge the names, # urgh!
         tape_object_name = f"nlds.{tape_location.root}:{tape_location.path}"
         objstr_object_name = f"nlds.{transaction.transaction_id}:{tape_location.path}"
         path_details = PathDetails(
@@ -766,16 +741,8 @@ class CatalogConsumer(RMQC):
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location and
         aggregation for it and pass to for writing to tape."""
-        # Get the tape_url from message, if none found then use the configured
-        # default
-        tape_url = None
-        try:
-            tape_url = body[MSG.DETAILS][MSG.TAPE_URL]
-        except KeyError:
-            pass
-        if tape_url is None:
-            tape_url = self.default_tape_url
-
+        # get the tape url
+        tape_url = self._parse_tape_url(body)
         # start the database transactions
         self.catalog.start_session()
 
@@ -893,8 +860,8 @@ class CatalogConsumer(RMQC):
             )
             self.send_pathlist(
                 self.completelist,
-                rk_complete,
-                body,
+                routing_key=rk_complete,
+                body_json=body,
                 state=State.CATALOG_ARCHIVE_AGGREGATING,
             )
 
@@ -911,30 +878,15 @@ class CatalogConsumer(RMQC):
         aggregation as failed upon a failed write attempt.
         """
         # Parse the message body for required variables
-        message_vars = self._parse_required_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
-            )
-            return
-        else:
-            # Unpack if no problems found in parsing
-            filelist, user, group = message_vars
-
-        # Extract variables from the metadata section of the message body
-        md = Metadata(body)
-        _, holding_id, _, _ = md.unpack
-
-        # Parse aggregation and checksum info from message.
         try:
-            aggregation_id = body[MSG.META][MSG.AGGREGATION_ID]
-        except KeyError:
-            self.log(
-                "Aggregation id not in message, continuing without.", RK.LOG_WARNING
-            )
+            filelist = self._parse_filelist(body)
+            user, group = self._parse_user_vars(body)
+            _, holding_id, _, _ = self._parse_metadata_vars(body)
+            aggregation_id = self._parse_aggregation_id(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
+            return
+
         try:
             checksum = body[MSG.DATA][MSG.CHECKSUM]
         except KeyError:
@@ -996,7 +948,7 @@ class CatalogConsumer(RMQC):
                 f"Error encountered during _catalog_archive_update(): {e}", RK.LOG_ERROR
             )
             raise CallbackError(
-                "Encountered error during aggregation update, " "submitting for retry"
+                "Encountered error during aggregation update."
             )
 
         # Only need to update the monitor after a successful tape-write
@@ -1011,8 +963,8 @@ class CatalogConsumer(RMQC):
             )
             self.send_pathlist(
                 self.completelist,
-                rk_complete,
-                body,
+                routing_key=rk_complete,
+                body_json=body,
                 state=State.CATALOG_ARCHIVE_UPDATING,
             )
 
@@ -1024,22 +976,13 @@ class CatalogConsumer(RMQC):
         """Remove a given list of files from the catalog if the transfer
         fails"""
         # Parse the message body for required variables
-        message_vars = self._parse_required_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
-            )
+        try:
+            filelist = self._parse_filelist(body)
+            user, group = self._parse_user_vars(body)
+            holding_label, holding_id, holding_tag, _ = self._parse_metadata_vars(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
             return
-        else:
-            # Unpack if no problems found in parsing
-            filelist, user, group = message_vars
-
-        # Extract variables from the metadata section of the message body
-        md = Metadata(body)
-        holding_label, holding_id, holding_tag, _ = md.unpack
 
         # start the database transactions
         self.catalog.start_session()
@@ -1066,15 +1009,12 @@ class CatalogConsumer(RMQC):
                     tag=holding_tag,
                 )
             except CatalogError as e:
-                if file_details.retries.count > self.max_retries:
-                    self.failedlist.append(file_details)
-                else:
-                    file_details.retries.add(reason=f"{e.message}")
-                    self.retrylist.append(file_details)
+                file_details.failure_reason = e.message
+                self.failedlist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
 
-        # log the successful and non-successful catalog puts
+        # log the successful and non-successful catalog dels
         # SUCCESS
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_DEL, RK.COMPLETE])
@@ -1083,21 +1023,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.completelist, rk_complete, body, state=State.CATALOG_ROLLBACK
-            )
-        # RETRY
-        if len(self.retrylist) > 0:
-            rk_retry = ".".join([rk_origin, RK.CATALOG_DEL, RK.START])
-            self.log(
-                f"Sending retry PathList from CATALOG_DEL {self.retrylist}",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(
-                self.retrylist,
-                rk_retry,
-                body,
-                mode="retry",
-                state=State.CATALOG_ROLLBACK,
+                self.completelist, 
+                routing_key=rk_complete, 
+                body_json=body, 
+                state=State.CATALOG_ROLLBACK
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -1106,7 +1035,12 @@ class CatalogConsumer(RMQC):
                 f"Sending failed PathList from CATALOG_DEL {self.failedlist}",
                 RK.LOG_DEBUG,
             )
-            self.send_pathlist(self.failedlist, rk_failed, body, mode="failed")
+            self.send_pathlist(
+                self.failedlist, 
+                routing_key=rk_failed, 
+                body_json=body,
+                state=State.FAILED
+            )
 
         # stop db transactions and commit
         self.catalog.save()
@@ -1121,22 +1055,15 @@ class CatalogConsumer(RMQC):
         """Remove a given list of locations from the catalog if the transfer,
         archive-put or archive-get fails."""
         # Parse the message body for required variables
-        message_vars = self._parse_required_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
+        try:
+            filelist = self._parse_filelist(body)
+            user, group = self._parse_user_vars(body)
+            (holding_label, holding_id, tag, transaction_id) = (
+                self._parse_metadata_vars(body)
             )
+        except CatalogError:
+            # functions above handled message logging, here we just return
             return
-        else:
-            # Unpack if no problems found in parsing
-            filelist, user, group = message_vars
-
-        # Extract variables from the metadata section of the message body
-        md = Metadata(body)
-        holding_label, holding_id, tag, transaction_id = md.unpack
 
         # start the database transactions
         self.catalog.start_session()
@@ -1173,19 +1100,13 @@ class CatalogConsumer(RMQC):
                     try:
                         self.catalog.delete_location(file_, location_type)
                     except CatalogError as e:
-                        if file_details.retries.count > self.max_retries:
-                            self.failedlist.append(file_details)
-                        else:
-                            file_details.retries.add(reason=f"{e.message}")
-                            self.retrylist.append(file_details)
+                        file_details.failure_reason = e.message
+                        self.failedlist.append(file_details)
                         self.log(e.message, RK.LOG_ERROR)
                         continue
             except CatalogError as e:
-                if file_details.retries.count > self.max_retries:
-                    self.failedlist.append(file_details)
-                else:
-                    file_details.retries.add(reason=f"{e.message}")
-                    self.retrylist.append(file_details)
+                file_details.failure_reason = e.message
+                self.failedlist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
 
@@ -1198,21 +1119,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.completelist, rk_complete, body, state=State.CATALOG_ROLLBACK
-            )
-        # RETRY
-        if len(self.retrylist) > 0:
-            rk_retry = ".".join([rk_origin, RK.CATALOG_ARCHIVE_DEL, RK.START])
-            self.log(
-                f"Sending retry PathList from CATALOG_DEL {self.retrylist}",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(
-                self.retrylist,
-                rk_retry,
-                body,
-                mode="retry",
-                state=State.CATALOG_ROLLBACK,
+                self.completelist, 
+                routing_key=rk_complete, 
+                body_json=body, 
+                state=State.CATALOG_ROLLBACK
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -1221,7 +1131,12 @@ class CatalogConsumer(RMQC):
                 f"Sending failed PathList from CATALOG_DEL {self.failedlist}",
                 RK.LOG_DEBUG,
             )
-            self.send_pathlist(self.failedlist, rk_failed, body, mode="failed")
+            self.send_pathlist(
+                self.failedlist, 
+                routing_key=rk_failed, 
+                body_json=body, 
+                state=State.FAILED
+            )
 
         # stop db transactions and commit
         self.catalog.save()
@@ -1230,27 +1145,15 @@ class CatalogConsumer(RMQC):
     def _catalog_list(self, body: Dict, properties: Header) -> None:
         """List the users holdings"""
         # Parse the message body for required variables
-        message_vars = self._parse_user_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
-            )
-            return
-        else:
-            # Unpack if no problems found in parsing
-            user, group = message_vars
-
         try:
-            groupall = body[MSG.DETAILS][MSG.GROUPALL]
-        except KeyError:
-            groupall = False
-
-        # Extract variables from the metadata section of the message body
-        md = Metadata(body)
-        holding_label, holding_id, tag, transaction_id = md.unpack
+            user, group = self._parse_user_vars(body)
+            (holding_label, holding_id, tag, transaction_id) = (
+                self._parse_metadata_vars(body)
+            )
+            groupall = self._parse_groupall(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
+            return
 
         self.catalog.start_session()
 
@@ -1307,41 +1210,15 @@ class CatalogConsumer(RMQC):
     def _catalog_stat(self, body: Dict, properties: Header) -> None:
         """Get the labels for a list of transaction ids"""
         # Parse the message body for required variables
-        message_vars = self._parse_user_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
-            )
-            return
-        else:
-            # Unpack if no problems found in parsing
-            user, group = message_vars
-
-        # get the transaction_ids from the metadata section of the message
         try:
-            transaction_records = body[MSG.DATA][MSG.RECORD_LIST]
-        except KeyError:
-            self.log("Transaction ids not in message, exiting callback.", RK.LOG_ERROR)
+            user, group = self._parse_user_vars(body)
+            transaction_id = self._parse_transaction_id(body)
+            label, _, _, _ = self._parse_metadata_vars(body)
+            transaction_records = self._parse_transaction_id(body)
+            groupall = self._parse_groupall(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
             return
-
-        # Verify transaction list
-        if transaction_records is None or len(transaction_records) <= 0:
-            self.log(
-                "Passed list of transactions is not valid, check message "
-                "contents. Exiting callback",
-                RK.LOG_ERROR,
-            )
-            return
-
-        # Extract the groupall variable from the metadata section of the
-        # message body
-        try:
-            groupall = body[MSG.DETAILS][MSG.GROUPALL]
-        except KeyError:
-            groupall = False
 
         self.catalog.start_session()
 
@@ -1393,33 +1270,17 @@ class CatalogConsumer(RMQC):
     def _catalog_find(self, body: Dict, properties: Header) -> None:
         """List the user's files"""
         # Parse the message body for required variables
-        message_vars = self._parse_user_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
+        try:
+            user, group = self._parse_user_vars(body)
+            transaction_id = self._parse_transaction_id(body)
+            (holding_label, holding_id, tag, transaction_id) = (
+                self._parse_metadata_vars(body)
             )
+            groupall = self._parse_groupall(body)
+            path = self._parse_path(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
             return
-        else:
-            # Unpack if no problems found in parsing
-            user, group = message_vars
-
-        try:
-            groupall = body[MSG.DETAILS][MSG.GROUPALL]
-        except KeyError:
-            groupall = False
-
-        # Extract variables from the metadata section of the message body
-        md = Metadata(body)
-        holding_label, holding_id, tag, transaction_id = md.unpack
-
-        # get the path from the detaisl section of the message
-        try:
-            path = body[MSG.META][MSG.PATH]
-        except KeyError:
-            path = None
 
         self.catalog.start_session()
         ret_dict = {}
@@ -1526,40 +1387,13 @@ class CatalogConsumer(RMQC):
     def _catalog_meta(self, body: Dict, properties: Header) -> None:
         """Change metadata for a user's holding"""
         # Parse the message body for required variables
-        message_vars = self._parse_user_vars(body)
-        if message_vars is None:
-            # Check if any problems have occurred in the parsing of the message
-            # body and exit if necessary
-            self.log(
-                "Could not parse one or more mandatory variables, exiting " "callback.",
-                RK.LOG_ERROR,
-            )
+        try:
+            user, group = self._parse_user_vars(body)
+            holding_label, holding_id, tag, _ = self._parse_metadata_vars(body)
+            new_label, new_tag, del_tag = self._parse_new_metadata_variables(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
             return
-        else:
-            # Unpack if no problems found in parsing
-            user, group = message_vars
-
-        # Extract variables from the metadata section of the message body
-        md = Metadata(body)
-        holding_label, holding_id, tag, _ = md.unpack
-
-        # get the new label from the new meta section of the message
-        try:
-            new_label = body[MSG.META][MSG.NEW_META][MSG.LABEL]
-        except KeyError:
-            new_label = None
-
-        # get the new tag(s) from the new meta section of the message
-        try:
-            new_tag = body[MSG.META][MSG.NEW_META][MSG.TAG]
-        except KeyError:
-            new_tag = None
-
-        # get the deleted tag(s) from the new_meta section of the message
-        try:
-            del_tag = body[MSG.META][MSG.NEW_META][MSG.DEL_TAG]
-        except KeyError:
-            del_tag = None
 
         self.catalog.start_session()
 
@@ -1670,29 +1504,8 @@ class CatalogConsumer(RMQC):
             )
             return
 
-        # If received system test message, reply to it and end the callback
-        # TODO: Convert these strings to publisher constants.
-        # TODO: Can probably also refactor this (and other similar snippets)
-        # into a single function and maybe put it before the callback in the
-        # wrapper
-        if api_method == "system_stat":
-            if (
-                properties.correlation_id is not None
-                and properties.correlation_id != self.channel.consumer_tags[0]
-            ):
-                # If not message not for this consumer then nack it
-                return False
-            if (body["details"]["ignore_message"]) == True:
-                # End the callback without replying to simulate an unresponsive
-                # consumer
-                return
-            else:
-                self.publish_message(
-                    properties.reply_to,
-                    msg_dict=body,
-                    exchange={"name": ""},
-                    correlation_id=properties.correlation_id,
-                )
+        # Check for system status
+        if self._is_system_status_check(body_json=body, properties=properties):
             return
 
         # Only print the message contents when we're not statting, the message

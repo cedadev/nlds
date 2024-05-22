@@ -396,13 +396,12 @@ optional for each processor.  The `json` document looks like this:
     {
         file_details        : {
             original_path       : <str>,
-            object_name         : <str>,
             size                : <int>, (in kilobytes?)
             user                : <str>, (get uid from LDAP?)
             group               : <str>, (get gid from LDAP?)
             file_permissions    : <int>, (unix file permissions)
             access_time         : <datetime>, (timestamp of last accessed type)
-            filetype            : <str>, (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
+            filetype            : <str>, (LINK, DIRECTORY or FILE)
             link_path           : <str>, (link position,path of link, related to either root or common path)
         }
     }

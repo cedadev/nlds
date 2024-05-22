@@ -92,15 +92,6 @@ class PutTransferConsumer(BaseTransferConsumer):
                 f"Attempting to upload file {path_details.original_path}", RK.LOG_DEBUG
             )
 
-            # NOTE: (2023-01-19) Removing the remove_root_slash_fl options as it
-            # causes problems with the reorganisation of the workflow for
-            # duplicate file catching. Given we're not even using the feature
-            # this seems a better solution than having to update the location in
-            # the catalog once transfer has completed. In the future we may want
-            # to encode the object name differently but this can be dealt with
-            # when that occurs.
-            # TODO: This begs the question of whether we need to store the
-            # object-name at all
             path_details.object_name = path_details.original_path
             try:
                 result = client.fput_object(

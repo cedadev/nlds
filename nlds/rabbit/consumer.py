@@ -151,6 +151,35 @@ class RabbitMQConsumer(ABC, RMQP):
         # Set up the logging and pass through constructor parameter
         self.setup_logging(enable=setup_logging_fl)
 
+    def _is_system_status_check(self, body_json: Dict[str, Any], properties) -> bool:
+        """Check whether the body_json contains a message to check for system status"""
+        # This checks if the message was for a system status check
+        try:
+            api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
+        except KeyError:
+            self.log(f"Message did not contain api_method", RK.LOG_INFO)
+            api_method = None
+
+        # If received system test message, reply to it (this is for system status check)
+        if api_method == RK.SYSTEM_STAT:
+            if (
+                properties.correlation_id is not None
+                and properties.correlation_id != self.channel.consumer_tags[0]
+            ):
+                return False
+
+            if (body_json["details"]["ignore_message"]) == True:
+                return False
+            else:
+                self.publish_message(
+                    properties.reply_to,
+                    msg_dict=body_json,
+                    exchange={"name": ""},
+                    correlation_id=properties.correlation_id,
+                )
+            return True
+        return False
+
     def reset(self) -> None:
         self.sent_message_count = 0
         self.completelist = []
