@@ -90,16 +90,12 @@ def test_path_details():
 
     # Check contents of json?
     assert "file_details" in pd_json
-    assert "retries" in pd_json
 
 
 def test_serialisation():
     """Test that the message is encoded / decoded as a whole"""
     pd = PathDetails(original_path=__file__)
     pd.stat()
-
-    # add a retry
-    pd.retries.add(reason="A test reason")
 
     # add a location
     location = PathLocation(
@@ -127,6 +123,5 @@ def test_serialisation():
 
 if __name__ == "__main__":
     test_path_details()
-    test_retries()
     test_path_location()
     test_serialisation()

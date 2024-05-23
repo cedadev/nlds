@@ -8,7 +8,7 @@ from minio.error import S3Error
 from retry import retry
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
-from nlds.rabbit.consumer import FilelistType, State
+from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
 import nlds.rabbit.routing_keys as RK
@@ -72,47 +72,49 @@ class GetTransferConsumer(BaseTransferConsumer):
         )
 
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
-        rk_retry = ".".join([rk_origin, RK.TRANSFER_GET, RK.START])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
 
         for path_details in filelist:
-            if path_details.retries.count > self.max_retries:
-                self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="failed"
-                )
-                continue
-
             # If bucketname inserted into object path (i.e. from catalogue) then
-            # extract both
-            elif len(path_details.object_name.split(":")) == 2:
+            # extract both - TODO, get these from the path_details via a function
+            if len(path_details.object_name.split(":")) == 2:
                 bucket_name, object_name = path_details.object_name.split(":")
             # Otherwise, log error and queue for retry
             else:
                 reason = "Unable to get bucket_name from message info"
                 self.log(
-                    f"{reason}, adding " f"{path_details.object_name} to retry list.",
+                    f"{reason}, adding " f"{path_details.object_name} to failed list.",
                     RK.LOG_INFO,
                 )
-                path_details.retries.increment(reason=reason)
+                path_details.failure_reason = reason
                 self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="retry"
+                    self.failedlist,
+                    path_details,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED,
                 )
                 continue
 
             if bucket_name and not client.bucket_exists(bucket_name):
-                # If bucket doesn't exist then pass for retry
-                reason = f"Bucket {bucket_name} doesn't seem to exist"
-                self.log(f"{reason}. Adding {object_name} to retry list.", RK.LOG_ERROR)
-                path_details.retries.increment(reason=reason)
+                # If bucket doesn't exist then pass for failure
+                reason = f"Bucket {bucket_name} does not exist"
+                self.log(
+                    f"{reason}. Adding {object_name} to failed list.", RK.LOG_ERROR
+                )
+                path_details.failure_reason = reason
                 self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="retry"
+                    self.failedlist,
+                    path_details,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED,
                 )
                 continue
 
             self.log(
                 f"Attempting to get file {object_name} from {bucket_name}", RK.LOG_DEBUG
             )
-
             # Decide whether to prepend target path or download directly to it.
             if not target:
                 # In the case of no given target, we just download the files
@@ -126,10 +128,14 @@ class GetTransferConsumer(BaseTransferConsumer):
                         f"Unable to download {download_path}.  Target "
                         "path is inaccessible."
                     )
-                    self.log(f"{reason}. Adding to retry-list.", RK.LOG_INFO)
-                    path_details.retries.increment(reason=reason)
+                    self.log(f"{reason}. Adding to failed list.", RK.LOG_INFO)
+                    path_details.failure_reason = reason
                     self.append_and_send(
-                        path_details, rk_retry, body_json, list_type=FilelistType.retry
+                        self.failedlist,
+                        path_details,
+                        routing_key=rk_failed,
+                        body_json=body_json,
+                        state=State.FAILED,
                     )
                     continue
             elif target_path.is_dir():
@@ -163,12 +169,16 @@ class GetTransferConsumer(BaseTransferConsumer):
                 self.log(reason, RK.LOG_DEBUG)
                 self.log(
                     f"Exception encountered during download, adding "
-                    f"{object_name} to retry-list.",
+                    f"{object_name} to failed list.",
                     RK.LOG_INFO,
                 )
-                path_details.retries.increment(reason=reason)
+                path_details.failure_reason = reason
                 self.append_and_send(
-                    path_details, rk_retry, body_json, list_type=FilelistType.retry
+                    self.failedlist,
+                    path_details,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED,
                 )
                 continue
 
@@ -195,24 +205,27 @@ class GetTransferConsumer(BaseTransferConsumer):
 
             self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
             self.append_and_send(
-                path_details, rk_complete, body_json, list_type=FilelistType.transferred
+                self.completelist,
+                path_details,
+                routing_key=rk_complete,
+                body_json=body_json,
+                state=State.TRANSFER_GETTING,
             )
 
         # Send whatever remains after all items have been (attempted to be) put
         if len(self.completelist) > 0:
             self.send_pathlist(
                 self.completelist,
-                rk_complete,
-                body_json,
-                mode=FilelistType.transferred,
-            )
-        if len(self.retrylist) > 0:
-            self.send_pathlist(
-                self.retrylist, rk_retry, body_json, mode=FilelistType.retry
+                routing_key=rk_complete,
+                body_json=body_json,
+                state=State.TRANSFER_GETTING,
             )
         if len(self.failedlist) > 0:
             self.send_pathlist(
-                self.failedlist, rk_failed, body_json, mode=FilelistType.failed
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body_json,
+                state=State.FAILED,
             )
 
 

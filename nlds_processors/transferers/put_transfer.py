@@ -6,7 +6,7 @@ from retry import retry
 from urllib3.exceptions import HTTPError
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
-from nlds.rabbit.consumer import FilelistType, State
+from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 
@@ -38,19 +38,9 @@ class PutTransferConsumer(BaseTransferConsumer):
         )
 
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
-        rk_retry = ".".join([rk_origin, RK.TRANSFER_PUT, RK.START])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
 
-        # First check for transaction-level message failure and boot back to
-        # catalog if necessary.
-        retries = self.get_retries(body_json)
-        if retries is not None and retries.count > self.max_retries:
-            # Mark the message as 'processed' so it can be failed more safely.
-            self.send_pathlist(
-                filelist, rk_failed, body_json, state=State.CATALOG_ROLLBACK
-            )
-            return
-
+        # TODO add this to the PathDetails as the StorageLocation
         bucket_name = f"nlds.{transaction_id}"
 
         # Check that bucket exists, and create if not
@@ -70,21 +60,18 @@ class PutTransferConsumer(BaseTransferConsumer):
         for path_details in filelist:
             item_path = path_details.path
 
-            # First check whether index item has failed too many times
-            if path_details.retries.count > self.max_retries:
-                self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="failed"
-                )
-                continue
-
             # If check_permissions active then check again that file exists and
             # is accessible.
             if self.check_permissions_fl and not self.check_path_access(item_path):
                 reason = f"Path:{path_details.path} is inaccessible."
                 self.log(reason, RK.LOG_DEBUG)
-                path_details.retries.increment(reason=reason)
+                path_details.failure_reason = reason
                 self.append_and_send(
-                    path_details, rk_retry, body_json, list_type="retry"
+                    self.failedlist,
+                    path_details,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED,
                 )
                 continue
 
@@ -92,6 +79,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                 f"Attempting to upload file {path_details.original_path}", RK.LOG_DEBUG
             )
 
+            # TODO add this to the PathDetails as the StorageLocation
             path_details.object_name = path_details.original_path
             try:
                 result = client.fput_object(
@@ -103,19 +91,24 @@ class PutTransferConsumer(BaseTransferConsumer):
                     f"Successfully uploaded {path_details.original_path}", RK.LOG_DEBUG
                 )
                 self.append_and_send(
+                    self.completelist,
                     path_details,
-                    rk_complete,
-                    body_json,
-                    list_type=FilelistType.transferred,
+                    routing_key=rk_complete,
+                    body_json=body_json,
+                    state=State.TRANSFER_PUTTING,
                 )
             except HTTPError as e:
                 reason = (
                     f"Error uploading {path_details.path} to object " f"store: {e}."
                 )
-                self.log(f"{reason} Adding to retry list.", RK.LOG_ERROR)
-                path_details.retries.increment(reason=reason)
+                self.log(f"{reason} Adding to failed list.", RK.LOG_ERROR)
+                path_details.failure_reason = reason
                 self.append_and_send(
-                    path_details, rk_retry, body_json, list_type="retry"
+                    self.failedlist,
+                    path_details,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED,
                 )
                 continue
 
@@ -128,12 +121,18 @@ class PutTransferConsumer(BaseTransferConsumer):
         # Send whatever remains after all items have been (attempted to be) put
         if len(self.completelist) > 0:
             self.send_pathlist(
-                self.completelist, rk_complete, body_json, mode="transferred"
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body_json,
+                state=State.TRANSFER_PUTTING,
             )
-        if len(self.retrylist) > 0:
-            self.send_pathlist(self.retrylist, rk_retry, body_json, mode="retry")
         if len(self.failedlist) > 0:
-            self.send_pathlist(self.failedlist, rk_failed, body_json, mode="failed")
+            self.send_pathlist(
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body_json,
+                state=State.FAILED,
+            )
 
 
 def main():

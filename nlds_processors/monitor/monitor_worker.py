@@ -34,7 +34,6 @@ from pika.frame import Header
 
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
-from nlds.details import Retries
 from nlds_processors.monitor.monitor import Monitor, MonitorError
 from nlds_processors.monitor.monitor_models import orm_to_dict
 from nlds_processors.db_mixin import DBError
@@ -128,7 +127,8 @@ class MonitorConsumer(RMQC):
                 state = State[state]
             else:
                 self.log(
-                    "State found in message invalid, exiting callback.", RK.LOG_ERROR
+                    f"State found in message invalid: {state}, exiting callback.", 
+                    RK.LOG_ERROR
                 )
                 return
         except KeyError:
@@ -143,24 +143,6 @@ class MonitorConsumer(RMQC):
                 "Transaction sub-id not in message, exiting callback.", RK.LOG_ERROR
             )
             return
-
-        # get the retry_fl from the details section of the message
-        retry_fl = False
-        try:
-            retry_fl = body[MSG.DETAILS][MSG.RETRY]
-        except KeyError:
-            self.log("No retry_fl found in message, assuming false.", RK.LOG_DEBUG)
-
-        # Get the transaction-level retry
-        try:
-            trans_retries = Retries.from_dict(body)
-        except KeyError:
-            self.log(
-                "No retries found in message, continuing with an empty ",
-                "Retries object.",
-                RK.LOG_DEBUG,
-            )
-            trans_retries = Retries()
 
         # get the warning(s) from the details section of the message
         try:
@@ -179,8 +161,6 @@ class MonitorConsumer(RMQC):
         #   - see if it matches sub_id in message
         #       - update it if it does
         #           - change state
-        #           - update retry count if retrying
-        #           - reset retry count if now continuing
         #           - add failed files if failed
         #       - create a new one if it doesn't
         #   - open question whether we delete the older subrecords (i.e. before
@@ -233,7 +213,7 @@ class MonitorConsumer(RMQC):
 
         # Update subrecord to match new monitoring data
         try:
-            self.monitor.update_sub_record(srec, state, retry_fl)
+            self.monitor.update_sub_record(srec, state)
         except MonitorError as e:
             # If the state update is invalid then rollback session and exit
             # callback
@@ -247,28 +227,13 @@ class MonitorConsumer(RMQC):
                 "Creating FailedFiles records as transaction appears to " "have failed",
                 RK.LOG_INFO,
             )
-            # Make failed files reasons for the immediate retry reason and any
-            # saved reasons.
             try:
                 for pd in filelist:
-                    # First make FailedFiles for each of the saved reasons.
-                    # These are only made in the event of a failure, and so
-                    # should definitely be recorded as _a_ reason for failure.
-                    for reason in trans_retries.saved_reasons:
-                        self.monitor.create_failed_file(srec, pd, reason=reason)
-                    for reason in pd.retries.saved_reasons:
-                        self.monitor.create_failed_file(srec, pd, reason=reason)
-
-                    # Second check the immediate retrys for any reasons
-                    reason = None
+                    reason = 0
                     # Check which was the final reason for failure and pass
                     # that as the failure reason for the FailedFile.
-                    if len(trans_retries.reasons) > len(pd.retries.reasons):
-                        reason = trans_retries.reasons[-1]
-                    elif len(pd.retries.reasons) > 0:
-                        reason = pd.retries.reasons[-1]
-                    else:
-                        continue
+                    if pd.failure_reason >= reason:
+                        reason = pd.failure_reason
                     self.monitor.create_failed_file(srec, pd, reason=reason)
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
@@ -401,7 +366,8 @@ class MonitorConsumer(RMQC):
                 state = State[state]
             else:
                 self.log(
-                    "State found in message invalid, continuing without.", RK.LOG_INFO
+                    f"State found in message invalid {state}, continuing without.", 
+                    RK.LOG_INFO
                 )
                 state = None
         except KeyError:
@@ -416,15 +382,6 @@ class MonitorConsumer(RMQC):
                 "Transaction sub-id not in message, continuing without.", RK.LOG_INFO
             )
             sub_id = None
-
-        # get the desired retry_count from the DETAILS section of the message
-        try:
-            retry_count = int(body[MSG.DETAILS][MSG.RETRY_COUNT_QUERY])
-        except (KeyError, TypeError):
-            self.log(
-                "Transaction sub-id not in message, continuing without.", RK.LOG_INFO
-            )
-            retry_count = None
 
         # start a SQL alchemy session
         self.monitor.start_session()
@@ -450,7 +407,7 @@ class MonitorConsumer(RMQC):
             query_user = None
         for tr in trecs:
             srecs = self.monitor.get_sub_records(
-                tr, sub_id, query_user, query_group, state, retry_count, api_action
+                tr, sub_id, query_user, query_group, state, api_action
             )
 
             if tr.id in trecs_dict:
@@ -474,7 +431,6 @@ class MonitorConsumer(RMQC):
                     "id": sr.id,
                     "sub_id": sr.sub_id,
                     "state": sr.state.name,
-                    "retry_count": sr.retry_count,
                     "last_updated": sr.last_updated.isoformat(),
                     "failed_files": [orm_to_dict(ff) for ff in sr.failed_files],
                 }

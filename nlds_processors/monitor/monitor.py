@@ -138,14 +138,6 @@ class Monitor(DBMixin):
         be attempted to be taken from the PathDetails object. If no reason can
         be found then a MonitorError will be raised.
         """
-        if reason is None:
-            if len(path_details.retries.reasons) <= 0:
-                raise MonitorError(
-                    f"FailedFile for sub_record_id:{sub_record.id} could not be "
-                    "added to the database as no failure reason was supplied. "
-                )
-            else:
-                reason = path_details.retries.reasons[-1]
         try:
             failed_file = FailedFile(
                 filepath=path_details.original_path,
@@ -181,7 +173,6 @@ class Monitor(DBMixin):
         user: str = None,
         group: str = None,
         state: State = None,
-        retry_count: int = None,
         api_action: str = None,
     ) -> list:
         """Return many sub records, identified by one of the (many) function
@@ -200,8 +191,6 @@ class Monitor(DBMixin):
                 query = query.filter(SubRecord.sub_id == sub_id)
             if state is not None:
                 query = query.filter(SubRecord.state == state)
-            if retry_count is not None:
-                query = query.filter(SubRecord.retry_count == retry_count)
             if api_action is not None:
                 api_action = query.filter(TransactionRecord.api_action == api_action)
             if user is not None:
@@ -217,21 +206,11 @@ class Monitor(DBMixin):
         return srecs
 
     def update_sub_record(
-        self, sub_record: SubRecord, new_state: State, retry_fl: bool
+        self, sub_record: SubRecord, new_state: State
     ) -> SubRecord:
         """Update a retrieved SubRecord to reflect the new monitoring info.
-        Furthest state is updated, if required, and the retry count is
-        incremented by one if appropriate.
-        TODO: Should retrying be a flag instead of a separate state? Probably,
-        yes
+        Furthest state is updated, if required.
         """
-        # Increment retry counter if appropriate.
-        # NOTE: Do we want to just specify the retry_count in the message?
-        if retry_fl:
-            sub_record.retry_count = SubRecord.retry_count + 1
-        # Reset retry count if retry was successful, keep it if the job failed
-        elif sub_record.retry_count > 0 and new_state != State.FAILED:
-            sub_record.retry_count = 0
         # Upgrade state to new_state, but throw exception if regressing state
         # (staying the same is fine)
         if new_state.value < sub_record.state.value:

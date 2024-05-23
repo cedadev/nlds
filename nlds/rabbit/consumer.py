@@ -59,16 +59,6 @@ class RabbitQueue(BaseModel):
         )
 
 
-# class FilelistType(Enum):
-#     raw = 0
-#     processed = 1
-#     failed = 3
-#     indexed = 1
-#     transferred = 1
-#     catalogued = 1
-#     archived = 1
-
-
 class SigTermError(Exception):
     pass
 

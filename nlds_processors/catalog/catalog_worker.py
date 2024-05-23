@@ -550,7 +550,6 @@ class CatalogConsumer(RMQC):
                         group=file_.group,
                         permissions=file_.file_permissions,
                         access_time=access_time,
-                        path_type=file_.path_type,
                         link_path=file_.link_path,
                     )
                     # NRM - TODO - this all needs revisiting

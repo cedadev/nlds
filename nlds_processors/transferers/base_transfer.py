@@ -16,12 +16,10 @@ import pathlib as pth
 
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.details import PathDetails
-from nlds.rabbit.consumer import FilelistType, State
+from nlds.rabbit.consumer import State
 from nlds_processors.utils.aggregations import aggregate_files
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-import nlds.rabbit.delays as DLY
-
 
 class TransferError(Exception):
     pass
@@ -46,7 +44,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         _FILELIST_MAX_LENGTH: 1000,
-        DLY.RETRY_DELAYS: DLY.DEFAULT_RETRY_DELAYS,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -58,7 +55,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.print_tracebacks_fl = self.load_config_value(self._PRINT_TRACEBACKS)
         self.max_retries = self.load_config_value(self._MAX_RETRIES)
         self.filelist_max_len = self.load_config_value(self._FILELIST_MAX_LENGTH)
-        self.retry_delays = self.load_config_value(DLY.RETRY_DELAYS)
 
         self.reset()
 
@@ -69,29 +65,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         body = body.decode("utf-8")
         body_json = json.loads(body)
 
-        # This checks if the message was for a system status check
-        try:
-            api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
-        except KeyError:
-            self.log(f"Message did not contain api_method", RK.LOG_INFO)
-            api_method = None
-
-        # If received system test message, reply to it (this is for system status check)
-        if api_method == "system_stat":
-            if (
-                properties.correlation_id is not None
-                and properties.correlation_id != self.channel.consumer_tags[0]
-            ):
-                return False
-            if (body_json["details"]["ignore_message"]) == True:
-                return
-            else:
-                self.publish_message(
-                    properties.reply_to,
-                    msg_dict=body_json,
-                    exchange={"name": ""},
-                    correlation_id=properties.correlation_id,
-                )
+        if self._is_system_status_check(body_json=body_json, properties=properties):
             return
 
         self.log(
@@ -124,33 +98,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             access_key, secret_key, tenancy = self.get_objectstore_config(body_json)
         except TransferError:
             self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
-            return
-
-        # First check for transaction-level message failure and boot back to
-        # catalog if necessary. We do this here so that errors in set_ids() can
-        # still be caught at the transaction-level
-        retries = self.get_retries(body_json)
-        if retries is not None and retries.count > self.max_retries:
-            rk_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
-            if rk_parts[1] == RK.TRANSFER_PUT:
-                # For transfer-put, mark the message as 'processed' so it can be
-                # failed more safely.
-                mode = FilelistType.processed
-                state = State.CATALOG_ROLLBACK
-                save_reasons_fl = True
-            else:
-                # Otherwise fail it regularly
-                mode = FilelistType.failed
-                state = None
-                save_reasons_fl = False
-            self.send_pathlist(
-                filelist,
-                rk_failed,
-                body_json,
-                mode=mode,
-                state=state,
-                save_reasons_fl=save_reasons_fl,
-            )
             return
 
         # Set uid and gid from message contents if configured to check
@@ -238,4 +185,4 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         rk_origin: str,
         body_json: Dict[str, str],
     ):
-        pass
+        raise NotImplementedError

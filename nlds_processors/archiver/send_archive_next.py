@@ -41,7 +41,6 @@ def send_archive_next():
             # Convert to PathDetails for JSON serialisation
             MSG.FILELIST: [],
         },
-        **Retries().to_dict(),
         MSG.META: {
             # Insert an empty meta dict
         },

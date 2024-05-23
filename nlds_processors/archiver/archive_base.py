@@ -107,8 +107,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         _CHUNK_SIZE: 5 * (1024**2),  # Default to 5 MiB
         _QUERY_CHECKSUM: True,
         _PRINT_TRACEBACKS: False,
-        _MAX_RETRIES: 5,
-        DLY.RETRY_DELAYS: DLY.DEFAULT_RETRY_DELAYS,
     }
     DEFAULT_CONSUMER_CONFIG = (
         BaseTransferConsumer.DEFAULT_CONSUMER_CONFIG | ARCHIVE_CONSUMER_CONFIG

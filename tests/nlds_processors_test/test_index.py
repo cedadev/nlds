@@ -106,8 +106,7 @@ def test_index(
         default_indexer.uid = 100
         default_indexer.gids = [100]
 
-    # All files should be in failed list with any number of retries over the
-    # limit
+    # All files should be in failed list
     for i in range(5, 10):
         test_filelist = [PathDetails(original_path="./no_test/")]
         default_indexer.index(test_filelist, "test", default_rmq_message_dict)

@@ -69,11 +69,10 @@ class SubRecord(MonitorBase):
         therefore be marked as COMPLETE.
 
         Checks whether all states have gotten to the final stage of a workflow
-        (CATALOG_PUT or TRANSFER_GET) and are not retrying, OR have failed. This
-        should cover all bases.
+        (CATALOG_PUT or TRANSFER_GET) OR have failed. This should cover all bases.
         """
         return (
-            self.state in State.get_final_states() and self.retry_count == 0
+            self.state in State.get_final_states()
         ) or self.state == State.FAILED
 
 
