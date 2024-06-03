@@ -200,14 +200,14 @@ class JasminAuthenticator(BaseAuthenticator):
         # returns False.
         try:
             response = requests.get(
-                f"{config['user_grants_url']}{user}/grants/?category=GWS",
+                f"{config['user_grants_url']}{user}/grants/?category=GWS&service={group}",
                 headers = token_headers,
                 timeout = JasminAuthenticator._timeout
             )
         except requests.exceptions.ConnectionError:
             raise RuntimeError(
                 "User grants url "
-                f"{config['user_grants_url']}{user}/grants/ could not "
+                f"{config['user_grants_url']}{user}/grants/?category=GWS&service={group} could not "
                 "be reached."
             )
         except KeyError:
@@ -224,12 +224,12 @@ class JasminAuthenticator(BaseAuthenticator):
                 raise RuntimeError(
                     "The user's role was not found in the response "
                     "from the user grants url: "
-                    f"{config['user_grants_url']}{user}/grants/"
+                    f"{config['user_grants_url']}{user}/grants/?category=GWS&service={group}"
                 )
             except json.JSONDecodeError:
                 raise RuntimeError(
                     "Invalid JSON returned from the user grants url: "
-                    f"{config['user_grants_url']}{user}/grants/"
+                    f"{config['user_grants_url']}{user}/grants/?category=GWS&service={group}"
                 )
         else:
             return False
