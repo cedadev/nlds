@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Aggregation, Storage, Tag
 from nlds_processors.db_mixin import DBMixin
+from nlds.authenticators.jasmin_authenticator import authenticate_user_group_role
 
 class CatalogError(Exception):
     def __init__(self, message, *args):
@@ -483,13 +484,13 @@ class Catalog(DBMixin):
     @staticmethod
     def _user_has_delete_from_holding_permission(user: str, 
                                                  group: str,
-                                                 is_admin: bool,
                                                  holding: Holding) -> bool:
         """Check whether a user has permission to delete files from this holding.
         When we implement ROLES this will be more complicated."""
         # is_admin == whether the user is an administrator of the group
         # i.e. a DEPUTY or MANAGER
         # this gives them delete permissions for all files in the group
+        is_admin = authenticate_user_group_role(user, group)
         permitted = True
         # Currently, only users can delete files from their owned holdings
         permitted &= (holding.user == user or is_admin)
@@ -516,7 +517,7 @@ class Catalog(DBMixin):
                                tag=tag)
         holding = self.get_holding(user, group, holding_id=holding_id)[0]
         if not Catalog._user_has_delete_from_holding_permission(
-            user, group, False, holding):
+            user, group, holding):
             # No admins at the moment!
             raise CatalogError(
                 f"User:{user} in group:{group} does not have permission "

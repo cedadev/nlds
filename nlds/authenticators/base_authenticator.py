@@ -26,3 +26,7 @@ class BaseAuthenticator(ABC):
     def authenticate_group(self, oauth_token: str, group: str):
         """Validate whether the Bearer of the token belongs to the group."""
         return NotImplementedError
+    
+    def authenticate_user_group_role(self, oauth_token: str, user: str, group: str):
+        """Validate whether the user has manager/deputy permissions in the group."""
+        return NotImplementedError

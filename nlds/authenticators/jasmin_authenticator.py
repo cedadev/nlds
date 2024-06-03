@@ -182,3 +182,54 @@ class JasminAuthenticator(BaseAuthenticator):
                 )
         else:
             return False
+
+
+    @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
+    def authenticate_user_group_role(self, oauth_token: str, user: str, group: str):
+        """Make a call to the JASMIN services to determine whether the user with the
+        token has a manager/deputy role within the requested group."""
+        config = self.config[self.auth_name][self.name]
+        token_headers = {
+            "Content-Type" : "application/x-www-form-urlencoded",
+            "cache-control": "no-cache",
+            "Authorization" : f"Bearer {oauth_token}"
+        }
+        # Contact the user_grants_url to check the role of the user in the group
+        # given. This checks whether the user is a manger, deputy or user and 
+        # returns True if they are either a manager or deputy, otherwise it 
+        # returns False.
+        try:
+            response = requests.get(
+                f"{config['user_grants_url']}{user}/grants/?category=GWS",
+                headers = token_headers,
+                timeout = JasminAuthenticator._timeout
+            )
+        except requests.exceptions.ConnectionError:
+            raise RuntimeError(
+                "User grants url "
+                f"{config['user_grants_url']}{user}/grants/ could not "
+                "be reached."
+            )
+        except KeyError:
+            raise RuntimeError(
+                f"Could not find 'user_grants_url' key in the "
+                f"[{self.name}] section of the .server_config file."
+            )
+        if response.status_code == requests.codes.ok:  # status code 200
+            try:
+                response_json = json.loads(response.text)
+                user_role = response_json['group_workspaces']
+                return user_role in ['MANAGER', 'DEPUTY']
+            except KeyError:
+                raise RuntimeError(
+                    "The user's role was not found in the response "
+                    "from the user grants url: "
+                    f"{config['user_grants_url']}{user}/grants/"
+                )
+            except json.JSONDecodeError:
+                raise RuntimeError(
+                    "Invalid JSON returned from the user grants url: "
+                    f"{config['user_grants_url']}{user}/grants/"
+                )
+        else:
+            return False
