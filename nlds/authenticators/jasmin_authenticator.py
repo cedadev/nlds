@@ -201,6 +201,7 @@ class JasminAuthenticator(BaseAuthenticator):
                 headers=token_headers,
                 timeout=JasminAuthenticator._timeout,
             )
+            print(response)
         except requests.exceptions.ConnectionError:
             raise RuntimeError(
                 "User grants url "
