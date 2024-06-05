@@ -248,9 +248,9 @@ class Monitor(DBMixin):
                 # If all have, then set all non-failed jobs to complete
                 for sr in sub_records:
                     if sr.state in State.get_failed_states():
-                        self.update_sub_record(sr, State.FAILED, False)
+                        self.update_sub_record(sr, State.FAILED)
                     else:
-                        self.update_sub_record(sr, State.COMPLETE, False)
+                        self.update_sub_record(sr, State.COMPLETE)
 
         except IntegrityError:
             raise MonitorError(
