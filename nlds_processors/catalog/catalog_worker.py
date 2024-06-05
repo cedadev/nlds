@@ -166,8 +166,9 @@ class CatalogConsumer(RMQC):
         try:
             _ = filelist[0]
         except TypeError as e:
-            self.log(f"filelist field must contain a list", RK.LOG_ERROR)
-            raise CatalogError
+            msg = f"filelist field must contain a list"
+            self.log(msg, RK.LOG_ERROR)
+            raise CatalogError(message=msg)
 
         return filelist
 
@@ -176,26 +177,32 @@ class CatalogConsumer(RMQC):
         try:
             user = body[MSG.DETAILS][MSG.USER]
         except KeyError:
-            self.log("User not in message, exiting callback.", RK.LOG_ERROR)
-            raise CatalogError
+            msg = "User not in message, exiting callback."
+            self.log(msg, RK.LOG_ERROR)
+            raise CatalogError(message=msg)
 
         # get the group from the details section of the message
         try:
             group = body[MSG.DETAILS][MSG.GROUP]
         except KeyError:
-            self.log("Group not in message, exiting callback.", RK.LOG_ERROR)
-            raise CatalogError
+            msg = "Group not in message, exiting callback."
+            self.log(msg, RK.LOG_ERROR)
+            raise CatalogError(message=msg)
 
         return user, group
 
-    def _parse_transaction_id(self, body: Dict) -> str:
+    def _parse_transaction_id(self, body: Dict, mandatory: bool=False) -> str:
         # get the transaction id from the details section of the message. It is
         # a mandatory variable for the PUT workflow
         try:
             transaction_id = body[MSG.DETAILS][MSG.TRANSACT_ID]
         except KeyError:
-            self.log("Transaction id not in message, exiting callback.", RK.LOG_ERROR)
-            raise CatalogError
+            if mandatory:
+                msg = "Transaction id not in message, exiting callback."
+                self.log(msg, RK.LOG_ERROR)
+                raise CatalogError(message=msg)
+            else:
+                transaction_id = None
         return transaction_id
 
     def _parse_tenancy(self, body: Dict) -> str:
@@ -220,7 +227,7 @@ class CatalogConsumer(RMQC):
     def _parse_groupall(self, body: Dict) -> str:
         try:
             groupall = body[MSG.DETAILS][MSG.GROUPALL]
-        except:
+        except KeyError:
             groupall = False
         return groupall
 
@@ -249,17 +256,16 @@ class CatalogConsumer(RMQC):
         try:
             transaction_records = body[MSG.DATA][MSG.RECORD_LIST]
         except KeyError:
-            self.log("Transaction ids not in message, exiting callback.", RK.LOG_ERROR)
-            raise CatalogError
+            msg = "Transaction ids not in message, exiting callback."
+            self.log(msg, RK.LOG_ERROR)
+            raise CatalogError(message=msg)
 
         # Verify transaction list
         if transaction_records is None or len(transaction_records) <= 0:
-            self.log(
-                "Passed list of transactions is not valid, check message "
-                "contents. Exiting callback",
-                RK.LOG_ERROR,
-            )
-            raise CatalogError
+            msg = ("Passed list of transactions is not valid, check message "
+                   "contents. Exiting callback")
+            self.log(msg, RK.LOG_ERROR)
+            raise CatalogError(message=msg)
         return transaction_records
 
     def _parse_path(self, body: dict) -> str:
@@ -309,7 +315,7 @@ class CatalogConsumer(RMQC):
         try:
             filelist = self._parse_filelist(body)
             user, group = self._parse_user_vars(body)
-            transaction_id = self._parse_transaction_id(body)
+            transaction_id = self._parse_transaction_id(body, mandatory=True)
             tenancy = self._parse_tenancy(body)
             label, holding_id, tags, _ = self._parse_metadata_vars(body)
         except CatalogError:
@@ -1213,7 +1219,7 @@ class CatalogConsumer(RMQC):
             user, group = self._parse_user_vars(body)
             transaction_id = self._parse_transaction_id(body)
             label, _, _, _ = self._parse_metadata_vars(body)
-            transaction_records = self._parse_transaction_id(body)
+            transaction_records = self._parse_transaction_records(body)
             groupall = self._parse_groupall(body)
         except CatalogError:
             # functions above handled message logging, here we just return
@@ -1279,7 +1285,7 @@ class CatalogConsumer(RMQC):
             path = self._parse_path(body)
         except CatalogError:
             # functions above handled message logging, here we just return
-            return
+            raise Exception
 
         self.catalog.start_session()
         ret_dict = {}
