@@ -43,6 +43,7 @@ class PathType(Enum):
             "UNINDEXED",
         ][self.value]
 
+
 class PathLocation(BaseModel):
     storage_type: Optional[str] = None
     url_scheme: Optional[str] = None
@@ -138,7 +139,7 @@ class PathDetails(BaseModel):
                 "permissions": self.permissions,
                 "mode": self.mode,
                 "access_time": self.access_time,
-                "failure_reason": self.failure_reason
+                "failure_reason": self.failure_reason,
             },
             **self.locations.to_json(),
         }
@@ -149,9 +150,7 @@ class PathDetails(BaseModel):
             locations = PathLocations.from_dict(json_contents)
         else:
             locations = PathLocations()
-        return cls(
-            **json_contents["file_details"], locations=locations
-        )
+        return cls(**json_contents["file_details"], locations=locations)
 
     @classmethod
     def from_path(cls, path: str):
@@ -219,3 +218,35 @@ class PathDetails(BaseModel):
             path=self.original_path,
             stat_result=self.get_stat_result(),
         )
+
+    def set_object_store(self, tenancy: str, bucket: str) -> None:
+        """Set the object_storage details for the file.
+        This allows the object name to then be derived programmatically using a
+        function, rather than munging the name every time it is used.
+        The details for the PathLocation struct are:
+            storage_type = "object_storage"
+            url_scheme = "http://"
+            url_netloc = tenancy
+            root = bucket = transaction_id
+            path = original_path
+        """
+        # create the PathLocation and assign details to it
+        pl = PathLocation(
+            storage_type=MSG.OBJECT_STORAGE,
+            url_scheme="http://",
+            url_netloc=tenancy,
+            root=bucket,
+            path=self.original_path,
+        )
+        self.locations.add(pl)
+
+    @property
+    def object_name(self) -> str | None:
+        """Get the 1st object storage location and return the object_name by munging the string:
+            object_name = f"nlds.{root}:{location.path}
+        """
+        for pl in self.locations.locations:
+            if pl.storage_type == MSG.OBJECT_STORAGE:
+                object_name = f"nlds.{pl.root}:{pl.path}"
+                return object_name
+        return None
