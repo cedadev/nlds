@@ -145,7 +145,7 @@ class RabbitMQConsumer(ABC, RMQP):
         """Check whether the body_json contains a message to check for system status"""
         # This checks if the message was for a system status check
         try:
-            api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
+            api_method = body_json[MSG.DATA][MSG.API_ACTION]
         except KeyError:
             self.log(f"Message did not contain api_method", RK.LOG_INFO)
             api_method = None
@@ -369,30 +369,6 @@ class RabbitMQConsumer(ABC, RMQP):
         )
         self.log(f"Failed message content: {body}", RK.LOG_DEBUG)
 
-    def _fail_transaction(self, body_json: Dict[str, Any], monitoring_rk: str):
-        """Attempt to mark transaction as failed in monitoring db"""
-        try:
-            # Send message to monitoring to keep track of state
-            body_json[MSG.DETAILS][MSG.STATE] = State.FAILED
-            self.publish_message(monitoring_rk, body_json)
-        except Exception as e:
-            # If this fails there's not much we can do at this stage...
-            # TODO: might be worth figuring out a way of just extracting the
-            # transaction id and failing the job from that? If it's gotten to
-            # this point and failed then
-            self.log(
-                "Failed attempt to mark transaction as failed in " "monitoring.",
-                RK.LOG_WARNING,
-            )
-            self.log(
-                f"Exception that arose during attempt to mark job as " f"failed: {e}",
-                RK.LOG_DEBUG,
-            )
-            self.log(
-                f"Message that couldn't be failed: " f"{json.dumps(body_json)}",
-                RK.LOG_DEBUG,
-            )
-
     @staticmethod
     def _acknowledge_message(channel: Channel, delivery_tag: str) -> None:
         """Acknowledge a message with a basic ack. This is the bare minimum
@@ -492,11 +468,12 @@ class RabbitMQConsumer(ABC, RMQP):
 
         # Wrap callback with a try-except catching a selection of common
         # errors which can be caught without stopping consumption.
+        # NRM - this has changed to stop on all exceptions!
         try:
             ack_fl = self.callback(ch, method, properties, body, connection)
         except Exception as e:
             # this is very unsatisfactory!
-            pass
+            raise Exception(e)
         finally:
             # Only ack message if the message has not been flagged for nacking
             # in the callback with a `return False`
