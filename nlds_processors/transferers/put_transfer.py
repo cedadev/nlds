@@ -79,8 +79,8 @@ class PutTransferConsumer(BaseTransferConsumer):
                 f"Attempting to upload file {path_details.original_path}", RK.LOG_DEBUG
             )
 
-            # TODO add this to the PathDetails as the StorageLocation
-            path_details.object_name = path_details.original_path
+            # Add this to the PathDetails as the StorageLocation
+            path_details.set_object_store(tenancy=tenancy, bucket=transaction_id)
             try:
                 result = client.fput_object(
                     bucket_name,
