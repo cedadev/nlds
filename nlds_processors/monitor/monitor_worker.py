@@ -532,19 +532,6 @@ class MonitorConsumer(RMQC):
 
         self.log("Callback complete!", RK.LOG_INFO)
 
-    def _fail_transaction(self, body_json: Dict[str, Any], monitoring_rk: str):
-        """Overrides the fail transaction method so as to avoid an infinite loop
-        in the monitor queue system. The overridden method just adds another
-        message to the monitoring queue, so for failures in the monitoring queue
-        we just have to log the failure and move on.
-        """
-        self.log(
-            f"Failed message on monitoring with routing_key: "
-            f"{monitoring_rk}. Could not conntinue.",
-            RK.LOG_ERROR,
-        )
-        return
-
     def attach_database(self, create_db_fl: bool = True):
         """Attach the Monitor to the consumer"""
         # Load config options or fall back to default values.
