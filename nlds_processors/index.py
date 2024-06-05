@@ -86,7 +86,12 @@ class IndexerConsumer(StattingConsumer):
                 state=State.SPLITTING,
             )
 
-    def _scan(self, filelist, rk_parts):
+    def _scan(
+        self,
+        filelist: List[PathDetails],
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+    ) -> None:
         # First change user and group so file permissions can be
         # checked. This should be deactivated when testing locally.
         if self.check_permissions_fl:
@@ -139,7 +144,7 @@ class IndexerConsumer(StattingConsumer):
             if filelist_len > self.filelist_max_len:
                 self._split(filelist, rk_parts[0], body_json)
             else:
-                self._scan()
+                self._scan(filelist, rk_parts, body_json)
 
     def _index_r(
         self,
@@ -206,7 +211,7 @@ class IndexerConsumer(StattingConsumer):
 
     def index(
         self, raw_filelist: List[PathDetails], rk_origin: str, body_json: Dict[str, Any]
-    ):
+    ) -> None:
         """Indexes a list of PathDetails.
             :param List[PathDetails] raw_filelist:  List of PathDetails containing
                 paths to files or indexable directories and the number of times each
