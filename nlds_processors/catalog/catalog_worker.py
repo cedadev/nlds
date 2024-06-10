@@ -348,7 +348,7 @@ class CatalogConsumer(RMQC):
                 self.log(e.message, RK.LOG_ERROR)
                 raise e
         else:
-            holding = holding.first()
+            holding = holding[0]
         return holding
 
     def _get_or_create_transaction(self, transaction_id, holding):
@@ -490,7 +490,7 @@ class CatalogConsumer(RMQC):
             )
             self.send_pathlist(
                 self.failedlist,
-                routing_keu=rk_failed,
+                routing_key=rk_failed,
                 body_json=body,
                 state=State.FAILED,
                 warning=tag_warnings,
@@ -579,7 +579,7 @@ class CatalogConsumer(RMQC):
             )
             self.send_pathlist(
                 self.failedlist,
-                routing_keu=rk_failed,
+                routing_key=rk_failed,
                 body_json=body,
                 state=State.FAILED,
             )

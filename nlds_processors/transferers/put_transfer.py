@@ -11,6 +11,11 @@ from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 
 
+def _get_bucket_name(transaction_id: str):
+    bucket_name = f"nlds.{transaction_id}"
+    return bucket_name
+
+
 class PutTransferConsumer(BaseTransferConsumer):
     DEFAULT_QUEUE_NAME = "transfer_put_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_PUT}." f"{RK.WILD}"
@@ -18,44 +23,40 @@ class PutTransferConsumer(BaseTransferConsumer):
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
+        self.client = None
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
-    def transfer(
+    def _make_bucket(self, transaction_id: str):
+        bucket_name = _get_bucket_name(transaction_id)
+        # Check that bucket exists, and create if not
+        try:
+            if not self.client.bucket_exists(bucket_name):
+                self.client.make_bucket(bucket_name)
+                self.log(
+                    f"Creating bucket ({bucket_name}) for this" " transaction",
+                    RK.LOG_INFO,
+                )
+            else:
+                self.log(
+                    f"Bucket for this transaction ({transaction_id}) "
+                    f"already exists",
+                    RK.LOG_INFO,
+                )
+            return True, None
+        except minio.error.S3Error as e:
+            return False, e
+
+    def _transfer_files(
         self,
         transaction_id: str,
         tenancy: str,
-        access_key: str,
-        secret_key: str,
-        filelist: List[PathDetails],
+        filelist: list,
         rk_origin: str,
         body_json: Dict[str, Any],
     ):
-        client = minio.Minio(
-            tenancy,
-            access_key=access_key,
-            secret_key=secret_key,
-            secure=self.require_secure_fl,
-        )
-
+        """Transfer the files to the Object Storage"""
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
-
-        # TODO add this to the PathDetails as the StorageLocation
-        bucket_name = f"nlds.{transaction_id}"
-
-        # Check that bucket exists, and create if not
-        # TODO: Does this create a failure mode whereby if a transaction fails
-        # at the transaction level then no failure message is sent.
-        if not client.bucket_exists(bucket_name):
-            client.make_bucket(bucket_name)
-            self.log(
-                f"Creating bucket ({bucket_name}) for this" " transaction", RK.LOG_INFO
-            )
-        else:
-            self.log(
-                f"Bucket for this transaction ({transaction_id}) " f"already exists",
-                RK.LOG_INFO,
-            )
+        bucket_name = _get_bucket_name(transaction_id)
 
         for path_details in filelist:
             item_path = path_details.path
@@ -82,7 +83,7 @@ class PutTransferConsumer(BaseTransferConsumer):
             # Add this to the PathDetails as the StorageLocation
             path_details.set_object_store(tenancy=tenancy, bucket=transaction_id)
             try:
-                result = client.fput_object(
+                result = self.client.fput_object(
                     bucket_name,
                     path_details.object_name,
                     path_details.original_path,
@@ -97,7 +98,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                     body_json=body_json,
                     state=State.TRANSFER_PUTTING,
                 )
-            except HTTPError as e:
+            except (HTTPError, minio.error.S3Error) as e:
                 reason = (
                     f"Error uploading {path_details.path} to object " f"store: {e}."
                 )
@@ -111,6 +112,45 @@ class PutTransferConsumer(BaseTransferConsumer):
                     state=State.FAILED,
                 )
                 continue
+
+    @retry(S3Error, tries=5, delay=1, logger=None)
+    def transfer(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, Any],
+    ):
+        self.client = minio.Minio(
+            tenancy,
+            access_key=access_key,
+            secret_key=secret_key,
+            secure=self.require_secure_fl,
+        )
+
+        rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
+        rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
+
+        bucket_made, failure_reason = self._make_bucket(transaction_id)
+        if not bucket_made:
+            # If the bucket cannot be created, due to a S3 error, then fail all the
+            # files in the transaction
+            for f in filelist:
+                f.failure_reason = (
+                    f"S3 error: {failure_reason.message} when creating bucket"
+                )
+                self.failedlist.append(f)
+        else:
+            self._transfer_files(
+                transaction_id=transaction_id,
+                tenancy=tenancy,
+                filelist=filelist,
+                rk_origin=rk_origin,
+                body_json=body_json
+            )
 
         self.log(
             "Transfer complete, passing lists back to worker for "

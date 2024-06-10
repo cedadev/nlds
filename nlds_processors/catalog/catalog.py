@@ -437,7 +437,7 @@ class Catalog(DBMixin):
                 transaction = self.get_transaction(f.transaction_id)
                 holding = self.get_holding(
                     user, group, holding_id=transaction.holding_id
-                ).first()
+                )[0]
                 self.session.delete(f)
                 if len(transaction.files) == 0:
                     self.session.delete(transaction)
