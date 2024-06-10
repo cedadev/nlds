@@ -187,8 +187,32 @@ activate qw
 qw -> work : key=""nlds-api.transfer-put.complete""
 deactivate qw
 
+activate work
+work -> wex : key=""nlds-api.catalog-amend.start"
+deactivate work
+
+activate wex
+wex -> qc : key=""nlds-api.catalog-amend.start""
+deactivate wex
+
+activate qc
+qc -> catalog : key=""nlds-api.catalog-amend.start""
+deactivate qc
+
+activate catalog
+loop #LightGreen for file in //transferred_list//
+    catalog -> catalog_db : add object storage details to file record
+end
+catalog -> wex : key=""nlds-api.catalog-amend.complete""
+deactivate catalog
+
+activate wex
+wex -> work : key=""nlds-api.catalog-amend.complete""
+deactivate wex
+
 transfer_puts -> wex : key=""nlds-api.transfer-put.failed""
 deactivate transfer_puts
+
 
 activate wex
 wex -> qw : key=""nlds-api.transfer-put.failed""

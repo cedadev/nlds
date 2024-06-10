@@ -117,11 +117,28 @@ def test_serialisation():
     byte_str = json.dumps(message_dict)
     loaded = json.loads(byte_str)
     pd_from_msg = PathDetails.from_dict(loaded["DATA"]["DATA_FILELIST"][0])
-    print(pd_from_msg)
     assert pd_from_msg == pd
 
+
+def test_object_name():
+    pd = PathDetails(original_path=__file__)
+    pd.stat()
+
+    # add a location
+    location = PathLocation(
+        storage_type="object_storage",
+        url_scheme="https",
+        url_netloc="cedadev-o",
+        root="neils-bucket",
+        path="file",
+        access_time="now",
+    )
+    pd.locations.add(location)
+    os_loc = pd.object_name
+    assert(os_loc == "nlds.neils-bucket:file")
 
 if __name__ == "__main__":
     test_path_details()
     test_path_location()
     test_serialisation()
+    test_object_name()

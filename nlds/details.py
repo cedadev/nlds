@@ -233,12 +233,21 @@ class PathDetails(BaseModel):
         # create the PathLocation and assign details to it
         pl = PathLocation(
             storage_type=MSG.OBJECT_STORAGE,
-            url_scheme="http://",
+            url_scheme="http",
             url_netloc=tenancy,
             root=bucket,
             path=self.original_path,
         )
         self.locations.add(pl)
+
+    def get_object_store(self) -> PathLocation | None:
+        """Get the PathLocation for the object storage file."""
+        # note - this only returns the first object - this is fine for now, but might
+        # need amending if users want to use different tenancies
+        for pl in self.locations.locations:
+            if pl.storage_type == MSG.OBJECT_STORAGE:
+                return pl
+        return None
 
     @property
     def object_name(self) -> str | None:

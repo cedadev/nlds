@@ -15,6 +15,7 @@ from sqlalchemy.orm import declarative_base, relationship
 
 import enum
 from nlds.details import PathType
+from nlds_processors.catalog.catalog_error import CatalogError
 
 """Declarative base class, containing the Metadata object"""
 CatalogBase = declarative_base()
@@ -116,6 +117,15 @@ class Storage(enum.Enum):
     TAPE = 2
     def to_json(self):
         return ["OBJECT_STORAGE", "TAPE"][self.value-1]
+    
+    @classmethod
+    def from_str(cls, storage_type: str):
+        if storage_type == "OBJECT_STORAGE":
+            return cls(cls.OBJECT_STORAGE)
+        elif storage_type == "TAPE":
+            return cls(cls.TAPE)
+        else:
+            raise CatalogError(f"{storage_type}: unknown Storage_Type in Storage")
 
 
 class Location(CatalogBase):

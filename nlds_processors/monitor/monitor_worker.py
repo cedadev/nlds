@@ -229,10 +229,10 @@ class MonitorConsumer(RMQC):
             )
             try:
                 for pd in filelist:
-                    reason = 0
+                    reason = ""
                     # Check which was the final reason for failure and pass
                     # that as the failure reason for the FailedFile.
-                    if pd.failure_reason >= reason:
+                    if pd.failure_reason is not None:
                         reason = pd.failure_reason
                     self.monitor.create_failed_file(srec, pd, reason=reason)
             except MonitorError as e:

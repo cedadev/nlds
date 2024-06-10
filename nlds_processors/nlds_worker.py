@@ -139,10 +139,20 @@ class NLDSWorkerConsumer(RMQC):
         self.publish_and_log_message(new_routing_key, body_json)
 
     def _process_rk_transfer_put_complete(self, body_json: Dict) -> None:
-        # Nothing happens after a successful transfer anymore, so we leave this
-        # empty in case any future messages are required (queueing archive for
-        # example)
-        pass
+        # After a successfull TRANSFER_PUT, the catalog is amended with the locations
+        # of the files on the OBJECT STORAGE
+        self.log(
+            f"Transfer successful, sending filelist with object storage locations to "
+             "be inserted into the catalog",
+            RK.LOG_INFO,
+        )
+        queue = f"{RK.CATALOG_AMEND}"
+        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
+        self.log(
+            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            RK.LOG_INFO,
+        )
+        self.publish_and_log_message(new_routing_key, body_json)
 
     def _process_rk_transfer_put_failed(self, body_json: Dict) -> None:
         self.log(

@@ -20,16 +20,8 @@ from nlds_processors.catalog.catalog_models import (
     Tag,
 )
 from nlds_processors.db_mixin import DBMixin
+from nlds_processors.catalog.catalog_error import CatalogError
 
-
-class CatalogError(Exception):
-    def __init__(self, message, *args):
-        super().__init__(args)
-        self.message = message
-
-    def __str__(self):
-        return self.message
-    
 class Catalog(DBMixin):
     """Catalog object containing methods to manipulate the Catalog Database"""
 

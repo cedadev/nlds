@@ -27,6 +27,7 @@ Requires these settings in the /etc/nlds/server_config file:
 import json
 from typing import Dict, Tuple, List
 from hashlib import shake_256
+from datetime import datetime
 
 from urllib.parse import urlunsplit
 
@@ -36,13 +37,12 @@ from pika.connection import Connection
 from pika.frame import Method
 from pika.frame import Header
 
-from datetime import datetime, timezone
-
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
-from nlds_processors.catalog.catalog import Catalog, CatalogError
+from nlds_processors.catalog.catalog import Catalog
+from nlds_processors.catalog.catalog_error import CatalogError
 from nlds_processors.catalog.catalog_models import Storage, Location
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
@@ -89,6 +89,14 @@ class Metadata:
     @property
     def unpack(self) -> Tuple:
         return (self.label, self.holding_id, self.tags, self.transaction_id)
+
+
+def format_datetime(date: datetime):
+    try:
+        datetime_str = date.isoformat()
+    except AttributeError:
+        datetime_str = "0000-01-01T00:00:00"
+    return datetime_str
 
 
 class CatalogConsumer(RMQC):
@@ -144,11 +152,11 @@ class CatalogConsumer(RMQC):
     def reset(self):
         super().reset()
 
-        self.completelist = []
-        self.failedlist = []
+        self.completelist.clear()
+        self.failedlist.clear()
         # New list for rerouting to archive if not found on object store
-        self.reroutelist = []
-        self.retrievedict = {}
+        self.reroutelist.clear()
+        self.retrievedict.clear()
 
     def _parse_filelist(self, body: Dict) -> list[str]:
         # get the filelist from the data section of the message
@@ -191,7 +199,7 @@ class CatalogConsumer(RMQC):
 
         return user, group
 
-    def _parse_transaction_id(self, body: Dict, mandatory: bool=False) -> str:
+    def _parse_transaction_id(self, body: Dict, mandatory: bool = False) -> str:
         # get the transaction id from the details section of the message. It is
         # a mandatory variable for the PUT workflow
         try:
@@ -262,8 +270,10 @@ class CatalogConsumer(RMQC):
 
         # Verify transaction list
         if transaction_records is None or len(transaction_records) <= 0:
-            msg = ("Passed list of transactions is not valid, check message "
-                   "contents. Exiting callback")
+            msg = (
+                "Passed list of transactions is not valid, check message "
+                "contents. Exiting callback"
+            )
             self.log(msg, RK.LOG_ERROR)
             raise CatalogError(message=msg)
         return transaction_records
@@ -309,6 +319,75 @@ class CatalogConsumer(RMQC):
             # this will produce a new holding
         return search_label
 
+    def _get_or_create_holding(self, user, group, label, holding_id, new_label):
+        """Get a holding via label or holding_id.
+        If the holding doesn't already exist then create it."""
+        # try to get the holding to see if it already exists and can be added to
+        try:
+            # don't use tags to search - they are strictly for adding to the holding
+            holding = self.catalog.get_holding(
+                user, group, label=label, holding_id=holding_id
+            )
+        except (KeyError, CatalogError):
+            holding = None
+
+        if holding is None:
+            # if the holding_id is not None then raise an error as the user is
+            # trying to add to a holding that doesn't exist, but creating a new
+            # holding won't have a holding_id that matches the one they passed in
+            if holding_id is not None:
+                message = (
+                    f"Could not add files to holding with holding_id: "
+                    f"{holding_id}.  holding_id does not exist."
+                )
+                self.log(message, RK.LOG_DEBUG)
+                raise CallbackError(message)
+            try:
+                holding = self.catalog.create_holding(user, group, new_label)
+            except CatalogError as e:
+                self.log(e.message, RK.LOG_ERROR)
+                raise e
+        else:
+            holding = holding.first()
+        return holding
+
+    def _get_or_create_transaction(self, transaction_id, holding):
+        # try to get the transaction to see if it already exists and can be
+        # added to
+        try:
+            transaction = self.catalog.get_transaction(transaction_id=transaction_id)
+        except (KeyError, CatalogError):
+            transaction = None
+
+        # create the transaction within the  holding if it doesn't exist
+        if transaction is None:
+            try:
+                transaction = self.catalog.create_transaction(holding, transaction_id)
+            except CatalogError as e:
+                self.log(e.message, RK.LOG_ERROR)
+                raise e
+        return transaction
+
+    def _create_tags(self, tags, holding, label):
+        # add the tags - if the tag already exists then don't add it or modify
+        # it, with the reasoning that the user can change it with the `meta`
+        # command.
+        warnings = []
+        if tags:
+            for k in tags:
+                try:
+                    tag = self.catalog.get_tag(holding, k)
+                except CatalogError:  # tag's key not found so create
+                    self.catalog.create_tag(holding, k, tags[k])
+                else:
+                    # append a warning that the tag could not be added to the holding
+                    warnings.append(
+                        f"Tag with key:{k} could not be added to holding with label"
+                        f":{label} as that tag already exists.  Tags can be modified"
+                        f" using the meta command"
+                    )
+        return warnings
+
     def _catalog_put(self, body: Dict, rk_origin: str) -> None:
         """Put a file record into the catalog - end of a put transaction"""
         # Parse the message body for required variables
@@ -336,48 +415,13 @@ class CatalogConsumer(RMQC):
         # get the (regex) search label
         search_label = self._get_search_label(label, holding_id)
 
-        # try to get the holding to see if it already exists and can be added to
-        try:
-            # don't use tags to search - they are strictly for adding to the holding
-            holding = self.catalog.get_holding(
-                user, group, label=search_label, holding_id=holding_id
-            )
-        except (KeyError, CatalogError):
-            holding = None
+        # get, or create the holding
+        holding = self._get_or_create_holding(
+            user, group, label=search_label, holding_id=holding_id, new_label=new_label
+        )
 
-        if holding is None:
-            # if the holding_id is not None then raise an error as the user is
-            # trying to add to a holding that doesn't exist, but creating a new
-            # holding won't have a holding_id that matches the one they passed in
-            if holding_id is not None:
-                message = (
-                    f"Could not add files to holding with holding_id: "
-                    f"{holding_id}.  holding_id does not exist."
-                )
-                self.log(message, RK.LOG_DEBUG)
-                raise CallbackError(message)
-            try:
-                holding = self.catalog.create_holding(user, group, new_label)
-            except CatalogError as e:
-                self.log(e.message, RK.LOG_ERROR)
-                return
-        else:
-            holding = holding.first()
-
-        # try to get the transaction to see if it already exists and can be
-        # added to
-        try:
-            transaction = self.catalog.get_transaction(transaction_id=transaction_id)
-        except (KeyError, CatalogError):
-            transaction = None
-
-        # create the transaction within the  holding if it doesn't exist
-        if transaction is None:
-            try:
-                transaction = self.catalog.create_transaction(holding, transaction_id)
-            except CatalogError as e:
-                self.log(e.message, RK.LOG_ERROR)
-                return
+        # get or create the transaction
+        transaction = self._get_or_create_transaction(transaction_id, holding)
 
         # loop over the filelist
         for f in filelist:
@@ -397,6 +441,7 @@ class CatalogConsumer(RMQC):
                 else:
                     raise CatalogError("File already exists in holding")
 
+                # create the file
                 file_ = self.catalog.create_file(
                     transaction,
                     pd.user,
@@ -414,23 +459,8 @@ class CatalogConsumer(RMQC):
                 self.log(e.message, RK.LOG_ERROR)
                 continue
 
-        # add the tags - if the tag already exists then don't add it or modify
-        # it, with the reasoning that the user can change it with the `meta`
-        # command.
-        warnings = []
-        if tags:
-            for k in tags:
-                try:
-                    tag = self.catalog.get_tag(holding, k)
-                except CatalogError:  # tag's key not found so create
-                    self.catalog.create_tag(holding, k, tags[k])
-                else:
-                    # append a warning that the tag could not be added to the holding
-                    warnings.append(
-                        f"Tag with key:{k} could not be added to holding with label"
-                        f":{label} as that tag already exists.  Tags can be modified"
-                        f" using the meta command"
-                    )
+        # Add any user tags to the holding
+        tag_warnings = self._create_tags(tags, holding, label)
 
         # stop db transitions and commit
         self.catalog.save()
@@ -449,7 +479,7 @@ class CatalogConsumer(RMQC):
                 routing_key=rk_complete,
                 body_json=body,
                 state=State.CATALOG_PUTTING,
-                warning=warnings,
+                warning=tag_warnings,
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -463,7 +493,95 @@ class CatalogConsumer(RMQC):
                 routing_keu=rk_failed,
                 body_json=body,
                 state=State.FAILED,
-                warning=warnings,
+                warning=tag_warnings,
+            )
+
+    def _catalog_amend(self, body: Dict, rk_origin: str) -> None:
+        """Upon completion of a TRANSFER_PUT, the list of completed files is returned
+        back to the NLDS worker, but with location on Object Storage of the files
+        appended to each PathDetails JSON object.
+        The NLDS worker then passes this message to the Catalog, and this function
+        processes the PathDetails and amends each file's record in the database to
+        contain the Object Storage location."""
+        # Parse the message body for required variables
+        try:
+            filelist = self._parse_filelist(body)
+            user, group = self._parse_user_vars(body)
+            transaction_id = self._parse_transaction_id(body, mandatory=True)
+        except CatalogError as e:
+            # functions above handled message logging, here we just return
+            raise e
+
+        self.catalog.start_session()
+        self.completelist.clear()
+        self.failedlist.clear()
+
+        # loop over the filelist
+        for f in filelist:
+            # convert to PathDetails class
+            pd = PathDetails.from_dict(f)
+            # need to
+            #   1. find the file,
+            #   2. create the object storage location,
+            #   3. add the details to the object storage location from the PathDetails
+            pl = pd.get_object_store()  # this returns a PathLocation object
+            # get the file
+            try:
+                file = self.catalog.get_files(
+                    user,
+                    group,
+                    transaction_id=transaction_id,
+                    original_path=pd.original_path,
+                )[
+                    0
+                ]  # just one file
+                location = self.catalog.create_location(
+                    file,
+                    storage_type=Storage.from_str(pl.storage_type),
+                    url_scheme=pl.url_scheme,
+                    url_netloc=pl.url_netloc,
+                    root=pl.root,
+                    path=pl.path,
+                    access_time=pl.access_time,
+                )
+                self.completelist.append(pd)
+            except CatalogError as e:
+                # the file wasn't found or the location couldn't be created
+                pd.failure_reason = e.message
+                self.failedlist.append(pd)
+                self.log(e.message, RK.LOG_ERROR)
+                continue
+
+        # stop db transitions and commit
+        self.catalog.save()
+        self.catalog.end_session()
+
+        # log the successful and non-successful catalog amends
+        # SUCCESS
+        if len(self.completelist) > 0:
+            rk_complete = ".".join([rk_origin, RK.CATALOG_AMEND, RK.COMPLETE])
+            self.log(
+                f"Sending completed PathList from CATALOG_AMEND {self.completelist}",
+                RK.LOG_DEBUG,
+            )
+            self.send_pathlist(
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body,
+                state=State.CATALOG_AMEND,
+            )
+        # FAILED
+        if len(self.failedlist) > 0:
+            rk_failed = ".".join([rk_origin, RK.CATALOG_AMEND, RK.FAILED])
+            self.log(
+                f"Sending failed PathList from CATALOG_AMEND {self.failedlist}",
+                RK.LOG_DEBUG,
+            )
+            self.send_pathlist(
+                self.failedlist,
+                routing_keu=rk_failed,
+                body_json=body,
+                state=State.FAILED,
             )
 
     def _catalog_get(self, body: Dict, rk_origin: str) -> None:
@@ -656,10 +774,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.completelist, 
-                routing_key=rk_complete, 
-                body_json=body, 
-                state=State.CATALOG_GETTING
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body,
+                state=State.CATALOG_GETTING,
             )
         # REROUTE
         if len(self.reroutelist) > 0:
@@ -679,10 +797,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.reroutelist, 
-                pouting_key= rk_reroute, 
-                body_json=body, 
-                state=State.CATALOG_GETTING
+                self.reroutelist,
+                pouting_key=rk_reroute,
+                body_json=body,
+                state=State.CATALOG_GETTING,
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -952,9 +1070,7 @@ class CatalogConsumer(RMQC):
             self.log(
                 f"Error encountered during _catalog_archive_update(): {e}", RK.LOG_ERROR
             )
-            raise CallbackError(
-                "Encountered error during aggregation update."
-            )
+            raise CallbackError("Encountered error during aggregation update.")
 
         # Only need to update the monitor after a successful tape-write
         if not rollback_fl:
@@ -1028,10 +1144,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.completelist, 
-                routing_key=rk_complete, 
-                body_json=body, 
-                state=State.CATALOG_ROLLBACK
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body,
+                state=State.CATALOG_ROLLBACK,
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -1041,10 +1157,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.failedlist, 
-                routing_key=rk_failed, 
+                self.failedlist,
+                routing_key=rk_failed,
                 body_json=body,
-                state=State.FAILED
+                state=State.FAILED,
             )
 
         # stop db transactions and commit
@@ -1124,10 +1240,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.completelist, 
-                routing_key=rk_complete, 
-                body_json=body, 
-                state=State.CATALOG_ROLLBACK
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body,
+                state=State.CATALOG_ROLLBACK,
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -1137,10 +1253,10 @@ class CatalogConsumer(RMQC):
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
-                self.failedlist, 
-                routing_key=rk_failed, 
-                body_json=body, 
-                state=State.FAILED
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body,
+                state=State.FAILED,
             )
 
         # stop db transactions and commit
@@ -1186,7 +1302,7 @@ class CatalogConsumer(RMQC):
                 # get the first transaction
                 if len(h.transactions) > 0:
                     t = h.transactions[0]
-                    date_str = t.ingest_time.isoformat()
+                    date_str = format_datetime(t.ingest_time)
                 else:
                     date_str = ""
                 ret_dict = {
@@ -1329,7 +1445,7 @@ class CatalogConsumer(RMQC):
                     t_rec = {
                         MSG.FILELIST: [],
                         MSG.TRANSACT_ID: t.transaction_id,
-                        "ingest_time": t.ingest_time.isoformat(),
+                        "ingest_time": format_datetime(t.ingest_time)
                     }
                     ret_dict[h.label][MSG.TRANSACTIONS][t.transaction_id] = t_rec
                 # get the locations
@@ -1353,7 +1469,7 @@ class CatalogConsumer(RMQC):
                         "storage_type": l.storage_type,
                         "root": l.root,
                         "path": l.path,
-                        "access_time": l.access_time.isoformat(),
+                        "access_time": format_datetime(l.access_time),
                         "url": url,
                     }
                     locations.append(l_rec)
@@ -1571,6 +1687,8 @@ class CatalogConsumer(RMQC):
                     self._catalog_put(body, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_DEL:
                     self._catalog_del(body, rk_parts[0])
+                elif rk_parts[1] == RK.CATALOG_AMEND:
+                    self._catalog_amend(body, rk_parts[0])
 
         # Archive put requires getting from the catalog
         elif api_method == RK.ARCHIVE_PUT:

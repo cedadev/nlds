@@ -172,8 +172,8 @@ class RabbitMQConsumer(ABC, RMQP):
 
     def reset(self) -> None:
         self.sent_message_count = 0
-        self.completelist = []
-        self.failedlist = []
+        self.completelist.clear()
+        self.failedlist.clear()
 
     def load_config_value(self, config_option: str, path_listify_fl: bool = False):
         """
@@ -230,7 +230,7 @@ class RabbitMQConsumer(ABC, RMQP):
 
     def parse_filelist(self, body_json: dict) -> List[PathDetails]:
         """Convert flat list from message json into list of PathDetails objects
-        and the check it is, in fact, a list
+        and then check it is, in fact, a list
         """
         try:
             filelist = [
