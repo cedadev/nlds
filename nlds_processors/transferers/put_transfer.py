@@ -11,11 +11,6 @@ from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 
 
-def _get_bucket_name(transaction_id: str):
-    bucket_name = f"nlds.{transaction_id}"
-    return bucket_name
-
-
 class PutTransferConsumer(BaseTransferConsumer):
     DEFAULT_QUEUE_NAME = "transfer_put_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_PUT}." f"{RK.WILD}"
@@ -25,8 +20,15 @@ class PutTransferConsumer(BaseTransferConsumer):
         super().__init__(queue=queue)
         self.client = None
 
+    @staticmethod
+    def _get_bucket_name(transaction_id: str):
+        bucket_name = f"nlds.{transaction_id}"
+        return bucket_name
+
     def _make_bucket(self, transaction_id: str):
-        bucket_name = _get_bucket_name(transaction_id)
+        assert(self.client is not None)
+
+        bucket_name = self._get_bucket_name(transaction_id)
         # Check that bucket exists, and create if not
         try:
             if not self.client.bucket_exists(bucket_name):
@@ -41,9 +43,9 @@ class PutTransferConsumer(BaseTransferConsumer):
                     f"already exists",
                     RK.LOG_INFO,
                 )
-            return True, None
+            return None
         except minio.error.S3Error as e:
-            return False, e
+            return e
 
     def _transfer_files(
         self,
@@ -56,7 +58,9 @@ class PutTransferConsumer(BaseTransferConsumer):
         """Transfer the files to the Object Storage"""
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
-        bucket_name = _get_bucket_name(transaction_id)
+        bucket_name = self._get_bucket_name(transaction_id)
+
+        assert(self.client is not None)
 
         for path_details in filelist:
             item_path = path_details.path
@@ -134,8 +138,8 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
 
-        bucket_made, failure_reason = self._make_bucket(transaction_id)
-        if not bucket_made:
+        failure_reason = self._make_bucket(transaction_id)
+        if failure_reason:
             # If the bucket cannot be created, due to a S3 error, then fail all the
             # files in the transaction
             for f in filelist:
