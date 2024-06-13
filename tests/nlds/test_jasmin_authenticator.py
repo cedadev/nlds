@@ -4,10 +4,12 @@ import json
 
 from nlds.authenticators.jasmin_authenticator import JasminAuthenticator
 
+
 @pytest.fixture(autouse=True)
 def no_requests(monkeypatch):
     """Remove requests.sessions.Session.request for all tests."""
     monkeypatch.delattr("requests.sessions.Session.request")
+
 
 class MockResponse:
     """Custom class to mock the requests.Response object."""
@@ -20,15 +22,9 @@ class MockResponse:
         return self.json_data
     
 
-def test_authenticate_user(monkeypatch):
-    """Check whether the user is a valid user."""
-    def mock_get(*args, **kwargs):
-        return MockResponse({"username": "test_user"}, 200)
-    
-    # Apply the monkeypatch for requests.get to mock_get
-    monkeypatch.setattr(requests, "get", mock_get)
-
-    # Create an instance of the JASMIN Authenticator, replacing the config with our test config
+@pytest.fixture
+def mock_load_config(monkeypatch):
+    """Mock the load_config function to return a test-specific configuration."""
     test_config = {
         'authentication' : {
             'authentication_backend': 'jasmin_authenticator',
@@ -38,11 +34,40 @@ def test_authenticate_user(monkeypatch):
         }
     }
     monkeypatch.setattr('nlds.authenticators.jasmin_authenticator.load_config', lambda: test_config)
-    auth = JasminAuthenticator()
 
-    # The authenticate_user method will use the monkeypatch
-    is_user = auth.authenticate_user("mock_oauth_token", "test_user")
-    assert is_user == True
+
+@pytest.fixture
+def mock_requests_get(monkeypatch):
+    """Mock the requests.get method to return different responses based on the URL."""
+    responses = {}
+
+    def mock_get(url, *args, **kwargs):
+        return responses[url]
+    
+    monkeypatch.setattr(requests, "get", mock_get)
+    return responses
+
+
+class TestAuthenticateUser:
+    """Check whether the user is a valid user."""
+    
+    @pytest.mark.parametrize("oauth_token, user, mock_response, expected_result", [
+    ("mock_oauth_token", "test_user", MockResponse({"username": "test_user"}, 200), True),
+    ("mock_oauth_token", "test_user", MockResponse({"username": "another_user"}, 200), False),
+    ("mock_oauth_token", "test_user", MockResponse({"error": "Unauthorized"}, 401), False),
+    ("mock_oauth_token", "test_user", MockResponse(None, 500), False)
+    ])
+
+    def test_authenticate_user(self, mock_load_config, mock_requests_get, oauth_token, user, mock_response, expected_result):
+        """Check whether the user is a valid user."""
+        mock_requests_get['https://mock.url/api/profile'] = mock_response
+    
+        # Create an instance of the JASMIN Authenticator
+        auth = JasminAuthenticator()
+
+        # The authenticate_user method will use the monkeypatch
+        is_user = auth.authenticate_user("mock_oauth_token", "test_user")
+        assert is_user == expected_result
 
 # def test_authenticate_group():
 #     """Check whether the user is part of the group."""
