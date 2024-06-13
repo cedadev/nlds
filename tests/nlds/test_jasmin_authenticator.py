@@ -48,14 +48,19 @@ def mock_requests_get(monkeypatch):
     return responses
 
 
+@pytest.fixture
+def oauth_token():
+    """Fixture for the oauth token."""
+    return "mock_oauth_token"
+
 class TestAuthenticateUser:
     """Check whether the user is a valid user."""
     
-    @pytest.mark.parametrize("oauth_token, user, mock_response, expected_result", [
-    ("mock_oauth_token", "test_user", MockResponse({"username": "test_user"}, 200), True),
-    ("mock_oauth_token", "test_user", MockResponse({"username": "another_user"}, 200), False),
-    ("mock_oauth_token", "test_user", MockResponse({"error": "Unauthorized"}, 401), False),
-    ("mock_oauth_token", "test_user", MockResponse(None, 500), False)
+    @pytest.mark.parametrize("user, mock_response, expected_result", [
+    ("test_user", MockResponse({"username": "test_user"}, 200), True),
+    ("test_user", MockResponse({"username": "another_user"}, 200), False),
+    ("test_user", MockResponse({"error": "Unauthorized"}, 401), False),
+    ("test_user", MockResponse(None, 500), False)
     ])
 
     def test_authenticate_user(self, mock_load_config, mock_requests_get, oauth_token, user, mock_response, expected_result):
@@ -66,7 +71,7 @@ class TestAuthenticateUser:
         auth = JasminAuthenticator()
 
         # The authenticate_user method will use the monkeypatch
-        is_user = auth.authenticate_user("mock_oauth_token", "test_user")
+        is_user = auth.authenticate_user(oauth_token, "test_user")
         assert is_user == expected_result
 
 # def test_authenticate_group():
