@@ -29,7 +29,8 @@ def mock_load_config(monkeypatch):
         'authentication' : {
             'authentication_backend': 'jasmin_authenticator',
             'jasmin_authenticator': {
-                'user_profile_url': 'https://mock.url/api/profile'
+                'user_profile_url': 'https://mock.url/api/profile',
+                'user_services_url': 'https://mock.url/api/services'
             }
         }
     }
@@ -53,6 +54,7 @@ def oauth_token():
     """Fixture for the oauth token."""
     return "mock_oauth_token"
 
+
 class TestAuthenticateUser:
     """Check whether the user is a valid user."""
     
@@ -74,8 +76,32 @@ class TestAuthenticateUser:
         is_user = auth.authenticate_user(oauth_token, "test_user")
         assert is_user == expected_result
 
-# def test_authenticate_group():
-#     """Check whether the user is part of the group."""
+
+
+class TestAuthenticateGroup:
+    """Check whether the user is part of the group."""
+
+    @pytest.mark.parametrize("group, mock_response, expected_result, raises_exception", [
+    ("test_group", MockResponse({"group_workspaces": ["test_group"]}, 200), True, False),
+    ("test_group", MockResponse({"group_workspaces": ["another_group"]}, 200), False, False),
+    ("test_group", MockResponse({"error": "Unauthorized"}, 401), False, False),
+    ("test_group", MockResponse({}, 200), False, True) # Key error scenario
+    ])
+
+    def test_authenticate_group(self, mock_load_config, mock_requests_get, oauth_token, group, mock_response, expected_result, raises_exception):
+        """Check whether the user is part of the group."""
+        mock_requests_get['https://mock.url/api/services'] = mock_response
+
+        # Create an instance of the JASMIN Authenticator
+        auth = JasminAuthenticator()
+
+        if raises_exception:
+            with pytest.raises(RuntimeError):
+                auth.authenticate_group(oauth_token, group)
+        else: 
+            # The authenticate_group method will use the monkeypatch
+            is_member = auth.authenticate_group(oauth_token, group)
+            assert is_member == expected_result
 
 # def test_authenticate_user_group_role():
 #     """Check the user's role in the group."""
