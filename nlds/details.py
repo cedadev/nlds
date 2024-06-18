@@ -95,6 +95,14 @@ class PathLocations(BaseModel):
         for l in self.locations:
             out_dict[l.storage_type] = l.to_dict()
         return {MSG.STORAGE_LOCATIONS: out_dict}
+    
+    def has_storage_type(self, storage_type):
+        """Determine whether the path locations contains a specific storage_type
+           storage_type = MSG.OBJECT_STORAGE | MSG.TAPE"""
+        for l in self.locations:
+            if l.storage_type == storage_type:
+                return True
+        return False
 
     @classmethod
     def from_dict(cls, dictionary: Dict[str, Any]) -> None:
@@ -159,6 +167,33 @@ class PathDetails(BaseModel):
         return pd
 
     @classmethod
+    def from_filemodel(cls, file: Enum):
+        """Create from a File model returned from the database."""
+        # copy the basic info
+        pd = cls()
+        pd.original_path = file.original_path
+        pd.path_type = file.path_type
+        pd.link_path = file.link_path
+        pd.size = file.size
+        pd.user = file.user
+        pd.group = file.group
+        pd.permissions = file.file_permissions
+        
+        # copy the storage locations
+        pd.locations = PathLocations()
+        for fl in file.locations:
+            pl = PathLocation()
+            pl.storage_type = fl.storage_type.to_json()
+            pl.url_scheme = fl.url_scheme
+            pl.url_netloc = fl.url_netloc
+            pl.root = fl.root
+            pl.path = fl.path
+            pl.access_time = fl.access_time
+            pd.locations.add(pl)
+
+        return pd
+
+    @classmethod
     def from_stat_result(cls, path: str, stat_result: stat_result):
         pd = cls(original_path=path)
         pd.stat(stat_result=stat_result)
@@ -220,11 +255,11 @@ class PathDetails(BaseModel):
         )
 
     def set_object_store(self, tenancy: str, bucket: str) -> None:
-        """Set the object_storage details for the file.
+        """Set the OBJECT_STORAGE details for the file.
         This allows the object name to then be derived programmatically using a
         function, rather than munging the name every time it is used.
         The details for the PathLocation struct are:
-            storage_type = "object_storage"
+            storage_type = "OBJECT_STORAGE"
             url_scheme = "http://"
             url_netloc = tenancy
             root = bucket = transaction_id
@@ -239,6 +274,7 @@ class PathDetails(BaseModel):
             path=self.original_path,
         )
         self.locations.add(pl)
+        return pl
 
     def get_object_store(self) -> PathLocation | None:
         """Get the PathLocation for the object storage file."""
@@ -252,7 +288,7 @@ class PathDetails(BaseModel):
     @property
     def object_name(self) -> str | None:
         """Get the 1st object storage location and return the object_name by munging the string:
-            object_name = f"nlds.{root}:{location.path}
+        object_name = f"nlds.{root}:{location.path}
         """
         for pl in self.locations.locations:
             if pl.storage_type == MSG.OBJECT_STORAGE:
