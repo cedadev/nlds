@@ -22,6 +22,7 @@ from nlds_processors.catalog.catalog_models import (
 from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
 
+
 class Catalog(DBMixin):
     """Catalog object containing methods to manipulate the Catalog Database"""
 
@@ -57,7 +58,6 @@ class Catalog(DBMixin):
     ) -> List[Holding]:
         """Get a holding from the database"""
         assert self.session != None
-
         try:
             # build holding query bit by bit
             holding_q = self.session.query(Holding).filter(Holding.group == group)
@@ -109,7 +109,7 @@ class Catalog(DBMixin):
                         f"User:{user} in group:{group} does not have permission "
                         f"to access the holding with label:{h.label}."
                     )
-        except (IntegrityError, KeyError, ArgumentError):
+        except (IntegrityError, KeyError, ArgumentError) as e:
             msg = ""
             if holding_id:
                 msg = (
