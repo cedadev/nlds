@@ -9,6 +9,7 @@ from nlds_processors.transferers.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
+from nlds_processors.transferers.transfer_error import TransferError
 
 
 class PutTransferConsumer(BaseTransferConsumer):
@@ -26,7 +27,7 @@ class PutTransferConsumer(BaseTransferConsumer):
         return bucket_name
 
     def _make_bucket(self, transaction_id: str):
-        assert(self.client is not None)
+        assert self.client is not None
 
         bucket_name = self._get_bucket_name(transaction_id)
         # Check that bucket exists, and create if not
@@ -45,7 +46,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                 )
             return None
         except minio.error.S3Error as e:
-            return e
+            raise TransferError(message=str(e))
 
     def _transfer_files(
         self,
@@ -60,7 +61,7 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
         bucket_name = self._get_bucket_name(transaction_id)
 
-        assert(self.client is not None)
+        assert self.client is not None
 
         for path_details in filelist:
             item_path = path_details.path
@@ -85,15 +86,15 @@ class PutTransferConsumer(BaseTransferConsumer):
             )
 
             # Add this to the PathDetails as the StorageLocation
-            path_details.set_object_store(tenancy=tenancy, bucket=transaction_id)
+            pl = path_details.set_object_store(tenancy=tenancy, bucket=transaction_id)
             try:
                 result = self.client.fput_object(
-                    bucket_name,
-                    path_details.object_name,
-                    path_details.original_path,
+                    bucket_name, pl.path, path_details.original_path,
                 )
                 self.log(
-                    f"Successfully uploaded {path_details.original_path}", RK.LOG_DEBUG
+                    f"Successfully uploaded {path_details.original_path} to "
+                    f"bucket {bucket_name} with object_name {pl.path}", 
+                    RK.LOG_DEBUG
                 )
                 self.append_and_send(
                     self.completelist,
@@ -138,14 +139,13 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
 
-        failure_reason = self._make_bucket(transaction_id)
-        if failure_reason:
+        try:
+            self._make_bucket(transaction_id)
+        except TransferError as e:
             # If the bucket cannot be created, due to a S3 error, then fail all the
             # files in the transaction
             for f in filelist:
-                f.failure_reason = (
-                    f"S3 error: {failure_reason.message} when creating bucket"
-                )
+                f.failure_reason = f"S3 error: {e.message} when creating bucket"
                 self.failedlist.append(f)
         else:
             self._transfer_files(
@@ -153,7 +153,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                 tenancy=tenancy,
                 filelist=filelist,
                 rk_origin=rk_origin,
-                body_json=body_json
+                body_json=body_json,
             )
 
         self.log(

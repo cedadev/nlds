@@ -17,12 +17,10 @@ import pathlib as pth
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.details import PathDetails
 from nlds.rabbit.consumer import State
-from nlds_processors.utils.aggregations import aggregate_files
+from nlds_processors.utils.aggregations import bin_files
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-
-class TransferError(Exception):
-    pass
+from nlds_processors.transferers.transfer_error import TransferError
 
 
 class BaseTransferConsumer(StattingConsumer, ABC):
@@ -118,8 +116,8 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             # Make a new routing key which returns message to this queue
             rk_transfer_start = ".".join([rk_parts[0], rk_parts[1], RK.START])
             # Aggregate files into bins of approximately equal size and split
-            # the transaction into subtransactions for parallelisability
-            sub_lists = aggregate_files(filelist)
+            # the transaction into subtransactions to allow parallel transfers
+            sub_lists = bin_files(filelist)
             for sub_list in sub_lists:
                 self.send_pathlist(
                     sub_list, rk_transfer_start, body_json, state=State.CATALOG_GETTING

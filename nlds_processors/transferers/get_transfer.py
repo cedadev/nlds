@@ -13,6 +13,7 @@ from nlds.details import PathDetails
 from nlds.errors import CallbackError
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
+from nlds_processors.transferers.transfer_error import TransferError
 
 
 class GetTransferConsumer(BaseTransferConsumer):
@@ -41,10 +42,7 @@ class GetTransferConsumer(BaseTransferConsumer):
             target_path = Path(target)
             if not self.check_path_access(target_path, access=os.W_OK):
                 self.log(f"Full path: {target_path}", RK.LOG_DEBUG)
-                raise CallbackError(
-                    "Unable to copy, given target path is "
-                    "inaccessible. Passing for retry."
-                )
+                raise TransferError("Unable to copy, target path is inaccessible.")
         else:
             target_path = None
         return target_path
@@ -52,7 +50,7 @@ class GetTransferConsumer(BaseTransferConsumer):
     def _get_and_check_bucket_name_object_name(self, path_details):
         """Get the bucket and object name and perform an existence check on the
         bucket"""
-        assert(self.client is not None)
+        assert self.client is not None
 
         if len(path_details.object_name.split(":")) == 2:
             bucket_name, object_name = path_details.object_name.split(":")
@@ -63,15 +61,18 @@ class GetTransferConsumer(BaseTransferConsumer):
                 f"{reason}, adding " f"{path_details.object_name} to failed list.",
                 RK.LOG_INFO,
             )
-            return None, None, reason
+            raise TransferError(message=reason)
 
         if bucket_name and not self.client.bucket_exists(bucket_name):
             # If bucket doesn't exist then pass for failure
             reason = f"Bucket {bucket_name} does not exist"
-            self.log(f"{reason}. Adding {object_name} to failed list.", RK.LOG_ERROR)
-            return None, None, reason
+            self.log(
+                f"{reason}. Adding {path_details.object_name} to failed list.",
+                RK.LOG_ERROR,
+            )
+            raise TransferError(message=reason)
 
-        return bucket_name, object_name, None
+        return bucket_name, object_name
 
     def _get_download_path(self, path_details, target_path):
         # Decide whether to prepend target path or download directly to it.
@@ -84,11 +85,10 @@ class GetTransferConsumer(BaseTransferConsumer):
             # will fail.
             if not self.check_path_access(path_details.path.parent, access=os.W_OK):
                 reason = (
-                    f"Unable to download {download_path}.  Target "
-                    "path is inaccessible."
+                    f"Unable to download {download_path}. Target path is inaccesible."
                 )
                 self.log(f"{reason}. Adding to failed list.", RK.LOG_INFO)
-                return None, reason
+                raise TransferError(message=reason)
 
         elif target_path.is_dir():
             # In the case of a given target, we remove the leading slash on
@@ -98,17 +98,13 @@ class GetTransferConsumer(BaseTransferConsumer):
             else:
                 download_path = target_path / path_details.original_path
         else:
-            # TODO (2022-09-20): This probably isn't appropriate for getlist
-            self.log(
-                "Target path is not a valid directory, renaming files "
-                "got to target path.",
-                RK.LOG_WARNING,
-            )
-            download_path = target_path
-        return download_path, None
+            reason = "Target path is not a valid directory."
+            self.log(f"{reason}", RK.LOG_WARNING)
+            raise TransferError(message=reason)
+        return download_path
 
     def _transfer(self, bucket_name, object_name, download_path):
-        assert(self.client is not None)
+        assert self.client is not None
         download_path_str = str(download_path)
         # Attempt the download!
         try:
@@ -117,7 +113,6 @@ class GetTransferConsumer(BaseTransferConsumer):
                 object_name,
                 download_path_str,
             )
-            return None
         except Exception as e:
             reason = f"Download-time exception occurred: {e}"
             self.log(reason, RK.LOG_DEBUG)
@@ -126,7 +121,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                 f"{object_name} to failed list.",
                 RK.LOG_INFO,
             )
-            return reason
+            raise TransferError(message=reason)
 
     def _change_permissions(self, download_path, path_details):
         """Change the permission of the downloaded files"""
@@ -161,8 +156,27 @@ class GetTransferConsumer(BaseTransferConsumer):
         rk_origin: str,
         body_json: Dict[str, Any],
     ) -> None:
-        # get the target
-        target_path = self._get_target_path(body_json)
+        
+        # build the routing keys
+        rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
+        rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
+
+        # get the target directory and fail all the transfers if it cannot be created
+        try:
+            target_path = self._get_target_path(body_json)
+        except TransferError as e:
+            for path_details in filelist:
+                path_details.failure_reason = e.message
+                self.append_and_send(
+                    self.failedlist,
+                    path_details,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED
+                )
+            # and return as there is nothing to do successfully
+            return
+
         # set the ids for the
         if self.chown_fl:
             self.set_ids(body_json)
@@ -175,17 +189,15 @@ class GetTransferConsumer(BaseTransferConsumer):
             secure=self.require_secure_fl,
         )
 
-        rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
-        rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
-
         for path_details in filelist:
             # If bucketname inserted into object path (i.e. from catalogue) then
             # extract both
-            bucket_name, object_name, failure_reason = (
-                self._get_and_check_bucket_name_object_name(path_details)
-            )
-            if failure_reason:
-                path_details.failure_reason = failure_reason
+            try:
+                bucket_name, object_name = (
+                    self._get_and_check_bucket_name_object_name(path_details)
+                )
+            except TransferError as e:
+                path_details.failure_reason = e.message
                 self.append_and_send(
                     self.failedlist,
                     path_details,
@@ -200,11 +212,10 @@ class GetTransferConsumer(BaseTransferConsumer):
             )
 
             # get the download path from the path details
-            download_path, failure_reason = self._get_download_path(
-                path_details, target_path
-            )
-            if failure_reason:
-                path_details.failure_reason = failure_reason
+            try:
+                download_path = self._get_download_path(path_details, target_path)
+            except TransferError as e:
+                path_details.failure_reason = e.message
                 self.append_and_send(
                     self.failedlist,
                     path_details,
@@ -215,9 +226,10 @@ class GetTransferConsumer(BaseTransferConsumer):
                 continue
 
             # do the download
-            failure_reason = self._transfer(bucket_name, object_name, download_path)
-            if failure_reason:
-                path_details.failure_reason = failure_reason
+            try:
+                self._transfer(bucket_name, object_name, download_path)
+            except TransferError as e:
+                path_details.failure_reason = e.message
                 self.append_and_send(
                     self.failedlist,
                     path_details,
@@ -228,7 +240,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                 continue
 
             # change ownership and permissions
-            self._change_permissions(download_path)
+            self._change_permissions(download_path, path_details)
 
             # all finished successfully!
             self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
