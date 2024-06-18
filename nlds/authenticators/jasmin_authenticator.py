@@ -196,27 +196,34 @@ class JasminAuthenticator(BaseAuthenticator):
         # returns True if they are either a manager or deputy, otherwise it
         # returns False.
         try:
+            url = config['user_grants_url']
             response = requests.get(
-                f"{config['user_grants_url']}{user}/grants/?category=GWS&service={group}",
+                url,
                 headers=token_headers,
                 timeout=JasminAuthenticator._timeout,
             )
         except requests.exceptions.ConnectionError:
             raise RuntimeError(
-                "User grants url "
-                f"{config['user_grants_url']}{user}/grants/?category=GWS&service={group} could not "
+                "User grants url ",
+                url,
                 "be reached."
             )
         except KeyError:
             raise RuntimeError(
                 f"Could not find 'user_grants_url' key in the "
-                f"[{self.name}] section of the .server_config file."
+                f"[{self.name}] section of the .server_config file.",
+                config
             )
         if response.status_code == requests.codes.ok:  # status code 200
             try:
                 response_json = json.loads(response.text)
                 user_role = response_json["group_workspaces"]
-                return user_role in ["MANAGER", "DEPUTY"]
+                for role in user_role:
+                    if role in ["MANAGER", "DEPUTY"]:
+                        is_manager = True
+                    else:
+                        is_manager = False
+                return is_manager
             except KeyError:
                 raise RuntimeError(
                     "The user's role was not found in the response "
