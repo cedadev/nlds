@@ -145,9 +145,9 @@ class RabbitMQConsumer(ABC, RMQP):
         """Check whether the body_json contains a message to check for system status"""
         # This checks if the message was for a system status check
         try:
-            api_method = body_json[MSG.DATA][MSG.API_ACTION]
+            api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
         except KeyError:
-            self.log(f"Message did not contain api_method", RK.LOG_INFO)
+            self.log(f"Message did not contain api_action", RK.LOG_INFO)
             api_method = None
 
         # If received system test message, reply to it (this is for system status check)
