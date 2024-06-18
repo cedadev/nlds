@@ -46,7 +46,7 @@ from nlds_processors.catalog.catalog_error import CatalogError
 from nlds_processors.catalog.catalog_models import Storage, Location
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
-from nlds_processors.utils.aggregations import aggregate_files
+from nlds_processors.utils.aggregations import bin_files
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
@@ -142,7 +142,7 @@ class CatalogConsumer(RMQC):
         self.fully_unpack_tar_fl = self.load_config_value(self._FULLY_UNPACK_TAR)
 
         self.catalog = None
-        self.reroutelist = []
+        self.tapelist = []
         self.retrievedict = {}
 
     @property
@@ -154,8 +154,8 @@ class CatalogConsumer(RMQC):
 
         self.completelist.clear()
         self.failedlist.clear()
-        # New list for rerouting to archive if not found on object store
-        self.reroutelist.clear()
+        # New list for rerouting to tape archive if not found on object store
+        self.tapelist.clear()
         self.retrievedict.clear()
 
     def _parse_filelist(self, body: Dict) -> list[str]:
@@ -593,6 +593,114 @@ class CatalogConsumer(RMQC):
         try:
             filelist = self._parse_filelist(body)
             user, group = self._parse_user_vars(body)
+            tenancy = self._parse_tenancy(body)
+            holding_label, holding_id, holding_tag, transaction_id = (
+                self._parse_metadata_vars(body)
+            )
+            groupall = self._parse_groupall(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
+            return
+
+        # reset the lists
+        self.completelist.clear()
+        self.failedlist.clear()
+
+        # start the database transactions, reset lists and
+        self.catalog.start_session()
+
+        for filepath in filelist:
+            filepath_details = PathDetails.from_dict(filepath)
+            try:
+                # get the files first
+                files = self.catalog.get_files(
+                    user,
+                    group,
+                    groupall=groupall,
+                    holding_label=holding_label,
+                    holding_id=holding_id,
+                    transaction_id=transaction_id,
+                    original_path=filepath_details.original_path,
+                    tag=holding_tag,
+                )
+
+                if len(files) == 0:
+                    raise CatalogError(
+                        f"Could not find file(s) with original path: "
+                        f"{filepath.original_path}"
+                    )
+
+                # determine the storage location - None, OBJECT_STORAGE and/or TAPE
+                for file in files:
+                    pd = PathDetails.from_filemodel(file)
+                    if pd.locations.count == 0:
+                        pd.failure_reason = (
+                            f"No Storage Location found for file with original path: "
+                            f"{pd.original_path}.  Has it completed transfer?"
+                        )
+                        self.failedlist.append(pd)
+                        self.log(pd.failure_reason, RK.LOG_ERROR)
+                    elif pd.locations.has_storage_type(MSG.OBJECT_STORAGE):
+                        self.completelist.append(pd)
+                    elif pd.locations.has_storage_type(MSG.TAPE):
+                        self.tapelist.append(pd)
+                    else:
+                        # this shouldn't occur but we'll trap the error anyway
+                        pd.failure_reason = (
+                            f"No compatible Storage Location found for file with "
+                            f"original path: {pd.original_path}."
+                        )
+                        self.failedlist.append(pd)
+                        self.log(pd.failure_reason, RK.LOG_ERROR)
+            except CatalogError as e:
+                filepath_details.failure_reason = e.message
+                self.failedlist.append(filepath_details)
+                self.log(e.message, RK.LOG_ERROR)
+                continue
+
+        self.catalog.end_session()
+
+        # COMPLETED
+        # NRM - TODO - move binning to here
+        if len(self.completelist) > 0:
+            rk_complete = ".".join([rk_origin, RK.CATALOG_GET, RK.COMPLETE])
+            self.log(
+                f"Sending completed PathList from CATALOG_GET {self.completelist}",
+                RK.LOG_DEBUG,
+            )
+            self.send_pathlist(
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body,
+                state=State.CATALOG_GETTING,
+            )        
+
+        # NEED RETRIEVING FROM TAPE
+        # NRM - TODO - sort out the logic here
+
+        # FAILED
+        if len(self.failedlist) > 0:
+            rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
+            self.log(
+                f"Sending failed PathList from CATALOG_GET {self.failedlist}",
+                RK.LOG_DEBUG,
+            )
+            self.send_pathlist(
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body,
+                state=State.FAILED,
+            )
+
+    def _catalog_get_old(self, body: Dict, rk_origin: str) -> None:
+        """Get the details for each file in a filelist and send it to the
+        exchange to be processed by the transfer processor. If any file is only
+        found on tape then it will be first rerouted to the archive processor
+        for retrieval to object store cache."""
+        # Parse the message body for required variables
+        try:
+            filelist = self._parse_filelist(body)
+            user, group = self._parse_user_vars(body)
             transaction_id = self._parse_transaction_id(body)
             tenancy = self._parse_tenancy(body)
             holding_label, holding_id, holding_tag, _ = self._parse_metadata_vars(body)
@@ -888,9 +996,7 @@ class CatalogConsumer(RMQC):
         # make a distinction between aggregates, being just groups of files, and
         # aggregations, being the database object / table
         filelist = self.catalog.get_unarchived_files(next_holding)
-        aggregates = aggregate_files(
-            filelist, target_agg_size=self.target_aggregation_size
-        )
+        aggregates = bin_files(filelist, target_agg_size=self.target_aggregation_size)
 
         # Create the aggragation and respective locations for each file in each
         # aggregate
@@ -1393,9 +1499,8 @@ class CatalogConsumer(RMQC):
         # Parse the message body for required variables
         try:
             user, group = self._parse_user_vars(body)
-            transaction_id = self._parse_transaction_id(body)
-            (holding_label, holding_id, tag, transaction_id) = (
-                self._parse_metadata_vars(body)
+            holding_label, holding_id, tag, transaction_id = self._parse_metadata_vars(
+                body
             )
             groupall = self._parse_groupall(body)
             path = self._parse_path(body)
@@ -1445,7 +1550,7 @@ class CatalogConsumer(RMQC):
                     t_rec = {
                         MSG.FILELIST: [],
                         MSG.TRANSACT_ID: t.transaction_id,
-                        "ingest_time": format_datetime(t.ingest_time)
+                        "ingest_time": format_datetime(t.ingest_time),
                     }
                     ret_dict[h.label][MSG.TRANSACTIONS][t.transaction_id] = t_rec
                 # get the locations
