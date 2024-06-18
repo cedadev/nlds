@@ -383,12 +383,12 @@ class NLDSWorkerConsumer(RMQC):
 
             # If archive_put failed then we need to remove the TAPE locations
             # from the catalog
-            if rk_parts[1] == f"{RK.ARCHIVE_PUT}":
+            elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
                 self._process_rk_archive_put_failed(body_json)
 
             # If archive_get failed then we need to remove the OBJECT_STORAGE
             # locations from the catalog
-            if rk_parts[1] == f"{RK.ARCHIVE_GET}":
+            elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
                 self._process_rk_archive_get_failed(body_json)
 
         self.log(f"Worker callback complete!", RK.LOG_INFO)
