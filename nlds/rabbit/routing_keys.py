@@ -1,3 +1,4 @@
+# encoding: utf-8
 """
 routing_keys.py
 """

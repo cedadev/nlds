@@ -1,3 +1,13 @@
+# encoding: utf-8
+"""
+keepalive.py
+"""
+__author__ = "Neil Massey and Jack Leland"
+__date__ = "19 Jun 2024"
+__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__license__ = "BSD - see LICENSE file in top-level package directory"
+__contact__ = "neil.massey@stfc.ac.uk"
+
 from uuid import uuid4
 import threading as thr
 from typing import List

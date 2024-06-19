@@ -1,3 +1,13 @@
+# encoding: utf-8
+"""
+monitor_models.py
+"""
+__author__ = "Neil Massey and Jack Leland"
+__date__ = "19 Jun 2024"
+__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__license__ = "BSD - see LICENSE file in top-level package directory"
+__contact__ = "neil.massey@stfc.ac.uk"
+
 """Declare the SQLAlchemy ORM models for the NLDS Monitoring database"""
 
 from sqlalchemy import Integer, String, Column, Enum, ForeignKey, DateTime

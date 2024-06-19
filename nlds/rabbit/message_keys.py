@@ -1,3 +1,4 @@
+# encoding: utf-8
 """
 message_keys.py
 """

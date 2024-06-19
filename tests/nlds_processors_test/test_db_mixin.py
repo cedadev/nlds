@@ -1,3 +1,13 @@
+# encoding: utf-8
+"""
+test_db_mixin.py
+"""
+__author__ = "Neil Massey and Jack Leland"
+__date__ = "07 Dec 2021"
+__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__license__ = "BSD - see LICENSE file in top-level package directory"
+__contact__ = "neil.massey@stfc.ac.uk"
+
 import pytest
 
 from nlds_processors.db_mixin import DBMixin, DBError
