@@ -192,9 +192,9 @@ class JasminAuthenticator(BaseAuthenticator):
             "cache-control": "no-cache",
             "Authorization": f"Bearer {oauth_token}",
         }
-        query_params = {'category': 'GWS', 'service': group}
-        encoded_query_params = urllib.parse.urlencode(query_params)
-        full_url = urllib.parse.urljoin(config['user_grants_url'], user + '/grants/' + encoded_query_params)
+        encoded_query_params = urllib.parse.urlencode({'category': 'GWS', 'service': group})
+        relative_url = f"{user}/grants/{encoded_query_params}"
+        full_url = urllib.parse.urljoin(config['user_grants_url'], relative_url)
         # Contact the user_grants_url to check the role of the user in the group
         # given. This checks whether the user is a manger, deputy or user and
         # returns True if they are either a manager or deputy, otherwise it

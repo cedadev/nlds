@@ -195,9 +195,9 @@ class TestAuthenticateUserGroupRole:
         raises_exception,
     ):
         """Check whether the user has a manager/deputy role within the specified group."""
-        query_params = {'category': 'GWS', 'service': group}
-        encoded_query_params = urllib.parse.urlencode(query_params)
-        full_url = urllib.parse.urljoin("https://mock.url/api/v1/users/", user + '/grants/' + encoded_query_params)
+        encoded_query_params = urllib.parse.urlencode({'category': 'GWS', 'service': group})
+        relative_url = f"{user}/grants/{encoded_query_params}"
+        full_url = urllib.parse.urljoin("https://mock.url/api/v1/users/", relative_url)
         mock_requests_get[full_url] = mock_response
 
         # Create an instance of JASMIN Authenticator
