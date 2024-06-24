@@ -8,8 +8,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Aggregation, Storage, Tag
 from nlds_processors.db_mixin import DBMixin
-from nlds.authenticators.jasmin_authenticator import authenticate_user_group_role
-
+from nlds.authenticators.jasmin_authenticator import JasminAuthenticator
 class CatalogError(Exception):
     def __init__(self, message, *args):
         super().__init__(args)
@@ -490,7 +489,7 @@ class Catalog(DBMixin):
         # is_admin == whether the user is an administrator of the group
         # i.e. a DEPUTY or MANAGER
         # this gives them delete permissions for all files in the group
-        is_admin = authenticate_user_group_role(user, group)
+        is_admin = JasminAuthenticator.authenticate_user_group_role(user, group)
         permitted = True
         # Currently, only users can delete files from their owned holdings
         permitted &= (holding.user == user or is_admin)
