@@ -13,6 +13,7 @@ from ..server_config import load_config
 from retry import retry
 import requests
 import json
+import urllib.parse
 
 
 class JasminAuthenticator(BaseAuthenticator):
@@ -191,22 +192,24 @@ class JasminAuthenticator(BaseAuthenticator):
             "cache-control": "no-cache",
             "Authorization": f"Bearer {oauth_token}",
         }
+        query_params = {'category': 'GWS', 'service': group}
+        encoded_query_params = urllib.parse.urlencode(query_params)
+        full_url = urllib.parse.urljoin(config['user_grants_url'], user + '/grants/' + encoded_query_params)
         # Contact the user_grants_url to check the role of the user in the group
         # given. This checks whether the user is a manger, deputy or user and
         # returns True if they are either a manager or deputy, otherwise it
         # returns False.
         try:
-            url = config['user_grants_url']
             response = requests.get(
-                url,
+                url=full_url,
                 headers=token_headers,
                 timeout=JasminAuthenticator._timeout,
             )
         except requests.exceptions.ConnectionError:
             raise RuntimeError(
                 "User grants url ",
-                url,
-                "be reached."
+                full_url,
+                "could not be reached."
             )
         except KeyError:
             raise RuntimeError(
@@ -226,14 +229,14 @@ class JasminAuthenticator(BaseAuthenticator):
                 return is_manager
             except KeyError:
                 raise RuntimeError(
-                    "The user's role was not found in the response "
-                    "from the user grants url: "
-                    f"{config['user_grants_url']}{user}/grants/?category=GWS&service={group}"
+                    "The user's role was not found in the response ",
+                    "from the user grants url: ",
+                    full_url
                 )
             except json.JSONDecodeError:
                 raise RuntimeError(
-                    "Invalid JSON returned from the user grants url: "
-                    f"{config['user_grants_url']}{user}/grants/?category=GWS&service={group}"
+                    "Invalid JSON returned from the user grants url: ",
+                    full_url
                 )
         else:
             return False

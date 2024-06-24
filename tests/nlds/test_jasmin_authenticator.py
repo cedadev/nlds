@@ -1,6 +1,7 @@
 import requests
 import pytest
 import json
+import urllib
 
 from nlds.authenticators.jasmin_authenticator import JasminAuthenticator
 
@@ -30,9 +31,9 @@ def mock_load_config(monkeypatch):
         "authentication": {
             "authentication_backend": "jasmin_authenticator",
             "jasmin_authenticator": {
-                "user_profile_url": "https://mock.url/api/profile",
-                "user_services_url": "https://mock.url/api/services",
-                "user_grants_url": "https://mock.url/api/v1/users/grants",
+                "user_profile_url": "https://mock.url/api/profile/",
+                "user_services_url": "https://mock.url/api/services/",
+                "user_grants_url": "https://mock.url/api/v1/users/",
             },
         }
     }
@@ -81,7 +82,7 @@ class TestAuthenticateUser:
         expected_result,
     ):
         """Check whether the user is a valid user."""
-        mock_requests_get["https://mock.url/api/profile"] = mock_response
+        mock_requests_get["https://mock.url/api/profile/"] = mock_response
 
         # Create an instance of the JASMIN Authenticator
         auth = JasminAuthenticator()
@@ -124,7 +125,7 @@ class TestAuthenticateGroup:
         raises_exception,
     ):
         """Check whether the user is part of the group."""
-        mock_requests_get["https://mock.url/api/services"] = mock_response
+        mock_requests_get["https://mock.url/api/services/"] = mock_response
 
         # Create an instance of the JASMIN Authenticator
         auth = JasminAuthenticator()
@@ -194,7 +195,10 @@ class TestAuthenticateUserGroupRole:
         raises_exception,
     ):
         """Check whether the user has a manager/deputy role within the specified group."""
-        mock_requests_get["https://mock.url/api/v1/users/grants"] = mock_response
+        query_params = {'category': 'GWS', 'service': group}
+        encoded_query_params = urllib.parse.urlencode(query_params)
+        full_url = urllib.parse.urljoin("https://mock.url/api/v1/users/", user + '/grants/' + encoded_query_params)
+        mock_requests_get[full_url] = mock_response
 
         # Create an instance of JASMIN Authenticator
         auth = JasminAuthenticator()
