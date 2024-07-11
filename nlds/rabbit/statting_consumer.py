@@ -108,10 +108,6 @@ class StattingConsumer(RMQC):
 
         # If filesize has been passed then use total list size as message cap
         if path_details.size:
-            # NOTE: This references a general pathlist but a specific list size,
-            # perhaps these two should be combined together into a single
-            # pathlist object? Might not be necessary for just this small code
-            # snippet.
             self.completelist_size += path_details.size
 
             # Send directly to exchange and reset filelist
