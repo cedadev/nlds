@@ -147,7 +147,6 @@ class RabbitMQConsumer(ABC, RMQP):
         try:
             api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
         except KeyError:
-            self.log(f"Message did not contain api_action", RK.LOG_INFO)
             api_method = None
 
         # If received system test message, reply to it (this is for system status check)
@@ -280,6 +279,10 @@ class RabbitMQConsumer(ABC, RMQP):
         # If necessary values not set at this point then use default values
         if state is None:
             state = self.DEFAULT_STATE
+
+        # Create new sub_id for each extra subrecord created.
+        if self.sent_message_count >= 1:
+            body_json[MSG.DETAILS][MSG.SUB_ID] = str(uuid.uuid4())
 
         # Send message to next part of workflow
         body_json[MSG.DATA][MSG.FILELIST] = pathlist
