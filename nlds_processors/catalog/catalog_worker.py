@@ -1724,7 +1724,7 @@ class CatalogConsumer(RMQC):
             api_method = body[MSG.DETAILS][MSG.API_ACTION]
         except KeyError:
             self.log(
-                f"Message did not contain an appropriate API method, "
+                f"Message did not contain an appropriate api_action, "
                 "exiting callback",
                 RK.LOG_ERROR,
             )
