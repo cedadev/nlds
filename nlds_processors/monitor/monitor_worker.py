@@ -73,48 +73,69 @@ class MonitorConsumer(RMQC):
     def database(self):
         return self.monitor
 
-    def _monitor_put(self, body: Dict[str, str]) -> None:
-        """
-        Create or update a monitoring record for an in-progress transaction.
-        """
-        # get the transaction id from the details section of the message
+    def _parse_transaction_id(self, body, mandatory=True):
+        # get the transaction id from the details section of the message.
         try:
             transaction_id = body[MSG.DETAILS][MSG.TRANSACT_ID]
         except KeyError:
-            self.log("Transaction id not in message, exiting callback.", RK.LOG_ERROR)
-            return
+            if mandatory:
+                msg = "Transaction id not in message, exiting callback."
+                self.log(msg, RK.LOG_ERROR)
+                raise MonitorError(message=msg)
+            else:
+                transaction_id = None
+        return transaction_id
 
-        filelist = self.parse_filelist(body)
-
+    def _parse_user(self, body):
         # get the user id from the details section of the message
         try:
             user = body[MSG.DETAILS][MSG.USER]
             assert user is not None
         except (KeyError, AssertionError):
-            self.log("User not in message, exiting callback.", RK.LOG_ERROR)
-            return
+            msg = "User not in message, exiting callback."
+            self.log(msg, RK.LOG_ERROR)
+            raise MonitorError(message=msg)
+        return user
 
+    def _parse_group(self, body):
         # get the group from the details section of the message
         try:
             group = body[MSG.DETAILS][MSG.GROUP]
             assert group is not None
         except (KeyError, AssertionError):
-            self.log("Group not in message, exiting callback.", RK.LOG_ERROR)
-            return
+            msg = "Group not in message, exiting callback."
+            self.log(msg, RK.LOG_ERROR)
+            raise MonitorError(message=msg)
+        return group
 
+    def _parse_api_action(self, body, mandatory=True):
         # get the api-action from the details section of the message
         try:
             api_action = body[MSG.DETAILS][MSG.API_ACTION]
         except KeyError:
-            self.log("API-action not in message, exiting callback.", RK.LOG_ERROR)
-            return
+            if mandatory:
+                msg = "API-action not in message, exiting callback."
+                self.log(msg, RK.LOG_ERROR)
+                raise Monitor(message=msg)
+            else:
+                api_action = None
+        return api_action
 
+    def _parse_job_label(self, body):
         # get the job_label from the details section of the message
+        # if it doesn't exist then use the transaction_id
+        # if that doesn't exist then return blank
         try:
             job_label = body[MSG.DETAILS][MSG.JOB_LABEL]
         except KeyError:
-            job_label = transaction_id[0:8]
+            try:
+                transaction_id = body[MSG.DETAILS][MSG.TRANSACT_ID]
+                job_label = transaction_id[0:8]
+            except KeyError:
+                job_label = ""
+        return job_label
 
+    def _parse_state(self, body, mandatory=True):
         # get the state from the details section of the message
         try:
             state = body[MSG.DETAILS][MSG.STATE]
@@ -126,45 +147,100 @@ class MonitorConsumer(RMQC):
             elif State.has_name(state):
                 state = State[state]
             else:
-                self.log(
-                    f"State found in message invalid: {state}, exiting callback.", 
-                    RK.LOG_ERROR
-                )
-                return
+                if mandatory:
+                    msg = f"State found in message invalid: {state}, exiting callback."
+                    self.log(msg, RK.LOG_ERROR)
+                    raise MonitorError(message=msg)
+                else:
+                    state = None
         except KeyError:
-            self.log("Required state not in message, exiting callback.", RK.LOG_ERROR)
-            return
+            if mandatory:
+                msg = "Required state not in message, exiting callback."
+                self.log(msg, RK.LOG_ERROR)
+                raise MonitorError(message=msg)
+            else:
+                state = None
+        return state
 
+    def _parse_subid(self, body, mandatory=True):
         # get the sub_record id from the details section of the message
         try:
             sub_id = body[MSG.DETAILS][MSG.SUB_ID]
         except KeyError:
-            self.log(
-                "Transaction sub-id not in message, exiting callback.", RK.LOG_ERROR
-            )
-            return
+            if mandatory:
+                msg = "Transaction sub-id not in message, exiting callback."
+                self.log(msg, RK.LOG_ERROR)
+                raise MonitorError(message=msg)
+            else:
+                sub_id = None
+        return sub_id
 
+    def _parse_warnings(self, body):
         # get the warning(s) from the details section of the message
         try:
             warnings = body[MSG.DETAILS][MSG.WARNING]
         except KeyError:
             self.log("No warning found in message, continuing without", RK.LOG_DEBUG)
             warnings = []
+        return warnings
+    
+    def _parse_groupall(self, body):
+        # get whether to list all jobs in the group, or just the user's groups
+        try:
+            groupall = body[MSG.DETAILS][MSG.GROUPALL]
+        except KeyError:
+            groupall = False
+        return groupall
+    
+    def _parse_querygroup(self, body, group):
+        # get the desired group from the details section of the message
+        try:
+            query_group = body[MSG.DETAILS][MSG.GROUP_QUERY]
+        except KeyError:
+            self.log("Query group not in message, continuing without.", RK.LOG_INFO)
+            query_group = None
 
-        # start the database transactions
-        self.monitor.start_session()
+        # For now we're not allowing users to query other users, but will in the
+        # future with the inclusion of ROLES. Leave this here for completeness
+        # and ease of insertion of the appropriate logic in the future.
+        # groupall allows users to query other groups
+        if query_group is not None and query_group != group:
+            msg = ("Attempting to query a group that does not match current group, "
+                   "exiting callback")
+            self.log(msg, RK.LOG_ERROR)
+            raise MonitorError(message=msg)
+        return query_group
+    
+    def _parse_queryuser(self, body, user):
+        # get the desired user id to search for from the details section of the 
+        # message. this can be different than the user making the call 
+        try:
+            query_user = body[MSG.DETAILS][MSG.USER_QUERY]
+        except KeyError:
+            self.log("Query user not in message, continuing without.", RK.LOG_INFO)
+            query_user = None
 
-        # For any given monitoring update, we need to:
-        # - find the transaction record (create if not present)
-        # - update the subrecord(s) associated with it
-        #   - find an existing
-        #   - see if it matches sub_id in message
-        #       - update it if it does
-        #           - change state
-        #           - add failed files if failed
-        #       - create a new one if it doesn't
-        #   - open question whether we delete the older subrecords (i.e. before
-        #     a split)
+        if query_user is not None and user != query_user:
+            msg = ("Attempting to query a user that does not match current "
+                   "user, exiting callback")
+            self.log(msg, RK.LOG_ERROR)
+            raise MonitorError(message=msg)
+        return query_user
+    
+    def _parse_idd(self, body):
+        # get the id / primary key
+        try:
+            idd = body[MSG.DETAILS][MSG.ID]
+        except KeyError:
+            self.log("Id not in message, continuing without.", RK.LOG_INFO)
+            idd = None
+        return idd
+
+    def _get_or_create_transaction_record(
+        self, user, group, transaction_id, job_label, api_action, warnings
+    ):
+        # Find an existing transaction record with the transaction id, or create
+        # a new one.
         try:
             trec = self.monitor.get_transaction_record(
                 user, group, idd=None, transaction_id=transaction_id
@@ -188,7 +264,10 @@ class MonitorConsumer(RMQC):
         if warnings and len(warnings) > 0:
             for w in warnings:
                 warning = self.monitor.create_warning(trec, w)
-
+        return trec
+    
+    def _get_or_create_sub_record(self, trec, sub_id, state):
+        # get or create a sub record
         try:
             srec = self.monitor.get_sub_record(sub_id)
         except MonitorError:
@@ -203,12 +282,63 @@ class MonitorConsumer(RMQC):
 
         # consistency check
         if srec.transaction_record_id != trec.id:
-            self.log(
-                "Transaction id does not match sub_record's transaction "
-                "id. Something has gone amiss, rolling back and exiting"
-                "callback.",
-                RK.LOG_ERROR,
-            )
+            msg = ("Transaction id does not match sub_record's transaction "
+                   "id. Something has gone wrong, rolling back and exiting"
+                   "callback.")
+            self.log(msg, RK.LOG_ERROR)
+            raise MonitorError(msg=e)
+        return srec
+
+    def _monitor_put(self, body: Dict[str, str]) -> None:
+        """
+        Create or update a monitoring record for an in-progress transaction.
+        """
+        # get the required details from the message
+        try:
+            transaction_id = self._parse_transaction_id(body)
+            user = self._parse_user(body)
+            group = self._parse_group(body)
+            api_action = self._parse_api_action(body)
+            job_label = self._parse_job_label(body)
+            state = self._parse_state(body)
+            sub_id = self._parse_subid(body)
+            warnings = self._parse_warnings(body)
+        except MonitorError:
+            # Functions above handled message logging, here we just return
+            return
+
+        # get the filelist
+        filelist = self.parse_filelist(body)
+        # start the database transactions
+        self.monitor.start_session()
+
+        # For any given monitoring update, we need to:
+        # - find the transaction record (create if not present)
+        # - update the subrecord(s) associated with it
+        #   - find an existing
+        #   - see if it matches sub_id in message
+        #       - update it if it does
+        #           - change state
+        #           - add failed files if failed
+        #       - create a new one if it doesn't
+        #   - open question whether we delete the older subrecords (i.e. before
+        #     a split)
+
+        # find or create the transaction record
+        trec = self._get_or_create_transaction_record(
+            user,
+            group,
+            transaction_id,
+            job_label=job_label,
+            api_action=api_action,
+            warnings=warnings,
+        )
+
+        # find or create the sub record
+        try:
+            srec = self._get_or_create_sub_record(trec, sub_id, state)
+        except MonitorError as e:
+            # Function above handled message logging, here we just return
             return
 
         # Update subrecord to match new monitoring data
@@ -224,7 +354,7 @@ class MonitorConsumer(RMQC):
         # Create failed_files if necessary
         if state in State.get_failed_states():
             self.log(
-                "Creating FailedFiles records as transaction appears to " "have failed",
+                "Creating FailedFiles records as transaction appears to have failed",
                 RK.LOG_INFO,
             )
             try:
@@ -269,120 +399,24 @@ class MonitorConsumer(RMQC):
         scale out database reads separately from database writes - which at the
         moment need to be done one at a time to avoid
         """
-        # TODO: what do we want to do with files? A list command?
-        # filelist = self.parse_filelist(body)
 
-        # NOTE: might not need to check/have these passed?
-
-        # get the desired user id from the details section of the message
+        # get the required details from the message
         try:
-            user = body[MSG.DETAILS][MSG.USER]
-        except KeyError:
-            self.log("User not in message, exiting callback.", RK.LOG_ERROR)
+            transaction_id = self._parse_transaction_id(body, mandatory=False)
+            user = self._parse_user(body)
+            group = self._parse_group(body)
+            api_action = self._parse_api_action(body, mandatory=False)
+            job_label = self._parse_job_label(body)
+            state = self._parse_state(body, mandatory=False)
+            sub_id = self._parse_subid(body, mandatory=False)
+            groupall = self._parse_groupall(body)
+            query_group = self._parse_querygroup(body, group)
+            query_user = self._parse_queryuser(body, user)
+            idd = self._parse_idd(body)
+        except MonitorError:
+            # Functions above handled message logging, here we just return
             return
-
-        # get the desired group from the details section of the message
-        try:
-            group = body[MSG.DETAILS][MSG.GROUP]
-        except KeyError:
-            self.log("Group not in message, exiting callback.", RK.LOG_ERROR)
-            return
-
-        try:
-            groupall = body[MSG.DETAILS][MSG.GROUPALL]
-        except KeyError:
-            groupall = False
-
-        # get the api-action from the details section of the message
-        try:
-            api_action = body[MSG.DETAILS][MSG.API_ACTION]
-        except KeyError:
-            self.log("API-action not in message, continuing without.", RK.LOG_ERROR)
-            api_action = None
-
-        # get the desired user id from the details section of the message
-        try:
-            query_user = body[MSG.DETAILS][MSG.USER_QUERY]
-        except KeyError:
-            self.log("Query user not in message, continuing without.", RK.LOG_INFO)
-            query_user = None
-
-        # get the desired group from the details section of the message
-        try:
-            query_group = body[MSG.DETAILS][MSG.GROUP_QUERY]
-        except KeyError:
-            self.log("Query group not in message, continuing without.", RK.LOG_INFO)
-            query_group = None
-
-        # For now we're not allowing users to query other users, but will in the
-        # future with the inclusion of ROLES. Leave this here for completeness
-        # and ease of insertion of the appropriate logic in the future.
-        # groupall allows users to query other groups
-        if query_group is not None and query_group != group:
-            self.log(
-                "Attempting to query a group that does not match current "
-                "group, exiting callback",
-                RK.LOG_ERROR,
-            )
-            return
-
-        elif query_user is not None and user != query_user:
-            self.log(
-                "Attempting to query a user that does not match current "
-                "user, exiting callback",
-                RK.LOG_ERROR,
-            )
-            return
-
-        # get the id / primary key
-        try:
-            idd = body[MSG.DETAILS][MSG.ID]
-        except KeyError:
-            self.log("Id not in message, continuing without.", RK.LOG_INFO)
-            idd = None
-
-        # get the desired transaction id from the details section of the message
-        try:
-            transaction_id = body[MSG.DETAILS][MSG.TRANSACT_ID]
-        except KeyError:
-            self.log("Transaction id not in message, continuing without.", RK.LOG_INFO)
-            transaction_id = None
-
-        try:
-            job_label = body[MSG.DETAILS][MSG.JOB_LABEL]
-        except:
-            self.log("job label not in message, continuing without.", RK.LOG_INFO)
-            job_label = None
-
-        # get the desired state from the details section of the message
-        try:
-            state = body[MSG.DETAILS][MSG.STATE]
-            # Convert state to an actual ENUM value for ease of comparison, can
-            # either be passed as the enum.value (default) or as the state
-            # string
-            if State.has_value(state):
-                state = State(state)
-            elif State.has_name(state):
-                state = State[state]
-            else:
-                self.log(
-                    f"State found in message invalid {state}, continuing without.", 
-                    RK.LOG_INFO
-                )
-                state = None
-        except KeyError:
-            self.log("Required state not in message, continuing without.", RK.LOG_INFO)
-            state = None
-
-        # get the desired sub_record id from the details section of the message
-        try:
-            sub_id = body[MSG.DETAILS][MSG.SUB_ID]
-        except KeyError:
-            self.log(
-                "Transaction sub-id not in message, continuing without.", RK.LOG_INFO
-            )
-            sub_id = None
-
+        
         # start a SQL alchemy session
         self.monitor.start_session()
 
@@ -474,12 +508,15 @@ class MonitorConsumer(RMQC):
             RK.LOG_INFO,
         )
 
+        if self._is_system_status_check(body_json=body, properties=properties):
+            return
+
         # Get the API method and decide what to do with it
         try:
             api_method = body[MSG.DETAILS][MSG.API_ACTION]
         except KeyError:
             self.log(
-                f"Message did not contain an API method, exiting callback", RK.LOG_ERROR
+                f"Message did not contain an api_action, exiting callback", RK.LOG_ERROR
             )
             return
 
@@ -487,24 +524,6 @@ class MonitorConsumer(RMQC):
         if api_method == RK.STAT:
             self.log("Starting stat from monitoring db.", RK.LOG_INFO)
             self._monitor_get(body, properties)
-
-        # If received system test message, reply to it (this is for system status check)
-        elif api_method == "system_stat":
-            if (
-                properties.correlation_id is not None
-                and properties.correlation_id != self.channel.consumer_tags[0]
-            ):
-                return False
-            if (body["details"]["ignore_message"]) == True:
-                return
-            else:
-                self.publish_message(
-                    properties.reply_to,
-                    msg_dict=body,
-                    exchange={"name": ""},
-                    correlation_id=properties.correlation_id,
-                )
-            return
 
         elif api_method in (
             RK.PUT,
