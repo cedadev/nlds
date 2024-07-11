@@ -210,7 +210,6 @@ class IndexerConsumer(StattingConsumer):
         except IndexError as ie:
             # add to the failed list - use append_and_send to subdivide if necessary
             item_path.failure_reason = ie.message
-            # this should be append and send
             self.append_and_send(
                 self.failedlist,
                 item_path,
