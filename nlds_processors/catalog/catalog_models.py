@@ -1,3 +1,4 @@
+from __future__ import annotations
 # encoding: utf-8
 """
 catalog_models.py
@@ -9,8 +10,6 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 """Declare the SQLAlchemy ORM models for the NLDS Catalog database"""
-
-from __future__ import annotations
 
 from sqlalchemy import (
     Integer,
