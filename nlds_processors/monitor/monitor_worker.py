@@ -183,7 +183,7 @@ class MonitorConsumer(RMQC):
             self.log("No warning found in message, continuing without", RK.LOG_DEBUG)
             warnings = []
         return warnings
-    
+
     def _parse_groupall(self, body):
         # get whether to list all jobs in the group, or just the user's groups
         try:
@@ -191,7 +191,7 @@ class MonitorConsumer(RMQC):
         except KeyError:
             groupall = False
         return groupall
-    
+
     def _parse_querygroup(self, body, group):
         # get the desired group from the details section of the message
         try:
@@ -205,15 +205,17 @@ class MonitorConsumer(RMQC):
         # and ease of insertion of the appropriate logic in the future.
         # groupall allows users to query other groups
         if query_group is not None and query_group != group:
-            msg = ("Attempting to query a group that does not match current group, "
-                   "exiting callback")
+            msg = (
+                "Attempting to query a group that does not match current group, "
+                "exiting callback"
+            )
             self.log(msg, RK.LOG_ERROR)
             raise MonitorError(message=msg)
         return query_group
-    
+
     def _parse_queryuser(self, body, user):
-        # get the desired user id to search for from the details section of the 
-        # message. this can be different than the user making the call 
+        # get the desired user id to search for from the details section of the
+        # message. this can be different than the user making the call
         try:
             query_user = body[MSG.DETAILS][MSG.USER_QUERY]
         except KeyError:
@@ -221,12 +223,14 @@ class MonitorConsumer(RMQC):
             query_user = None
 
         if query_user is not None and user != query_user:
-            msg = ("Attempting to query a user that does not match current "
-                   "user, exiting callback")
+            msg = (
+                "Attempting to query a user that does not match current "
+                "user, exiting callback"
+            )
             self.log(msg, RK.LOG_ERROR)
             raise MonitorError(message=msg)
         return query_user
-    
+
     def _parse_idd(self, body):
         # get the id / primary key
         try:
@@ -265,7 +269,7 @@ class MonitorConsumer(RMQC):
             for w in warnings:
                 warning = self.monitor.create_warning(trec, w)
         return trec
-    
+
     def _get_or_create_sub_record(self, trec, sub_id, state):
         # get or create a sub record
         try:
@@ -282,9 +286,11 @@ class MonitorConsumer(RMQC):
 
         # consistency check
         if srec.transaction_record_id != trec.id:
-            msg = ("Transaction id does not match sub_record's transaction "
-                   "id. Something has gone wrong, rolling back and exiting"
-                   "callback.")
+            msg = (
+                "Transaction id does not match sub_record's transaction "
+                "id. Something has gone wrong, rolling back and exiting"
+                "callback."
+            )
             self.log(msg, RK.LOG_ERROR)
             raise MonitorError(msg=e)
         return srec
@@ -416,7 +422,7 @@ class MonitorConsumer(RMQC):
         except MonitorError:
             # Functions above handled message logging, here we just return
             return
-        
+
         # start a SQL alchemy session
         self.monitor.start_session()
 
@@ -436,12 +442,25 @@ class MonitorConsumer(RMQC):
         # we want a list of transaction_records, each transaction_record
         # contains a list of sub_records
         trecs_dict = {}
-        # allo groupall to get all the sub records by setting query_user to None
+        # allow groupall to get all the sub records by setting query_user to None
         if groupall:
             query_user = None
         for tr in trecs:
+            # filter on the state
+            if state is not None:
+                if tr.get_state() != state:
+                    continue
+
+            # Note that state is used to filter on the final state, not the state of
+            # each sub record - so return the sub records no matter what state they
+            # are in
             srecs = self.monitor.get_sub_records(
-                tr, sub_id, query_user, query_group, state, api_action
+                transaction_record=tr,
+                sub_id=sub_id,
+                user=query_user,
+                group=query_group,
+                state=None,
+                api_action=api_action,
             )
 
             if tr.id in trecs_dict:
@@ -471,9 +490,7 @@ class MonitorConsumer(RMQC):
                 t_rec["sub_records"].append(s_rec)
 
         self.monitor.end_session()
-
-        # Send the recovered record as an RPC response if there are one or more
-        # sub records
+            
         ret_list = []
         for id_ in trecs_dict:
             if len(trecs_dict[id_]["sub_records"]) > 0:

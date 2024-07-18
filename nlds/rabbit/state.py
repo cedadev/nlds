@@ -20,6 +20,8 @@ class State(Enum):
     ROUTING = 0
     COMPLETE = 100
     FAILED = 101
+    COMPLETE_WITH_ERRORS = 102
+    COMPLETE_WITH_WARNINGS = 103
     # PUT workflow states
     SPLITTING = 1
     INDEXING = 2
@@ -40,6 +42,8 @@ class State(Enum):
     CATALOG_ARCHIVE_ROLLBACK = 40
     CATALOG_DELETE_ROLLBACK = 41
     CATALOG_RESTORING = 42
+    # Initial state for searching for sub-states
+    SEARCHING = 1000
 
     @classmethod
     def has_value(cls, value):
@@ -69,3 +73,8 @@ class State(Enum):
 
     def to_json(self):
         return self.value
+
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        raise NotImplementedError

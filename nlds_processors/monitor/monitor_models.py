@@ -50,6 +50,30 @@ class TransactionRecord(MonitorBase):
             warnings.append(w.warning)
         return warnings
 
+    def get_state(self):
+        """Get the overall state of the TransactionRecord.  This code has been
+        duplicated from the client to allow filtering on the State at the server level.
+        """
+        min_state = State.SEARCHING
+        error_count = 0
+        for sr in self.sub_records:
+            if sr.state < min_state:
+                min_state = sr.state
+            if sr.state == State.FAILED:
+                error_count += 1
+
+        if min_state == State.SEARCHING:
+            return None
+
+        if min_state == State.COMPLETE and error_count > 0:
+            min_state = State.COMPLETE_WITH_ERRORS
+
+        # see if any warnings were given
+        if min_state == State.COMPLETE and len(self.get_warnings()) > 0:
+            min_state = State.COMPLETE_WITH_WARNINGS
+
+        return min_state
+
 
 class SubRecord(MonitorBase):
     __tablename__ = "sub_record"
@@ -81,9 +105,7 @@ class SubRecord(MonitorBase):
         Checks whether all states have gotten to the final stage of a workflow
         (CATALOG_PUT or TRANSFER_GET) OR have failed. This should cover all bases.
         """
-        return (
-            self.state in State.get_final_states()
-        ) or self.state == State.FAILED
+        return (self.state in State.get_final_states()) or self.state == State.FAILED
 
 
 class FailedFile(MonitorBase):
