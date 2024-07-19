@@ -221,11 +221,10 @@ class JasminAuthenticator(BaseAuthenticator):
             try:
                 response_json = json.loads(response.text)
                 user_role = response_json["group_workspaces"]
+                is_manager = False
                 for role in user_role:
                     if role in ["MANAGER", "DEPUTY"]:
                         is_manager = True
-                    else:
-                        is_manager = False
                 return is_manager
             except KeyError:
                 raise RuntimeError(
