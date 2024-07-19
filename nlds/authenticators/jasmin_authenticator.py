@@ -192,13 +192,15 @@ class JasminAuthenticator(BaseAuthenticator):
             "cache-control": "no-cache",
             "Authorization": f"Bearer {oauth_token}",
         }
-        encoded_query_params = urllib.parse.urlencode({'category': 'GWS', 'service': group})
+        # Parameters needed in the URL to get service information
+        encoded_query_params = urllib.parse.urlencode(
+            {"category": "GWS", "service": group}
+        )
         relative_url = f"{user}/grants/{encoded_query_params}"
-        full_url = urllib.parse.urljoin(config['user_grants_url'], relative_url)
-        # Contact the user_grants_url to check the role of the user in the group
-        # given. This checks whether the user is a manger, deputy or user and
-        # returns True if they are either a manager or deputy, otherwise it
-        # returns False.
+        full_url = urllib.parse.urljoin(config["user_grants_url"], relative_url)
+        # Contact the user_grants_url to check the role of the user in the group given.
+        # This checks whether the user is a manger, deputy or user and returns True if
+        # if they are either a manager or deputy, otherwise it returns False.
         try:
             response = requests.get(
                 url=full_url,
@@ -206,21 +208,18 @@ class JasminAuthenticator(BaseAuthenticator):
                 timeout=JasminAuthenticator._timeout,
             )
         except requests.exceptions.ConnectionError:
-            raise RuntimeError(
-                "User grants url ",
-                full_url,
-                "could not be reached."
-            )
+            raise RuntimeError("User grants url ", full_url, "could not be reached.")
         except KeyError:
             raise RuntimeError(
                 f"Could not find 'user_grants_url' key in the "
                 f"[{self.name}] section of the .server_config file.",
-                config
+                config,
             )
         if response.status_code == requests.codes.ok:  # status code 200
             try:
                 response_json = json.loads(response.text)
                 user_role = response_json["group_workspaces"]
+                # is_manager is False by default and only changes if user has a manager or deputy role.
                 is_manager = False
                 for role in user_role:
                     if role in ["MANAGER", "DEPUTY"]:
@@ -230,12 +229,11 @@ class JasminAuthenticator(BaseAuthenticator):
                 raise RuntimeError(
                     "The user's role was not found in the response ",
                     "from the user grants url: ",
-                    full_url
+                    full_url,
                 )
             except json.JSONDecodeError:
                 raise RuntimeError(
-                    "Invalid JSON returned from the user grants url: ",
-                    full_url
+                    "Invalid JSON returned from the user grants url: ", full_url
                 )
         else:
             return False
