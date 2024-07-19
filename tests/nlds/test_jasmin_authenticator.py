@@ -173,6 +173,13 @@ class TestAuthenticateUserGroupRole:
                 False,
                 False,
             ),
+            (
+                "test_user",
+                "test_group",
+                MockResponse({"group_workspaces": ["MANAGER", "USER"]}, 200),
+                True,
+                False,
+            ),
             ("test_user", "test_group", MockResponse(None, 500), False, False),
             (
                 "test_user",
