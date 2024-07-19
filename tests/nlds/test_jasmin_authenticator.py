@@ -63,12 +63,17 @@ def oauth_token():
 class TestAuthenticateUser:
     """Check whether the user is a valid user."""
 
+    # Run the tests for different responses.
     @pytest.mark.parametrize(
         "user, mock_response, expected_result",
         [
+            # There is a valid response for test_user so the expected result is True.
             ("test_user", MockResponse({"username": "test_user"}, 200), True),
+            # There is a valid response but it's for another user so the expected result is False.
             ("test_user", MockResponse({"username": "another_user"}, 200), False),
+            # The reponse is showing a 401 Unauthorized error so the expected result is False.
             ("test_user", MockResponse({"error": "Unauthorized"}, 401), False),
+            # There is a 500 Internal Server Error so the expected result is False.
             ("test_user", MockResponse(None, 500), False),
         ],
     )
@@ -82,6 +87,7 @@ class TestAuthenticateUser:
         expected_result,
     ):
         """Check whether the user is a valid user."""
+        # Get the user information from the profile URL
         mock_requests_get["https://mock.url/api/profile/"] = mock_response
 
         # Create an instance of the JASMIN Authenticator
@@ -95,23 +101,28 @@ class TestAuthenticateUser:
 class TestAuthenticateGroup:
     """Check whether the user is part of the group."""
 
+    # Run the test for different responses.
     @pytest.mark.parametrize(
         "group, mock_response, expected_result, raises_exception",
         [
+            # There is a valid response for test_group so the result should be True with no exception
             (
                 "test_group",
                 MockResponse({"group_workspaces": ["test_group"]}, 200),
                 True,
                 False,
             ),
+            # There is a valid response but for the wrong group so the result should be False with no exception
             (
                 "test_group",
                 MockResponse({"group_workspaces": ["another_group"]}, 200),
                 False,
                 False,
             ),
+            # There is a 401 unauthorized error so the result should be False with no exception
             ("test_group", MockResponse({"error": "Unauthorized"}, 401), False, False),
-            ("test_group", MockResponse({}, 200), False, True),  # Key error scenario
+            # The response is valid but empty so the response should be False with an exception (key error scenario)
+            ("test_group", MockResponse({}, 200), False, True),
         ],
     )
     def test_authenticate_group(
@@ -130,9 +141,11 @@ class TestAuthenticateGroup:
         # Create an instance of the JASMIN Authenticator
         auth = JasminAuthenticator()
 
+        # If raises_exception is true, the test is expecting the authenticate_group method to raise a RuntimeError exception.
         if raises_exception:
             with pytest.raises(RuntimeError):
                 auth.authenticate_group(oauth_token, group)
+        # Otherwise, the test should return the expected result.
         else:
             # The authenticate_group method will use the monkeypatch
             is_member = auth.authenticate_group(oauth_token, group)
@@ -142,9 +155,11 @@ class TestAuthenticateGroup:
 class TestAuthenticateUserGroupRole:
     """Check the user's role in the group."""
 
+    # Run the test for different responses
     @pytest.mark.parametrize(
         "user, group, mock_response, expected_result, raises_exception",
         [
+            # The user is a manager of that group so the result should be true with no exception
             (
                 "test_user",
                 "test_group",
@@ -152,6 +167,7 @@ class TestAuthenticateUserGroupRole:
                 True,
                 False,
             ),
+            #  The user is a deputy of that group so the result should be true with no exception
             (
                 "test_user",
                 "test_group",
@@ -159,6 +175,7 @@ class TestAuthenticateUserGroupRole:
                 True,
                 False,
             ),
+            # The user is just a user of that group so the result should be true with no exception
             (
                 "test_user",
                 "test_group",
@@ -166,6 +183,7 @@ class TestAuthenticateUserGroupRole:
                 False,
                 False,
             ),
+            # The user isn't authorized so the result should be false with no exception
             (
                 "test_user",
                 "test_group",
@@ -173,6 +191,7 @@ class TestAuthenticateUserGroupRole:
                 False,
                 False,
             ),
+            # The user is a manager AND a user of the group but the result should still be true with no exception.
             (
                 "test_user",
                 "test_group",
@@ -180,14 +199,16 @@ class TestAuthenticateUserGroupRole:
                 True,
                 False,
             ),
+            # There response is an internal server error so the result should be false with no exception.
             ("test_user", "test_group", MockResponse(None, 500), False, False),
+            #  There is a valid response but it's empty so there should be an exception (key error scenario)
             (
                 "test_user",
                 "test_group",
                 MockResponse({}, 200),
                 None,
                 True,
-            ),  # Key error scenario
+            ),
         ],
     )
     def test_authenticate_user_group_role(
@@ -202,17 +223,23 @@ class TestAuthenticateUserGroupRole:
         raises_exception,
     ):
         """Check whether the user has a manager/deputy role within the specified group."""
-        encoded_query_params = urllib.parse.urlencode({'category': 'GWS', 'service': group})
+        #  Create the URL from the query params and relative URL
+        encoded_query_params = urllib.parse.urlencode(
+            {"category": "GWS", "service": group}
+        )
         relative_url = f"{user}/grants/{encoded_query_params}"
         full_url = urllib.parse.urljoin("https://mock.url/api/v1/users/", relative_url)
+        # Get the response from the full_url
         mock_requests_get[full_url] = mock_response
 
         # Create an instance of JASMIN Authenticator
         auth = JasminAuthenticator()
 
+        # If raises_exception is true, the test is expecting the authenticate_user_group_role method to raise a RuntimeError exception.
         if raises_exception:
             with pytest.raises(RuntimeError):
                 auth.authenticate_user_group_role(oauth_token, user, group)
+        # Otherwise, the test should return the expected result.
         else:
             # The authenticate_user_group_role method will use the monkeypatch
             has_role = auth.authenticate_user_group_role(oauth_token, user, group)
