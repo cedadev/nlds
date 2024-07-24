@@ -4,6 +4,7 @@ import json
 import urllib
 
 from nlds.authenticators.jasmin_authenticator import JasminAuthenticator
+from nlds.utils.construct_url import construct_url
 
 
 @pytest.fixture(autouse=True)
@@ -223,14 +224,10 @@ class TestAuthenticateUserGroupRole:
         raises_exception,
     ):
         """Check whether the user has a manager/deputy role within the specified group."""
-        #  Create the URL from the query params and relative URL
-        encoded_query_params = urllib.parse.urlencode(
-            {"category": "GWS", "service": group}
-        )
-        relative_url = f"{user}/grants/{encoded_query_params}"
-        full_url = urllib.parse.urljoin("https://mock.url/api/v1/users/", relative_url)
+        #  Create the URL
+        url = construct_url(["https://mock.url/api/v1/users", user, "grants"], {"category": "GWS", "service": group})
         # Get the response from the full_url
-        mock_requests_get[full_url] = mock_response
+        mock_requests_get[url] = mock_response
 
         # Create an instance of JASMIN Authenticator
         auth = JasminAuthenticator()

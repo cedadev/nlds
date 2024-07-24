@@ -10,6 +10,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from .base_authenticator import BaseAuthenticator
 from ..server_config import load_config
+from ..utils.construct_url import construct_url
 from retry import retry
 import requests
 import json
@@ -192,23 +193,19 @@ class JasminAuthenticator(BaseAuthenticator):
             "cache-control": "no-cache",
             "Authorization": f"Bearer {oauth_token}",
         }
-        # Parameters needed in the URL to get service information
-        encoded_query_params = urllib.parse.urlencode(
-            {"category": "GWS", "service": group}
-        )
-        relative_url = f"{user}/grants/{encoded_query_params}"
-        full_url = urllib.parse.urljoin(config["user_grants_url"], relative_url)
+        # Construct the URL
+        url = construct_url([config["user_grants_url"], user, 'grants'], {"category": "GWS", "service": group})
         # Contact the user_grants_url to check the role of the user in the group given.
         # This checks whether the user is a manger, deputy or user and returns True if
         # if they are either a manager or deputy, otherwise it returns False.
         try:
             response = requests.get(
-                url=full_url,
+                url=url,
                 headers=token_headers,
                 timeout=JasminAuthenticator._timeout,
             )
         except requests.exceptions.ConnectionError:
-            raise RuntimeError("User grants url ", full_url, "could not be reached.")
+            raise RuntimeError("User grants url ", url, "could not be reached.")
         except KeyError:
             raise RuntimeError(
                 f"Could not find 'user_grants_url' key in the "
@@ -229,11 +226,11 @@ class JasminAuthenticator(BaseAuthenticator):
                 raise RuntimeError(
                     "The user's role was not found in the response ",
                     "from the user grants url: ",
-                    full_url,
+                    url,
                 )
             except json.JSONDecodeError:
                 raise RuntimeError(
-                    "Invalid JSON returned from the user grants url: ", full_url
+                    "Invalid JSON returned from the user grants url: ", url
                 )
         else:
             return False
