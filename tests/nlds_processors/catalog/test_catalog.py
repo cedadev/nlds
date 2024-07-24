@@ -9,6 +9,7 @@ from nlds_processors.catalog.catalog_models import (
 )
 from nlds_processors.catalog.catalog import Catalog, CatalogError
 from nlds.details import PathType
+from nlds.authenticators.jasmin_authenticator import JasminAuthenticator
 
 test_uuid = '00a246cf-e2a8-46f0-baca-be3972fc4034'
 
@@ -356,6 +357,22 @@ class TestCatalog:
     def test_user_has_get_file_permission(self):
         # Leaving this for now until it's a bit more fleshed out
         pass
+
+    @pytest.mark.parametrize("user, group, mock_is_admin, expected", [
+        ("test-user", "test-group", False, True), # User owns the holding
+        ("user2", "test-group", False, False), # User does not own holding and is not admin
+        ("user2", "test-group", True, True), # User is admin of the group
+        ("test-user", "group2", False, False), # User is owner of different holding
+    ])
+    def test_user_has_delete_from_holiding_permission(self, monkeypatch, user, group, mock_is_admin, expected, mock_holding):
+        # Mock the authenticate_user_group_role method
+        def mock_authenticate_user_group_role(user, group):
+            return mock_is_admin
+        
+        monkeypatch.setattr(JasminAuthenticator, "authenticate_user_group_role", mock_authenticate_user_group_role)
+        result = Catalog._user_has_delete_from_holding_permission(user, group, mock_holding)
+        assert result == expected
+
 
     def test_get_files(self, mock_catalog, mock_holding, mock_transaction, 
                        mock_file):

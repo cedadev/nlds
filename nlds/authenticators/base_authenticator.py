@@ -2,16 +2,17 @@
 """
 
 """
-__author__ = 'Neil Massey and Jack Leland'
-__date__ = '30 Nov 2021'
-__copyright__ = 'Copyright 2021 United Kingdom Research and Innovation'
-__license__ = 'BSD - see LICENSE file in top-level package directory'
-__contact__ = 'neil.massey@stfc.ac.uk'
+__author__ = "Neil Massey and Jack Leland"
+__date__ = "30 Nov 2021"
+__copyright__ = "Copyright 2021 United Kingdom Research and Innovation"
+__license__ = "BSD - see LICENSE file in top-level package directory"
+__contact__ = "neil.massey@stfc.ac.uk"
 
 """Base class used to authenticate / authorise the users, groups, collections,
    etc.
 """
 from abc import ABC
+
 
 class BaseAuthenticator(ABC):
 
@@ -25,4 +26,8 @@ class BaseAuthenticator(ABC):
 
     def authenticate_group(self, oauth_token: str, group: str):
         """Validate whether the Bearer of the token belongs to the group."""
+        return NotImplementedError
+
+    def authenticate_user_group_role(self, oauth_token: str, user: str, group: str):
+        """Validate whether the user has manager/deputy permissions in the group."""
         return NotImplementedError
