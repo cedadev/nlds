@@ -194,7 +194,10 @@ class JasminAuthenticator(BaseAuthenticator):
             "Authorization": f"Bearer {oauth_token}",
         }
         # Construct the URL
-        url = construct_url([config["user_grants_url"], user, 'grants'], {"category": "GWS", "service": group})
+        url = construct_url(
+            [config["user_grants_url"], user, "grants"],
+            {"category": "GWS", "service": group},
+        )
         # Contact the user_grants_url to check the role of the user in the group given.
         # This checks whether the user is a manger, deputy or user and returns True if
         # if they are either a manager or deputy, otherwise it returns False.

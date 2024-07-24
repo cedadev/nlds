@@ -225,7 +225,10 @@ class TestAuthenticateUserGroupRole:
     ):
         """Check whether the user has a manager/deputy role within the specified group."""
         #  Create the URL
-        url = construct_url(["https://mock.url/api/v1/users", user, "grants"], {"category": "GWS", "service": group})
+        url = construct_url(
+            ["https://mock.url/api/v1/users", user, "grants"],
+            {"category": "GWS", "service": group},
+        )
         # Get the response from the full_url
         mock_requests_get[url] = mock_response
 
