@@ -17,7 +17,6 @@ import click
 
 from nlds.routers import rabbit_publisher
 from nlds.rabbit.consumer import State
-from nlds.details import Retries
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
