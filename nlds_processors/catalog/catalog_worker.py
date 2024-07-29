@@ -661,7 +661,6 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session()
 
         # COMPLETED
-        # NRM - TODO - move binning to here
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_GET, RK.COMPLETE])
             self.log(
@@ -676,8 +675,10 @@ class CatalogConsumer(RMQC):
             )        
 
         # NEED RETRIEVING FROM TAPE
+        if len(self.tapelist) > 0:
+            raise NotImplementedError
+        
         # NRM - TODO - sort out the logic here
-
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
@@ -923,52 +924,6 @@ class CatalogConsumer(RMQC):
         self.catalog.save()
         self.catalog.end_session()
 
-    def create_objectstore_location(
-        self, tape_location: Location, tenancy: str
-    ) -> PathDetails:
-        # Need to query catalog for file and transaction info to
-        # create the same object_store location that existed before
-        # archive.
-        file_ = self.catalog.get_location_file(tape_location)
-
-        # Check if objectstore location already exists and skip if so
-        if self.catalog.get_location(file_, Storage.OBJECT_STORAGE):
-            return
-
-        transaction = self.catalog.get_location_transaction(tape_location)
-        access_time = tape_location.access_time.timestamp()
-        # Create the object store location with the old bucket name
-        objstr_location = self.catalog.create_location(
-            file_=file_,
-            storage_type=Storage.OBJECT_STORAGE,
-            url_scheme="http",
-            url_netloc=tenancy,
-            root=transaction.transaction_id,
-            path=file_.original_path,
-            access_time=tape_location.access_time,
-        )
-        # Also need to make a path_details object for each of the
-        # files within the same aggregation and add it to the
-        # retrieve list.
-        # NRM - TODO this needs changing to new structure - and don't munge the names, # urgh!
-        tape_object_name = f"nlds.{tape_location.root}:{tape_location.path}"
-        objstr_object_name = f"nlds.{transaction.transaction_id}:{tape_location.path}"
-        path_details = PathDetails(
-            original_path=file_.original_path,
-            object_name=objstr_object_name,
-            tape_url=tape_location.url_netloc,
-            tape_path=tape_object_name,
-            tenancy=tenancy,
-            size=file_.size,
-            user=file_.user,
-            group=file_.group,
-            permissions=file_.file_permissions,
-            access_time=access_time,
-            path_type=file_.path_type,
-            link_path=file_.link_path,
-        )
-        return path_details
-
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location and
         aggregation for it and pass to for writing to tape."""
@@ -990,7 +945,7 @@ class CatalogConsumer(RMQC):
         # We need a new root as we can't rely on the transaction_id any more.
         # Create a slug from the uneditable holding information, this will be
         # the directory on the tape that contains each of the tar files.
-        holding_slug = f"{next_holding.id}.{next_holding.user}" f".{next_holding.group}"
+        holding_slug = f"{next_holding.id}.{next_holding.user}.{next_holding.group}"
 
         # Get the unarchived files and make suitable aggregates of them. Here we
         # make a distinction between aggregates, being just groups of files, and
@@ -1008,8 +963,6 @@ class CatalogConsumer(RMQC):
             filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8)
             tar_filename = f"{filelist_hash}.tar"
             # Make the tape_root here, which will be stored in the Location.
-            # This will act as the bucket name if transferred to object store
-            # later on
             tape_root = f"{holding_slug}_{filelist_hash}"
             # Make the aggregation first
             try:
