@@ -16,12 +16,14 @@ from typing import Tuple, List, Dict, TypeVar
 from zlib import adler32
 from enum import Enum
 
+ignore_xrootd = False
 try:
     from XRootD.client import File, FileSystem
     from XRootD.client.flags import StatInfoFlags
 except ModuleNotFoundError:
     File = TypeVar("File")
     FileSystem = TypeVar("FileSystem")
+    ignore_xrootd = True
 
     class StatInfoFlags(Enum):
         IS_DIR = 2
@@ -36,7 +38,6 @@ from nlds.details import PathDetails
 from nlds.rabbit.consumer import State
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-import nlds.rabbit.delays as DLY
 
 
 class ArchiveError(Exception):
@@ -140,36 +141,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         body = body.decode("utf-8")
         body_dict = json.loads(body)
 
-        # This checks if the message was for a system status check
-        try:
-            api_method = body_dict[MSG.DETAILS][MSG.API_ACTION]
-        except KeyError:
-            self.log(f"Message did not contain api_method", RK.LOG_INFO)
-            api_method = None
-
-        # If received system test message, reply to it (this is for system status check)
-        if api_method == "system_stat":
-            if (
-                properties.correlation_id is not None
-                and properties.correlation_id != self.channel.consumer_tags[0]
-            ):
-                return False
-            if (body_dict["details"]["ignore_message"]) == True:
-                return
-            else:
-                self.publish_message(
-                    properties.reply_to,
-                    msg_dict=body_dict,
-                    exchange={"name": ""},
-                    correlation_id=properties.correlation_id,
-                )
+        if self._is_system_status_check(body_json=body_dict, properties=properties):
             return
-
-        self.log(
-            f"Received {json.dumps(body_dict, indent=4)} from "
-            f"{self.queues[0].name} ({method.routing_key})",
-            RK.LOG_DEBUG,
-        )
 
         # Verify routing key is appropriate
         try:
@@ -181,25 +154,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             return
 
         filelist = self.parse_filelist(body_dict)
-
-        # We do this here in case a Transaction-level Retry is triggered before
-        # we get to the transfer method.
-        rk_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
-        retries = self.get_retries(body_dict)
-        if retries is not None and retries.count >= self.max_retries:
-            # Mark the message as 'processed' so it can be failed more safely.
-            self.log(
-                "Max transaction-level retries reached, failing filelist",
-                RK.LOG_ERROR,
-            )
-            self.send_pathlist(
-                filelist,
-                rk_failed,
-                body_dict,
-                state=State.CATALOG_ARCHIVE_ROLLBACK,
-                save_reasons_fl=True,
-            )
-            return
 
         ###
         # Verify and load message contents
