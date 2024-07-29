@@ -22,21 +22,27 @@ from minio.helpers import ObjectWriteResult
 from minio.error import S3Error
 from retry import retry
 from urllib3.exceptions import HTTPError
-from XRootD import client
-from XRootD.client.flags import (
-    DirListFlags,
-    PrepareFlags,
-    OpenFlags,
-    StatInfoFlags,
-    QueryCode,
-)
+
+# ignore_xrootd is so that we can test the message flow and preparation without
+# invoking an xrootd client
+ignore_xrootd = False
+try:
+    from XRootD import client as XRDClient
+    from XRootD.client.flags import (
+        DirListFlags,
+        PrepareFlags,
+        OpenFlags,
+        QueryCode,
+    )
+except ModuleNotFoundError:
+    ignore_xrootd = True
 
 from nlds_processors.archiver.archive_base import (
     BaseArchiveConsumer,
     ArchiveError,
     AdlerisingXRDFile,
 )
-from nlds.rabbit.consumer import FilelistType, State
+from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
 
@@ -78,11 +84,7 @@ class FileAlreadyRetrieved(Exception):
 
 class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_QUEUE_NAME = "archive_get_q"
-    DEFAULT_ROUTING_KEY = (
-        f"{RK.ROOT}."
-        f"{RK.TRANSFER_PUT}."
-        f"{RK.WILD}"
-    )
+    DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_PUT}." f"{RK.WILD}"
     DEFAULT_STATE = State.ARCHIVE_GETTING
 
     _PREPARE_REQUEUE_DELAY = "prepare_requeue"
@@ -152,7 +154,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         )
 
         # Create the FileSystem client at this point to verify the tape_base_dir
-        fs_client = client.FileSystem(f"root://{tape_server}")
+        fs_client = XRDClient.FileSystem(f"root://{tape_server}")
         # Attempt to verify that the base-directory exists
         self.verify_tape_server(fs_client, tape_server, tape_base_dir)
 
@@ -288,8 +290,6 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     f"{prepare_id}, sending for retry."
                 )
             else:
-                # TODO: split list at this point? Probably want to keep all
-                # members of the same request together?
                 self.log(
                     f"Prepare request with id {prepare_id} has not completed "
                     f"for {tar_path}, requeuing message with a delay of "
@@ -300,9 +300,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     filelist,
                     rk_retry,
                     body_json,
-                    mode=FilelistType.retry,
                     state=State.CATALOG_ARCHIVE_AGGREGATING,
-                    delay=self.prepare_requeue_delay,
                 )
                 return
 
@@ -341,7 +339,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             # at a time
             try:
                 path_details = None
-                with client.File() as f:
+                with XRDClient.File() as f:
                     # Open the tar file with READ
                     status, _ = f.open(full_tape_path, OpenFlags.READ)
                     if status.status != 0:
@@ -550,7 +548,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         return tar_list
 
     def query_prepare_request(
-        self, prepare_id: str, tar_list: List[str], fs_client: client.FileSystem
+        self, prepare_id: str, tar_list: List[str], fs_client: XRDClient.FileSystem
     ) -> Dict[str, str]:
         # Generate the arg string for the prepare query with new line characters
         query_args = "\n".join([prepare_id, *tar_list])

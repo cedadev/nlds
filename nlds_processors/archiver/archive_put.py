@@ -17,8 +17,13 @@ from hashlib import shake_256
 import minio
 from minio.error import S3Error
 from urllib3.exceptions import HTTPError
-from XRootD import client
-from XRootD.client.flags import OpenFlags, MkDirFlags, QueryCode
+
+ignore_xrootd = False
+try:
+    from XRootD import client as XRDClient
+    from XRootD.client.flags import OpenFlags, MkDirFlags, QueryCode
+except ModuleNotFoundError:
+    ignore_xrootd = True
 
 from nlds_processors.archiver.archive_base import (
     BaseArchiveConsumer,
@@ -57,12 +62,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
     ):
         # Make the routing keys now
         rk_complete = ".".join([rk_origin, RK.ARCHIVE_PUT, RK.COMPLETE])
-        rk_retry = ".".join([rk_origin, RK.ARCHIVE_PUT, RK.START])
         rk_failed = ".".join([rk_origin, RK.ARCHIVE_PUT, RK.FAILED])
-
-        # First check for transaction-level message failure and boot back to
-        # catalog if necessary.
-        retries = self.get_retries(body_json)
 
         # Can call this with impunity as the url has been verified previously
         tape_server, tape_base_dir = self.split_tape_url(tape_url)
@@ -85,7 +85,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         )
 
         # Create the FileSystem client at this point to verify the tape_base_dir
-        fs_client = client.FileSystem(f"root://{tape_server}")
+        fs_client = XRDClient.FileSystem(f"root://{tape_server}")
         self.verify_tape_server(fs_client, tape_server, tape_base_dir)
 
         # Generate a name for the tarfile by hashing the combined filelist.
@@ -93,13 +93,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # NOTE: this breaks if a problem file is removed from an aggregation
         filenames = [f.original_path for f in filelist]
         filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8)
-        # Conflicting filename in cache from previous attempt might prevent us
-        # making a new tar, so guarantee a new filename for each attempt.
-        retry_str = ""
-        if retries is not None and retries.count > 0:
-            retry_str = f".{retries.count}"
 
-        tar_filename = f"{filelist_hash}{retry_str}.tar"
+        tar_filename = f"{filelist_hash}.tar"
 
         # All files are now supposed to be from a single aggregation according
         # to the current implementation of the PUT workflow. Here we do an
@@ -117,7 +112,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 check_bucket, check_object = path_details.object_name.split(":")
             except ValueError as e:
                 raise CallbackError(
-                    "Could not unpack mandatory info from " "filelist, cannot continue."
+                    "Could not unpack mandatory info from filelist, cannot continue."
                 )
             try:
                 # Check that the calculated filelist_hash and the constructed
@@ -162,16 +157,15 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 f"({fs_holding_tapepath})."
             )
 
-        with client.File() as f:
+        with XRDClient.File() as f:
             # Open the file as NEW, to avoid having to prepare it
             flags = OpenFlags.NEW | OpenFlags.MAKEPATH
             status, _ = f.open(client_full_tapepath, flags)
             if status.status != 0:
                 raise CallbackError("Failed to open file for writing")
 
-            # From this point onward we have a file on the disk cache. If
-            # anything goes wrong we'll need to delete it and try the whole
-            # write again.
+            # From this point onward we have a file on the disk cache. If anything
+            # goes wrong we'll need to delete it and try the whole write again.
             try:
                 file_wrapper = AdlerisingXRDFile(f, debug_fl=False)
 
@@ -214,10 +208,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                                 f"{type(e).__name__}: {e}"
                             )
                             self.log(f"{reason}", RK.LOG_ERROR)
-                            # NOTE: for now the retrylist is purely symbolic,
-                            # we may change this in the future
-                            path_details.retries.increment(reason=reason)
-                            self.retrylist.append(path_details)
+                            # Retries have gone, replaced by straight failure
+                            self.failedlist.append(path_details)
                             raise e
                         else:
                             # Log successful
@@ -256,11 +248,9 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             )
             if status.status != 0:
                 self.log(
-                    f"Could not query xrootd's checksum for tar file "
-                    f"{tar_filename}.",
+                    f"Could not query xrootd's checksum for tar file {tar_filename}.",
                     RK.LOG_WARNING,
                 )
-                # TODO: Schedule another for later?
             else:
                 try:
                     method, value = result.decode().split()
@@ -299,20 +289,12 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Send whatever remains after all items have been put
         if len(self.completelist) > 0:
-            # If file has had to be renamed and successfully written, the
-            # catalog will need to know
-            if retry_str:
-                body_json[MSG.DATA][MSG.NEW_TARNAME] = f"{filelist_hash}{retry_str}"
             self.send_pathlist(
                 self.completelist, rk_complete, body_json, mode="archived"
             )
 
-        # These _should_ both be empty as they're not populated anywhere.
-        if len(self.retrylist) > 0:
-            self.send_pathlist(self.retrylist, rk_retry, body_json, mode="retry")
         if len(self.failedlist) > 0:
-            # Send message back to worker so catalog can be scrubbed of failed
-            # puts
+            # Send message back to worker so catalog can be scrubbed of failed puts
             self.send_pathlist(
                 self.failedlist,
                 rk_failed,
@@ -320,7 +302,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 state=State.CATALOG_ARCHIVE_ROLLBACK,
             )
 
-    def remove_file(self, full_tape_path: str, fs_client: client.FileSystem):
+    def remove_file(self, full_tape_path: str, fs_client: XRDClient.FileSystem):
         """Part of the error handling process, if any error occurs during write
         we'll have to be very defensive and start the whole process again. If
         doing so we'll need to remove the file from the disk cache before it
@@ -332,14 +314,14 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         if status.status != 0:
             reason = "Could not delete file from disk-cache"
             self.log(
-                f"{reason}, will need to be marked as deleted for future "
-                "tape repacking",
+                f"{reason}, will need to be marked as deleted for future tape "
+                "repacking",
                 RK.LOG_ERROR,
             )
             raise CallbackError(reason)
         else:
             self.log(
-                "Deleted errored file from disk-cache to prevent tape " "write.",
+                "Deleted errored file from disk-cache to prevent tape write.",
                 RK.LOG_INFO,
             )
 
