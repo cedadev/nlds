@@ -83,7 +83,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
 
         ###
         # Verify and load message contents
-
         try:
             transaction_id = body_json[MSG.DETAILS][MSG.TRANSACT_ID]
         except KeyError:
