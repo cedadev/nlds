@@ -23,9 +23,15 @@ note over qc
 end note
 
 participant wex as "Exchange"
-
-queue aq as "Archive Q" #LightSteelBlue
 collections archy as "Archive\nWorker" #LightSteelBlue
+
+queue qw as "NLDS Q" #lightgrey
+note over qw
+    topic=""nlds-api.route.*""
+end note
+collections work as "NLDS\nWorker" #lightgrey
+
+' queue aq as "Archive Q" #LightSteelBlue
 
 queue qap as "Archive Put Q" #MistyRose
 note over qap
@@ -68,16 +74,16 @@ catalog -> wex : key=""nlds-api.catalog-archive.next-complete""
 deactivate catalog
 
 activate wex
-wex -> aq : key=""nlds-api.catalog-archive.next-complete""
+wex -> qw : key=""nlds-api.catalog-archive.next-complete""
 deactivate wex
 
-activate aq
-aq -> archy : key=""nlds-api.catalog-archive.next-complete""
-deactivate aq
+activate qw
+qw -> work : key=""nlds-api.catalog-archive.next-complete""
+deactivate qw
 
-activate archy
-archy -> wex : key=""nlds-api.archive-put.start""
-deactivate archy
+activate work
+work -> wex : key=""nlds-api.archive-put.start""
+deactivate work
 
 activate wex
 wex -> qap : key=""nlds-api.archive-put.start""
@@ -109,26 +115,26 @@ else else
 end
 archive_puts -> wex : key=""nlds-api.archive-put.complete""
 activate wex
-wex -> aq : key=""nlds-api.archive-put.complete""
+wex -> qw : key=""nlds-api.archive-put.complete""
 deactivate wex
 
-activate aq
-aq -> archy : key=""nlds-api.archive-put.complete""
-deactivate aq
+activate qw
+qw -> work : key=""nlds-api.archive-put.complete""
+deactivate qw
 
 archive_puts -> wex : key=""nlds.api.archive.failed""
 deactivate archive_puts
 
 activate wex
-wex -> aq : key=""nlds-api.archive-put.failed""
+wex -> qw : key=""nlds-api.archive-put.failed""
 deactivate wex
 
-activate aq
-aq -> archy : key=""nlds-api.archive-put.failed""
-deactivate aq
+activate qw
+qw -> work : key=""nlds-api.archive-put.failed""
+deactivate qw
 
-activate archy
-archy -> wex : key=""nlds-api.catalog-archive.failed""
+activate work
+work -> wex : key=""nlds-api.catalog-archive.failed""
 deactivate archy 
 
 activate wex
@@ -147,11 +153,11 @@ catalog -> wex : key=""nlds-api.catalog-archive.failed-complete""
 deactivate catalog
 
 activate wex
-wex -> aq : key=""nlds-api.catalog-archive.failed-complete""
+wex -> qw : key=""nlds-api.catalog-archive.failed-complete""
 deactivate wex
 
-activate aq
-aq -> archy : key=""nlds-api.catalog-archive.failed-complete""
-deactivate aq
+activate qw
+qw -> work : key=""nlds-api.catalog-archive.failed-complete""
+deactivate qw
 
 @enduml
