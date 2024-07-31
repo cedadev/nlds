@@ -1,5 +1,5 @@
 from ..server_config import load_config
-from construct_url import construct_url
+from .construct_url import construct_url
 from retry import retry
 import requests
 import json
