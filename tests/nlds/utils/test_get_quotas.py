@@ -1,4 +1,5 @@
 import pytest
+import json
 import requests
 import re
 from nlds.utils.get_quotas import Quotas
@@ -22,7 +23,7 @@ def test_get_projects_services_success(monkeypatch, quotas):
         """Mock the load_config function to make it return the test config."""
         return {
             'authentication': {
-                'authenticator':{
+                'jasmin_authenticator':{
                     'user_services_url': user_services_url
                 }
             }
@@ -31,7 +32,7 @@ def test_get_projects_services_success(monkeypatch, quotas):
     
     def mock_construct_url(*args, **kwargs):
         """Mock the construct_url function to make it return the test url."""
-        return f'https://example.com/services?name=test_service'
+        return url
     monkeypatch.setattr('nlds.utils.get_quotas.construct_url', mock_construct_url)
 
     class MockResponse:
@@ -55,13 +56,13 @@ def test_get_projects_services_success(monkeypatch, quotas):
 
 
 def test_get_projects_services_connection_error(monkeypatch, quotas):
-    """Test an unsuccessful instance of get_projects_services"""
+    """Test an unsuccessful instance of get_projects_services due to connection error."""
 
     def mock_load_config():
         """Mock the load_config function to make it return the test config."""
         return {
             'authentication': {
-                'authenticator': {
+                'jasmin_authenticator': {
                     'user_services_url': user_services_url
                 }
             }
@@ -70,11 +71,11 @@ def test_get_projects_services_connection_error(monkeypatch, quotas):
     
     def mock_construct_url(*args, **kwargs):
         """Mock the construct_url function to make it return the test url."""
-        return f'https://example.com/services?name=test_service'
+        return url
     monkeypatch.setattr('nlds.utils.get_quotas.construct_url', mock_construct_url)
 
     def mock_get(*args, **kwargs):
-        """Mock the get function to give the MockResponse."""
+        """Mock the get function to give a ConnectionError."""
         raise requests.exceptions.ConnectionError
     monkeypatch.setattr(requests, 'get', mock_get)
 
@@ -83,8 +84,74 @@ def test_get_projects_services_connection_error(monkeypatch, quotas):
         quotas.get_projects_services('dummy_oauth_token', 'test_service')
 
 
+def test_get_projects_services_key_error(monkeypatch, quotas):
+    """Test an unsuccessful instance of get_projects_services due to a key error."""
+
+    def mock_load_config():
+        """Mock the load_config function to make it return the test config with no user_services_key"""
+        return {
+            'authentication': {
+                'jasmin_authenticator': {
+                    'other_url': 'test.com'
+                }
+            }
+        }
+    monkeypatch.setattr('nlds.utils.get_quotas.load_config', mock_load_config)
+
+    def mock_construct_url(*args, **kwargs):
+        """Mock the construct_url function to make it return the test url."""
+        return url
+    monkeypatch.setattr('nlds.utils.get_quotas.construct_url', mock_construct_url)
+
+    def mock_get(*args, **kwargs):
+        """Mock the get function to give the KeyError."""
+        raise KeyError
+    monkeypatch.setattr(requests, 'get', mock_get)
+
+    # Check that the KeyError in the get triggers a RuntimeError with the right text.
+    with pytest.raises(RuntimeError, match=f"Could not find 'user_services_url' key in the jasmin_authenticator section of the .server_config file."):
+        quotas.get_projects_services('dummy_oauth_token', 'test_service')
+
+
+def test_get_projects_services_json_error(monkeypatch, quotas):
+    """Test an unsuccessful instance of get_projects_services due to a JSON error."""
+
+    def mock_load_config():
+        """Mock the load_config function to make it return the test config."""
+        return {
+            'authentication': {
+                'jasmin_authenticator': {
+                    'user_services_url': user_services_url
+                }
+            }
+        }
+    
+    def mock_construct_url(*args, **kwargs):
+        """Mock the construct url function to make it return the test url."""
+        return url
+    monkeypatch.setattr('nlds.utils.get_quotas.construct_url', mock_construct_url)
+
+    class MockResponse:
+        """Mock the response to return a 200 status code and the test text."""
+        status_code = 200
+        text = 'invalid json'
+
+        def json(self):
+            raise json.JSONDecodeError("Expecting value", "invalid json", 0)
+        
+    def mock_get(*args, **kwargs):
+        """Mock the get function to give the JSON error."""
+        return MockResponse()
+    monkeypatch.setattr(requests, 'get', mock_get)
+
+    # Check that the JSONDecodeError triggers a RuntimeError with the right text.
+    with pytest.raises(RuntimeError, match=re.escape(f"Invalid JSON returned from the user services url: {url}")):
+        quotas.get_projects_services('dummy_oauth_token', 'test_service')
+     
+
+
 def test_extract_tape_quota_success(monkeypatch, quotas):
-    """Test a succesful instance of extract_tape_quota"""
+    """Test a successful instance of extract_tape_quota"""
 
     def mock_get_projects_services(*args, **kwargs):
         """Mock the response from get_projects_services to give the response for
