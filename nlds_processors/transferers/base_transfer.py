@@ -121,7 +121,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                 self.send_pathlist(
                     sub_list, rk_transfer_start, body_json, state=State.CATALOG_GETTING
                 )
-        else:
+        elif rk_parts[2] == RK.START:
             # Start transfer - this is implementation specific and handled by
             # child classes
             self.log(f"Starting object store transfer with {tenancy}", RK.LOG_INFO)
@@ -134,6 +134,8 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                 rk_parts[0],
                 body_json,
             )
+        else:
+            raise TransferError(f"Unknown routing key {rk_parts[2]}")
 
     def get_objectstore_config(self, body_dict) -> Tuple:
         try:

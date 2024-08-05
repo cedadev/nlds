@@ -44,15 +44,15 @@ participant obj as "Object\nStore" #GhostWhite
 participant tape as "Tape" #GhostWhite
 
 activate archy
-archy -> wex : key=""nlds-api.catalog-archive.next""
+archy -> wex : key=""nlds-api.catalog-archive-next.start""
 deactivate archy
 
 activate wex
-wex->qc : key=""nlds-api.catalog-archive.next""
+wex->qc : key=""nlds-api.catalog-archive-next.start""
 deactivate wex
 
 activate qc
-qc -> catalog : key=""nlds-api.catalog-archive.next""
+qc -> catalog : key=""nlds-api.catalog-archive-next.start""
 deactivate qc
 
 activate catalog
@@ -70,15 +70,15 @@ opt #SpringGreen
         end
     end
 end
-catalog -> wex : key=""nlds-api.catalog-archive.next-complete""
+catalog -> wex : key=""nlds-api.catalog-archive-next.complete""
 deactivate catalog
 
 activate wex
-wex -> qw : key=""nlds-api.catalog-archive.next-complete""
+wex -> qw : key=""nlds-api.catalog-archive-next.complete""
 deactivate wex
 
 activate qw
-qw -> work : key=""nlds-api.catalog-archive.next-complete""
+qw -> work : key=""nlds-api.catalog-archive-next.complete""
 deactivate qw
 
 activate work

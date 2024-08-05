@@ -149,6 +149,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             rk_parts = self.split_routing_key(method.routing_key)
         except ValueError as e:
             self.log(
+                
                 "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
             return

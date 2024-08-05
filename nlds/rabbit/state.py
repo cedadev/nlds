@@ -28,7 +28,7 @@ class State(Enum):
     CATALOG_PUTTING = 3
     TRANSFER_PUTTING = 4
     CATALOG_ROLLBACK = 5
-    CATALOG_AMEND = 6
+    CATALOG_UPDATE = 6
     # GET workflow states
     CATALOG_GETTING = 10
     ARCHIVE_GETTING = 11
@@ -58,7 +58,7 @@ class State(Enum):
         final_states = (
             cls.TRANSFER_GETTING,
             #cls.TRANSFER_PUTTING,
-            cls.CATALOG_AMEND,
+            cls.CATALOG_UPDATE,
             cls.CATALOG_ARCHIVE_UPDATING,
             cls.CATALOG_ROLLBACK,
             cls.CATALOG_ARCHIVE_ROLLBACK,

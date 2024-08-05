@@ -118,7 +118,7 @@ class NLDSWorkerConsumer(RMQC):
     def _process_rk_index_complete(self, body_json: Dict[str, str]) -> None:
         # forward to catalog-put on the catalog_q
         self.log(f"Index successful, sending file list for cataloguing.", RK.LOG_INFO)
-
+        
         queue = f"{RK.CATALOG_PUT}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
@@ -139,14 +139,14 @@ class NLDSWorkerConsumer(RMQC):
         self.publish_and_log_message(new_routing_key, body_json)
 
     def _process_rk_transfer_put_complete(self, body_json: Dict) -> None:
-        # After a successfull TRANSFER_PUT, the catalog is amended with the locations
+        # After a successfull TRANSFER_PUT, the catalog is updated with the locations
         # of the files on the OBJECT STORAGE
         self.log(
             f"Transfer successful, sending filelist with object storage locations to "
              "be inserted into the catalog",
             RK.LOG_INFO,
         )
-        queue = f"{RK.CATALOG_AMEND}"
+        queue = f"{RK.CATALOG_UPDATE}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
             f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",

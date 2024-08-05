@@ -496,12 +496,12 @@ class CatalogConsumer(RMQC):
                 warning=tag_warnings,
             )
 
-    def _catalog_amend(self, body: Dict, rk_origin: str) -> None:
+    def _catalog_update(self, body: Dict, rk_origin: str) -> None:
         """Upon completion of a TRANSFER_PUT, the list of completed files is returned
         back to the NLDS worker, but with location on Object Storage of the files
         appended to each PathDetails JSON object.
         The NLDS worker then passes this message to the Catalog, and this function
-        processes the PathDetails and amends each file's record in the database to
+        processes the PathDetails and updates each file's record in the database to
         contain the Object Storage location."""
         # Parse the message body for required variables
         try:
@@ -556,25 +556,25 @@ class CatalogConsumer(RMQC):
         self.catalog.save()
         self.catalog.end_session()
 
-        # log the successful and non-successful catalog amends
+        # log the successful and non-successful catalog updates
         # SUCCESS
         if len(self.completelist) > 0:
-            rk_complete = ".".join([rk_origin, RK.CATALOG_AMEND, RK.COMPLETE])
+            rk_complete = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.COMPLETE])
             self.log(
-                f"Sending completed PathList from CATALOG_AMEND {self.completelist}",
+                f"Sending completed PathList from CATALOG_UPDATE {self.completelist}",
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
                 body_json=body,
-                state=State.CATALOG_AMEND,
+                state=State.CATALOG_UPDATE,
             )
         # FAILED
         if len(self.failedlist) > 0:
-            rk_failed = ".".join([rk_origin, RK.CATALOG_AMEND, RK.FAILED])
+            rk_failed = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.FAILED])
             self.log(
-                f"Sending failed PathList from CATALOG_AMEND {self.failedlist}",
+                f"Sending failed PathList from CATALOG_UPDATE {self.failedlist}",
                 RK.LOG_DEBUG,
             )
             self.send_pathlist(
@@ -1745,8 +1745,8 @@ class CatalogConsumer(RMQC):
                     self._catalog_put(body, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_DEL:
                     self._catalog_del(body, rk_parts[0])
-                elif rk_parts[1] == RK.CATALOG_AMEND:
-                    self._catalog_amend(body, rk_parts[0])
+                elif rk_parts[1] == RK.CATALOG_UPDATE:
+                    self._catalog_update(body, rk_parts[0])
 
         # Archive put requires getting from the catalog
         elif api_method == RK.ARCHIVE_PUT:
