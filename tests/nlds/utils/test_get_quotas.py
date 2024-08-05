@@ -147,6 +147,42 @@ def test_get_projects_services_json_error(monkeypatch, quotas):
     # Check that the JSONDecodeError triggers a RuntimeError with the right text.
     with pytest.raises(RuntimeError, match=re.escape(f"Invalid JSON returned from the user services url: {url}")):
         quotas.get_projects_services('dummy_oauth_token', 'test_service')
+
+
+def test_get_projects_services_404_error(monkeypatch, quotas):
+    """Test an unsuccessful instance of get_projects_services due to a 404 error."""
+
+    def mock_load_config():
+        """Mock the load_config function to make it return the test config."""
+        return {
+            'authentication': {
+                'jasmin_authenticator': {
+                    'user_services_url': user_services_url
+                }
+            }
+        }
+    
+    def mock_construct_url(*args, **kwargs):
+        """Mock the construct url function to make it return the test url."""
+        return url
+    monkeypatch.setattr('nlds.utils.get_quotas.construct_url', mock_construct_url)
+
+    class MockResponse:
+        """Mock the response to return a 401 status code and the relevant text."""
+        status_code = 401
+        text = 'Unauthorized'
+
+        def json(self):
+            return 'Unauthorized'
+        
+    def mock_get(*args, **kwargs):
+        """Mock the get function to give the 401 error."""
+        return MockResponse()
+    monkeypatch.setattr(requests, 'get', mock_get)
+
+    # Check that the 401 error triggers a RuntimeError with the right text.
+    with pytest.raises(RuntimeError, match=f"Error getting data for test_service"):
+        quotas.get_projects_services('dummy_oauth_token', 'test_service')
      
 
 
@@ -211,3 +247,25 @@ def test_extract_tape_quota_no_tape_resource(monkeypatch, quotas):
     # A ValueError should be raised saying there's no tape resources.
     with pytest.raises(ValueError, match="No tape resources could be found for test_service"):
         quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
+
+
+def test_extract_tape_quota_services_runtime_error(monkeypatch, quotas):
+    """Test an unsuccessful instance of extract_tape_quota due to a runtime error getting services from the projects portal."""
+    def mock_get_projects_services(*args, **kwargs):
+        raise RuntimeError('Runtime error occurred')
+    
+    monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
+
+    with pytest.raises(RuntimeError, match="Error getting information for test_service: Runtime error occurred"):
+        quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
+
+
+# def test_extract_tape_quota_services_value_error(monkeypatch, quotas):
+#     """Test an unsuccessful instance of extract_tape_quota due to a value error getting services from the projects portal."""
+
+
+# test 'cannot find a gws with the name ....'
+
+# test 'issue getting tape quota for ...'
+
+# test 'no provisioned requirements ....'

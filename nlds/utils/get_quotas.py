@@ -44,7 +44,7 @@ class Quotas():
             except json.JSONDecodeError:
                 raise RuntimeError(f"Invalid JSON returned from the user services url: {url}")
         else:
-            raise RuntimeError(f"Error getting data for {service_name}.")
+            raise RuntimeError(f"Error getting data for {service_name}")
         
     
     def extract_tape_quota(self, oauth_token: str, service_name):
