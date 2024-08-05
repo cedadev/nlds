@@ -79,7 +79,7 @@ def test_get_projects_services_connection_error(monkeypatch, quotas):
         raise requests.exceptions.ConnectionError
     monkeypatch.setattr(requests, 'get', mock_get)
 
-    # Check that the ConnectionError in the get triggers a RuntimeError with the right text.
+    # Check that the ConnectionError in the 'get' triggers a RuntimeError with the right text.
     with pytest.raises(RuntimeError, match=re.escape(f"User services url {url} could not be reached.")):
         quotas.get_projects_services('dummy_oauth_token', 'test_service')
 
@@ -185,7 +185,6 @@ def test_get_projects_services_404_error(monkeypatch, quotas):
         quotas.get_projects_services('dummy_oauth_token', 'test_service')
      
 
-
 def test_extract_tape_quota_success(monkeypatch, quotas):
     """Test a successful instance of extract_tape_quota"""
 
@@ -252,10 +251,12 @@ def test_extract_tape_quota_no_tape_resource(monkeypatch, quotas):
 def test_extract_tape_quota_services_runtime_error(monkeypatch, quotas):
     """Test an unsuccessful instance of extract_tape_quota due to a runtime error getting services from the projects portal."""
     def mock_get_projects_services(*args, **kwargs):
+        """Mock the response from get_projects_services to give a RuntimeError."""
         raise RuntimeError('Runtime error occurred')
     
     monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
 
+    # A RuntimeError should be raised saying a runtime error occurred.
     with pytest.raises(RuntimeError, match="Error getting information for test_service: Runtime error occurred"):
         quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
 
@@ -263,10 +264,12 @@ def test_extract_tape_quota_services_runtime_error(monkeypatch, quotas):
 def test_extract_tape_quota_services_value_error(monkeypatch, quotas):
     """Test an unsuccessful instance of extract_tape_quota due to a value error getting services from the projects portal."""
     def mock_get_projects_services(*args, **kwargs):
+        """Mock the response from get_projects_services to give a ValueError."""
         raise ValueError('Value error occurred')
     
     monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
 
+    # A ValueError should be raised saying a value error occurred.
     with pytest.raises(ValueError, match="Error getting information for test_service: Value error occurred"):
         quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
 
@@ -274,6 +277,7 @@ def test_extract_tape_quota_services_value_error(monkeypatch, quotas):
 def test_extract_tape_quota_no_gws(monkeypatch, quotas):
     """Test an unsuccessful instance of extract_tape_quota due to the given service not being a gws."""
     def mock_get_projects_services(*args, **kwargs):
+        """Mock the response from get_projects_services to give results with the wrong category (a GWS is 1)."""
         return [
             {"category": 2, "requirements": []},
             {"category": 3, "requirements": []}
@@ -281,6 +285,7 @@ def test_extract_tape_quota_no_gws(monkeypatch, quotas):
     
     monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
 
+    # A ValueError should be raised saying it cannot find a GWS and to check the category.
     with pytest.raises(ValueError, match="Cannot find a Group Workspace with the name test_service. Check the category."):
         quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
 
@@ -288,6 +293,7 @@ def test_extract_tape_quota_no_gws(monkeypatch, quotas):
 def test_extract_tape_quota_zero_quota(monkeypatch, quotas):
     """Test an unsuccessful instance of extract_tape_quota due to the quota being zero."""
     def mock_get_projects_services(*args, **kwargs):
+        """Mock the response from get_projects_services to give a quota of 0."""
         return [{
             "category": 1,
              "requirements": [
@@ -301,13 +307,15 @@ def test_extract_tape_quota_zero_quota(monkeypatch, quotas):
     
     monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
 
+    # A ValueError should be raised saying there was an issue getting tape quota as it is zero.
     with pytest.raises(ValueError, match="Issue getting tape quota for test_service. Quota is zero."):
         quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
 
 
 def test_extract_tape_quota_no_quota(monkeypatch, quotas):
-    """Test an unsuccessful instance of extract_tape_quota due to there being no quota value."""
+    """Test an unsuccessful instance of extract_tape_quota due to there being no quota field."""
     def mock_get_projects_services(*args, **kwargs):
+        """Mock the response from get_projects_services to give no 'amount' field."""
         return [{
             "category": 1,
             "requirements": [
@@ -320,7 +328,27 @@ def test_extract_tape_quota_no_quota(monkeypatch, quotas):
     
     monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
 
-    with pytest.raises(KeyError, match="Issue getting tape quota for test_service. No quota field exists."):
+    # A KeyError should be raised saying there was an issue getting tape quota as no value field exists.
+    with pytest.raises(KeyError, match="Issue getting tape quota for test_service. No 'value' field exists."):
         quotas.extract_tape_quota("dummy_oauth_token", "test_service")
 
-# test 'no provisioned requirements ....'
+
+def test_extract_tape_quota_no_provisioned_resources(monkeypatch, quotas):
+    """Test an unsuccessful instance of extract_tape_quota due to there being no provisioned resources."""
+    def mock_get_projects_services(*args, **kwargs):
+        """Mock the response from get_projects_services to give no provisioned resources (status 50)."""
+        return [{
+            "category": 1,
+            "requirements": [
+                {
+                    "status": 1,
+                    "resource": {"short_name": "tape"},
+                }
+            ],
+        }]
+    
+    monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
+
+    # A ValueError should be raised saying there were no provisioned requirements found and to check the status of requested resources.
+    with pytest.raises(ValueError, match="No provisioned requirements found for test_service. Check the status of your requested resources."):
+        quotas.extract_tape_quota("dummy_oauth_token", "test_service")

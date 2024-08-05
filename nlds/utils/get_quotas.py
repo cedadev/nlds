@@ -80,7 +80,7 @@ class Quotas():
                         else:
                             raise ValueError(f"Issue getting tape quota for {service_name}. Quota is zero.")
                     except KeyError:
-                        raise KeyError(f"Issue getting tape quota for {service_name}. No quota field exists.")
+                        raise KeyError(f"Issue getting tape quota for {service_name}. No 'value' field exists.")
                 else:
                     raise ValueError(f"No tape resources could be found for {service_name}")
             else:
