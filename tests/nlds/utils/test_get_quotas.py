@@ -260,11 +260,30 @@ def test_extract_tape_quota_services_runtime_error(monkeypatch, quotas):
         quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
 
 
-# def test_extract_tape_quota_services_value_error(monkeypatch, quotas):
-#     """Test an unsuccessful instance of extract_tape_quota due to a value error getting services from the projects portal."""
+def test_extract_tape_quota_services_value_error(monkeypatch, quotas):
+    """Test an unsuccessful instance of extract_tape_quota due to a value error getting services from the projects portal."""
+    def mock_get_projects_services(*args, **kwargs):
+        raise ValueError('Value error occurred')
+    
+    monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
+
+    with pytest.raises(ValueError, match="Error getting information for test_service: Value error occurred"):
+        quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
 
 
-# test 'cannot find a gws with the name ....'
+def test_extract_tape_quota_no_gws(monkeypatch, quotas):
+    """Test an unsuccesful instance of extract_tape_quota due to the given service not being a gws."""
+    def mock_get_projects_services(*args, **kwargs):
+        return [
+            {"category": 2, "requirements": []},
+            {"category": 3, "requirements": []}
+        ]
+    
+    monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
+
+    with pytest.raises(ValueError, match="Cannot find a Group Workspace with the name test_service. Check the category."):
+        quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
+
 
 # test 'issue getting tape quota for ...'
 
