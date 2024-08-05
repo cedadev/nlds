@@ -272,7 +272,7 @@ def test_extract_tape_quota_services_value_error(monkeypatch, quotas):
 
 
 def test_extract_tape_quota_no_gws(monkeypatch, quotas):
-    """Test an unsuccesful instance of extract_tape_quota due to the given service not being a gws."""
+    """Test an unsuccessful instance of extract_tape_quota due to the given service not being a gws."""
     def mock_get_projects_services(*args, **kwargs):
         return [
             {"category": 2, "requirements": []},
@@ -285,6 +285,42 @@ def test_extract_tape_quota_no_gws(monkeypatch, quotas):
         quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
 
 
-# test 'issue getting tape quota for ...'
+def test_extract_tape_quota_zero_quota(monkeypatch, quotas):
+    """Test an unsuccessful instance of extract_tape_quota due to the quota being zero."""
+    def mock_get_projects_services(*args, **kwargs):
+        return [{
+            "category": 1,
+             "requirements": [
+                {
+                    "status": 50,
+                    "resource": {"short_name": "tape"},
+                    "amount": 0,
+                }
+             ],
+        }]
+    
+    monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
+
+    with pytest.raises(ValueError, match="Issue getting tape quota for test_service. Quota is zero."):
+        quotas.extract_tape_quota('dummy_oauth_token', 'test_service')
+
+
+def test_extract_tape_quota_no_quota(monkeypatch, quotas):
+    """Test an unsuccessful instance of extract_tape_quota due to there being no quota value."""
+    def mock_get_projects_services(*args, **kwargs):
+        return [{
+            "category": 1,
+            "requirements": [
+                {
+                    "status": 50,
+                    "resource": {"short_name": "tape"},
+                }
+            ],
+        }]
+    
+    monkeypatch.setattr(Quotas, 'get_projects_services', mock_get_projects_services)
+
+    with pytest.raises(KeyError, match="Issue getting tape quota for test_service. No quota field exists."):
+        quotas.extract_tape_quota("dummy_oauth_token", "test_service")
 
 # test 'no provisioned requirements ....'

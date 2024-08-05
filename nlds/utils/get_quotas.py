@@ -73,11 +73,14 @@ class Quotas():
             if requirement["status"] == 50:
                 # Find the tape resource and get its quota
                 if requirement["resource"]["short_name"] == "tape":
-                    if requirement["amount"]:
+                    try:
                         tape_quota = requirement["amount"]
-                        return tape_quota
-                    else:
-                        raise ValueError(f"Issue getting tape quota for {service_name}. Either quota is zero or couldn't be found.")
+                        if tape_quota:
+                            return tape_quota
+                        else:
+                            raise ValueError(f"Issue getting tape quota for {service_name}. Quota is zero.")
+                    except KeyError:
+                        raise KeyError(f"Issue getting tape quota for {service_name}. No quota field exists.")
                 else:
                     raise ValueError(f"No tape resources could be found for {service_name}")
             else:
