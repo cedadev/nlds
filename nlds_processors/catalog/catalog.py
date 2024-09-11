@@ -722,7 +722,7 @@ class Catalog(DBMixin):
             )
             raise CatalogError(err_msg)
 
-    def get_next_holding(self) -> Holding:
+    def get_next_unarchived_holding(self) -> Holding:
         """The principal function for getting the next unarchived holding to
         archive aggregate."""
         assert self.session is not None
@@ -737,9 +737,16 @@ class Catalog(DBMixin):
                 Location.storage_type == Storage.TAPE,
             )
             # Get the first of the holdings which are not in the archived
-            # holdings query
+            # holdings query - need to ensure that the files are on object storage
+            # already and not mid-transfer
             next_holding = (
-                all_holdings_q.filter(Holding.id.not_in(archived_holdings_q))
+                all_holdings_q.filter(
+                    Holding.id.not_in(archived_holdings_q),
+                    Transaction.holding_id == Holding.id,
+                    File.transaction_id == Transaction.id,
+                    Location.file_id == File.id,
+                    Location.storage_type == Storage.OBJECT_STORAGE,
+                )
                 .order_by(Holding.id)
                 .first()
             )
@@ -752,10 +759,14 @@ class Catalog(DBMixin):
         send to archive put."""
         assert self.session is not None
         try:
-            # Get all files for the given holding
+            # Get all files for the given holding. Again we have to ensure that the
+            # transfer to object storage has completed and the files are not
+            # mid-transfer
             all_files = self.session.query(File).filter(
                 Transaction.holding_id == holding.id,
                 File.transaction_id == Transaction.id,
+                Location.file_id == File.id,
+                Location.storage_type == Storage.OBJECT_STORAGE,
             )
             # Get the subset of files which are archived
             archived_files = self.session.query(File.id).filter(
@@ -765,9 +776,11 @@ class Catalog(DBMixin):
                 Location.storage_type == Storage.TAPE,
             )
             # Get the remainder of files which are unarchived
-            unarchived_files = all_files.filter(File.id.not_in(archived_files)).all()
+            unarchived_files = all_files.filter(
+                File.id.not_in(archived_files),
+            ).all()
         except (NoResultFound, KeyError):
             raise CatalogError(
-                f"Couldn't find unarchived files for holding with " f"id:{holding.id}"
+                f"Couldn't find unarchived files for holding with id:{holding.id}"
             )
         return unarchived_files

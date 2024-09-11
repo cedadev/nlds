@@ -35,6 +35,8 @@ note over qs
 end note
 collections index as "Indexers" #lightblue
 
+participant disk as "POSIX\nDisk" #GhostWhite
+
 queue qc as "Catalog Q" #springgreen
 collections catalog as "Catalog" #springgreen
 database catalog_db as "Catalog DB" #springgreen
@@ -48,7 +50,6 @@ note over qt
 end note
 collections transfer_puts as "Transfer Put" #gold
 
-participant disk as "POSIX\nDisk" #GhostWhite
 participant obj as "Object\nStore" #GhostWhite
 
 user -> client : PUT(filelist,target,\n\tuser,group)
@@ -188,26 +189,26 @@ qw -> work : key=""nlds-api.transfer-put.complete""
 deactivate qw
 
 activate work
-work -> wex : key=""nlds-api.catalog-amend.start"
+work -> wex : key=""nlds-api.catalog-update.start""
 deactivate work
 
 activate wex
-wex -> qc : key=""nlds-api.catalog-amend.start""
+wex -> qc : key=""nlds-api.catalog-update.start""
 deactivate wex
 
 activate qc
-qc -> catalog : key=""nlds-api.catalog-amend.start""
+qc -> catalog : key=""nlds-api.catalog-update.start""
 deactivate qc
 
 activate catalog
 loop #LightGreen for file in //transferred_list//
     catalog -> catalog_db : add object storage details to file record
 end
-catalog -> wex : key=""nlds-api.catalog-amend.complete""
+catalog -> wex : key=""nlds-api.catalog-update.complete""
 deactivate catalog
 
 activate wex
-wex -> work : key=""nlds-api.catalog-amend.complete""
+wex -> work : key=""nlds-api.catalog-update.complete""
 deactivate wex
 
 transfer_puts -> wex : key=""nlds-api.transfer-put.failed""

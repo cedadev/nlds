@@ -12,22 +12,8 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from abc import ABC, abstractmethod
 import json
-from typing import Tuple, List, Dict, TypeVar
-from zlib import adler32
+from typing import List, Dict
 from enum import Enum
-
-ignore_xrootd = False
-try:
-    from XRootD.client import File, FileSystem
-    from XRootD.client.flags import StatInfoFlags
-except ModuleNotFoundError:
-    File = TypeVar("File")
-    FileSystem = TypeVar("FileSystem")
-    ignore_xrootd = True
-
-    class StatInfoFlags(Enum):
-        IS_DIR = 2
-
 
 from nlds_processors.transferers.base_transfer import (
     BaseTransferConsumer,
@@ -42,54 +28,6 @@ import nlds.rabbit.message_keys as MSG
 
 class ArchiveError(Exception):
     pass
-
-
-class AdlerisingXRDFile:
-    """Wrapper class around the XRootD.File object to make it act more like a
-    regular python file object. This means it can interface with packages made
-    for python, e.g. tarfile, BytesIO, minio. This also auto-calculates the
-    adler32 checksum for all written/read bytes from the file, making
-    implentation of checksums within the catalog feasible.
-    """
-
-    def __init__(self, f: File, offset=0, length=0, checksum=1, debug_fl=False):
-        self.f = f
-        self.offset = offset
-        self.length = length
-        self.pointer = 0
-        self.checksum = checksum
-        self.debug_fl = debug_fl
-
-    def read(self, size):
-        """Read some number of bytes (size) from the file, offset by the current
-        pointer position. Note this is wrapped by the adler checksumming but if
-        used within a tarfile read this will not be done purely sequentially so
-        will be essentially meaningless."""
-        status, result = self.f.read(offset=self.pointer, size=size)
-        if status.status != 0:
-            raise IOError(f"Unable to read from file f ({self.f})")
-        self.checksum = adler32(result, self.checksum)
-        self.pointer += size
-        return result
-
-    def write(self, b):
-        # Update the checksum before we actually do the writing
-        self.checksum = adler32(b, self.checksum)
-        to_write = len(b)
-        if self.debug_fl:
-            print(f"{self.pointer}:{to_write}")
-        status, _ = self.f.write(b, offset=self.pointer, size=to_write)
-        if status.status != 0:
-            raise IOError(f"Unable to write to file f {self.f}")
-        # Move the pointer on
-        self.pointer += to_write
-        return to_write
-
-    def seek(self, whence: int) -> None:
-        self.pointer = whence
-
-    def tell(self) -> int:
-        return self.pointer
 
 
 class BaseArchiveConsumer(BaseTransferConsumer, ABC):
@@ -121,11 +59,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         self.tape_url = self.load_config_value(self._TAPE_URL)
         self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
         self.query_checksum_fl = self.load_config_value(self._QUERY_CHECKSUM)
-
-        # Verify the tape_url is valid, if it exists
-        if self.tape_url is not None:
-            self.split_tape_url(self.tape_url)
-
         self.reset()
 
     def callback(self, ch, method, properties, body, connection):
@@ -149,7 +82,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             rk_parts = self.split_routing_key(method.routing_key)
         except ValueError as e:
             self.log(
-                
                 "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
             return
@@ -228,54 +160,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             self.log(reason, RK.LOG_ERROR)
             raise ArchiveError(reason)
 
-        # Verify the tape_url is valid
-        # NOTE: Might not be necessary as it's checked at startup if using
-        # default or checked at the point of use if used later..
-        self.split_tape_url(tape_url)
-
         return tape_url
-
-    @staticmethod
-    def split_tape_url(tape_url: str) -> Tuple[str]:
-        # Verify tape url is valid
-        tape_url_parts = tape_url.split("//")
-        if not (len(tape_url_parts) == 3 and tape_url_parts[0] == "root:"):
-            raise ArchiveError(
-                "Tape URL given was invalid. Must be of the "
-                "form: root://{server}//{archive/path}, was "
-                f"given as {tape_url}."
-            )
-        _, server, base_dir = tape_url_parts
-        # prepend a slash onto the base_dir so it can directly be used to make
-        # directories with the pyxrootd client
-        return server, f"/{base_dir}"
-
-    def verify_tape_server(
-        self, fs_client: FileSystem, tape_server: str, tape_base_dir: str
-    ):
-        """Make several simple checks with xrootd to ensure the tape server and
-        tape base path, derived form a given tape url, are valid and the xrootd
-        endpoint they describe is accessible on the current system.
-        """
-        # Attempt to ping the tape server to check connection is workable.
-        status, _ = fs_client.ping()
-        if status.status != 0:
-            self.log(f"Failed status message: {status.message}", RK.LOG_ERROR)
-            raise CallbackError(f"Could not ping cta server at {tape_server}.")
-
-        # Stat the base directory and check it's a directory.
-        status, resp = fs_client.stat(tape_base_dir)
-        if status.status != 0:
-            self.log(f"Failed status message: {status.message}", RK.LOG_ERROR)
-            raise CallbackError(f"Base dir {tape_base_dir} could not be statted")
-        # Check whether the flag indicates it's a directory
-        elif not bool(resp.flags & StatInfoFlags.IS_DIR):
-            self.log(f"Failed status message: {status.message}", RK.LOG_ERROR)
-            self.log(f"Full status object: {status}", RK.LOG_DEBUG)
-            raise CallbackError(
-                f"Stat result for base dir {tape_base_dir} "
-                f"indicates it is not a directory."
-            )
 
     @abstractmethod
     def transfer(

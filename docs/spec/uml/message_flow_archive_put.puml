@@ -63,13 +63,18 @@ opt #SpringGreen
         catalog -> catalog_db : is file archived?
         catalog_db -> catalog
         alt #MintCream NO
-            catalog -> catalog_db : set file as archived
+            note over catalog
+                Create an empty TAPE storage location here so that 
+                ""catalog-archive-next"" does not try to archive the file again.
+            endnote
+            catalog -> catalog_db : create TAPE storage location
             catalog -> catalog : add file record to\n//archive_list//
         else YES
             catalog -> catalog : continue
         end
     end
 end
+
 catalog -> wex : key=""nlds-api.catalog-archive-next.complete""
 deactivate catalog
 
@@ -82,10 +87,27 @@ qw -> work : key=""nlds-api.catalog-archive-next.complete""
 deactivate qw
 
 activate work
-work -> wex : key=""nlds-api.archive-put.start""
+work -> wex : key=""nlds-api.archive-put.init""
 deactivate work
 
 activate wex
+wex -> qap : key=""nlds-api.archive-put.init""
+deactivate wex
+
+activate qap
+qap -> archive_puts : key=""nlds-api.archive-put.init""
+deactivate qap
+
+activate archive_puts
+opt #LightPink
+    archive_puts -> archive_puts : //aggregate_list// = bin_files(//archive_list//)
+    loop #MistyRose for //aggregate// in //aggregate_list//
+        archive_puts->wex : key=""nlds-api.archive-put.start""
+        activate wex
+    end
+end
+deactivate archive_puts
+
 wex -> qap : key=""nlds-api.archive-put.start""
 deactivate wex
 
@@ -93,12 +115,13 @@ activate qap
 qap -> archive_puts : key=""nlds-api.archive-put.start""
 deactivate qap
 
+
 activate archive_puts
-loop #LightPink for file in //archive_list//
+loop #LightPink for file in //aggregate//
     archive_puts -> obj : stream file
     obj -> archive_puts 
     alt #MistyRose the stream succeeded
-        archive_puts->archive_puts : 1. add file to aggregate\n2. add file record to //aggregate_list//
+        archive_puts->archive_puts : 1. add file to aggregate\n2. add file record to //aggregated_list//
     else else
         archive_puts->archive_puts : add file record to //failed_list//
     end
@@ -122,7 +145,43 @@ activate qw
 qw -> work : key=""nlds-api.archive-put.complete""
 deactivate qw
 
-archive_puts -> wex : key=""nlds.api.archive.failed""
+activate work
+work -> wex : key=""nlds-api.catalog-archive-update.start""
+deactivate work
+
+activate wex
+wex -> qc : key=""nlds-api.catalog-archive-update.start""
+deactivate wex
+
+activate qc
+qc -> catalog : key=""nlds-api.catalog-archive-update.start""
+deactivate qc
+
+note over catalog
+    The ArchivePut worker returns a single aggregation
+endnote
+
+activate catalog
+opt #SpringGreen
+    catalog -> catalog_db : does the Aggregation exist?
+    catalog_db -> catalog
+    alt #LightGreen NO
+        catalog -> catalog_db : create the Aggregation
+    end
+
+    loop #LightGreen for file in //completed_list//
+        catalog -> catalog_db : add TAPE path to TAPE storage location details in file record
+        catalog -> catalog_db : add the Aggregation to the storage location details
+    end
+end
+catalog -> wex : key=""nlds-api.catalog-archive-update.complete""
+deactivate catalog
+
+activate wex
+wex -> work : key=""nlds-api.catalog-archive-update.complete""
+deactivate wex
+
+archive_puts -> wex : key=""nlds.api.archive-put.failed""
 deactivate archive_puts
 
 activate wex
@@ -134,30 +193,30 @@ qw -> work : key=""nlds-api.archive-put.failed""
 deactivate qw
 
 activate work
-work -> wex : key=""nlds-api.catalog-archive.failed""
-deactivate archy 
+work -> wex : key=""nlds-api.catalog-archive-remove.start""
+deactivate work
 
 activate wex
-wex -> qc : key=""nlds-api.catalog-archive.failed""
+wex -> qc : key=""nlds-api.catalog-archive-remove.start""
 deactivate wex
 
 activate qc
-qc -> catalog : key=""nlds-api.catalog-archive.failed""
+qc -> catalog : key=""nlds-api.catalog-archive-remove.start""
 deactivate qc
 
 activate catalog
 loop #LightGreen for file in failed_list
-catalog -> catalog_db : set file as unarchived
+catalog -> catalog_db : remove TAPE storage location from file record
 end
-catalog -> wex : key=""nlds-api.catalog-archive.failed-complete""
+catalog -> wex : key=""nlds-api.catalog-archive-remove.complete""
 deactivate catalog
 
 activate wex
-wex -> qw : key=""nlds-api.catalog-archive.failed-complete""
+wex -> qw : key=""nlds-api.catalog-archive-remove.complete""
 deactivate wex
 
 activate qw
-qw -> work : key=""nlds-api.catalog-archive.failed-complete""
+qw -> work : key=""nlds-api.catalog-archive-remove.complete""
 deactivate qw
 
 @enduml

@@ -28,7 +28,7 @@ def check_permissions(
     stat_result: stat_result = None,
 ) -> bool:
     if access not in ACCESSES:
-        raise ValueError("Invalid access bit passed, must be one of " f"{ACCESSES}.")
+        raise ValueError("Invalid access bit passed, must be one of {ACCESSES}.")
 
     if not isinstance(gids, list):
         raise ValueError("The parameter 'gids' must be a list.")

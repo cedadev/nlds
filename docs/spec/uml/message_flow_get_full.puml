@@ -116,13 +116,13 @@ loop #SpringGreen for file in //archive_list//
     end
 end
 
-catalog_get -> wex : key=""nlds-api.catalog-get.reroute""
+catalog_get -> wex : key=""nlds-api.catalog-get.reroute-archive""
 
 activate wex
-wex -> qw : key=""nlds-api.catalog-get.reroute""
+wex -> qw : key=""nlds-api.catalog-get.reroute-archive""
 deactivate wex
 activate qw
-qw -> work : key=""nlds-api.catalog-get.reroute""
+qw -> work : key=""nlds-api.catalog-get.reroute-archive""
 deactivate qw
 activate work
 work -> qag : key=""nlds-api.archive-get.start""

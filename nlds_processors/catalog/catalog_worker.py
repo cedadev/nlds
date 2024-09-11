@@ -29,8 +29,6 @@ from typing import Dict, Tuple, List
 from hashlib import shake_256
 from datetime import datetime
 
-from urllib.parse import urlunsplit
-
 # Typing imports
 from pika.channel import Channel
 from pika.connection import Connection
@@ -43,7 +41,7 @@ from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog
 from nlds_processors.catalog.catalog_error import CatalogError
-from nlds_processors.catalog.catalog_models import Storage, Location
+from nlds_processors.catalog.catalog_models import Storage
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
 from nlds_processors.utils.aggregations import bin_files
@@ -672,12 +670,12 @@ class CatalogConsumer(RMQC):
                 routing_key=rk_complete,
                 body_json=body,
                 state=State.CATALOG_GETTING,
-            )        
+            )
 
         # NEED RETRIEVING FROM TAPE
         if len(self.tapelist) > 0:
             raise NotImplementedError
-        
+
         # NRM - TODO - sort out the logic here
         # FAILED
         if len(self.failedlist) > 0:
@@ -888,9 +886,9 @@ class CatalogConsumer(RMQC):
                 body_json=body,
                 state=State.CATALOG_GETTING,
             )
-        # REROUTE
+        # REROUTE_ARCHIVE
         if len(self.reroutelist) > 0:
-            rk_reroute = ".".join([rk_origin, RK.CATALOG_GET, RK.REROUTE])
+            rk_reroute = ".".join([rk_origin, RK.CATALOG_GET, RK.REROUTE_ARCHIVE])
             # TODO (2024-03-14): This probably needs to be split, definitely
             # into cache-appropriate chunks of less than 500GB
             # Ensure the holding_id is present as we'll need it during retrieval
@@ -925,6 +923,72 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session()
 
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
+        """Get the next holding for archiving, create a new location for it and pass it
+        for aggregating to the Archive Put process."""
+        # start the database transactions
+        self.catalog.start_session()
+
+        # Get the next holding in the catalog, by id, which has any unarchived
+        # Files, i.e. any files which don't have a tape location
+        next_holding = self.catalog.get_next_unarchived_holding()
+
+        # If no holdings left to archive then end the callback
+        if not next_holding:
+            self.log("No holdings found to archive, exiting callback.", RK.LOG_INFO)
+            self.catalog.end_session()
+            return
+
+        # get the list of unarchived files from that holding
+        filelist = self.catalog.get_unarchived_files(next_holding)
+
+        # loop over the files and modify the database to have a TAPE storage location
+        self.reset()
+        for f in filelist:
+            try:
+                # create a mostly empty TAPE storage location
+                self.catalog.create_location(
+                    file_=f,
+                    storage_type=Storage.TAPE,
+                    url_scheme="",
+                    url_netloc="",
+                    root="",
+                    path=f.original_path,
+                    access_time=f.get_object_store().access_time.timestamp(),
+                    aggregation=None,
+                )
+                # add to the completelist ready for sending
+                self.completelist.append(f)
+            except CatalogError as e:
+                # In the case of failure, we can just carry on adding files to the
+                # message
+                self.log(e.message, RK.LOG_ERROR)
+                # Keep note of the failure (we're not sending it anywhere currently)
+                self.failedlist.append(f)
+                continue
+
+            # Forward successful file details to archiver for tape write
+            rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.COMPLETE])
+
+            body[MSG.DETAILS][MSG.USER] = next_holding.user
+            body[MSG.DETAILS][MSG.GROUP] = next_holding.group
+            body[MSG.META][MSG.HOLDING_ID] = next_holding.id
+            self.log(
+                f"Sending completed PathList from CATALOG_ARCHIVE_PUT "
+                f"{self.completelist}",
+                RK.LOG_DEBUG,
+            )
+            self.send_pathlist(
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body,
+                state=State.ARCHIVE_INIT,
+            )
+
+        # stop db transactions and commit
+        self.catalog.save()
+        self.catalog.end_session()
+
+    def _catalog_archive_put_old(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location and
         aggregation for it and pass to for writing to tape."""
         # get the tape url
@@ -934,7 +998,7 @@ class CatalogConsumer(RMQC):
 
         # Get the next holding in the catalog, by id, which has any unarchived
         # Files, i.e. any files which don't have a tape location
-        next_holding = self.catalog.get_next_holding()
+        next_holding = self.catalog.get_next_unarchived_holding()
 
         # If no holdings left to archive then end the callback
         if not next_holding:
@@ -942,10 +1006,8 @@ class CatalogConsumer(RMQC):
             self.catalog.end_session()
             return
 
-        # We need a new root as we can't rely on the transaction_id any more.
-        # Create a slug from the uneditable holding information, this will be
-        # the directory on the tape that contains each of the tar files.
-        holding_slug = f"{next_holding.id}.{next_holding.user}.{next_holding.group}"
+        # We need a new directory name as we can't rely on the transaction_id any more.
+        holding_prefix = next_holding.get_prefix()
 
         # Get the unarchived files and make suitable aggregates of them. Here we
         # make a distinction between aggregates, being just groups of files, and
@@ -963,7 +1025,7 @@ class CatalogConsumer(RMQC):
             filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8)
             tar_filename = f"{filelist_hash}.tar"
             # Make the tape_root here, which will be stored in the Location.
-            tape_root = f"{holding_slug}_{filelist_hash}"
+            tape_root = f"{holding_prefix}_{filelist_hash}"
             # Make the aggregation first
             try:
                 aggregation = self.catalog.create_aggregation(tarname=tar_filename)
@@ -1044,7 +1106,7 @@ class CatalogConsumer(RMQC):
                 self.completelist,
                 routing_key=rk_complete,
                 body_json=body,
-                state=State.CATALOG_ARCHIVE_AGGREGATING,
+                state=State.ARCHIVE_AGGREGATING,
             )
 
         # stop db transactions and commit
@@ -1092,7 +1154,7 @@ class CatalogConsumer(RMQC):
             new_tarname = body[MSG.DATA][MSG.NEW_TARNAME]
         except KeyError as e:
             self.log(
-                "Optional parameter new_tarname not found, continuing " "without",
+                "Optional parameter new_tarname not found, continuing without",
                 RK.LOG_INFO,
             )
             new_tarname = None
@@ -1107,7 +1169,7 @@ class CatalogConsumer(RMQC):
                 # it into a PathDetails object
                 f = filelist[0]
                 file_details = PathDetails.from_dict(f)
-                # Using that and the holding_id, we can get the
+                # Using that and the holding_id, we can get the files
                 files = self.catalog.get_files(
                     user,
                     group,
@@ -1481,9 +1543,7 @@ class CatalogConsumer(RMQC):
                 )  # should only be one!
                 h = self.catalog.get_holding(
                     user, group, groupall=groupall, holding_id=t.holding_id
-                )[
-                    0
-                ]  # should only be one!
+                )[0]  # should only be one!
                 # create a holding dictionary if it doesn't exists
                 if h.label in ret_dict:
                     h_rec = ret_dict[h.label]
@@ -1509,19 +1569,7 @@ class CatalogConsumer(RMQC):
                 # get the locations
                 locations = []
                 for l in f.locations:
-                    # build the url for object storage
-                    if l.storage_type == Storage.OBJECT_STORAGE:
-                        url = urlunsplit(
-                            (
-                                l.url_scheme,
-                                l.url_netloc,
-                                f"nlds.{l.root}/{l.path}",
-                                "",
-                                "",
-                            )
-                        )
-                    else:
-                        url = None
+                    url = l.get_url()
 
                     l_rec = {
                         "storage_type": l.storage_type,

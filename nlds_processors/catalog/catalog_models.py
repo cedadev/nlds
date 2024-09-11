@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # encoding: utf-8
 """
 catalog_models.py
@@ -28,6 +29,8 @@ import enum
 from nlds.details import PathType
 from nlds_processors.catalog.catalog_error import CatalogError
 import nlds.rabbit.message_keys as MSG
+
+from urllib.parse import urlunsplit
 
 """Declarative base class, containing the Metadata object"""
 CatalogBase = declarative_base()
@@ -65,6 +68,13 @@ class Holding(CatalogBase):
         for t in self.transactions:
             t_ids.append(t.transaction_id)
         return t_ids
+
+    # get the prefix
+    def get_prefix(self):
+        """Gets a unique prefix from the holding that will be used as the directory on
+        tape"""
+        prefix = f"{self.id}.{self.user}.{self.group}"
+        return prefix
 
 
 class Transaction(CatalogBase):
@@ -174,6 +184,20 @@ class Location(CatalogBase):
     # storage_type must be unique per file_id, i.e. each file can only have one
     # each location
     __table_args__ = (UniqueConstraint("storage_type", "file_id"),)
+
+    def get_url(self):
+        if self.storage_type == Storage.OBJECT_STORAGE:
+            return urlunsplit(
+                (
+                    self.url_scheme,
+                    self.url_netloc,
+                    f"nlds.{self.root}/{self.path}",
+                    "",
+                    "",
+                )
+            )
+        else:
+            return None
 
 
 class Checksum(CatalogBase):

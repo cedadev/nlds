@@ -93,7 +93,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.CATALOG_GET}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -110,7 +110,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.CATALOG_GET}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.LIST])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -118,11 +118,11 @@ class NLDSWorkerConsumer(RMQC):
     def _process_rk_index_complete(self, body_json: Dict[str, str]) -> None:
         # forward to catalog-put on the catalog_q
         self.log(f"Index successful, sending file list for cataloguing.", RK.LOG_INFO)
-        
+
         queue = f"{RK.CATALOG_PUT}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -133,7 +133,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.TRANSFER_PUT}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -143,13 +143,13 @@ class NLDSWorkerConsumer(RMQC):
         # of the files on the OBJECT STORAGE
         self.log(
             f"Transfer successful, sending filelist with object storage locations to "
-             "be inserted into the catalog",
+            "be inserted into the catalog",
             RK.LOG_INFO,
         )
         queue = f"{RK.CATALOG_UPDATE}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -164,7 +164,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.CATALOG_DEL}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -179,7 +179,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.TRANSFER_GET}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.INITIATE])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -188,7 +188,9 @@ class NLDSWorkerConsumer(RMQC):
         # Can simply call the same process used at catalog_get complete
         self._process_rk_catalog_get_complete(rk_parts, body_json)
 
-    def _process_rk_catalog_get_reroute(self, rk_parts: List, body_json: Dict) -> None:
+    def _process_rk_catalog_get_reroute_archive(
+        self, rk_parts: List, body_json: Dict
+    ) -> None:
         # forward confirmation to monitor
         self.log(f"Sending message to {RK.MONITOR} queue", RK.LOG_INFO)
         new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
@@ -198,7 +200,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.ARCHIVE_GET}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -213,7 +215,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.CATALOG_ARCHIVE_DEL}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -256,7 +258,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.ARCHIVE_PUT}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -272,7 +274,7 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.CATALOG_ARCHIVE_UPDATE}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing key " f"{new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -298,10 +300,10 @@ class NLDSWorkerConsumer(RMQC):
             RK.LOG_INFO,
         )
 
-        queue = f"{RK.CATALOG_ARCHIVE_DEL}"
+        queue = f"{RK.CATALOG_ARCHIVE_REMOVE}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -370,8 +372,8 @@ class NLDSWorkerConsumer(RMQC):
 
         # If a reroute has happened from the catalog then we need to get from
         # archive before we can do the transfer from object store.
-        elif rk_parts[2] == f"{RK.REROUTE}":
-            self._process_rk_catalog_get_reroute(rk_parts, body_json)
+        elif rk_parts[2] == f"{RK.REROUTE_ARCHIVE}":
+            self._process_rk_catalog_get_reroute_archive(rk_parts, body_json)
 
         # If a transfer/archive task has failed, remove something from the
         # catalog

@@ -40,8 +40,9 @@ except ModuleNotFoundError:
 from nlds_processors.archiver.archive_base import (
     BaseArchiveConsumer,
     ArchiveError,
-    AdlerisingXRDFile,
 )
+from nlds_processors.archiver.adler32file import Adler32File
+
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
@@ -177,7 +178,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 continue
 
             try:
-                holding_slug, filelist_hash = self.parse_tape_details(path_details)
+                holding_prefix, filelist_hash = self.parse_tape_details(path_details)
             except ArchiveError as e:
                 self.process_retry(str(e), path_details)
                 continue
@@ -192,18 +193,18 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 continue
 
             holding_tape_path = (
-                f"root://{tape_server}/{tape_base_dir}/" f"{holding_slug}"
+                f"root://{tape_server}/{tape_base_dir}/" f"{holding_prefix}"
             )
             full_tape_path = f"{holding_tape_path}/{tar_filename}"
 
             # Check bucket folder exists on tape
             status, _ = fs_client.dirlist(
-                f"{tape_base_dir}/{holding_slug}", DirListFlags.STAT
+                f"{tape_base_dir}/{holding_prefix}", DirListFlags.STAT
             )
             if status.status != 0:
                 # If bucket tape-folder can't be found then pass for retry
                 reason = (
-                    f"Tape holding folder ({tape_base_dir}/{holding_slug}) "
+                    f"Tape holding folder ({tape_base_dir}/{holding_prefix}) "
                     f"could not be found, cannot retrieve from archive"
                 )
                 self.process_retry(reason, path_details)
@@ -212,7 +213,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             # The tar_filenames must be encoded into a list of byte strings for
             # prepare to work, as of pyxrootd v5.5.3. We group them together to
             # ensure only a single transaction is passed to the tape server.
-            prepare_item = f"{tape_base_dir}/{holding_slug}/{tar_filename}"
+            prepare_item = f"{tape_base_dir}/{holding_prefix}/{tar_filename}"
             tar_list.append(prepare_item)
 
             # Create the tar_originals_map, which maps from tar file to the
@@ -311,10 +312,10 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         for tarname, tar_filelist in retrieval_dict.items():
             original_filelist = tar_originals_map[tarname]
 
-            # Get the holding_slug from the first path_details in the
+            # Get the holding_prefix from the first path_details in the
             # original filelist. This is guaranteed not to error as it would
             # have above otherwise?
-            holding_slug, filelist_hash = self.parse_tape_details(original_filelist[0])
+            holding_prefix, filelist_hash = self.parse_tape_details(original_filelist[0])
 
             tar_filename = f"{filelist_hash}.tar"
             if tar_filename != tarname:
@@ -324,7 +325,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 )
 
             holding_tape_path = (
-                f"root://{tape_server}/{tape_base_dir}/" f"{holding_slug}"
+                f"root://{tape_server}/{tape_base_dir}/" f"{holding_prefix}"
             )
             full_tape_path = f"{holding_tape_path}/{tar_filename}"
 
@@ -349,7 +350,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         )
 
                     # Wrap the xrootd File handler so minio can use it
-                    fw = AdlerisingXRDFile(f)
+                    fw = Adler32File(f)
 
                     self.log(f"Opening tar file {tar_filename}", RK.LOG_INFO)
                     with tarfile.open(
@@ -524,7 +525,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
 
     def parse_tape_details(self, path_details):
         """Get the tape information from a given path_details object
-        (holding_slug and filelist_hash) for constructing the full tape path
+        (holding_prefix and filelist_hash) for constructing the full tape path
         """
         # Then parse tape path information in preparedness for file
         # preparation
@@ -532,9 +533,9 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         try:
             # Split out the root and path, passed from the Location
             tape_location_root, original_path = tape_path.split(":")
-            # Split further to get the holding_slug and the tar filename
-            holding_slug, filelist_hash = tape_location_root.split("_")
-            return holding_slug, filelist_hash
+            # Split further to get the holding_prefix and the tar filename
+            holding_prefix, filelist_hash = tape_location_root.split("_")
+            return holding_prefix, filelist_hash
         except ValueError as e:
             reason = f"Could not unpack mandatory info from path_details. {e}"
             self.log(reason, RK.LOG_ERROR)

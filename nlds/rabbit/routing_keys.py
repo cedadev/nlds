@@ -46,6 +46,7 @@ ARCHIVE_GET = "archive-get"
 CATALOG_ARCHIVE_NEXT = "catalog-archive-next"
 CATALOG_ARCHIVE_DEL = "catalog-archive-del"
 CATALOG_ARCHIVE_UPDATE = "catalog-archive-update"
+CATALOG_ARCHIVE_REMOVE = "catalog-archive-remove"
 ROUTE = "route"
 LOG = "log"
 
@@ -54,7 +55,7 @@ INITIATE = "init"
 START = "start"
 COMPLETE = "complete"
 FAILED = "failed"
-REROUTE = "reroute"
+REROUTE_ARCHIVE = "reroute-archive"
 NEXT = "next"
 
 # Exchange routing key parts – monitoring levels
