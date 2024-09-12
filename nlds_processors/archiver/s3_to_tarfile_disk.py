@@ -1,4 +1,14 @@
-from s3_to_tarfile_stream import S3ToTarfileStream
+import os
+from typing import List
+from zlib import adler32
+
+from nlds.details import PathDetails
+from nlds_processors.archiver.s3_to_tarfile_stream import (
+    S3ToTarfileStream,
+    S3StreamError,
+)
+from nlds_processors.archiver.adler32file import Adler32File
+import nlds.rabbit.routing_keys as RK
 
 
 class S3ToTarfileDisk(S3ToTarfileStream):
@@ -9,10 +19,142 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     PUT : S3 -> Tarfile
     GET : Tarfile -> S3"""
 
-    def __init__(self, s3_tenancy: str, s3_access_key: str, s3_secret_key: str) -> None:
+    def __init__(
+        self,
+        s3_tenancy: str,
+        s3_access_key: str,
+        s3_secret_key: str,
+        disk_loc: str,
+        logger,
+    ) -> None:
         # Initialise the S3 client first
         super().__init__(
             s3_tenancy=s3_tenancy,
             s3_access_key=s3_access_key,
             s3_secret_key=s3_secret_key,
+            logger=logger,
         )
+        # record and make the disk location directory if it doesn't exist
+        try:
+            self.disk_loc = os.path.expanduser(disk_loc)
+            os.mkdir(self.disk_loc)
+        except FileExistsError:
+            # it's okay if the path already exists
+            pass
+        except FileNotFoundError:
+            raise S3StreamError(
+                f"Couldn't create or find DISKTAPE directory ({self.disk_loc})."
+            )
+
+    def put(self, holding_prefix: str, filelist: List[PathDetails]):
+        assert self.filelist == []
+        self.filelist = filelist
+        self.holding_prefix = holding_prefix
+        # self._generate_filelist_hash and self._check_files_exist use the member
+        # variables already set and the function definitions are in the parent class
+        self.filelist_hash = self._generate_filelist_hash()
+        self._check_files_exist()
+
+        # make or find the holding folder on the disk
+        try:
+            os.mkdir(self.holding_diskpath)
+        except FileExistsError:
+            # it's okay if the path already exists
+            pass
+        except FileNotFoundError:
+            raise S3StreamError(
+                f"Couldn't create or find holding directory ({self.holding_diskpath})."
+            )
+
+        try:
+            # open the tarfile to write to
+            file = open(self.tarfile_diskpath, 'wb')
+            file_object = Adler32File(file, debug_fl=False)
+            completelist, failedlist, checksum = self._stream_to_fileobject(
+                file_object
+            )
+        except FileExistsError:
+            msg = (
+                f"Couldn't create tarfile ({self.tarfile_diskpath}). File already "
+                "exists."
+            )
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+        except FileNotFoundError:
+            msg = (
+                f"Couldn't create tarfile ({self.tarfile_diskpath}). Parent directory "
+                "not found."
+            )
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+        except S3StreamError as e:
+            msg = (
+                f"Exception occurred during write of tarfile "
+                f"{self.tarfile_diskpath}.  This file will now be deleted from the"
+                f"DISKTAPE. Original exception: {e}"
+            )
+            self.log(msg, RK.LOG_ERROR)
+            self._remove_tarfile_from_disktape()
+            # need to set all completed_files to failed
+            failedlist.extend(completelist)
+            completelist.clear()
+            raise S3StreamError(msg)
+        
+        # now verify the checksum
+        try:
+            self._validate_tarfile_checksum(checksum)
+        except S3StreamError as e:
+            msg = (f"Exception occurred during validation of tarfile "
+                   f"{self.tarfile_tapepath}.  Original exception: {e}")
+            self.log(msg, RK.LOG_ERROR)
+            self._remove_tarfile_from_disktape()
+            # need to set all completed_files to failed
+            failedlist.extend(completelist)
+            completelist.clear()
+            raise S3StreamError(msg)
+        return completelist, failedlist, checksum
+
+
+    def holding_diskpath(self):
+        """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
+        assert self.disk_loc
+        assert self.holding_prefix
+        return f"{self.disk_loc}/{self.holding_prefix}"
+
+    def tarfile_diskpath(self):
+        """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
+        assert self.disk_loc
+        assert self.holding_prefix
+        assert self.filelist_hash
+        return f"{self.disk_loc}/{self.holding_prefix}/{self.filelist_hash}.tar"
+
+    def _validate_tarfile_checksum(self, tarfile_checksum: str):
+        """Calculate the Adler32 checksum of the tarfile and compare it to the checksum
+        calculated when streaming from the S3 server to the DISKTAPE"""
+        blocksize = 256*1024*1024
+        asum = 1
+        with open(self.tarfile_diskpath, 'rb') as fh:
+            while (data := fh.read(blocksize)):
+                asum = adler32(data, asum)
+        try:
+            assert(asum == tarfile_checksum)
+        except AssertionError as e:
+            reason = (
+                f"Checksum {asum} differs from that calculated during streaming "
+                f"upload {tarfile_checksum}."
+            )
+            self.log(reason, RK.LOG_ERROR)
+            raise S3StreamError(
+                f"Failure occurred during DISKTAPE-write " f"({reason})."
+            )
+        
+    def _remove_tarfile_from_disktape(self):
+        """On failure, remove tarfile from disk"""
+        try:
+            os.remove(self.tarfile_diskpath)
+        except FileNotFoundError:
+            reason = "Could not delete file from DISKTAPE: not found"
+            self.log(f"{reason}, will need to be manually deleted", RK.LOG_ERROR)
+            raise S3StreamError(reason)
+        else:
+            self.log("Deleted errored file from DISKTAPE to prevent tape write.")

@@ -1,9 +1,15 @@
-from s3_to_tarfile_stream import S3ToTarfileStream, S3StreamError
+from typing import Tuple, List
 
 from XRootD import client as XRDClient
-from XRootD.client.flags import StatInfoFlags, MkDirFlags, OpenFlags
-from typing import Tuple, List
+from XRootD.client.flags import StatInfoFlags, MkDirFlags, OpenFlags, QueryCode
+
 from nlds.details import PathDetails
+from nlds_processors.archiver.s3_to_tarfile_stream import (
+    S3ToTarfileStream,
+    S3StreamError,
+)
+from nlds_processors.archiver.adler32file import Adler32File
+import nlds.rabbit.routing_keys as RK
 
 
 class S3ToTarfileTape(S3ToTarfileStream):
@@ -15,20 +21,32 @@ class S3ToTarfileTape(S3ToTarfileStream):
     GET : Tarfile -> S3"""
 
     def __init__(
-        self, s3_tenancy: str, s3_access_key: str, s3_secret_key: str, tape_url: str
+        self,
+        s3_tenancy: str,
+        s3_access_key: str,
+        s3_secret_key: str,
+        tape_url: str,
+        logger,
     ) -> None:
         # Initialise the S3 client first
         super().__init__(
             s3_tenancy=s3_tenancy,
             s3_access_key=s3_access_key,
             s3_secret_key=s3_secret_key,
+            logger=logger,
         )
         # get the location of the tape server and the base directory from the tape_url
         self.tape_server_url, self.tape_base_dir = self._split_tape_url(tape_url)
+        self.log(
+            f"Tape url:{tape_url} split into tape server:{self.tape_server_url} "
+            f"and tape base directory:{self.tape_base_dir}.",
+            RK.LOG_INFO,
+        )
 
         # create the connection to the tape server
         self.tape_client = XRDClient.FileSystem(f"root://{self.tape_server_url}")
         self._verify_tape_server()
+        self.log(f"Connected to tape server: {self.tape_server_url}")
 
     def put(self, holding_prefix: str, filelist: List[PathDetails]):
         """
@@ -53,15 +71,46 @@ class S3ToTarfileTape(S3ToTarfileStream):
             raise S3StreamError(
                 f"Couldn't create or find holding directory ({self.holding_tapepath})."
             )
-        
-        with XRDClient.File() as XRD_file:
-            # Open the file as NEW, to avoid having to prepare it
-            flags = OpenFlags.NEW | OpenFlags.MAKEPATH
-            status, _ = XRD_file.open(self.tarfile_absolute_tapepath, flags)
-            if status.status != 0:
-                raise S3StreamError(
-                    f"Failed to open file {self.tarfile_absolute_tapepath} for writing"
+
+        try:
+            with XRDClient.File() as XRD_file:
+                # Open the file as NEW, to avoid having to prepare it
+                flags = OpenFlags.NEW | OpenFlags.MAKEPATH
+                status, _ = XRD_file.open(self.tarfile_absolute_tapepath, flags)
+                if status.status != 0:
+                    raise S3StreamError(
+                        f"Failed to open file {self.tarfile_absolute_tapepath} for "
+                        "writing."
+                    )
+                file_object = Adler32File(XRD_file, debug_fl=False)
+                completelist, failedlist, checksum = self._stream_to_fileobject(
+                    file_object
                 )
+        except S3StreamError as e:
+            msg = (
+                f"Exception occurred during write of tarfile "
+                f"{self.tarfile_absolute_tapepath}.  This file will now be deleted "
+                f"from the tape system disk cache. Original exception: {e}"
+            )
+            self.log(msg, RK.LOG_ERROR)
+            self._remove_tarfile_from_tape()
+            # need to set all completed_files to failed
+            failedlist.extend(completelist)
+            completelist.clear()
+            raise S3StreamError(msg)
+        # now verify the checksum
+        try:
+            self._validate_tarfile_checksum(checksum)
+        except S3StreamError as e:
+            msg = (f"Exception occurred during validation of tarfile "
+                   f"{self.tarfile_tapepath}.  Original exception: {e}")
+            self.log(msg)
+            self._remove_tarfile_from_tape()
+            # need to set all completed_files to failed
+            failedlist.extend(completelist)
+            completelist.clear()
+            raise S3StreamError(msg)
+        return completelist, failedlist, checksum
 
     """Note that there are a number of different methods below to get the tapepaths"""
 
@@ -88,7 +137,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         assert self.tape_base_dir
         assert self.holding_prefix
         assert self.filelist_hash
-        assert self.tape_server
+        assert self.tape_server_url
         return (
             f"root://{self.tape_server_url}/{self.tape_base_dir}/"
             f"{self.holding_prefix}/{self.filelist_hash}.tar"
@@ -96,6 +145,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
 
     @staticmethod
     def _split_tape_url(tape_url: str) -> Tuple[str]:
+        """Split the tape URL into the server and base directory"""
         # Verify tape url is valid
         tape_url_parts = tape_url.split("//")
         if not (len(tape_url_parts) == 3 and tape_url_parts[0] == "root:"):
@@ -141,3 +191,65 @@ class S3ToTarfileTape(S3ToTarfileStream):
                 f"indicates it is not a directory.",
             )
             raise S3StreamError(msg)
+
+    def _remove_tarfile_from_tape(self):
+        """Part of the error handling process, if any error occurs during write
+        we'll have to be very defensive and start the whole process again. If
+        doing so we'll need to remove the tarfile from the disk cache on the tape
+        system before it gets written to tape, hence this function.
+        """
+        
+        status, _ = self.tape_client.rm(self.tarfile_tapepath)
+        if status.status != 0:
+            reason = "Could not delete file from disk-cache"
+            self.log(
+                f"{reason}, will need to be marked as deleted for future tape "
+                "repacking",
+                RK.LOG_ERROR,
+            )
+            raise S3StreamError(reason)
+        else:
+            self.log(
+                "Deleted errored file from disk-cache to prevent tape write.",
+                RK.LOG_INFO,
+            )
+
+    def _validate_tarfile_checksum(self, tarfile_checksum: str):
+        """Validate the checksum of the tarfile by querying what the tape server
+        calculated"""
+        # Need to specify the type of checksum
+        status, result = self.tape_client.query(
+            QueryCode.CHECKSUM,
+            f"{self.tarfile_tapepath}?cks.type=adler32",
+        )
+        if status.status != 0:
+            self.log(
+                f"Could not query xrootd's checksum for tar file "
+                f"{self.tarfile_tapepath}.",
+                RK.LOG_WARNING,
+            )
+        else:
+            try:
+                method, value = result.decode().split()
+                assert method == "adler32"
+                # Convert checksum from hex to int for comparison
+                checksum = int(value[:8], 16)
+                assert(checksum == tarfile_checksum)
+            except ValueError as e:
+                self.log(
+                    f"Exception {e} when attempting to parse tarfile checksum from "
+                    f"xrootd",
+                    RK.LOG_ERROR,
+                )
+            except AssertionError as e:
+                # If it fails at this point then attempt to delete.  It will be
+                # scheduled to happend again, so long as the files are added to 
+                # failed_list
+                reason = (
+                    f"XRootD checksum {checksum} differs from that calculated during "
+                    f"streaming upload {tarfile_checksum}."
+                )
+                self.log(reason, RK.LOG_ERROR)
+                raise S3StreamError(
+                    f"Failure occurred during tape-write " f"({reason})."
+                )

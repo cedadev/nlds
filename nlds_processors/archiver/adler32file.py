@@ -1,5 +1,6 @@
 from zlib import adler32
 
+
 class Adler32File:
     """Wrapper class around a File object to make it act more like a
     regular python file object. This means it can interface with packages made
