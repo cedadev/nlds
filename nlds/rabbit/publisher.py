@@ -50,6 +50,7 @@ class RabbitMQPublisher():
     RK_STAT = "stat"
     RK_FIND = "find"
     RK_META = "meta"
+    RK_QUOTA = "quota"
 
     # Exchange routing key parts – root
     RK_ROOT = "nlds-api"

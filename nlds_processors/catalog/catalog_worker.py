@@ -1850,7 +1850,23 @@ class CatalogConsumer(RMQC):
             msg_dict=body,
             exchange={'name': ''},
             correlation_id=properties.correlation_id
-        )       
+        )
+
+    def _catalog_quota(self, body: Dict, properties: Header) -> None:
+        """Return the users quota for the given service."""
+        message_vars = self._parse_user_vars(body)
+        if message_vars is None:
+            # Check if any problems have occured in the parsing of the message
+            # body and exit if necessary
+            self.log("Could not parse one or more mandatory variables, exiting"
+                     "callback", self.RK_LOG_ERROR)
+            return
+        else:
+            # Unpack if no problems found in parsing
+            user, group = message_vars
+
+        try:
+            group_quota = 
 
 
     def attach_database(self, create_db_fl: bool = True):
@@ -2023,6 +2039,10 @@ class CatalogConsumer(RMQC):
 
         elif (api_method == self.RK_STAT):
             self._catalog_stat(body, properties)
+
+        elif (api_method == self.RK_QUOTA):
+            # don't need to split any routing key for an RPC method
+            self._catalog_quota(body, properties)
 
         # If received system test message, reply to it (this is for system status check)
         elif api_method == "system_stat":
