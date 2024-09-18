@@ -143,10 +143,10 @@ class Catalog(DBMixin):
             else:
                 msg += "."
             raise CatalogError(msg)
-        except OperationalError:
+        except OperationalError as e:
             raise CatalogError(
-                f"Invalid regular expression:{label} when listing holding for "
-                f"user:{user} and group:{group}."
+                f"Error when when listing holding for user:{user} and group:{group}. "
+                f"Original error {e}"
             )
         return holding
 
@@ -727,8 +727,6 @@ class Catalog(DBMixin):
         archive aggregate."""
         assert self.session is not None
         try:
-            # Get all holdings
-            all_holdings_q = self.session.query(Holding)
             # Get all archived holdings
             archived_holdings_q = self.session.query(Holding.id).filter(
                 Transaction.holding_id == Holding.id,
@@ -736,20 +734,20 @@ class Catalog(DBMixin):
                 Location.file_id == File.id,
                 Location.storage_type == Storage.TAPE,
             )
+
             # Get the first of the holdings which are not in the archived
             # holdings query - need to ensure that the files are on object storage
             # already and not mid-transfer
-            next_holding = (
-                all_holdings_q.filter(
-                    Holding.id.not_in(archived_holdings_q),
-                    Transaction.holding_id == Holding.id,
-                    File.transaction_id == Transaction.id,
-                    Location.file_id == File.id,
-                    Location.storage_type == Storage.OBJECT_STORAGE,
-                )
-                .order_by(Holding.id)
-                .first()
+            all_holdings_q = self.session.query(Holding).filter(
+                Transaction.holding_id == Holding.id,
+                File.transaction_id == Transaction.id,
+                Location.file_id == File.id,
+                Location.storage_type == Storage.OBJECT_STORAGE,
             )
+            unarchived_holdings_q = all_holdings_q.filter(
+                Holding.id.not_in(archived_holdings_q.correlate(Holding))
+            )            
+            next_holding = unarchived_holdings_q.order_by(Holding.id).first()
         except (NoResultFound, KeyError):
             raise CatalogError(f"Couldn't get unarchived holdings")
         return next_holding
@@ -762,22 +760,23 @@ class Catalog(DBMixin):
             # Get all files for the given holding. Again we have to ensure that the
             # transfer to object storage has completed and the files are not
             # mid-transfer
-            all_files = self.session.query(File).filter(
+            all_files_q = self.session.query(File).filter(
                 Transaction.holding_id == holding.id,
                 File.transaction_id == Transaction.id,
                 Location.file_id == File.id,
                 Location.storage_type == Storage.OBJECT_STORAGE,
+                Location.storage_type != Storage.TAPE,
             )
             # Get the subset of files which are archived
-            archived_files = self.session.query(File.id).filter(
+            archived_files_q = self.session.query(File.id).filter(
                 Transaction.holding_id == holding.id,
                 File.transaction_id == Transaction.id,
                 Location.file_id == File.id,
                 Location.storage_type == Storage.TAPE,
             )
             # Get the remainder of files which are unarchived
-            unarchived_files = all_files.filter(
-                File.id.not_in(archived_files),
+            unarchived_files = all_files_q.filter(
+                File.id.not_in(archived_files_q.correlate(File)),
             ).all()
         except (NoResultFound, KeyError):
             raise CatalogError(

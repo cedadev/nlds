@@ -27,7 +27,6 @@ from nlds_processors.archiver.s3_to_tarfile_stream import S3StreamError
 
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
-from nlds.errors import CallbackError
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 
@@ -58,14 +57,25 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # Create the S3 to tape or disk streamer
         try:
             if USE_DISKTAPE:
+                disk_loc = os.path.expanduser("~/DISKTAPE")
+                self.log(
+                    f"Starting disk transfer between {disk_loc} and object store " 
+                    f"{tenancy}",
+                    RK.LOG_INFO,
+                )
                 streamer = S3ToTarfileDisk(
                     s3_tenancy=tenancy,
                     s3_access_key=access_key,
                     s3_secret_key=secret_key,
-                    disk_location=os.path.expanduser("~/DISKTAPE"),
+                    disk_location=disk_loc,
                     logger=self.log,
                 )
             else:
+                self.log(
+                    f"Starting tape transfer between {tape_url} and object store " 
+                    f"{tenancy}",
+                    RK.LOG_INFO,
+                )
                 streamer = S3ToTarfileTape(
                     s3_tenancy=tenancy,
                     s3_access_key=access_key,
@@ -74,29 +84,36 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     logger=self.log,
                 )
         except S3StreamError as e:
-            raise CallbackError(e)
+            # if a S3StreamError occurs then all files have failed
+            for path_details in filelist:
+                path_details.failure_reason = e.message
+                self.failedlist.append(path_details)
+            checksum = None
+        else:
+            # NOTE: For the purposes of tape reading and writing, the holding prefix
+            # has 'nlds.' prepended
+            holding_prefix = self.get_holding_prefix(body_json)
 
-        # NOTE: For the purposes of tape reading and writing, the holding prefix
-        # has 'nlds.' prepended
-        holding_prefix = self.get_holding_prefix(body_json)
-
-        try:
-            completelist, failedlist, checksum = streamer.put(holding_prefix, filelist)
-        except (S3StreamError) as e:
-            raise CallbackError(e)
-        # assign the return data
-        body_json[MSG.DATA][MSG.CHECKSUM] = checksum
-        self.completelist.extend(completelist)
-        self.failedlist.extend(failedlist)
-
-        self.log(
-            "Archive complete, passing lists back to worker for re-routing and "
-            "cataloguing.",
-            RK.LOG_INFO,
-        )
+            try:
+                self.completelist, self.failedlist, checksum = streamer.put(
+                    holding_prefix, filelist
+                )
+            except S3StreamError as e:
+                # if a S3StreamError occurs then all files have failed
+                for path_details in filelist:
+                    path_details.failure_reason = e.message
+                    self.failedlist.append(path_details)
+                checksum = None
+            # assign the return data
+            body_json[MSG.DATA][MSG.CHECKSUM] = checksum
 
         # Send whatever remains after all items have been put
         if len(self.completelist) > 0:
+            self.log(
+                "Archive complete, passing lists back to worker for re-routing and "
+                "cataloguing.",
+                RK.LOG_INFO,
+            )
             self.send_pathlist(
                 self.completelist, rk_complete, body_json, state=State.ARCHIVE_PUTTING
             )

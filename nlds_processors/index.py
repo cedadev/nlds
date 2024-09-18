@@ -17,16 +17,11 @@ from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
-import nlds.rabbit.message_keys as MSG
+from nlds.errors import MessageError
 
 
-class IndexError(Exception):
-    def __init__(self, message, *args):
-        super().__init__(args)
-        self.message = message
-
-    def __str__(self):
-        return self.message
+class IndexError(MessageError):
+    pass
 
 
 class IndexerConsumer(StattingConsumer):

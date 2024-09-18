@@ -256,7 +256,7 @@ class NLDSWorkerConsumer(RMQC):
         self.publish_and_log_message(new_routing_key, body_json)
 
         queue = f"{RK.ARCHIVE_PUT}"
-        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
+        new_routing_key = ".".join([RK.ROOT, queue, RK.INITIATE])
         self.log(
             f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,

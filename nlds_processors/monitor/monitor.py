@@ -17,12 +17,11 @@ from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 
 from nlds_processors.db_mixin import DBMixin
+from nlds.errors import MessageError
 
 
-class MonitorError(Exception):
-    def __init__(self, message, *args):
-        super().__init__(args)
-        self.message = message
+class MonitorError(MessageError):
+    pass
 
 
 class Monitor(DBMixin):

@@ -1,0 +1,19 @@
+{ 
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "monitor_q",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.monitor-get.*"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.monitor-put.*"
+                    }
+                ]
+            }
+        ]
+    }
+}

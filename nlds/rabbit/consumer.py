@@ -94,12 +94,13 @@ class RabbitMQConsumer(ABC, RMQP):
                     raise ValueError("No rabbit queues found in config.")
 
                 if queue not in [q.name for q in self.queues]:
-                    raise ValueError("Requested queue not in configuration.")
+                    raise ValueError(f"Requested queue {queue} not in configuration.")
 
             else:
                 raise ValueError("No queue specified, switching to default " "config.")
 
         except ValueError as e:
+            raise Exception(e)
             print("Using default queue config - only fit for testing purposes.")
             self.name = self.DEFAULT_QUEUE_NAME
             self.queues = [
@@ -206,12 +207,6 @@ class RabbitMQConsumer(ABC, RMQP):
             try:
                 return_val = self.consumer_config[config_option]
                 if path_listify_fl:
-                    # TODO: (2022-02-17) This is very specific to the use-case
-                    # of the indexer, could potentially be divided up into
-                    # listify and convert functions, but that's probably only
-                    # necessary if we refactor this into Consumer – which is
-                    # probably a good idea when we start fleshing out other
-                    # consumers
                     return_val_list = self.consumer_config[config_option]
                     # Make sure returned value is a list and not a string
                     # Note: it can't be any other iterable because it's loaded

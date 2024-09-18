@@ -1,0 +1,23 @@
+{ 
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "{{ rabbit_exchange_name }}",
+                "bindings": [
+                    {
+                        "exchange": "test_exchange",
+                        "routing_key": "nlds-api.route.*"
+                    },
+                    {
+                        "exchange": "test_exchange",
+                        "routing_key": "nlds-api.*.complete"
+                    },
+                    {
+                        "exchange": "test_exchange",
+                        "routing_key": "nlds-api.*.failed"
+                    }
+                ]
+            }
+        ]
+    }
+}

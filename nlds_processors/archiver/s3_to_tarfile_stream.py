@@ -1,3 +1,12 @@
+"""
+s3_to_tarfile_stream.py
+"""
+__author__ = "Neil Massey"
+__date__ = "18 Sep 2024"
+__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__license__ = "BSD - see LICENSE file in top-level package directory"
+__contact__ = "neil.massey@stfc.ac.uk"
+
 from hashlib import shake_256
 from typing import List
 from urllib3.exceptions import HTTPError
@@ -8,11 +17,11 @@ from minio.error import S3Error
 
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
+from nlds.errors import MessageError
 
 
-class S3StreamError(Exception):
+class S3StreamError(MessageError):
     pass
-
 
 class S3ToTarfileStream:
     """Class to stream files from an S3 resource (AWS, minio, DataCore Swarm etc.) to
@@ -69,9 +78,9 @@ class S3ToTarfileStream:
                 assert check_object == obj_stat_result.object_name
                 assert path_details.size == obj_stat_result.size
             except (AssertionError, S3Error, HTTPError) as e:
-                raise S3Error(
-                    f"Could not verify that bucket {check_bucket} contained "
-                    f"object {check_object} before writing to tape."
+                raise S3StreamError(
+                    f"Could not verify that bucket {check_bucket} contained object "
+                    f"{check_object} before writing to tape. Original exception: {e}"
                 )
 
     def _stream_to_fileobject(
@@ -109,6 +118,7 @@ class S3ToTarfileStream:
                     )
                     self.log(f"{reason}", RK.LOG_ERROR)
                     # Retries have gone, replaced by straight failure
+                    path_details.failure_reason = reason
                     failedlist.append(path_details)
                 else:
                     # Log successful

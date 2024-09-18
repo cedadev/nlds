@@ -216,7 +216,7 @@ class RabbitMQPublisher:
             # For any Undelivered messages attempt to send again
             logger.error(
                 "Message delivery was not confirmed, wasn't delivered "
-                f"properly (rk = {routing_key}). Attempting retry..."
+                f"properly (rk = {routing_key})."
             )
             logger.debug(f"{type(e).__name__}: {e}")
             # NOTE: don't reraise in this case, can cause an infinite loop as

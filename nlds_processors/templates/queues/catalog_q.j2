@@ -1,0 +1,39 @@
+{ 
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "catalog_q",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.catalog-put.start"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.catalog-get.list"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.catalog-del.start" 
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.catalog-archive-next.start"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.catalog-update.start"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.catalog-archive-update.start"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.catalog-archive-remove.start"
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -1,0 +1,16 @@
+{ 
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "transfer_get_q",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.transfer-get.start",
+                        "routing_key": "*.transfer-get.init"
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -12,7 +12,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from abc import ABC, abstractmethod
 import json
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from enum import Enum
 
 from nlds_processors.transferers.base_transfer import (
@@ -119,11 +119,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             self.log(str(e), RK.LOG_DEBUG)
             raise
 
-        self.log(
-            f"Starting tape transfer between {tape_url} and object store " f"{tenancy}",
-            RK.LOG_INFO,
-        )
-
         # Append route info to message to track the route of the message
         body_dict = self.append_route_info(body_dict)
 
@@ -155,7 +150,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         # or the server_config - exit if not.
         if tape_url is None:
             reason = (
-                "No tenancy specified at server- or request-level, exiting " "callback."
+                "No tape_url specified at server- or request-level, exiting callback."
             )
             self.log(reason, RK.LOG_ERROR)
             raise ArchiveError(reason)

@@ -1,3 +1,12 @@
+"""
+adler32file.py
+"""
+__author__ = "Neil Massey"
+__date__ = "18 Sep 2024"
+__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__license__ = "BSD - see LICENSE file in top-level package directory"
+__contact__ = "neil.massey@stfc.ac.uk"
+
 from zlib import adler32
 
 

@@ -1,3 +1,13 @@
+"""
+s3_to_tarfile_disk.py
+"""
+
+__author__ = "Neil Massey"
+__date__ = "18 Sep 2024"
+__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__license__ = "BSD - see LICENSE file in top-level package directory"
+__contact__ = "neil.massey@stfc.ac.uk"
+
 import os
 from typing import List
 from zlib import adler32
@@ -24,7 +34,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         s3_tenancy: str,
         s3_access_key: str,
         s3_secret_key: str,
-        disk_loc: str,
+        disk_location: str,
         logger,
     ) -> None:
         # Initialise the S3 client first
@@ -36,7 +46,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         )
         # record and make the disk location directory if it doesn't exist
         try:
-            self.disk_loc = os.path.expanduser(disk_loc)
+            self.disk_loc = os.path.expanduser(disk_location)
             os.mkdir(self.disk_loc)
         except FileExistsError:
             # it's okay if the path already exists
@@ -68,11 +78,9 @@ class S3ToTarfileDisk(S3ToTarfileStream):
 
         try:
             # open the tarfile to write to
-            file = open(self.tarfile_diskpath, 'wb')
+            file = open(self.tarfile_diskpath, "wb")
             file_object = Adler32File(file, debug_fl=False)
-            completelist, failedlist, checksum = self._stream_to_fileobject(
-                file_object
-            )
+            completelist, failedlist, checksum = self._stream_to_fileobject(file_object)
         except FileExistsError:
             msg = (
                 f"Couldn't create tarfile ({self.tarfile_diskpath}). File already "
@@ -95,25 +103,20 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             )
             self.log(msg, RK.LOG_ERROR)
             self._remove_tarfile_from_disktape()
-            # need to set all completed_files to failed
-            failedlist.extend(completelist)
-            completelist.clear()
             raise S3StreamError(msg)
-        
+
         # now verify the checksum
         try:
             self._validate_tarfile_checksum(checksum)
         except S3StreamError as e:
-            msg = (f"Exception occurred during validation of tarfile "
-                   f"{self.tarfile_tapepath}.  Original exception: {e}")
+            msg = (
+                f"Exception occurred during validation of tarfile "
+                f"{self.tarfile_tapepath}.  Original exception: {e}"
+            )
             self.log(msg, RK.LOG_ERROR)
             self._remove_tarfile_from_disktape()
-            # need to set all completed_files to failed
-            failedlist.extend(completelist)
-            completelist.clear()
             raise S3StreamError(msg)
         return completelist, failedlist, checksum
-
 
     def holding_diskpath(self):
         """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
@@ -131,13 +134,13 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     def _validate_tarfile_checksum(self, tarfile_checksum: str):
         """Calculate the Adler32 checksum of the tarfile and compare it to the checksum
         calculated when streaming from the S3 server to the DISKTAPE"""
-        blocksize = 256*1024*1024
+        blocksize = 256 * 1024 * 1024
         asum = 1
-        with open(self.tarfile_diskpath, 'rb') as fh:
-            while (data := fh.read(blocksize)):
+        with open(self.tarfile_diskpath, "rb") as fh:
+            while data := fh.read(blocksize):
                 asum = adler32(data, asum)
         try:
-            assert(asum == tarfile_checksum)
+            assert asum == tarfile_checksum
         except AssertionError as e:
             reason = (
                 f"Checksum {asum} differs from that calculated during streaming "
@@ -147,7 +150,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             raise S3StreamError(
                 f"Failure occurred during DISKTAPE-write " f"({reason})."
             )
-        
+
     def _remove_tarfile_from_disktape(self):
         """On failure, remove tarfile from disk"""
         try:

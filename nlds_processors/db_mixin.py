@@ -11,12 +11,10 @@ __contact__ = "neil.massey@stfc.ac.uk"
 from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from nlds.errors import MessageError
 
-
-class DBError(Exception):
-    def __init__(self, message, *args):
-        super().__init__(args)
-        self.message = message
+class DBError(MessageError):
+    pass
 
 
 class DBMixin:

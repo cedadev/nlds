@@ -1,0 +1,15 @@
+{ 
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "archive_get_q",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.archive-get.start"
+                    }
+                ]
+            }
+        ]
+    }
+}

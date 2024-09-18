@@ -529,10 +529,13 @@ class CatalogConsumer(RMQC):
                     user,
                     group,
                     transaction_id=transaction_id,
-                    original_path=pd.original_path,
-                )[
-                    0
-                ]  # just one file
+                    original_path=pd.original_path
+                )[0]  # just one file
+                # access time is now, if None
+                if pl.access_time is None:
+                    access_time = datetime.now()
+                else:
+                    access_time = pl.access_time
                 location = self.catalog.create_location(
                     file,
                     storage_type=Storage.from_str(pl.storage_type),
@@ -540,7 +543,7 @@ class CatalogConsumer(RMQC):
                     url_netloc=pl.url_netloc,
                     root=pl.root,
                     path=pl.path,
-                    access_time=pl.access_time,
+                    access_time=access_time,
                 )
                 self.completelist.append(pd)
             except CatalogError as e:
@@ -944,6 +947,15 @@ class CatalogConsumer(RMQC):
         # loop over the files and modify the database to have a TAPE storage location
         self.reset()
         for f in filelist:
+            pd = PathDetails.from_filemodel(f)
+            pl = pd.get_object_store()  # this returns a PathLocation object
+            # get the access time of the object store to mirror to tape, or set to now
+            # if no access_time present
+            if pl.access_time is None:
+                access_time = datetime.now()
+            else:
+                access_time = pl.access_time
+
             try:
                 # create a mostly empty TAPE storage location
                 self.catalog.create_location(
@@ -953,17 +965,19 @@ class CatalogConsumer(RMQC):
                     url_netloc="",
                     root="",
                     path=f.original_path,
-                    access_time=f.get_object_store().access_time.timestamp(),
+                    access_time=access_time,
                     aggregation=None,
                 )
+                # update the pd now with new location
+                pd = PathDetails.from_filemodel(f)
                 # add to the completelist ready for sending
-                self.completelist.append(f)
+                self.completelist.append(pd)
             except CatalogError as e:
                 # In the case of failure, we can just carry on adding files to the
                 # message
                 self.log(e.message, RK.LOG_ERROR)
                 # Keep note of the failure (we're not sending it anywhere currently)
-                self.failedlist.append(f)
+                self.failedlist.append(pd)
                 continue
 
             # Forward successful file details to archiver for tape write
