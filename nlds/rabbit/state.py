@@ -39,7 +39,7 @@ class State(Enum):
     ARCHIVE_PUTTING = 22
     CATALOG_ARCHIVE_UPDATING = 23
     # Shared ARCHIVE states
-    CATALOG_ARCHIVE_ROLLBACK = 40
+    CATALOG_ARCHIVE_REMOVING = 40
     CATALOG_DELETE_ROLLBACK = 41
     CATALOG_RESTORING = 42
     # Initial state for searching for sub-states
@@ -61,7 +61,7 @@ class State(Enum):
             cls.CATALOG_UPDATE,
             cls.CATALOG_ARCHIVE_UPDATING,
             cls.CATALOG_ROLLBACK,
-            cls.CATALOG_ARCHIVE_ROLLBACK,
+            cls.CATALOG_ARCHIVE_REMOVING,
             cls.CATALOG_RESTORING,
             cls.FAILED,
         )
@@ -69,7 +69,7 @@ class State(Enum):
 
     @classmethod
     def get_failed_states(cls):
-        return (cls.CATALOG_ROLLBACK, cls.CATALOG_ARCHIVE_ROLLBACK, cls.FAILED)
+        return (cls.CATALOG_ROLLBACK, cls.CATALOG_ARCHIVE_REMOVING, cls.FAILED)
 
     def to_json(self):
         return self.value

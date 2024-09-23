@@ -1,6 +1,7 @@
 """
 s3_to_tarfile_stream.py
 """
+
 __author__ = "Neil Massey"
 __date__ = "18 Sep 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -22,6 +23,7 @@ from nlds.errors import MessageError
 
 class S3StreamError(MessageError):
     pass
+
 
 class S3ToTarfileStream:
     """Class to stream files from an S3 resource (AWS, minio, DataCore Swarm etc.) to
@@ -62,26 +64,68 @@ class S3ToTarfileStream:
         # to the current implementation of the PUT workflow. Here we do an
         # initial loop over all the files to verify contents before writing
         # anything to tape.
+        failed_list = []
         for path_details in self.filelist:
             try:
                 # Split the object path to get bucket and object path
                 check_bucket, check_object = path_details.object_name.split(":")
             except ValueError as e:
-                raise S3StreamError(
+                path_details.failure_reason = (
                     "Could not unpack bucket and object info from path_details"
                 )
+                failed_list.append(path_details)
             try:
-                # Check the bucket and that the object is in the bucket and
-                # matches the metadata stored.
+                # Check the bucket exists
                 assert self.s3_client.bucket_exists(check_bucket)
+            except AssertionError  as e:
+                path_details.failure_reason = (
+                    f"Could not verify that bucket {check_bucket} exists before "
+                    f"writing to tape."
+                )
+                failed_list.append(path_details)
+            except (S3Error, HTTPError) as e:
+                path_details.failure_reason = (
+                    f"Could not verify that bucket {check_bucket} exists before "
+                    f"writing to tape. Original exception: {e}"
+                )
+                failed_list.append(path_details)
+            
+            try:
+                # Check that the object is in the bucket and the names match
                 obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
                 assert check_object == obj_stat_result.object_name
-                assert path_details.size == obj_stat_result.size
-            except (AssertionError, S3Error, HTTPError) as e:
-                raise S3StreamError(
-                    f"Could not verify that bucket {check_bucket} contained object "
-                    f"{check_object} before writing to tape. Original exception: {e}"
+            except AssertionError:
+                path_details.failure_reason = (
+                    f"Could not verify file {check_bucket}:{check_object} before "
+                    f"writing to tape. File name differs between original name and "
+                    f"object name."
                 )
+                failed_list.append(path_details)
+            except (S3Error, HTTPError) as e:
+                path_details.failure_reason = (
+                    f"Could not verify file {check_bucket}:{check_object} exists "
+                    f"before writing to tape. Original exception {e}."
+                )
+                failed_list.append(path_details)
+            
+            try:
+                # Check that the object is in the bucket and the names match
+                obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
+                assert path_details.size == obj_stat_result.size
+            except AssertionError:
+                path_details.failure_reason = (
+                    f"Could not verify file {check_bucket}:{check_object} before "
+                    f"writing to tape. File size differs between original size and "
+                    f"object size."
+                )
+                failed_list.append(path_details)
+            except (S3Error, HTTPError) as e:
+                path_details.failure_reason = (
+                    f"Could not verify that file {check_bucket}:{check_object} exists "
+                    f"before writing to tape. Original exception {e}."
+                )
+                failed_list.append(path_details)
+        return [], failed_list
 
     def _stream_to_fileobject(
         self, file_object, filelist: List[PathDetails], chunk_size: int

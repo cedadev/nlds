@@ -17,7 +17,7 @@ from nlds_processors.archiver.s3_to_tarfile_stream import (
     S3ToTarfileStream,
     S3StreamError,
 )
-from nlds_processors.archiver.adler32file import Adler32File
+from nlds_processors.archiver.adler32file import Adler32XRDFile
 import nlds.rabbit.routing_keys as RK
 
 
@@ -91,7 +91,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
                         f"Failed to open file {self.tarfile_absolute_tapepath} for "
                         "writing."
                     )
-                file_object = Adler32File(XRD_file, debug_fl=False)
+                file_object = Adler32XRDFile(XRD_file, debug_fl=False)
                 completelist, failedlist, checksum = self._stream_to_fileobject(
                     file_object
                 )

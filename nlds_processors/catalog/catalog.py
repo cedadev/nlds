@@ -402,7 +402,7 @@ class Catalog(DBMixin):
                 original_path=original_path,
                 path_type=path_type,
                 link_path=link_path,
-                size=int(size * 1000),
+                size=int(size),
                 user=user,
                 group=group,
                 file_permissions=file_permissions,
@@ -598,8 +598,7 @@ class Catalog(DBMixin):
         self,
         tarname: str,
         checksum: str = None,
-        algorithm: str = None,
-        failed_fl: bool = False,
+        algorithm: str = None
     ) -> Aggregation:
         """Create an aggregation of files to write to tape as a tar file"""
         assert self.session is not None
@@ -608,61 +607,14 @@ class Catalog(DBMixin):
                 tarname=tarname,
                 checksum=checksum,
                 algorithm=algorithm,
-                failed_fl=failed_fl,
+                failed_fl=False        # Aggregations fail before creation now
             )
             self.session.add(aggregation)
-            self.session.flush()  # flush to generate aggregation.id
+            self.session.flush()       # flush to generate aggregation.id
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Aggregation with tarname:{tarname} could not be added to the "
                 f"database"
-            )
-        return aggregation
-
-    def update_aggregation(
-        self,
-        aggregation: Aggregation,
-        checksum: str,
-        algorithm: str,
-        tarname: str = None,
-    ) -> Aggregation:
-        """Add a missing checksum & algorithm to an aggregation after a
-        successful write to tape. Can also optionally rename the tarname, at
-        which point the"""
-        assert self.session is not None
-        try:
-            aggregation.checksum = checksum
-            aggregation.algorithm = algorithm
-            if tarname:
-                # Change the tarname and then edit all locations so their
-                # root is correct.
-                current_tarname = aggregation.tarname
-                aggregation.tarname = tarname
-                for location in aggregation.locations:
-                    new_root = location.root.replace(current_tarname, tarname)
-                    location.root = new_root
-        except (IntegrityError, KeyError):
-            raise CatalogError(
-                f"Aggregation with id:{aggregation.id} and "
-                f"tarname:{aggregation.tarname} could not be updated with new "
-                f"checksum:{checksum}, algorithm:{algorithm} and "
-                f"tarname:{tarname}."
-            )
-        return aggregation
-
-    def fail_aggregation(
-        self,
-        aggregation: Aggregation,
-    ) -> Aggregation:
-        """Mark an aggregation as failed, as the final step of a failed
-        archive-put."""
-        assert self.session is not None
-        try:
-            aggregation.failed_fl = True
-        except (IntegrityError, KeyError):
-            raise CatalogError(
-                f"Aggregation with id:{aggregation.id} and "
-                f"tarname:{aggregation.tarname} could not be marked as failed."
             )
         return aggregation
 
@@ -682,33 +634,6 @@ class Catalog(DBMixin):
             # only one tape location per file
         except (NoResultFound, KeyError):
             raise CatalogError(f"Aggregation with id:{aggregation_id} not found.")
-        return aggregation
-
-    def get_aggregation_by_file(
-        self, file_: File, storage_type: Storage = Storage.TAPE
-    ) -> Aggregation:
-        """Get the aggregation associated with a particular file's location on
-        tape. Storage type has been left as a kwarg in case future storage types
-        are added which will utilise aggregations."""
-        assert self.session is not None
-        try:
-            # Get the aggregation for a particular file via it's tape location
-            aggregation = (
-                self.session.query(Aggregation)
-                .filter(
-                    Aggregation.id == Location.aggregation_id,
-                    Location.file_id == file_.id,
-                    Location.storage_type == storage_type,
-                )
-                .one_or_none()
-            )
-            # There should only ever be one aggregation per tape location and
-            # only one tape location per file
-        except (NoResultFound, KeyError):
-            raise CatalogError(
-                f"Aggregation for file with id:{file_.id} and path:{file_.path}"
-                f" could not be found. "
-            )
         return aggregation
 
     def delete_aggregation(self, aggregation: Aggregation) -> None:

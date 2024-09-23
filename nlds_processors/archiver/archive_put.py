@@ -12,6 +12,8 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from typing import List, Dict, Any
 import os
+from minio.error import S3Error
+from retry import retry
 
 from nlds_processors.archiver.archive_base import (
     BaseArchiveConsumer,
@@ -33,12 +35,13 @@ import nlds.rabbit.message_keys as MSG
 
 class PutArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_QUEUE_NAME = "archive_put_q"
-    DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_PUT}." f"{RK.WILD}"
+    DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.ARCHIVE_PUT}." f"{RK.WILD}"
     DEFAULT_STATE = State.ARCHIVE_PUTTING
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
+    @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(
         self,
         transaction_id: str,
@@ -95,8 +98,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             holding_prefix = self.get_holding_prefix(body_json)
 
             try:
-                self.completelist, self.failedlist, checksum = streamer.put(
-                    holding_prefix, filelist
+                self.completelist, self.failedlist, tarfile, checksum = streamer.put(
+                    holding_prefix, filelist, self.chunk_size
                 )
             except S3StreamError as e:
                 # if a S3StreamError occurs then all files have failed
@@ -104,14 +107,15 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     path_details.failure_reason = e.message
                     self.failedlist.append(path_details)
                 checksum = None
-            # assign the return data
+            # assign the return data for the aggregation.  Need to know the tarfile name
+            # and its checksum
             body_json[MSG.DATA][MSG.CHECKSUM] = checksum
+            body_json[MSG.DATA][MSG.TARFILE] = tarfile
 
         # Send whatever remains after all items have been put
         if len(self.completelist) > 0:
             self.log(
-                "Archive complete, passing lists back to worker for re-routing and "
-                "cataloguing.",
+                "Archive complete, passing lists back to worker for cataloguing.",
                 RK.LOG_INFO,
             )
             self.send_pathlist(

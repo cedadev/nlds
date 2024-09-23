@@ -61,7 +61,7 @@ class PathLocation(BaseModel):
     url_netloc: Optional[str] = None
     root: Optional[str] = None
     path: Optional[str] = None
-    access_time: Optional[str] = None
+    access_time: Optional[float] = None
 
     def to_dict(self) -> Dict:
         return {
@@ -199,7 +199,7 @@ class PathDetails(BaseModel):
             pl.url_netloc = fl.url_netloc
             pl.root = fl.root
             pl.path = fl.path
-            pl.access_time = fl.access_time
+            pl.access_time = fl.access_time.timestamp()
             pd.locations.add(pl)
 
         return pd
@@ -265,6 +265,15 @@ class PathDetails(BaseModel):
             stat_result=self.get_stat_result(),
         )
 
+    def _get_location(self, location_type: str):
+        """Get the PathLocation for the location_type (OBJECT_STORAGE|TAPE)."""
+        # note - this only returns the first object - this is fine for now, but might
+        # need amending if users want to use different tenancies
+        for pl in self.locations.locations:
+            if pl.storage_type == location_type:
+                return pl
+        return None
+    
     def set_object_store(self, tenancy: str, bucket: str) -> None:
         """Set the OBJECT_STORAGE details for the file.
         This allows the object name to then be derived programmatically using a
@@ -289,20 +298,56 @@ class PathDetails(BaseModel):
 
     def get_object_store(self) -> PathLocation | None:
         """Get the PathLocation for the object storage file."""
-        # note - this only returns the first object - this is fine for now, but might
-        # need amending if users want to use different tenancies
-        for pl in self.locations.locations:
-            if pl.storage_type == MSG.OBJECT_STORAGE:
-                return pl
-        return None
+        return self._get_location(MSG.OBJECT_STORAGE)
 
     @property
     def object_name(self) -> str | None:
         """Get the 1st object storage location and return the object_name by munging the string:
         object_name = f"nlds.{root}:{location.path}
         """
+        pl = self._get_location(MSG.OBJECT_STORAGE)
+        if pl is None:
+            return None
+        else:
+            object_name = f"nlds.{pl.root}:{pl.path}"
+            return object_name
+
+    def set_tape(self, server: str, tapepath: str, tarfile: str) -> None:
+        """Set the TAPE details for the file.
+        This allows the tape name to then be derived programmatically using a
+        function, rather than munging the name every time it is used.
+        The details for the PathLocation struct are:
+            storage_type = "TAPE"
+            url_scheme = "root://"
+            url_netloc = server
+            root = tapepath
+            path = tarfile
+        """
+        # create the PathLocation and assign details to it
+        pl = PathLocation(
+            storage_type=MSG.TAPE,
+            url_scheme="root",
+            url_netloc=server,
+            root=tapepath,
+            path=tarfile
+        )
+        self.locations.add(pl)
+        return pl
+    
+    def get_tape(self) -> PathLocation | None:
+        """Get the PathLocation for the tape file."""
+        # note - this only returns the first object - this is fine for now, but might
+        # need amending if users want to use different tenancies
         for pl in self.locations.locations:
-            if pl.storage_type == MSG.OBJECT_STORAGE:
-                object_name = f"nlds.{pl.root}:{pl.path}"
-                return object_name
+            if pl.storage_type == MSG.TAPE:
+                return pl
         return None
+    
+    @property
+    def tape_name(self) -> str | None:
+        pl = self._get_location(MSG.TAPE)
+        if pl is None:
+            return None
+        else:
+            tape_name = f"{pl.url_netloc}/{pl.root}/{pl.path}"
+            return tape_name
