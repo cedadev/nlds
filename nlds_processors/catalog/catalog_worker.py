@@ -44,7 +44,6 @@ from nlds_processors.catalog.catalog_error import CatalogError
 from nlds_processors.catalog.catalog_models import Storage
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
-from nlds_processors.utils.aggregations import bin_files
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
@@ -1562,15 +1561,14 @@ class CatalogConsumer(RMQC):
                     ret_dict[h.label][MSG.TRANSACTIONS][t.transaction_id] = t_rec
                 # get the locations
                 locations = []
+                pd = PathDetails.from_filemodel(f)
                 for l in f.locations:
-                    url = l.get_url()
-
                     l_rec = {
                         "storage_type": l.storage_type,
                         "root": l.root,
                         "path": l.path,
                         "access_time": format_datetime(l.access_time),
-                        "url": url,
+                        "url": pd.url,
                     }
                     locations.append(l_rec)
                 # build the file record

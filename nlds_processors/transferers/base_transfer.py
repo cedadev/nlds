@@ -107,8 +107,8 @@ class BaseTransferConsumer(StattingConsumer, ABC):
 
         if rk_parts[2] == RK.INITIATE:
             self.log(
-                "Aggregating list into more appropriately sized sub-lists "
-                "for parallelised uploads.",
+                "Aggregating list into more appropriately sized sub-lists for "
+                "parallelised uploads.",
                 RK.LOG_INFO,
             )
 

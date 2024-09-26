@@ -30,8 +30,6 @@ from nlds.details import PathType
 from nlds_processors.catalog.catalog_error import CatalogError
 import nlds.rabbit.message_keys as MSG
 
-from urllib.parse import urlunsplit
-
 """Declarative base class, containing the Metadata object"""
 CatalogBase = declarative_base()
 
@@ -184,20 +182,6 @@ class Location(CatalogBase):
     # storage_type must be unique per file_id, i.e. each file can only have one
     # each location
     __table_args__ = (UniqueConstraint("storage_type", "file_id"),)
-
-    def get_url(self):
-        if self.storage_type == Storage.OBJECT_STORAGE:
-            return urlunsplit(
-                (
-                    self.url_scheme,
-                    self.url_netloc,
-                    f"nlds.{self.root}/{self.path}",
-                    "",
-                    "",
-                )
-            )
-        else:
-            return None
 
 
 class Checksum(CatalogBase):

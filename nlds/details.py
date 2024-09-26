@@ -17,12 +17,12 @@ from pathlib import Path
 import stat
 import os
 from os import stat_result
+from urllib.parse import urlunsplit
 
 from pydantic import BaseModel
 
 from nlds.utils.permissions import check_permissions
 import nlds.rabbit.message_keys as MSG
-
 
 # Patch the JSONEncoder so that a custom json serialiser can be run instead of
 # of the default, if one exists. This patches for ALL json.dumps calls.
@@ -301,17 +301,48 @@ class PathDetails(BaseModel):
         return self._get_location(MSG.OBJECT_STORAGE)
 
     @property
-    def object_name(self) -> str | None:
-        """Get the 1st object storage location and return the object_name by munging the string:
-        object_name = f"nlds.{root}:{location.path}
+    def bucket_name(self) -> str | None:
+        """Get the 1st object storage location and return the bucket by munging the string:
+        bucket_name = f"nlds.{root}"
         """
         pl = self._get_location(MSG.OBJECT_STORAGE)
         if pl is None:
             return None
         else:
-            object_name = f"nlds.{pl.root}:{pl.path}"
-            return object_name
+            bucket_name = f"nlds.{pl.root}"
+            return bucket_name
 
+    @property
+    def object_name(self) -> str | None:
+        """Get the 1st object storage location and return the object_name
+        object_name = f"{location.path}"
+        """
+        pl = self._get_location(MSG.OBJECT_STORAGE)
+        if pl is None:
+            return None
+        else:
+            object_name = f"{pl.path}"
+            return object_name
+        
+    @property
+    def url(self) -> str | None:
+        """Get the 1st object storage location and return the url
+        url = f"{}
+        """
+        pl = self._get_location(MSG.OBJECT_STORAGE)
+        if pl is None:
+            return None
+        else:
+            return urlunsplit(
+                (
+                    pl.url_scheme,
+                    pl.url_netloc,
+                    f"nlds.{pl.root}/{self.path}",
+                    "",
+                    "",
+                )
+            )
+        
     def set_tape(self, server: str, tapepath: str, tarfile: str) -> None:
         """Set the TAPE details for the file.
         This allows the tape name to then be derived programmatically using a

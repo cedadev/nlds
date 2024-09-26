@@ -62,8 +62,9 @@ class GetTransferConsumer(BaseTransferConsumer):
         bucket"""
         assert self.client is not None
 
-        if len(path_details.object_name.split(":")) == 2:
-            bucket_name, object_name = path_details.object_name.split(":")
+        if path_details.bucket_name is not None:
+            bucket_name = path_details.bucket_name
+            object_name = path_details.object_name
         # Otherwise, log error and queue for retry
         else:
             reason = "Unable to get bucket_name from message info"

@@ -67,8 +67,9 @@ class S3ToTarfileStream:
         failed_list = []
         for path_details in self.filelist:
             try:
-                # Split the object path to get bucket and object path
-                check_bucket, check_object = path_details.object_name.split(":")
+                # Get bucket and object path
+                check_bucket = path_details.bucket_name
+                check_object = path_details.object_name
             except ValueError as e:
                 path_details.failure_reason = (
                     "Could not unpack bucket and object info from path_details"
@@ -145,7 +146,8 @@ class S3ToTarfileStream:
                 )
 
                 # Add file info to the tarfile
-                bucket_name, object_name = path_details.object_name.split(":")
+                bucket_name = path_details.bucket_name
+                object_name = path_details.object_name
                 tar_info = tarfile.TarInfo(name=object_name)
                 tar_info.size = int(path_details.size)
 
