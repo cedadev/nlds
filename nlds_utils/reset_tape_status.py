@@ -75,6 +75,9 @@ def reset_tape_status(user: str, group: str, holding_id: int, force: bool) -> No
                         l.url_scheme == "" and l.url_netloc == "" and l.root == ""
                     ) or force:
                         nlds_cat.delete_location(f, Storage.TAPE)
+                        click.echo(
+                            f"Removed TAPE location for {f.original_path}"
+                        )
     nlds_cat.save()
     nlds_cat.end_session()
 

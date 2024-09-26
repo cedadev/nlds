@@ -108,6 +108,10 @@ def reset_object_status(
         raise click.UsageError("Error - group not specified")
     if holding_id is None:
         raise click.UsageError("Error - holding id not specified")
+    if access_key is None:
+        raise click.UsageError("Error - access key not specified")
+    if secret_key is None:
+        raise click.UsageError("Error - secret key not specified")
 
     s3_client = _connect_to_s3(access_key, secret_key)
 
@@ -125,12 +129,13 @@ def reset_object_status(
                 ) or force
                 if delloc:
                     if delete:
-                        l.
+                        pd = PathDetails.from_filemodel(f)
                         # delete from object storage - 
-                        s3_client.remove_object( )
-                    pd = PathDetails.from_filemodel(f)
+                        s3_client.remove_object(pd.bucket_name, pd.object_name)
+                        click.echo(f"Deleted object: {pd.url}")
                     # delete from catalog
-                    #nlds_cat.delete_location(f, Storage.OBJECT_STORAGE)
+                    nlds_cat.delete_location(f, Storage.OBJECT_STORAGE)
+                    click.echo(f"Removed OBJECT STORAGE location for {f.original_path}")
 
     nlds_cat.save()
     nlds_cat.end_session()
