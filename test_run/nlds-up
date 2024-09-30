@@ -1,0 +1,39 @@
+if [[ -z $NLDS_VENV ]]; then
+    echo "NLDS_VENV environment variable not set"
+    return 1
+else
+    source $NLDS_VENV/bin/activate
+fi
+
+if [[ -z $NLDS_CODE ]]; then
+    echo "NLDS_CODE environment variable not set"
+    return 1
+else
+    cd $NLDS_CODE
+fi
+
+if [ $1 = 'nlds_q' ]; then
+    nlds_q
+elif [ $1 = 'catalog_q' ]; then
+    catalog_q
+elif [ $1 = 'index_q' ]; then
+    index_q
+elif [ $1 = 'monitor_q' ]; then
+    monitor_q
+elif [ $1 = 'transfer_put_q' ]; then
+    transfer_put_q
+elif [ $1 = 'transfer_get_q' ]; then
+    transfer_get_q
+elif [ $1 = 'logging_q' ]; then
+    logging_q
+elif [ $1 = 'archive_put_q' ]; then
+    archive_put_q
+elif [ $1 = 'archive_get_q' ]; then
+    archive_get_q
+elif [ $1 = 'archive_next' ]; then
+    archive_next_q
+elif [ $1 = 'fast-api' ]; then
+    uvicorn nlds.main:nlds --reload --log-level=trace --port=8000
+fi
+
+deactivate

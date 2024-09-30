@@ -107,6 +107,7 @@ Running the Server
         transfer_put_q   
         transfer_get_q
         logging_q
+        monitor_q
         archive_put_q
         archive_get_q
         ```
