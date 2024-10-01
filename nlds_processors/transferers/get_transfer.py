@@ -51,8 +51,9 @@ class GetTransferConsumer(BaseTransferConsumer):
         if target:
             target_path = Path(target)
             if not self.check_path_access(target_path, access=os.W_OK):
-                self.log(f"Full path: {target_path}", RK.LOG_DEBUG)
-                raise TransferError("Unable to copy, target path is inaccessible.")
+                msg = f"Unable to copy, target path {target_path} is inaccessible."
+                self.log(msg, RK.LOG_ERROR)
+                raise TransferError(msg)
         else:
             target_path = None
         return target_path
@@ -156,38 +157,18 @@ class GetTransferConsumer(BaseTransferConsumer):
             self.log("Couldn't change owner of downloaded file", RK.LOG_WARNING)
             self.log(f"Original error: {e}", RK.LOG_DEBUG)
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
-    def transfer(
+    def _transfer_files(
         self,
-        transaction_id: str,
         tenancy: str,
-        access_key: str,
-        secret_key: str,
-        filelist: List[PathDetails],
+        filelist: list,
         rk_origin: str,
         body_json: Dict[str, Any],
-    ) -> None:
-        
+        access_key: str,
+        secret_key: str
+    ):
         # build the routing keys
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
-
-        # get the target directory and fail all the transfers if it cannot be created
-        try:
-            target_path = self._get_target_path(body_json)
-        except TransferError as e:
-            for path_details in filelist:
-                path_details.failure_reason = e.message
-                self.append_and_send(
-                    self.failedlist,
-                    path_details,
-                    routing_key=rk_failed,
-                    body_json=body_json,
-                    state=State.FAILED
-                )
-            # and return as there is nothing to do successfully
-            return
-
         # set the ids for the
         if self.chown_fl:
             self.set_ids(body_json)
@@ -204,40 +185,14 @@ class GetTransferConsumer(BaseTransferConsumer):
             # If bucketname inserted into object path (i.e. from catalogue) then
             # extract both
             try:
+                self.log(
+                    f"Attempting to get file {object_name} from {bucket_name}",
+                    RK.LOG_DEBUG,
+                )
                 bucket_name, object_name = (
                     self._get_and_check_bucket_name_object_name(path_details)
                 )
-            except TransferError as e:
-                path_details.failure_reason = e.message
-                self.append_and_send(
-                    self.failedlist,
-                    path_details,
-                    routing_key=rk_failed,
-                    body_json=body_json,
-                    state=State.FAILED,
-                )
-                continue
-
-            self.log(
-                f"Attempting to get file {object_name} from {bucket_name}", RK.LOG_DEBUG
-            )
-
-            # get the download path from the path details
-            try:
                 download_path = self._get_download_path(path_details, target_path)
-            except TransferError as e:
-                path_details.failure_reason = e.message
-                self.append_and_send(
-                    self.failedlist,
-                    path_details,
-                    routing_key=rk_failed,
-                    body_json=body_json,
-                    state=State.FAILED,
-                )
-                continue
-
-            # do the download
-            try:
                 self._transfer(bucket_name, object_name, download_path)
             except TransferError as e:
                 path_details.failure_reason = e.message
@@ -263,6 +218,45 @@ class GetTransferConsumer(BaseTransferConsumer):
                 state=State.TRANSFER_GETTING,
             )
 
+    @retry(S3Error, tries=5, delay=1, logger=None)
+    def transfer(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, Any],
+    ) -> None:
+
+        # build the routing keys
+        rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
+        rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
+
+        # get the target directory and fail all the transfers if it cannot be created
+        try:
+            target_path = self._get_target_path(body_json)
+        except TransferError as e:
+            for path_details in filelist:
+                path_details.failure_reason = e.message
+                self.append_and_send(
+                    self.failedlist,
+                    path_details,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED,
+                )
+        else:
+            self._transfer_files(
+                tenancy=tenancy,
+                filelist=filelist,
+                rk_origin=rk_origin,
+                body_json=body_json,
+                access_key=access_key,
+                secret_key=secret_key
+            )
+
         # Send whatever remains after all items have been (attempted to be) put
         if len(self.completelist) > 0:
             self.send_pathlist(
@@ -271,6 +265,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                 body_json=body_json,
                 state=State.TRANSFER_GETTING,
             )
+
         if len(self.failedlist) > 0:
             self.send_pathlist(
                 self.failedlist,
