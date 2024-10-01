@@ -164,7 +164,8 @@ class GetTransferConsumer(BaseTransferConsumer):
         rk_origin: str,
         body_json: Dict[str, Any],
         access_key: str,
-        secret_key: str
+        secret_key: str,
+        target_path: str
     ):
         # build the routing keys
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
@@ -254,7 +255,8 @@ class GetTransferConsumer(BaseTransferConsumer):
                 rk_origin=rk_origin,
                 body_json=body_json,
                 access_key=access_key,
-                secret_key=secret_key
+                secret_key=secret_key,
+                target_path=target_path
             )
 
         # Send whatever remains after all items have been (attempted to be) put
