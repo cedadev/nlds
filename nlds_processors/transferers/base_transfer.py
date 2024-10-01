@@ -89,7 +89,11 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.log("Transaction id unobtainable, exiting callback.", RK.LOG_ERROR)
             return
 
-        filelist = self.parse_filelist(body_json)
+        try:
+            filelist = self.parse_filelist(body_json)
+        except TypeError as e:
+            self.log("Filelist not parseable, exiting callback", RK.LOG_ERROR)
+            return
 
         try:
             access_key, secret_key, tenancy = self.get_objectstore_config(body_json)
@@ -119,7 +123,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             sub_lists = bin_files(filelist)
             for sub_list in sub_lists:
                 self.send_pathlist(
-                    sub_list, rk_transfer_start, body_json, state=State.CATALOG_GETTING
+                    sub_list, rk_transfer_start, body_json, state=State.INITIALISING
                 )
         elif rk_parts[2] == RK.START:
             # Start transfer - this is implementation specific and handled by
