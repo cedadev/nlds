@@ -156,7 +156,13 @@ class PutTransferConsumer(BaseTransferConsumer):
             # files in the transaction
             for f in filelist:
                 f.failure_reason = f"S3 error: {e.message} when creating bucket"
-                self.failedlist.append(f)
+                self.append_and_send(
+                    self.failedlist,
+                    f,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED,
+                )
         else:
             self._transfer_files(
                 transaction_id=transaction_id,
