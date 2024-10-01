@@ -1,7 +1,25 @@
 #! /usr/bin/env bash
+
+if [[ -z $1 ]]; then
+    echo "nlds-up requires a microservice to run"
+    echo "nlds-up <microservice>"
+    echo "    nlds_q"
+    echo "    catalog_q"
+    echo "    index_q"
+    echo "    monitor_q"
+    echo "    transfer_put_q"
+    echo "    transfer_get_q"
+    echo "    logging_q"
+    echo "    archive_put_q"
+    echo "    archive_get_q"
+    echo "    archive_next"
+    echo "    fast-api"
+    exit 1
+fi
+
 if [[ -z $NLDS_VENV ]]; then
     echo "NLDS_VENV environment variable not set"
-    return 1
+    exit 1
 else
     source $NLDS_VENV/bin/activate
 fi
