@@ -169,4 +169,4 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         rk_origin: str,
         body_dict: Dict[str, str],
     ):
-        raise NotImplementedError()
+        raise NotImplementedError
