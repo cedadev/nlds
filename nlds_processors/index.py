@@ -100,7 +100,7 @@ class IndexerConsumer(StattingConsumer):
         # First change user and group so file permissions can be
         # checked. This should be deactivated when testing locally.
         if self.check_permissions_fl:
-            self._set_ids(body_json)
+            self.set_ids(body_json)
 
         # Append routing info and then run the index
         body_json = self.append_route_info(body_json)
@@ -257,13 +257,6 @@ class IndexerConsumer(StattingConsumer):
                 body_json=body_json,
                 state=State.FAILED,
             )
-
-    def check_path_access(
-        self, path: pathlib.Path, stat_result: NamedTuple = None, access: int = os.R_OK
-    ) -> bool:
-        return super().check_path_access(
-            path, stat_result, access, self.check_permissions_fl
-        )
 
 
 def main():
