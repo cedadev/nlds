@@ -220,25 +220,6 @@ class NLDSWorkerConsumer(RMQC):
         )
         self.publish_and_log_message(new_routing_key, body_json)
 
-    # def _process_rk_archive_put(self, rk_parts: List, body_json: Dict) -> None:
-    #     # forward to catalog_get
-    #     queue = f"{RK.CATALOG_GET}"
-    #     new_routing_key = ".".join([RK.ROOT,
-    #                                 queue,
-    #                                 RK.START])
-    #     self.log(f"Sending  message to {queue} queue with routing "
-    #              f"key {new_routing_key}", RK.LOG_INFO)
-    #     self.publish_and_log_message(new_routing_key, body_json)
-
-    #     # Do initial monitoring update to ensure that a subrecord at ROUTING is
-    #     # created before the first job
-    #     self.log(f"Updating monitor", RK.LOG_INFO)
-    #     new_routing_key = ".".join([RK.ROOT,
-    #                                 RK.MONITOR_PUT,
-    #                                 RK.START])
-    #     body_json[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
-    #     self.publish_and_log_message(new_routing_key, body_json)
-
     def _process_rk_catalog_archive_next_complete(
         self, rk_parts: List, body_json: Dict
     ) -> None:
