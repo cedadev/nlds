@@ -409,7 +409,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                                     f"stream time {e}",
                                     RK.LOG_ERROR,
                                 )
-                                raise
+                                raise e
                             else:
                                 # Log successful
                                 self.log(
@@ -442,7 +442,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     f"Unexpected exception occurred during stream time {e}",
                     RK.LOG_ERROR,
                 )
-                raise
+                raise e
             else:
                 # Log successful retrieval
                 self.log(f"Successfully streamed tar file {tarname}", RK.LOG_INFO)
