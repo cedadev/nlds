@@ -30,7 +30,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
 
     _TENANCY = "tenancy"
     _REQUIRE_SECURE = "require_secure_fl"
-    _CHECK_PERMISSIONS = "check_permissions_fl"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
     _MAX_RETRIES = "max_retries"
     _FILELIST_MAX_LENGTH = "filelist_max_length"
@@ -38,7 +37,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
     DEFAULT_CONSUMER_CONFIG = {
         _TENANCY: None,
         _REQUIRE_SECURE: True,
-        _CHECK_PERMISSIONS: True,
         _PRINT_TRACEBACKS: False,
         _MAX_RETRIES: 5,
         _FILELIST_MAX_LENGTH: 1000,
@@ -49,7 +47,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
 
         self.tenancy = self.load_config_value(self._TENANCY)
         self.require_secure_fl = self.load_config_value(self._REQUIRE_SECURE)
-        self.check_permissions_fl = self.load_config_value(self._CHECK_PERMISSIONS)
         self.print_tracebacks_fl = self.load_config_value(self._PRINT_TRACEBACKS)
         self.max_retries = self.load_config_value(self._MAX_RETRIES)
         self.filelist_max_len = self.load_config_value(self._FILELIST_MAX_LENGTH)
@@ -101,10 +98,8 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
             return
 
-        # Set uid and gid from message contents if configured to check
-        # permissions
-        if self.check_permissions_fl:
-            self.set_ids(body_json)
+        # Set uid and gid from message contents
+        self.set_ids(body_json)
 
         # Append route info to message to track the route of the message
         body_json = self.append_route_info(body_json)
@@ -173,9 +168,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
     def check_path_access(
         self, path: pth.Path, stat_result: NamedTuple = None, access: int = os.R_OK
     ) -> bool:
-        return super().check_path_access(
-            path, stat_result, access, self.check_permissions_fl
-        )
+        return super().check_path_access(path, stat_result, access)
 
     @abstractmethod
     def transfer(

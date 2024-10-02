@@ -570,7 +570,7 @@ class CatalogConsumer(RMQC):
                 self.completelist,
                 routing_key=rk_complete,
                 body_json=body,
-                state=State.CATALOG_UPDATE,
+                state=State.CATALOG_UPDATING,
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -607,6 +607,7 @@ class CatalogConsumer(RMQC):
         # reset the lists
         self.completelist.clear()
         self.failedlist.clear()
+        self.tapelist.clear()
 
         # start the database transactions, reset lists and
         self.catalog.start_session()
@@ -678,7 +679,9 @@ class CatalogConsumer(RMQC):
 
         # NEED RETRIEVING FROM TAPE
         if len(self.tapelist) > 0:
-            raise NotImplementedError
+            for f in self.tapelist:
+                print(f.original_path, f.tape_name)
+            #raise NotImplementedError
 
         # NRM - TODO - sort out the logic here
         # FAILED

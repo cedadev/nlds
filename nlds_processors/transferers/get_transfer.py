@@ -186,12 +186,12 @@ class GetTransferConsumer(BaseTransferConsumer):
             # If bucketname inserted into object path (i.e. from catalogue) then
             # extract both
             try:
+                bucket_name, object_name = (
+                    self._get_and_check_bucket_name_object_name(path_details)
+                )
                 self.log(
                     f"Attempting to get file {object_name} from {bucket_name}",
                     RK.LOG_DEBUG,
-                )
-                bucket_name, object_name = (
-                    self._get_and_check_bucket_name_object_name(path_details)
                 )
                 download_path = self._get_download_path(path_details, target_path)
                 self._transfer(bucket_name, object_name, download_path)

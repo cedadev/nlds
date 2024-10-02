@@ -40,14 +40,12 @@ class StattingConsumer(RMQC):
     _FILELIST_MAX_LENGTH = "filelist_max_length"
     _MESSAGE_MAX_SIZE = "message_threshold"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
-    _CHECK_PERMISSIONS = "check_permissions_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
 
     # The corresponding default values
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
         _MESSAGE_MAX_SIZE: 1000,  # in kB
-        _CHECK_PERMISSIONS: True,
         _CHECK_FILESIZE: True,
     }
 
@@ -159,23 +157,16 @@ class StattingConsumer(RMQC):
         self.gids = gids
 
     def check_path_access(
-        self,
-        path: pth.Path,
-        stat_result: NamedTuple = None,
-        access: int = os.R_OK,
-        check_permissions_fl: bool = True,
+        self, path: pth.Path, stat_result: NamedTuple = None, access: int = os.R_OK
     ) -> bool:
         """Checks that the given path is accessible, either by checking for its
-        existence or, if the check_permissions_fl is set, by doing a permissions
-        check on the file's bitmask. This requires a stat of the file, so one
-        must be provided via stat_result else one is performed. The uid and gid
-        of the user must be set in the object as well, usually by having
-        performed RabbitMQConsumer.set_ids() beforehand.
+        existence and by doing a permissions check on the file's bitmask. This requires
+        a stat of the file, so one must be provided via stat_result else one is 
+        performed. The uid and gid of the user must be set in the object as well, 
+        usually by having performed RabbitMQConsumer.set_ids() beforehand.
 
         """
-        if check_permissions_fl and (
-            self.uid is None or self.gids is None or not isinstance(self.gids, list)
-        ):
+        if (self.uid is None or self.gids is None or not isinstance(self.gids, list)):
             raise ValueError("uid and gid not set properly.")
 
         if not isinstance(path, pth.Path):
@@ -183,13 +174,12 @@ class StattingConsumer(RMQC):
 
         if not path.exists():
             # Can't access or stat something that doesn't exist
-            return False
-        elif check_permissions_fl:
+            check_path = False
+        else:
             # If no stat result is passed through then get our own
             if stat_result is None:
                 stat_result = path.stat()
-            return check_permissions(
+            check_path = check_permissions(
                 self.uid, self.gids, access=access, stat_result=stat_result
             )
-        else:
-            return True
+        return check_path

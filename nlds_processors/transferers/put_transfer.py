@@ -78,7 +78,7 @@ class PutTransferConsumer(BaseTransferConsumer):
 
             # If check_permissions active then check again that file exists and
             # is accessible.
-            if self.check_permissions_fl and not self.check_path_access(item_path):
+            if not self.check_path_access(item_path):
                 reason = f"Path:{path_details.path} is inaccessible."
                 self.log(reason, RK.LOG_DEBUG)
                 path_details.failure_reason = reason

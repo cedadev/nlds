@@ -99,9 +99,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
         # Set uid and gid from message contents if configured to check
         # permissions
-        if self.check_permissions_fl:
-            self.log("Check permissions flag is set, setting uid and gids now.")
-            self.set_ids(body_dict)
+        self.log("Setting uid and gids now.", RK.LOG_INFOx)
+        self.set_ids(body_dict)
 
         try:
             access_key, secret_key, tenancy = self.get_objectstore_config(body_dict)
