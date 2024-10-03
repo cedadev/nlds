@@ -31,6 +31,7 @@ from nlds_processors.catalog.catalog_models import (
 )
 from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
+from nlds_processors.utils.is_regex import is_regex
 
 
 class Catalog(DBMixin):
@@ -90,7 +91,10 @@ class Catalog(DBMixin):
 
             # search label filtering
             if label:
-                holding_q = holding_q.filter(Holding.label.regexp_match(label))
+                if is_regex(label):
+                    holding_q = holding_q.filter(Holding.label.regexp_match(label))
+                else:
+                    holding_q = holding_q.filter(Holding.label == label)
 
             # filter the query on any tags
             if tag:
@@ -321,6 +325,7 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         original_path: str = None,
         tag: dict = None,
+        one: bool = False
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -346,16 +351,25 @@ class Catalog(DBMixin):
         try:
             for h in holding:
                 # build the file query bit by bit
-                file = (
-                    self.session.query(File)
-                    .filter(
-                        File.transaction_id == Transaction.id,
-                        Transaction.holding_id == h.id,
-                        File.original_path.regexp_match(search_path),
-                    )
-                    .all()
+                file_q = self.session.query(File).filter(
+                    File.transaction_id == Transaction.id,
+                    Transaction.holding_id == h.id,
                 )
+                if is_regex(search_path):
+                    file_q = file_q.filter(File.original_path.regexp_match(search_path))
+                else:
+                    file_q = file_q.filter(File.original_path == search_path)
+                # limit to the newest file if one is selected
+                # get_files does this to get the most recent if a file has been entered
+                # into multiple holdings
+                if one:
+                    file_q = file_q.order_by(Transaction.ingest_time)
+                    file = [file_q.first()]
+                else:
+                    file = file_q.all()
                 for f in file:
+                    if f is None:
+                        continue
                     # check user has permission to access this file
                     if f and not self._user_has_get_file_permission(user, group, f):
                         raise CatalogError(
@@ -595,10 +609,7 @@ class Catalog(DBMixin):
         return None
 
     def create_aggregation(
-        self,
-        tarname: str,
-        checksum: str = None,
-        algorithm: str = None
+        self, tarname: str, checksum: str = None, algorithm: str = None
     ) -> Aggregation:
         """Create an aggregation of files to write to tape as a tar file"""
         assert self.session is not None
@@ -607,10 +618,10 @@ class Catalog(DBMixin):
                 tarname=tarname,
                 checksum=checksum,
                 algorithm=algorithm,
-                failed_fl=False        # Aggregations fail before creation now
+                failed_fl=False,  # Aggregations fail before creation now
             )
             self.session.add(aggregation)
-            self.session.flush()       # flush to generate aggregation.id
+            self.session.flush()  # flush to generate aggregation.id
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Aggregation with tarname:{tarname} could not be added to the "
@@ -671,7 +682,7 @@ class Catalog(DBMixin):
             )
             unarchived_holdings_q = all_holdings_q.filter(
                 Holding.id.not_in(archived_holdings_q.correlate(Holding))
-            )            
+            )
             next_holding = unarchived_holdings_q.order_by(Holding.id).first()
         except (NoResultFound, KeyError):
             raise CatalogError(f"Couldn't get unarchived holdings")
