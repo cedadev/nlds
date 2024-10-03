@@ -127,12 +127,6 @@ class GetTransferConsumer(BaseTransferConsumer):
             )
         except Exception as e:
             reason = f"Download-time exception occurred: {e}"
-            self.log(reason, RK.LOG_DEBUG)
-            self.log(
-                f"Exception encountered during download, adding "
-                f"{object_name} to failed list.",
-                RK.LOG_INFO,
-            )
             raise TransferError(message=reason)
 
     def _change_permissions(self, download_path, path_details):
@@ -140,7 +134,7 @@ class GetTransferConsumer(BaseTransferConsumer):
         download_path_str = str(download_path)
         self.log(
             f"Changing permissions and ownership of file " f"{download_path}",
-            RK.LOG_ERROR,
+            RK.LOG_INFO,
         )
         try:
             # Attempt to change back to original permissions
@@ -197,6 +191,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                 self._transfer(bucket_name, object_name, download_path)
             except TransferError as e:
                 path_details.failure_reason = e.message
+                self.log(e.message, RK.LOG_DEBUG)
                 self.append_and_send(
                     self.failedlist,
                     path_details,
