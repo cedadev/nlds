@@ -56,7 +56,12 @@ class FileModel(BaseModel):
         return "[" + ",".join([f for f in self.filelist]) + "]"
 
     def get_cleaned_list(self) -> List[str]:
-        return [f.rstrip("\n") for f in self.filelist]
+        # strip new lines and remove empty entries post new-line-strip
+        flist = [f.rstrip("\n") for f in self.filelist]
+        # important to remove empty entries as they will match with everything via the
+        # regexp matcher
+        flist.remove("")
+        return flist
 
 
 class FileResponse(BaseModel):
@@ -121,7 +126,7 @@ async def get(
     ]
     # create the message dictionary - do this here now as it's more transparent
     routing_key = f"{RK.ROOT}.{RK.ROUTE}.{RK.GETLIST}"
-    api_action = f"{RK.GETLIST}"
+    api_action = f"{RK.GET}"
     msg_dict = {
         MSG.DETAILS: {
             MSG.TRANSACT_ID: str(transaction_id),
@@ -292,13 +297,21 @@ async def put(
     if job_label is None:
         job_label = str(transaction_id)[0:8]
 
+    # if one file then then method is PUT, if more
+    # than one it is PUTLIST
+    if len(contents) == 1:
+        api_method = f"{RK.PUT}"
+    else:
+        api_method = f"{RK.PUTLIST}" 
+    routing_key = f"{RK.ROOT}.{RK.ROUTE}.{api_method}"
+
     # return response, transaction id accepted for processing
     response = FileResponse(
-        transaction_id=transaction_id, msg=(f"PUT transaction accepted for processing.")
+        transaction_id=transaction_id, 
+        msg=(f"{api_method} transaction accepted for processing.")
     )
-    # create the message dictionary - do this here now as it's more transparent
-    routing_key = f"{RK.ROOT}.{RK.ROUTE}.{RK.PUT}"
-    api_method = f"{RK.PUT}"
+
+    # create the message dictionary
     msg_dict = {
         MSG.DETAILS: {
             MSG.TRANSACT_ID: str(transaction_id),
