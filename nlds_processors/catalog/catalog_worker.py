@@ -603,7 +603,7 @@ class CatalogConsumer(RMQC):
         except CatalogError:
             # functions above handled message logging, here we just return
             return
-
+        
         # reset the lists
         self.completelist.clear()
         self.failedlist.clear()
@@ -625,6 +625,7 @@ class CatalogConsumer(RMQC):
                     transaction_id=transaction_id,
                     original_path=filepath_details.original_path,
                     tag=holding_tag,
+                    one=True        # get only one per filename
                 )
 
                 if len(files) == 0:
@@ -1747,7 +1748,7 @@ class CatalogConsumer(RMQC):
         body = self.append_route_info(body)
 
         # check whether this is a GET or a PUT
-        if (api_method == RK.GETLIST) or (api_method == RK.GET):
+        if api_method in (RK.GETLIST, RK.GET):
             # split the routing key
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
@@ -1771,7 +1772,7 @@ class CatalogConsumer(RMQC):
                     body, rk_parts[0], location_type=Storage.OBJECT_STORAGE
                 )
 
-        elif (api_method == RK.PUTLIST) or (api_method == RK.PUT):
+        elif api_method in (RK.PUTLIST, RK.PUT):
             # split the routing key
             try:
                 rk_parts = self.split_routing_key(method.routing_key)
