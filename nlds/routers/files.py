@@ -60,7 +60,8 @@ class FileModel(BaseModel):
         flist = [f.rstrip("\n") for f in self.filelist]
         # important to remove empty entries as they will match with everything via the
         # regexp matcher
-        flist.remove("")
+        if "" in flist:
+            flist.remove("")
         return flist
 
 

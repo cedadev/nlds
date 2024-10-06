@@ -99,7 +99,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
         # Set uid and gid from message contents if configured to check
         # permissions
-        self.log("Setting uid and gids now.", RK.LOG_INFOx)
+        self.log("Setting uid and gids now.", RK.LOG_INFO)
         self.set_ids(body_dict)
 
         try:

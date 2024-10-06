@@ -62,6 +62,7 @@ class PathLocation(BaseModel):
     root: Optional[str] = None
     path: Optional[str] = None
     access_time: Optional[float] = None
+    aggregation_id: Optional[int] = None
 
     def to_dict(self) -> Dict:
         return {
@@ -200,6 +201,7 @@ class PathDetails(BaseModel):
             pl.root = fl.root
             pl.path = fl.path
             pl.access_time = fl.access_time.timestamp()
+            pl.aggregation_id = fl.aggregation_id
             pd.locations.add(pl)
 
         return pd

@@ -13,7 +13,7 @@ if [[ -z $1 ]]; then
     echo "    archive_put_q"
     echo "    archive_get_q"
     echo "    archive_next"
-    echo "    fast-api"
+    echo "    nlds-api"
     exit 1
 fi
 
@@ -43,8 +43,8 @@ elif [ $1 = 'archive_put_q' ]; then
 elif [ $1 = 'archive_get_q' ]; then
     archive_get_q
 elif [ $1 = 'archive_next' ]; then
-    archive_next_q
-elif [ $1 = 'fast-api' ]; then
+    send_archive_next
+elif [ $1 = 'nlds-api' ]; then
     uvicorn nlds.main:nlds --reload --log-level=trace --port=8000
 fi
 

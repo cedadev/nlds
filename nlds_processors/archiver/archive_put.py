@@ -141,7 +141,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             group = body[MSG.DETAILS][MSG.GROUP]
         except KeyError as e:
             raise ArchiveError(
-                f"Could not make holding prefix, original error: " f"{e}"
+                f"Could not make holding prefix, original error: {e}"
             )
 
         return f"nlds.{holding_id}.{user}.{group}"

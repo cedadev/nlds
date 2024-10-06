@@ -166,6 +166,7 @@ def view_holding(user: str, group: str, holding_id: int) -> None:
             print_aggregation(a)
             click.echo(f"{'':<8}+-+{' Files':<16}")
             for l in a.locations:
+                f = File(id=l.file_id)
                 f = nlds_cat.get_location_file(l)
                 click.echo(f"{'':<12}{f.original_path}")
 

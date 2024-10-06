@@ -6,7 +6,10 @@
                 "bindings": [
                     {
                         "exchange": "{{ rabbit_exchange_name }}",
-                        "routing_key": "*.transfer-get.start",
+                        "routing_key": "*.transfer-get.start"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",    
                         "routing_key": "*.transfer-get.init"
                     }
                 ]

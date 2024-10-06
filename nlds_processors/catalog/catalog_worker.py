@@ -112,7 +112,6 @@ class CatalogConsumer(RMQC):
     _DEFAULT_TENANCY = "default_tenancy"
     _DEFAULT_TAPE_URL = "default_tape_url"
     _TARGET_AGGREGATION_SIZE = "target_aggregation_size"
-    _FULLY_UNPACK_TAR = "fully_unpack_tar_fl"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -125,7 +124,6 @@ class CatalogConsumer(RMQC):
         _DEFAULT_TENANCY: None,
         _DEFAULT_TAPE_URL: None,
         _TARGET_AGGREGATION_SIZE: 5 * (1024**3),  # Default to 5 GB
-        _FULLY_UNPACK_TAR: False,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -136,11 +134,10 @@ class CatalogConsumer(RMQC):
         self.target_aggregation_size = self.load_config_value(
             self._TARGET_AGGREGATION_SIZE
         )
-        self.fully_unpack_tar_fl = self.load_config_value(self._FULLY_UNPACK_TAR)
 
         self.catalog = None
         self.tapelist = []
-        self.retrievedict = {}
+        self.tapedict = {}
 
     @property
     def database(self):
@@ -153,7 +150,7 @@ class CatalogConsumer(RMQC):
         self.failedlist.clear()
         # New list for rerouting to tape archive if not found on object store
         self.tapelist.clear()
-        self.retrievedict.clear()
+        self.tapedict.clear()
 
     def _parse_filelist(self, body: Dict) -> list[str]:
         # get the filelist from the data section of the message
@@ -510,8 +507,7 @@ class CatalogConsumer(RMQC):
             raise e
 
         self.catalog.start_session()
-        self.completelist.clear()
-        self.failedlist.clear()
+        self.reset()
 
         # loop over the filelist
         for f in filelist:
@@ -589,7 +585,7 @@ class CatalogConsumer(RMQC):
     def _catalog_get(self, body: Dict, rk_origin: str) -> None:
         """Get the details for each file in a filelist and send it to the
         exchange to be processed by the transfer processor. If any file is only
-        found on tape then it will be first rerouted to the archive processor
+        found on tape then it will be first restored by the archive processor
         for retrieval to object store cache."""
         # Parse the message body for required variables
         try:
@@ -603,11 +599,9 @@ class CatalogConsumer(RMQC):
         except CatalogError:
             # functions above handled message logging, here we just return
             return
-        
+
         # reset the lists
-        self.completelist.clear()
-        self.failedlist.clear()
-        self.tapelist.clear()
+        self.reset()
 
         # start the database transactions, reset lists and
         self.catalog.start_session()
@@ -625,7 +619,7 @@ class CatalogConsumer(RMQC):
                     transaction_id=transaction_id,
                     original_path=filepath_details.original_path,
                     tag=holding_tag,
-                    one=True        # get only one per filename
+                    one=True,  # get only one per filename
                 )
 
                 if len(files) == 0:
@@ -647,6 +641,18 @@ class CatalogConsumer(RMQC):
                     elif pd.locations.has_storage_type(MSG.OBJECT_STORAGE):
                         self.completelist.append(pd)
                     elif pd.locations.has_storage_type(MSG.TAPE):
+                        # get the aggregation
+                        tape = pd.get_tape()
+                        loc = self.catalog.get_aggregation(tape.aggregation_id)
+                        tr = self.catalog.get_transaction(file.transaction_id)
+                        # add the file to a dictionary indexed by tarname
+                        if loc.tarname in self.tapedict:
+                            self.tapedict[loc.tarname][MSG.FILELIST].append(pd)
+                        else:
+                            self.tapedict[loc.tarname] = {
+                                MSG.HOLDING_ID : tr.holding_id,
+                                MSG.FILELIST : [pd]
+                            }
                         self.tapelist.append(pd)
                     else:
                         # this shouldn't occur but we'll trap the error anyway
@@ -679,12 +685,23 @@ class CatalogConsumer(RMQC):
             )
 
         # NEED RETRIEVING FROM TAPE
-        if len(self.tapelist) > 0:
-            for f in self.tapelist:
-                print(f.original_path, f.tape_name)
-            #raise NotImplementedError
+        if len(self.tapedict) > 0 and len(self.tapelist) > 0:
+            rk_restore = ".".join([rk_origin, RK.ROUTE, RK.ARCHIVE_RESTORE])
+            # Include the original files requested in the message body so they
+            # can be moved to disk after retrieval
+            body[MSG.DATA][MSG.RETRIEVAL_FILELIST] = self.tapedict
+            self.log(
+                f"Rerouting PathList from CATALOG_GET to ARCHIVE_GET for "
+                f"archive retrieval ({self.tapelist})",
+                RK.LOG_DEBUG,
+            )
+            self.send_pathlist(
+                self.tapelist,
+                routing_key=rk_restore,
+                body_json=body,
+                state=State.CATALOG_GETTING,
+            )
 
-        # NRM - TODO - sort out the logic here
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
@@ -698,237 +715,6 @@ class CatalogConsumer(RMQC):
                 body_json=body,
                 state=State.FAILED,
             )
-
-    def _catalog_get_old(self, body: Dict, rk_origin: str) -> None:
-        """Get the details for each file in a filelist and send it to the
-        exchange to be processed by the transfer processor. If any file is only
-        found on tape then it will be first rerouted to the archive processor
-        for retrieval to object store cache."""
-        # Parse the message body for required variables
-        try:
-            filelist = self._parse_filelist(body)
-            user, group = self._parse_user_vars(body)
-            transaction_id = self._parse_transaction_id(body)
-            tenancy = self._parse_tenancy(body)
-            holding_label, holding_id, holding_tag, _ = self._parse_metadata_vars(body)
-            groupall = self._parse_groupall(body)
-        except CatalogError:
-            # functions above handled message logging, here we just return
-            return
-
-        # Start a set of the aggregations we need to retrieve
-        aggs_to_retrieve: Dict[int, List] = dict()
-
-        # start the database transactions
-        self.catalog.start_session()
-
-        for f in filelist:
-            file_details = PathDetails.from_dict(f)
-            try:
-                # get the files first
-                files = self.catalog.get_files(
-                    user,
-                    group,
-                    groupall=groupall,
-                    holding_label=holding_label,
-                    holding_id=holding_id,
-                    transaction_id=transaction_id,
-                    original_path=file_details.original_path,
-                    tag=holding_tag,
-                )
-                if len(files) == 0:
-                    raise CatalogError(
-                        f"Could not find file(s) with original path "
-                        f"{file_details.original_path}"
-                    )
-                # now get the location so we can get where it is stored
-                for file_ in files:
-                    try:
-                        # For files stored in object store
-                        in_object_store_fl = True
-                        location = self.catalog.get_location(
-                            file_, Storage.OBJECT_STORAGE
-                        )
-                        # If not in object store then look for it in tape
-                        if location is None:
-                            in_object_store_fl = False
-                            self.log(
-                                "Searching for copy of file in archive", RK.LOG_INFO
-                            )
-                            location = self.catalog.get_location(file_, Storage.TAPE)
-                            transaction = self.catalog.get_location_transaction(
-                                location
-                            )
-                            root = transaction.transaction_id
-                        else:
-                            root = location.root
-
-                        # If still None then file doesn't exist within the NLDS
-                        if location is None:
-                            raise CatalogError(
-                                f"Could not find location for file with "
-                                f"original path {file_details.original_path}."
-                            )
-                    except CatalogError as e:
-                        file_details.failure_reason = e.message
-                        self.failedlist.append(file_details)
-                        self.log(e.message, RK.LOG_ERROR)
-                        continue
-                    # NRM - TODO - this needs sorting out
-                    # Make the object name. (2023-09) As of now the root will
-                    # always be the transaction id, so files are retrieved from
-                    # tape into the same original bucket name (for URIs).
-                    object_name = f"nlds.{root}:{location.path}"
-                    access_time = location.access_time.timestamp()
-                    # create a new PathDetails with all the info from the DB
-                    new_file = PathDetails(
-                        original_path=file_.original_path,
-                        path_type=file_.path_type,
-                        size=file_.size,
-                        user=file_.user,
-                        group=file_.group,
-                        permissions=file_.file_permissions,
-                        access_time=access_time,
-                        link_path=file_.link_path,
-                    )
-                    # NRM - TODO - this all needs revisiting
-                    # Assign to the appropriate queue for retrieval from archive
-                    # or object store. Additional information is required
-                    # depending on where it's going
-                    if in_object_store_fl:
-                        # Need to include the tenancy information for the object
-                        # store transfer
-                        # TODO: this isn't actually used yet, the tenancy in the
-                        # message body is used instead in TransferGetConsumer()
-                        new_file.tenancy = location.url_netloc
-                        self.completelist.append(new_file)
-                    else:
-                        # Need the new tenancy info as well as the stored tape
-                        # location info
-                        tape_object_name = f"nlds.{location.root}:{location.path}"
-                        new_file.tenancy = tenancy
-                        new_file.tape_url = location.url_netloc
-                        new_file.tape_path = tape_object_name
-
-                        # Get the aggregation so we can group by tarname in
-                        # retrieval_dict
-                        agg = self.catalog.get_aggregation(
-                            aggregation_id=location.aggregation_id
-                        )
-                        if self.fully_unpack_tar_fl:
-                            # Save the aggregation for later so we can add
-                            # objectstore location for all of the files needed
-                            # to be retrieved from tape.
-                            if agg in aggs_to_retrieve:
-                                aggs_to_retrieve[agg].append(new_file)
-                            else:
-                                aggs_to_retrieve[agg] = [
-                                    new_file,
-                                ]
-                        else:
-                            # If we just want the files requested from the
-                            # archive then make the necessary Location and
-                            # message data now.
-                            self.create_objectstore_location(location, tenancy)
-                            self.reroutelist.append(new_file)
-                            if agg.tarname in self.retrievedict:
-                                self.retrievedict[agg.tarname].append(new_file)
-                            else:
-                                self.retrievedict[agg.tarname] = [
-                                    new_file,
-                                ]
-
-            except CatalogError as e:
-                file_details.failure_reason = e.message
-                self.failedlist.append(file_details)
-                self.log(e.message, RK.LOG_ERROR)
-                continue
-
-        # Create object store Locations for each member of an aggregation (if
-        # unpacking the whole tar file)
-        for aggregation, details_list in aggs_to_retrieve.items():
-            # Make a session checkpoint here so we can rollback in the event of
-            # a failed Location creation
-            # TODO: We need a way to mark a file as being a problem
-            checkpoint = self.catalog.session.begin_nested()
-            try:
-                retrievelist = []
-                # Add the new objectstore location to the catalog now,
-                # to be removed in the event of an s3 get failure.
-                for tape_location in aggregation.locations:
-                    path_details = self.create_objectstore_location(
-                        tape_location, tenancy
-                    )
-                    if path_details is None:
-                        continue
-                    retrievelist.append(path_details)
-            except CatalogError as e:
-                # In the event of a failure we rollback all the added locations
-                # and add the original file_details to the fail list
-                checkpoint.rollback()
-                for file_details in details_list:
-                    file_details.failure_reason = e.message
-                    self.failedlist.append(file_details)
-                self.log(e.message, RK.LOG_ERROR)
-                continue
-            else:
-                # Add the file_details to the reroute list for archive retrieval
-                for file_details in details_list:
-                    self.reroutelist.append(file_details)
-                self.retrievedict[aggregation.tarname] = retrievelist
-
-        # log and route the successful and non-successful catalog gets
-        # we could split up using the code:
-        # j=5 # size of each transfer
-        # [x[i*j:i*j+j] for i in range(0,int(len(x)/j)+1)]
-        # SUCCESS
-        if len(self.completelist) > 0:
-            rk_complete = ".".join([rk_origin, RK.CATALOG_GET, RK.COMPLETE])
-            self.log(
-                f"Sending completed PathList from CATALOG_GET {self.completelist}",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(
-                self.completelist,
-                routing_key=rk_complete,
-                body_json=body,
-                state=State.CATALOG_GETTING,
-            )
-        # REROUTE_ARCHIVE
-        if len(self.reroutelist) > 0:
-            rk_reroute = ".".join([rk_origin, RK.CATALOG_GET, RK.REROUTE_ARCHIVE])
-            # TODO (2024-03-14): This probably needs to be split, definitely
-            # into cache-appropriate chunks of less than 500GB
-            # Ensure the holding_id is present as we'll need it during retrieval
-            body[MSG.META][
-                MSG.HOLDING_ID
-            ] = holding_id  # Ensure this is actually populated
-            # Include the original files requested in the message body so they
-            # can be moved to disk after retrieval
-            body[MSG.DATA][MSG.RETRIEVAL_FILELIST] = self.retrievedict
-            self.log(
-                f"Rerouting PathList from CATALOG_GET to ARCHIVE_GET for "
-                f"archive retrieval ({self.reroutelist})",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(
-                self.reroutelist,
-                pouting_key=rk_reroute,
-                body_json=body,
-                state=State.CATALOG_GETTING,
-            )
-        # FAILED
-        if len(self.failedlist) > 0:
-            rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
-            self.log(
-                f"Sending failed PathList from CATALOG_GET {self.failedlist}",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(self.failedlist, rk_failed, body, state=State.FAILED)
-
-        # stop db transistions and commit
-        self.catalog.save()
-        self.catalog.end_session()
 
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location for it and pass it
@@ -1059,15 +845,11 @@ class CatalogConsumer(RMQC):
             pl = pd.get_tape()
             # get the file
             try:
+                # just one file
                 file = self.catalog.get_files(
-                    user,
-                    group,
-                    holding_id=holding_id,
-                    original_path=pd.original_path
-                )[
-                    0
-                ]  # just one file
-                # get the already created location and update with info from 
+                    user, group, holding_id=holding_id, original_path=pd.original_path
+                )[0]
+                # get the already created location and update with info from
                 # PathLocation and assign the aggregation
                 location = self.catalog.get_location(file, Storage.TAPE)
                 location.url_scheme = pl.url_scheme
@@ -1076,7 +858,7 @@ class CatalogConsumer(RMQC):
                 location.path = pl.path
                 location.aggregation_id = aggregation.id
                 self.completelist.append(pd)
-                
+
             except CatalogError as e:
                 # the file wasn't found or the location couldn't be created
                 pd.failure_reason = e.message
