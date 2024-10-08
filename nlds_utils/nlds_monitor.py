@@ -1,21 +1,18 @@
 import click
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from sqlalchemy.orm import joinedload
+from sqlalchemy import between, asc, desc
+
+from nlds_processors.monitor.monitor import Monitor
 from nlds_processors.monitor.monitor_models import (
     TransactionRecord,
     SubRecord,
-    FailedFile,
-    Warning,
 )
-
-from sqlalchemy.orm import joinedload
-from sqlalchemy import asc, desc
-
-from nlds_processors.monitor.monitor import Monitor
 from nlds.rabbit.consumer import State
 import nlds.server_config as CFG
 
-def query_monitor_db(user, group, state, time, order):
+def query_monitor_db(user, group, state, record_state, id, start_time, end_time, order):
     """Connects to the monitor database"""
     config = CFG.load_config()
 
@@ -32,23 +29,27 @@ def query_monitor_db(user, group, state, time, order):
         joinedload(TransactionRecord.sub_records).joinedload(SubRecord.failed_files),
         joinedload(TransactionRecord.warnings),
     )
-    
-    if user:
-        print("user")
-        query = query.filter(TransactionRecord.user == user)
-    
-    if group:
-        print("group")
-        query = query.filter(TransactionRecord.group == group)
-    
-    if state:
-        print("state")
-        query = query.join(SubRecord, TransactionRecord.id == SubRecord.transaction_record_id)
-        query = query.filter(SubRecord.state == state)
+    if id:
+        query = query.filter(TransactionRecord.id == id)
+    else:
+        if user:
+            query = query.filter(TransactionRecord.user == user)
+        
+        if group:
+            query = query.filter(TransactionRecord.group == group)
+        
+        if state:
+            query = query.join(
+                SubRecord, TransactionRecord.id == SubRecord.transaction_record_id
+            )
+            query = query.filter(SubRecord.state == state)
 
-    #if time:
-    #    print("time")
-    #    query = query.filter(TransactionRecord.creation_time == time)
+        if start_time and not end_time:
+            query = query.filter(TransactionRecord.creation_time >= start_time)
+        elif start_time and end_time:
+            query = query.filter(
+                between(TransactionRecord.creation_time, start_time, end_time)
+            )
     
     if order == 'ascending':
         query = query.order_by(asc(TransactionRecord.creation_time))
@@ -59,12 +60,16 @@ def query_monitor_db(user, group, state, time, order):
     
     nlds_monitor.end_session()
     
+    if record_state:
+        for record in trec[:]:
+            state = record.get_state()
+            if state != record_state:
+                trec.remove(record)
+    
     return(trec)
 
-def print_simple_monitor(record_list, req_details):
+def print_simple_monitor(record_list, stat_string):
     """Print a multi-line set of status for monitor"""
-    stat_string = "State of transactions for "
-    stat_string += req_details
     click.echo(stat_string)
     click.echo(
             f"{'':<4}{'user':<16}{'id':<6}{'action':<16}{'job label':<16}"
@@ -81,11 +86,9 @@ def print_simple_monitor(record_list, req_details):
             f"{job_label:16}{state.name:<23}{(record.creation_time)}"
         )
 
-def print_complex_monitor(record_list, req_details):
+def print_complex_monitor(record_list, stat_string):
     """Print a multi-line set of status for monitor in more detail, with a list of
     failed files if necessary"""
-    stat_string = "State of transactions for "
-    stat_string += req_details
     click.echo(stat_string)
     for record in record_list:
         click.echo("")
@@ -101,7 +104,7 @@ def print_complex_monitor(record_list, req_details):
             warn_str = ""
             for w in record.warnings:
                 warn_str += w + f"\n{'':<22}"
-            click.echo(f"{'':<4}{'warnings':<16}: {warn_str[:-23]}")            # TODO check this works with warnings
+            click.echo(f"{'':<4}{'warnings':<16}: {warn_str[:-23]}")
 
         click.echo(f"{'':<4}{'sub records':<16}->")
         for sr in record.sub_records:
@@ -132,26 +135,42 @@ def print_complex_monitor(record_list, req_details):
     type=str,
     help="Enter the group work space to filter by.",
 )
-@click.option(                                                                  # TODO add an overall filter by state and not just sub-record
+@click.option(
     "-s",
     "--state",
     default=None,
     type=str,
-    help="Will return any record with that state in any of its sub-records (not record).",
+    help="Will return any record with that state in any "
+    "of its sub-records (not record).",
 )
-@click.option(                                                                  # TODO (add aditional feature)
+@click.option(
+    "-rs",
+    "--record-state",
+    default=None,
+    type=str,
+    help="Will return any record with that state.",
+)
+@click.option(
     "-i",
     "--id",
     default=None,
     type=int,
     help="Display the selected record in complex view using id.",
 )
-@click.option(                                                                  # TODO (add aditional feature), fix help statement
-    "-t",
-    "--time",
+@click.option(
+    "-st",
+    "--start-time",
+    default=(datetime.now() - timedelta(days=30)),
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Filter start time in YYYY-MM-DD format "
+    "(leave blank for values from 30 days ago)",
+)
+@click.option(
+    "-et",
+    "--end-time",
     default=None,
-    type=click.DateTime(formats=["%Y-%m-%d %H:%M:%S"]),
-    help="DateTime in YYYY-MM-DD HH:MM:SS format",
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    help="Filter end time in YYYY-MM-DD format (leave blank for values up to present)",
 )
 @click.option(
     "-c",
@@ -167,44 +186,74 @@ def print_complex_monitor(record_list, req_details):
     default=False,
     help="Switch between ascending and descending order.",
 )
-def view_jobs(user, group, state, id, time, complex, order) -> None:
+def view_jobs(
+    user,
+    group,
+    state,
+    record_state,
+    id,
+    start_time,
+    end_time,
+    complex,
+    order,
+) -> None:
     """Returns all NLDS jobs filtered by user options."""
     
     if not order:
         order = "ascending"
     else:
         order = "descending"
-
-    print(user)
-    print(group)
-    print(state)
-    print(time)
-    print(complex)
-    print(order)
-    print("")
-    print("")
+    
+    if start_time and end_time:
+        if start_time > end_time:
+            click.echo("Error: Start time must be before end time.")
+            return
     
     if state:
         try:
             state = State[state.upper()]
         except KeyError:
-            print(f"Invalid state: {state}")
-            exit()
+            click.echo(f"Invalid state: {state}")
+            return
     
-    query = query_monitor_db(user, group, state, time, order)
+    if record_state:
+        try:
+            record_state = State[record_state.upper()]
+        except KeyError:
+            click.echo(f"Invalid state: {record_state}")
+            return
+    
+    query = query_monitor_db(
+        user,
+        group,
+        state,
+        record_state,
+        id,
+        start_time,
+        end_time,
+        order,
+    )
     
     
     details = []
 
     # Check if each value is provided and add to details
-    if user:
-        details.append(f"user: {user}")
-    if group:
-        details.append(f"group: {group}")
-    if state:
-        details.append(f"state: {state}")
-    if time:
-        details.append(f"time: {time}")
+    stat_string = "State of transactions for "
+    if id:
+        details.append(f"id: {id}")
+    else:
+        if user:
+            details.append(f"user: {user}")
+        if group:
+            details.append(f"group: {group}")
+        if state:
+            details.append(f"state: {state.name}")
+        if record_state:
+            details.append(f"record state: {record_state.name}")
+        if start_time and end_time:
+            details.append(f"between: {start_time} and {end_time}")
+        if start_time and not end_time:
+            details.append(f"from: {start_time}")
     
     # If no details were added, set req_details to 'all records'
     if not details:
@@ -217,11 +266,12 @@ def view_jobs(user, group, state, id, time, complex, order) -> None:
     if order:
         req_details += f", order: {order}"
     
+    stat_string += req_details
     
-    if complex:
-        print_complex_monitor(query, req_details)
+    if complex or id:
+        print_complex_monitor(query, stat_string)
     else:
-        print_simple_monitor(query, req_details)
+        print_simple_monitor(query, stat_string)
     
     
 
@@ -229,20 +279,10 @@ def view_jobs(user, group, state, id, time, complex, order) -> None:
 if __name__ == "__main__":
     view_jobs()
 
-
-
-                                                                                # TODO tidy up debug script
-                                                                                # TODO tidy up old commented out code
-                                                                                # TODO give functions a brief description
-                                                                                # TODO clear up imports
-                                                                                # TODO reformat everything to conform to pep8 (or whatever)
-
-
-
-
-
-
-# Try switching off some of the microprocessors before doing a PUT as that will cause the transaction to stall and have a different state.
+                                                                                # TODO add pytests
+                                                                                
+                                                                                
+                                                                                # TODO consider how this would work as a website
 
 
 # cd nlds/nlds_utils
