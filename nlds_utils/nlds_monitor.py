@@ -21,9 +21,9 @@ def query_monitor_db(user, group, state, record_state, id, start_time, end_time,
     db_options['echo'] = False
     nlds_monitor = Monitor(db_engine=db_engine, db_options=db_options)
     db_connect = nlds_monitor.connect(create_db_fl=False)
-    
+
     nlds_monitor.start_session()
-    
+
     """Returns a list of TransactionRecords"""
     query = nlds_monitor.session.query(TransactionRecord).options(
         joinedload(TransactionRecord.sub_records).joinedload(SubRecord.failed_files),
@@ -34,10 +34,10 @@ def query_monitor_db(user, group, state, record_state, id, start_time, end_time,
     else:
         if user:
             query = query.filter(TransactionRecord.user == user)
-        
+
         if group:
             query = query.filter(TransactionRecord.group == group)
-        
+
         if state:
             query = query.join(
                 SubRecord, TransactionRecord.id == SubRecord.transaction_record_id
@@ -50,14 +50,14 @@ def query_monitor_db(user, group, state, record_state, id, start_time, end_time,
             query = query.filter(
                 between(TransactionRecord.creation_time, start_time, end_time)
             )
-    
+
     if order == 'ascending':
         query = query.order_by(asc(TransactionRecord.creation_time))
     elif order == 'descending':
         query = query.order_by(desc(TransactionRecord.creation_time))
-    
+
     trec = query.all()
-    
+
     nlds_monitor.end_session()
     
     if record_state:
@@ -65,7 +65,7 @@ def query_monitor_db(user, group, state, record_state, id, start_time, end_time,
             state = record.get_state()
             if state != record_state:
                 trec.remove(record)
-    
+
     return(trec)
 
 def print_simple_monitor(record_list, stat_string):
@@ -208,21 +208,21 @@ def view_jobs(
         if start_time > end_time:
             click.echo("Error: Start time must be before end time.")
             return
-    
+
     if state:
         try:
             state = State[state.upper()]
         except KeyError:
             click.echo(f"Invalid state: {state}")
             return
-    
+
     if record_state:
         try:
             record_state = State[record_state.upper()]
         except KeyError:
             click.echo(f"Invalid state: {record_state}")
             return
-    
+
     query = query_monitor_db(
         user,
         group,
@@ -233,8 +233,8 @@ def view_jobs(
         end_time,
         order,
     )
-    
-    
+
+
     details = []
 
     # Check if each value is provided and add to details
@@ -254,7 +254,7 @@ def view_jobs(
             details.append(f"between: {start_time} and {end_time}")
         if start_time and not end_time:
             details.append(f"from: {start_time}")
-    
+
     # If no details were added, set req_details to 'all records'
     if not details:
         req_details = "all records"
@@ -265,23 +265,23 @@ def view_jobs(
     # Add the order
     if order:
         req_details += f", order: {order}"
-    
+
     stat_string += req_details
-    
+
     if complex or id:
         print_complex_monitor(query, stat_string)
     else:
         print_simple_monitor(query, stat_string)
-    
-    
+
+
 
 
 if __name__ == "__main__":
     view_jobs()
 
                                                                                 # TODO add pytests
-                                                                                
-                                                                                
+
+
                                                                                 # TODO consider how this would work as a website
 
 
