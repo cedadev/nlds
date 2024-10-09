@@ -202,7 +202,9 @@ deactivate qc
 
 activate catalog
 loop #LightGreen for file in //transferred_list//
-    catalog -> catalog_db : add object storage details to file record
+    catalog -> catalog_db : create OBJECT STORAGE location
+    catalog -> catalog_db : add details to OBJECT STORAGE 
+    catalog -> catalog_db : attach OBJECT STORAGE location to file record
 end
 catalog -> wex : key=""nlds-api.catalog-update.complete""
 deactivate catalog
@@ -213,7 +215,6 @@ deactivate wex
 
 transfer_puts -> wex : key=""nlds-api.transfer-put.failed""
 deactivate transfer_puts
-
 
 activate wex
 wex -> qw : key=""nlds-api.transfer-put.failed""
