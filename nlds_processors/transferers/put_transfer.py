@@ -54,7 +54,6 @@ class PutTransferConsumer(BaseTransferConsumer):
                     f"already exists",
                     RK.LOG_INFO,
                 )
-            return None
         except minio.error.S3Error as e:
             raise TransferError(message=str(e))
 
