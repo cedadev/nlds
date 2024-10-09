@@ -131,7 +131,7 @@ class NLDSWorkerConsumer(RMQC):
         self.log(f"Catalog successful, sending filelist for transfer", RK.LOG_INFO)
 
         queue = f"{RK.TRANSFER_PUT}"
-        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
+        new_routing_key = ".".join([RK.ROOT, queue, RK.INITIATE])
         self.log(
             f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
@@ -212,7 +212,7 @@ class NLDSWorkerConsumer(RMQC):
             RK.LOG_INFO,
         )
 
-        queue = f"{RK.CATALOG_ARCHIVE_DEL}"
+        queue = f"{RK.CATALOG_ARCHIVE_REMOVE}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
             f"Sending  message to {queue} queue with routing key {new_routing_key}",
