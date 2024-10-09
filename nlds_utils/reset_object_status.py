@@ -108,12 +108,14 @@ def reset_object_status(
         raise click.UsageError("Error - group not specified")
     if holding_id is None:
         raise click.UsageError("Error - holding id not specified")
-    if access_key is None:
-        raise click.UsageError("Error - access key not specified")
-    if secret_key is None:
-        raise click.UsageError("Error - secret key not specified")
 
-    s3_client = _connect_to_s3(access_key, secret_key)
+    # only need to contact S3 if deleting from object storage
+    if delete:
+        s3_client = _connect_to_s3(access_key, secret_key)
+        if access_key is None:
+            raise click.UsageError("Error - access key not specified")
+        if secret_key is None:
+            raise click.UsageError("Error - secret key not specified")
 
     nlds_cat = _connect_to_catalog()
     nlds_cat.start_session()
