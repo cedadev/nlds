@@ -119,6 +119,7 @@ class RabbitMQPublisher():
     MSG_TENANCY = "tenancy"
     MSG_ACCESS_KEY = "access_key"
     MSG_SECRET_KEY = "secret_key"
+    MSG_TOKEN = "token"
     MSG_API_ACTION = "api_action"
     MSG_JOB_LABEL = "job_label"
     MSG_DATA = "data"

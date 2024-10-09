@@ -46,6 +46,8 @@ from nlds_processors.catalog.catalog_models import Storage, Location, File
 from nlds.details import PathDetails, PathType
 from nlds_processors.db_mixin import DBError
 
+from nlds.authenticators.jasmin_authenticator import JasminAuthenticator as Authenticator
+
 
 class Metadata():
     """Container class for the meta section of the message body."""
@@ -1863,10 +1865,32 @@ class CatalogConsumer(RMQC):
             return
         else:
             # Unpack if no problems found in parsing
-            user, group = message_vars
+            user, group, token = message_vars
 
         try:
-            group_quota = 
+            group_quota = Authenticator.extract_tape_quota(oauth_token=token, service_name=group)
+        except CatalogError as e:
+            # failed to get the holdings - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = []
+        else:
+            # fill the return message with a dictionary of the holding(s)
+            body[self.MSG_DATA][self.MSG_HOLDING_LIST] = group_quota
+            self.log(
+                f"Quota from CATALOG_QUOTA {group_quota}",
+                self.RK_LOG_DEBUG
+            )
+
+        self.catalog.end_session()
+
+        # return message to complete RPC
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )
 
 
     def attach_database(self, create_db_fl: bool = True):

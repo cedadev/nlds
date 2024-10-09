@@ -8,9 +8,10 @@ __copyright__ = "Copyright 2021 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from .base_authenticator import BaseAuthenticator
-from ..server_config import load_config
-from ..utils.construct_url import construct_url
+from nlds.authenticators.base_authenticator import BaseAuthenticator
+from nlds.server_config import load_config
+from nlds.utils.construct_url import construct_url
+from nlds_processors.catalog.catalog_models import File, Holding, Transaction
 from retry import retry
 import requests
 import json
@@ -237,3 +238,125 @@ class JasminAuthenticator(BaseAuthenticator):
                 )
         else:
             return False
+        
+
+    @staticmethod
+    def user_has_get_holding_permission(user: str, 
+                                         group: str,
+                                         holding: Holding) -> bool:
+        """Check whether a user has permission to view this holding.
+        When we implement ROLES this will be more complicated."""
+        permitted = True
+        #Users can view / get all holdings in their group
+        #permitted &= holding.user == user
+        permitted &= holding.group == group
+        return permitted
+    
+
+    def user_has_get_file_permission(session, 
+                                      user: str, 
+                                      group: str,
+                                      file: File) -> bool:
+        """Check whether a user has permission to access a file.
+        Later, when we implement the ROLES this function will be a lot more
+        complicated!"""
+        assert(session != None)
+        holding = session.query(Holding).filter(
+            Transaction.id == file.transaction_id,
+            Holding.id == Transaction.holding_id
+        ).all()
+        permitted = True
+        for h in holding:
+            # users have get file permission if in group
+            # permitted &= h.user == user
+            permitted &= h.group == group
+
+        return permitted
+    
+    @staticmethod
+    def user_has_delete_from_holding_permission(self, user: str, 
+                                                 group: str,
+                                                 holding: Holding) -> bool:
+        """Check whether a user has permission to delete files from this holding.
+        When we implement ROLES this will be more complicated."""
+        # is_admin == whether the user is an administrator of the group
+        # i.e. a DEPUTY or MANAGER
+        # this gives them delete permissions for all files in the group
+        is_admin = self.authenticate_user_group_role(user, group)
+        permitted = True
+        # Currently, only users can delete files from their owned holdings
+        permitted &= (holding.user == user or is_admin)
+        permitted &= holding.group == group
+        return permitted
+
+
+    @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
+    def get_service_information(self, oauth_token: str, service_name: str):
+        """Make a call to the JASMIN Projects Portal to get the service information."""
+
+        config = self.config[self.auth_name][self.name]
+        token_headers = {
+            "Content-Type": "application/x-ww-form-urlencoded",
+            "cache-control": "no-cache",
+            "Authorization": f"Bearer {oauth_token}",
+        }
+        # Contact the user_services_url to get the information about the services
+        url = construct_url([config["user_services_urk"]], {"name": {service_name}})
+        try:
+            response = requests.get(
+                url,
+                headers=token_headers,
+                timeout=JasminAuthenticator._timeout,
+            )
+        except requests.exceptions.ConnectionError:
+            raise RuntimeError(f"User services url {url} could not be reached.")
+        except KeyError:
+            raise RuntimeError(f"Could not find 'user_services_url' key in the {self.name} section of the .server_config file.")
+        if response.status_code == requests.codes.ok: # status code 200
+            try:
+                response_json = json.loads(response.text)
+                return response_json
+            except json.JSONDecodeError:
+                raise RuntimeError(f"Invalid JSON returned from the user services url: {url}")
+        else:
+            raise RuntimeError(f"Error getting data for {service_name}")
+        
+        
+    def extract_tape_quota(self, oauth_token: str, service_name: str):
+        """Get the service information then process it to extract the quota for the service."""
+        try:
+            result = self.get_service_information(self, oauth_token, service_name)
+        except (RuntimeError, ValueError) as e:
+            raise type(e)(f"Error getting information for {service_name}: {e}")
+        
+        # Process the result to get the requirements
+        for attr in result:
+            # Check that the category is Group Workspace
+            if attr["category"] == 1:
+                # Check that there are requirements, otherwise throw an error
+                if attr["requirements"]:
+                    requirements = attr["requirements"]
+                else:
+                    raise ValueError(f"Cannot find any requirements for {service_name}.")
+            else:
+                raise ValueError(f"Cannot find a Group Workspace with the name {service_name}. Check the category.")
+            
+        # Go through the requirements to find the tape resource requirement
+        for requirement in requirements:
+            # Only return provisioned requirements
+            if requirement["status"] == 50:
+                # Find the tape resource and get its quota
+                if requirement["resource"]["short_name"] == "tape":
+                    try:
+                        tape_quota = requirement["amount"]
+                        if tape_quota:
+                            return tape_quota
+                        else:
+                            raise ValueError(f"Issue getting tape quota for {service_name}. Quota is zero.")
+                    except KeyError:
+                        raise KeyError(f"Issue getting tape quota for {service_name}. No 'value' field exists.")
+                else:
+                    raise ValueError(f"No tape resources could be found for {service_name}")
+            else:
+                raise ValueError(f"No provisioned requirements found for {service_name}.Check the status of your requested resources.")
+            

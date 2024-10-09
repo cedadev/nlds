@@ -13,7 +13,7 @@ from nlds.utils.construct_url import construct_url
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Aggregation, Storage, Tag
 from nlds_processors.db_mixin import DBMixin
-from nlds.authenticators.jasmin_authenticator import JasminAuthenticator
+from nlds.authenticators.jasmin_authenticator import JasminAuthenticator as Authenticator
 class CatalogError(Exception):
     def __init__(self, message, *args):
         super().__init__(args)
@@ -30,19 +30,6 @@ class Catalog(DBMixin):
         self.db_options = db_options
         self.base = CatalogBase
         self.session = None
-
-
-    @staticmethod
-    def _user_has_get_holding_permission(user: str, 
-                                         group: str,
-                                         holding: Holding) -> bool:
-        """Check whether a user has permission to view this holding.
-        When we implement ROLES this will be more complicated."""
-        permitted = True
-        #Users can view / get all holdings in their group
-        #permitted &= holding.user == user
-        permitted &= holding.group == group
-        return permitted
 
 
     def get_holding(self, 
@@ -109,7 +96,7 @@ class Catalog(DBMixin):
                 raise KeyError
             # check the user has permission to view the holding(s)
             for h in holding:
-                if not self._user_has_get_holding_permission(user, group, h):
+                if not Authenticator.user_has_get_holding_permission(user, group, h):
                     raise CatalogError(
                        f"User:{user} in group:{group} does not have permission "
                        f"to access the holding with label:{h.label}."
@@ -301,26 +288,6 @@ class Catalog(DBMixin):
                 f"Transaction with transaction_id:{transaction_id} could not "
                 "be added to the database"
             )
-        
-    def _user_has_get_file_permission(self, 
-                                      user: str, 
-                                      group: str,
-                                      file: File) -> bool:
-        """Check whether a user has permission to access a file.
-        Later, when we implement the ROLES this function will be a lot more
-        complicated!"""
-        assert(self.session != None)
-        holding = self.session.query(Holding).filter(
-            Transaction.id == file.transaction_id,
-            Holding.id == Transaction.holding_id
-        ).all()
-        permitted = True
-        for h in holding:
-            # users have get file permission if in group
-            # permitted &= h.user == user
-            permitted &= h.group == group
-
-        return permitted
 
 
     def get_file(self,
@@ -425,7 +392,7 @@ class Catalog(DBMixin):
                     # check user has permission to access this file
                     # NRM - 12/10/2023, is this necessary?
                     if (f and 
-                        not self._user_has_get_file_permission(user, group, f)
+                        not Authenticator.user_has_get_file_permission(self.session, user, group, f)
                         ):
                         raise CatalogError(
                             f"User:{user} in group:{group} does not have permission to "
@@ -483,23 +450,6 @@ class Catalog(DBMixin):
                  " the database"
             )
         return new_file
-
-
-    @staticmethod
-    def _user_has_delete_from_holding_permission(user: str, 
-                                                 group: str,
-                                                 holding: Holding) -> bool:
-        """Check whether a user has permission to delete files from this holding.
-        When we implement ROLES this will be more complicated."""
-        # is_admin == whether the user is an administrator of the group
-        # i.e. a DEPUTY or MANAGER
-        # this gives them delete permissions for all files in the group
-        is_admin = JasminAuthenticator.authenticate_user_group_role(user, group)
-        permitted = True
-        # Currently, only users can delete files from their owned holdings
-        permitted &= (holding.user == user or is_admin)
-        permitted &= holding.group == group
-        return permitted
     
 
     def delete_files(self, 
@@ -520,7 +470,7 @@ class Catalog(DBMixin):
                                holding_id=holding_id, original_path=path, 
                                tag=tag)
         holding = self.get_holding(user, group, holding_id=holding_id)[0]
-        if not Catalog._user_has_delete_from_holding_permission(
+        if not Authenticator.user_has_delete_from_holding_permission(
             user, group, holding):
             # No admins at the moment!
             raise CatalogError(
@@ -880,77 +830,3 @@ class Catalog(DBMixin):
                 f"id:{holding.id}"
             )
         return unarchived_files
-    
-    @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
-    def get_projects_services(self, oauth_token: str, service_name):
-        """Make a call to the JASMIN Projects Portal to get the service information."""
-        self.config = load_config()
-        self.name = "jasmin_authenticator"
-        self.auth_name = "authentication"
-        self._timeout = 10.0
-
-        config = self.config[self.auth_name][self.name]
-        token_headers = {
-            "Content-Type": "application/x-ww-form-urlencoded",
-            "cache-control": "no-cache",
-            "Authorization": f"Bearer {oauth_token}",
-        }
-        # Contact the user_services_url to get the information about the services
-        url = construct_url([config["user_services_urk"]], {"name": {service_name}})
-        try:
-            response = requests.get(
-                url,
-                headers=token_headers,
-                timeout=self._timeout,
-            )
-        except requests.exceptions.ConnectionError:
-            raise RuntimeError(f"User services url {url} could not be reached.")
-        except KeyError:
-            raise RuntimeError(f"Could not find 'user_services_url' key in the {self.name} section of the .server_config file.")
-        if response.status_code == requests.codes.ok: # status code 200
-            try:
-                response_json = json.loads(response.text)
-                return response_json
-            except json.JSONDecodeError:
-                raise RuntimeError(f"Invalid JSON returned from the user services url: {url}")
-        else:
-            raise RuntimeError(f"Error getting data for {service_name}")
-        
-    def extract_tape_quota(self, oauth_token: str, service_name):
-        """Get the service information then process it to extract the quota for the service."""
-        try:
-            result = self.get_projects_services(self, oauth_token, service_name)
-        except (RuntimeError, ValueError) as e:
-            raise type(e)(f"Error getting information for {service_name}: {e}")
-        
-        # Process the result to get the requirements
-        for attr in result:
-            # Check that the category is Group Workspace
-            if attr["category"] == 1:
-                # Check that there are requirements, otherwise throw an error
-                if attr["requirements"]:
-                    requirements = attr["requirements"]
-                else:
-                    raise ValueError(f"Cannot find any requirements for {service_name}.")
-            else:
-                raise ValueError(f"Cannot find a Group Workspace with the name {service_name}. Check the category.")
-            
-        # Go through the requirements to find the tape resource requirement
-        for requirement in requirements:
-            # Only return provisioned requirements
-            if requirement["status"] == 50:
-                # Find the tape resource and get its quota
-                if requirement["resource"]["short_name"] == "tape":
-                    try:
-                        tape_quota = requirement["amount"]
-                        if tape_quota:
-                            return tape_quota
-                        else:
-                            raise ValueError(f"Issue getting tape quota for {service_name}. Quota is zero.")
-                    except KeyError:
-                        raise KeyError(f"Issue getting tape quota for {service_name}. No 'value' field exists.")
-                else:
-                    raise ValueError(f"No tape resources could be found for {service_name}")
-            else:
-                raise ValueError(f"No provisioned requirements found for {service_name}.Check the status of your requested resources.")
-            
