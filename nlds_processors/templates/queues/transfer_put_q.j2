@@ -7,6 +7,10 @@
                     {
                         "exchange": "{{ rabbit_exchange_name }}",
                         "routing_key": "*.transfer-put.start"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",    
+                        "routing_key": "*.transfer-put.init"
                     }
                 ]
             }
