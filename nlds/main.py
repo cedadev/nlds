@@ -33,6 +33,11 @@ nlds.include_router(
     prefix = PREFIX + "/catalog/find"
 )
 nlds.include_router(
+    quota.router,
+    tags = ["quota", ],
+    prefix = PREFIX + "/catalog/quota"
+)
+nlds.include_router(
     status.router,
     tags = ["status",],
     prefix = PREFIX + "/status"
@@ -56,9 +61,4 @@ nlds.include_router(
     init.router,
     tags = ["init", ],
     prefix = PREFIX + "/init"
-)
-nlds.include_router(
-    quota.router,
-    tags = ["quota", ],
-    prefix = PREFIX + "/quota"
 )

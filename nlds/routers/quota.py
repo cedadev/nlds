@@ -54,6 +54,7 @@ async def get(token: str = Depends(authenticate_token),
             RMQP.MSG_USER: user,
             RMQP.MSG_GROUP: group,
             RMQP.MSG_TOKEN: token,
+            RMQP.MSG_API_ACTION: api_action
         },
         RMQP.MSG_DATA: {},
         RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
