@@ -107,10 +107,29 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         rk_origin: str,
         body_json: Dict[str, Any],
     ):
-        print(rk_origin)
-        retrieval_json = body_json[MSG.DATA][MSG.RETRIEVAL_FILELIST]
-        print(retrieval_json)
-        raise NotImplementedError
+        # Make the routing keys
+        rk_complete = ".".join([rk_origin, RK.ARCHIVE_GET, RK.COMPLETE])
+        rk_failed = ".".join([rk_origin, RK.ARCHIVE_GET, RK.FAILED])
+
+        # let's reject all requests
+        for path_details in filelist:
+            path_details.failure_reason = "Testing reject"
+            self.failedlist.append(path_details)
+
+        if len(self.failedlist) > 0:
+            # Send message back to worker so catalog can be scrubbed of failed puts
+            self.send_pathlist(
+                self.failedlist,
+                rk_failed,
+                body_json,
+                state=State.FAILED,
+            )
+        return
+
+        # print(rk_origin)
+        # retrieval_json = body_json[MSG.DATA][MSG.RETRIEVAL_FILELIST]
+        # print(retrieval_json)
+        # raise NotImplementedError
 
         # Can call this as the url has been verified previously
         tape_server, tape_base_dir = self.split_tape_url(tape_url)

@@ -1,4 +1,3 @@
-
 # encoding: utf-8
 """
 details.py
@@ -17,7 +16,6 @@ from pathlib import Path
 import stat
 import os
 from os import stat_result
-from urllib.parse import urlunsplit
 
 from pydantic import BaseModel
 
@@ -94,7 +92,11 @@ class PathLocations(BaseModel):
     locations: Optional[List[LocationType]] = []
 
     def add(self, location: PathLocation) -> None:
-        assert location.storage_type not in self.locations
+        if location.storage_type in self.locations:
+            raise PathDetailsError(
+                f"PathLocations already contains a PathLocation of the type "
+                f"{location.storage_type}"
+            )
         self.count += 1
         self.locations.append(location)
 
@@ -107,10 +109,10 @@ class PathLocations(BaseModel):
         for l in self.locations:
             out_dict[l.storage_type] = l.to_dict()
         return {MSG.STORAGE_LOCATIONS: out_dict}
-    
+
     def has_storage_type(self, storage_type):
         """Determine whether the path locations contains a specific storage_type
-           storage_type = MSG.OBJECT_STORAGE | MSG.TAPE"""
+        storage_type = MSG.OBJECT_STORAGE | MSG.TAPE"""
         for l in self.locations:
             if l.storage_type == storage_type:
                 return True
@@ -190,7 +192,7 @@ class PathDetails(BaseModel):
         pd.user = file.user
         pd.group = file.group
         pd.permissions = file.file_permissions
-        
+
         # copy the storage locations
         pd.locations = PathLocations()
         for fl in file.locations:
@@ -216,8 +218,9 @@ class PathDetails(BaseModel):
         if not stat_result:
             stat_result = self.path.lstat()
 
-        # Include this assertion so mypy knows it's definitely a stat_result
-        assert stat_result is not None
+        # Include this check so mypy knows it's definitely a stat_result
+        if stat_result is None:
+            raise ValueError(f"stat_result is None for path {self.path}")
 
         self.mode = stat_result.st_mode  # only for internal use
 
@@ -275,7 +278,7 @@ class PathDetails(BaseModel):
             if pl.storage_type == location_type:
                 return pl
         return None
-    
+
     def set_object_store(self, tenancy: str, bucket: str) -> None:
         """Set the OBJECT_STORAGE details for the file.
         This allows the object name to then be derived programmatically using a
@@ -325,26 +328,7 @@ class PathDetails(BaseModel):
         else:
             object_name = f"{pl.path}"
             return object_name
-        
-    @property
-    def url(self) -> str | None:
-        """Get the 1st object storage location and return the url
-        url = f"{}
-        """
-        pl = self._get_location(MSG.OBJECT_STORAGE)
-        if pl is None:
-            return None
-        else:
-            return urlunsplit(
-                (
-                    pl.url_scheme,
-                    pl.url_netloc,
-                    f"nlds.{pl.root}/{self.path}",
-                    "",
-                    "",
-                )
-            )
-        
+
     def set_tape(self, server: str, tapepath: str, tarfile: str) -> None:
         """Set the TAPE details for the file.
         This allows the tape name to then be derived programmatically using a
@@ -362,11 +346,11 @@ class PathDetails(BaseModel):
             url_scheme="root",
             url_netloc=server,
             root=tapepath,
-            path=tarfile
+            path=tarfile,
         )
         self.locations.add(pl)
         return pl
-    
+
     def get_tape(self) -> PathLocation | None:
         """Get the PathLocation for the tape file."""
         # note - this only returns the first object - this is fine for now, but might
@@ -375,7 +359,7 @@ class PathDetails(BaseModel):
             if pl.storage_type == MSG.TAPE:
                 return pl
         return None
-    
+
     @property
     def tape_name(self) -> str | None:
         pl = self._get_location(MSG.TAPE)

@@ -111,6 +111,16 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         if not self._callback_common(ch, method, properties, body, connection):
             return
 
+        # API-methods that have an INITIATE phase will split the files across
+        # sub-messages to parallelise upload and download.
+        # These methods are:
+        #       transfer-put  : to parallelise upload to the object storage
+        #       transfer-get  : to parallelise download from the object storage
+        #       archive-put   : to form the aggregates on the tape
+        # Note: archive-get does not have an INITIATE phase.  This is because the
+        #  messages are already split across aggregates by catalog-get, and we only
+        #  want to recall an aggregate once.
+
         if self.rk_parts[2] == RK.INITIATE:
             self.log(
                 "Aggregating list into more appropriately sized sub-lists for "

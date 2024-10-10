@@ -61,7 +61,8 @@ class GetTransferConsumer(BaseTransferConsumer):
     def _get_and_check_bucket_name_object_name(self, path_details):
         """Get the bucket and object name and perform an existence check on the
         bucket"""
-        assert self.client is not None
+        if self.client is None:
+            raise RuntimeError("self.client is None")
 
         if path_details.bucket_name is not None:
             bucket_name = path_details.bucket_name
@@ -116,7 +117,8 @@ class GetTransferConsumer(BaseTransferConsumer):
         return download_path
 
     def _transfer(self, bucket_name, object_name, download_path):
-        assert self.client is not None
+        if self.client is None:
+            raise RuntimeError("self.client is None")
         download_path_str = str(download_path)
         # Attempt the download!
         try:

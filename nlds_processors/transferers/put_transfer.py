@@ -37,7 +37,8 @@ class PutTransferConsumer(BaseTransferConsumer):
         return bucket_name
 
     def _make_bucket(self, transaction_id: str):
-        assert self.client is not None
+        if self.client is None:
+            raise RuntimeError("self.client is None")
 
         bucket_name = self._get_bucket_name(transaction_id)
         # Check that bucket exists, and create if not
@@ -70,7 +71,8 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
         bucket_name = self._get_bucket_name(transaction_id)
 
-        assert self.client is not None
+        if self.client is None:
+            raise RuntimeError("self.client is None")
 
         for path_details in filelist:
             item_path = path_details.path

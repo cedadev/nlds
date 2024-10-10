@@ -963,7 +963,7 @@ class CatalogConsumer(RMQC):
             # functions above handled message logging, here we just return
             return
 
-        if holding_id is None and filelist is None:
+        if holding_id is None and filelist_ is None:
             self.log(
                 "No method for identifying a filelist provided, exit callback.",
                 RK.LOG_ERROR,
@@ -1003,7 +1003,7 @@ class CatalogConsumer(RMQC):
                             self.completelist.append(f)
                         else:
                             f.failure_reason = (
-                                f"{storage_type.value} location not empty details"
+                                f"{str(storage_type.value)} location not empty details"
                             )
                             self.failedlist.append(f)
 
@@ -1306,7 +1306,7 @@ class CatalogConsumer(RMQC):
                         "root": l.root,
                         "path": l.path,
                         "access_time": format_datetime(l.access_time),
-                        "url": pd.url,
+                        "url": l.url,
                     }
                     locations.append(l_rec)
                 # build the file record

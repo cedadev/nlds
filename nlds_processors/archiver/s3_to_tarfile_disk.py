@@ -60,7 +60,8 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         self, holding_prefix: str, filelist: List[PathDetails], chunk_size: int
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """Stream from Object Store to a tarfile on disk"""
-        assert self.filelist == []
+        if self.filelist != []:
+            raise ValueError(f"self.filelist is not None: {self.filelist[0]}")
         self.filelist = filelist
         self.holding_prefix = holding_prefix
         # self._generate_filelist_hash and self._check_files_exist use the member
@@ -138,16 +139,21 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     @property
     def holding_diskpath(self):
         """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
-        assert self.disk_loc
-        assert self.holding_prefix
+        if not self.disk_loc:
+            raise ValueError("self.disk_lock is None")
+        if not self.holding_prefix:
+            raise ValueError("self.holding_prefix is None")
         return f"{self.disk_loc}/{self.holding_prefix}"
 
     @property
     def tarfile_diskpath(self):
         """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
-        assert self.disk_loc
-        assert self.holding_prefix
-        assert self.filelist_hash
+        if not self.disk_loc:
+            raise ValueError("self.disk_lock is None")
+        if not self.holding_prefix:
+            raise ValueError("self.holding_prefix is None")
+        if not self.filelist_hash:
+            raise ValueError("self.filelist_hash is None")
         return f"{self.disk_loc}/{self.holding_prefix}/{self.filelist_hash}.tar"
 
     def _validate_tarfile_checksum(self, tarfile_checksum: str):
@@ -157,9 +163,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         with open(self.tarfile_diskpath, "rb") as fh:
             while data := fh.read():
                 asum = adler32(data, asum)
-        try:
-            assert asum == tarfile_checksum
-        except AssertionError as e:
+        if asum != tarfile_checksum:
             reason = (
                 f"Checksum {asum} differs from that calculated during streaming "
                 f"upload {tarfile_checksum}."

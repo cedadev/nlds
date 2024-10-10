@@ -68,7 +68,8 @@ class Catalog(DBMixin):
         tag: dict = None,
     ) -> List[Holding]:
         """Get a holding from the database"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             # build holding query bit by bit
             holding_q = self.session.query(Holding).filter(Holding.group == group)
@@ -156,7 +157,8 @@ class Catalog(DBMixin):
 
     def create_holding(self, user: str, group: str, label: str) -> Holding:
         """Create the new Holding with the label, user, group"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             holding = Holding(label=label, user=user, group=group)
             self.session.add(holding)
@@ -175,7 +177,8 @@ class Catalog(DBMixin):
         del_tags: dict = None,
     ) -> Holding:
         """Find a holding and modify the information in it"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         if not isinstance(holding, Holding):
             raise CatalogError(
                 f"Cannot modify holding, it does not appear to be a valid "
@@ -219,7 +222,8 @@ class Catalog(DBMixin):
         self, id: int = None, transaction_id: str = None
     ) -> Transaction:
         """Get a transaction from the database"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             if transaction_id:
                 transaction = (
@@ -246,7 +250,8 @@ class Catalog(DBMixin):
         """Get a File but from the other end of the database tree, starting from
         a location.
         """
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             file_ = (
                 self.session.query(File)
@@ -259,7 +264,8 @@ class Catalog(DBMixin):
 
     def create_transaction(self, holding: Holding, transaction_id: str) -> Transaction:
         """Create a transaction that belongs to a holding and will contain files"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             transaction = Transaction(
                 holding_id=holding.id,
@@ -279,7 +285,8 @@ class Catalog(DBMixin):
         """Check whether a user has permission to access a file.
         Later, when we implement the ROLES this function will be a lot more
         complicated!"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         holding = (
             self.session.query(Holding)
             .filter(
@@ -310,7 +317,8 @@ class Catalog(DBMixin):
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         # Nones are set to .* in the regexp matching
         # get the matching holdings first, these match all but the path
         holding = self.get_holding(
@@ -390,7 +398,8 @@ class Catalog(DBMixin):
     ) -> File:
         """Create a file that belongs to a transaction and will contain
         locations"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             new_file = File(
                 transaction_id=transaction.id,
@@ -425,7 +434,8 @@ class Catalog(DBMixin):
         matching files will. Utilises get_files().
 
         """
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
 
         files = self.get_files(
             user,
@@ -458,7 +468,8 @@ class Catalog(DBMixin):
     def get_location(self, file: File, storage_type: Enum) -> Location:
         """Get a storage location for a file, given the file and the storage
         type"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             location = (
                 self.session.query(Location)
@@ -486,7 +497,8 @@ class Catalog(DBMixin):
         aggregation: Aggregation = None,
     ) -> Location:
         """Add the storage location for either object storage or tape"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         if aggregation is None:
             aggregation_id = None
         else:
@@ -534,7 +546,8 @@ class Catalog(DBMixin):
 
     def create_tag(self, holding: Holding, key: str, value: str):
         """Create a tag and add it to a holding"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             tag = Tag(key=key, value=value, holding_id=holding.id)
             self.session.add(tag)
@@ -545,7 +558,8 @@ class Catalog(DBMixin):
 
     def get_tag(self, holding: Holding, key: str):
         """Get the tag with a specific key"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             tag = (
                 self.session.query(Tag)
@@ -559,7 +573,8 @@ class Catalog(DBMixin):
     def modify_tag(self, holding: Holding, key: str, value: str):
         """Modify a tag that has the key, with a new value.
         Tag has to exist, current value will be overwritten."""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             tag = (
                 self.session.query(Tag)
@@ -573,7 +588,8 @@ class Catalog(DBMixin):
 
     def delete_tag(self, holding: Holding, key: str):
         """Delete a tag that has the key"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         # use a checkpoint as the tags are being deleted in an external loop and
         # using a checkpoint will ensure that any completed deletes are committed
         checkpoint = self.session.begin_nested()
@@ -593,7 +609,8 @@ class Catalog(DBMixin):
         self, tarname: str, checksum: str = None, algorithm: str = None
     ) -> Aggregation:
         """Create an aggregation of files to write to tape as a tar file"""
-        assert self.session is not None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             aggregation = Aggregation(
                 tarname=tarname,
@@ -612,7 +629,8 @@ class Catalog(DBMixin):
 
     def get_aggregation(self, aggregation_id: int) -> Aggregation:
         """Simple function for getting of Aggregation from aggregation_id."""
-        assert self.session is not None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             # Get the aggregation for a particular file via it's tape location
             aggregation = (
@@ -642,7 +660,8 @@ class Catalog(DBMixin):
     def get_next_unarchived_holding(self) -> Holding:
         """The principal function for getting the next unarchived holding to
         archive aggregate."""
-        assert self.session is not None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             # Get all archived holdings
             archived_holdings_q = self.session.query(Holding.id).filter(
@@ -672,7 +691,8 @@ class Catalog(DBMixin):
     def get_unarchived_files(self, holding: Holding) -> List[File]:
         """The principal function for getting unarchived files to aggregate and
         send to archive put."""
-        assert self.session is not None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             # Get all files for the given holding. Again we have to ensure that the
             # transfer to object storage has completed and the files are not

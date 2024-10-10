@@ -196,10 +196,15 @@ class NLDSWorkerConsumer(RMQC):
         new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
         self.publish_and_log_message(new_routing_key, body_json)
 
-        # forward to archive_get
-        new_routing_key = ".".join([RK.ROOT, RK.ARCHIVE_GET, RK.INITIATE])
+        # forward to archive_get - use START rather than INITIATE as we don't want
+        # and splitting to take place, as the messages are already sub-divided on
+        # aggregate and we want to pull the whole aggregate back from tape in a single
+        # call. (we don't want to pull the aggregate back multiple times, which is what
+        # would happen if we split the messages here)
+        queue = RK.ARCHIVE_GET
+        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {RK.ARCHIVE_GET} queue with routing key "
+            f"Sending  message to {queue} queue with routing key "
             f"{new_routing_key}",
             RK.LOG_INFO,
         )

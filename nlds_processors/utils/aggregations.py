@@ -58,7 +58,8 @@ def bin_files(
             # into our total size.
             target_bin_count = int(total_size / target_bin_size)
 
-    assert(target_bin_count is not None)
+    if target_bin_count is None:
+        raise ValueError("target_bin_count is None")
 
     # Make 2 lists, one being a list of lists dictating the bins, the
     # other being their sizes, so we're not continually recalculating it

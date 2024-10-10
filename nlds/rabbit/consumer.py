@@ -15,11 +15,7 @@ import logging
 import traceback
 from typing import Dict, List, Any
 import pathlib as pth
-from datetime import datetime, timedelta
 import uuid
-import json
-from json.decoder import JSONDecodeError
-from urllib3.exceptions import HTTPError
 import signal
 import threading as thr
 
@@ -30,7 +26,6 @@ from pika.frame import Method, Header
 from pika.amqp_object import Method
 from pika.spec import Channel
 from pydantic import BaseModel
-from minio.error import S3Error
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
@@ -38,6 +33,7 @@ from nlds.rabbit.state import State
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 import nlds.server_config as CFG
 from nlds.details import PathDetails
+from nlds.errors import MessageError
 
 logger = logging.getLogger("nlds.root")
 
@@ -101,15 +97,6 @@ class RabbitMQConsumer(ABC, RMQP):
 
         except ValueError as e:
             raise Exception(e)
-            print("Using default queue config - only fit for testing purposes.")
-            self.name = self.DEFAULT_QUEUE_NAME
-            self.queues = [
-                RabbitQueue.from_defaults(
-                    self.DEFAULT_QUEUE_NAME,
-                    self.DEFAULT_EXCHANGE_NAME,
-                    self.DEFAULT_ROUTING_KEY,
-                )
-            ]
 
     def __init__(self, queue: str = None, setup_logging_fl=False):
         super().__init__(name=queue, setup_logging_fl=False)
@@ -211,7 +198,8 @@ class RabbitMQConsumer(ABC, RMQP):
                     # Make sure returned value is a list and not a string
                     # Note: it can't be any other iterable because it's loaded
                     # from a json
-                    assert isinstance(return_val_list, list)
+                    if not isinstance(return_val_list, list):
+                        raise MessageError("Return value is not a valid list")
                     return_val = [pth.Path(item) for item in return_val_list]
             except KeyError:
                 self.log(

@@ -96,7 +96,7 @@ def print_file(file: File):
 
 def print_location(location: Location):
     click.echo(f"{'':<8}+-+ {'id':<16}: {location.id}")
-    click.echo(f"{'':<8}{'':<4}{'type':<16}: {str(location.storage_type)[8:]}")
+    click.echo(f"{'':<8}{'':<4}{'type':<16}: {str(location.storage_type)}")
     click.echo(f"{'':<8}{'':<4}{'url scheme':<16}: {location.url_scheme}")
     click.echo(f"{'':<8}{'':<4}{'url netloc':<16}: {location.url_netloc}")
     click.echo(f"{'':<8}{'':<4}{'root':<16}: {location.root}")

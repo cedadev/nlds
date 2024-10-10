@@ -37,11 +37,12 @@ def check_permissions(
         stat_result = os.lstat(path)
     elif stat_result is None and path is None:
         raise ValueError(
-            "Neither path nor a valid stat result of a path were "
-            "given so cannot continue. One is required."
+            "Neither path nor a valid stat result of a path were given so cannot "
+            "continue. One is required."
         )
 
-    assert stat_result is not None
+    if stat_result is None:
+        raise ValueError(f"stat_result is None for path: {path}")
 
     # Get file permissions mask from stat result
     mode = stat_result.st_mode & 0o777
