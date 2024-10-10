@@ -12,25 +12,29 @@ from nlds_processors.monitor.monitor_models import (
 from nlds.rabbit.consumer import State
 import nlds.server_config as CFG
 
-def query_monitor_db(user, group, state, record_state, id, start_time, end_time, order):
+def connect_to_monitor():
     """Connects to the monitor database"""
     config = CFG.load_config()
-
     db_engine = config["monitor_q"]["db_engine"]
     db_options = config["monitor_q"]["db_options"]
     db_options['echo'] = False
-    nlds_monitor = Monitor(db_engine=db_engine, db_options=db_options)
-    db_connect = nlds_monitor.connect(create_db_fl=False)
 
+    nlds_monitor = Monitor(db_engine=db_engine, db_options=db_options)
+    nlds_monitor.connect(create_db_fl=False)
     nlds_monitor.start_session()
 
+    return nlds_monitor
+
+def query_monitor_db(session, user, group, state, record_state, id, transaction_id, start_time, end_time, order):
     """Returns a list of TransactionRecords"""
-    query = nlds_monitor.session.query(TransactionRecord).options(
+    query = session.session.query(TransactionRecord).options(
         joinedload(TransactionRecord.sub_records).joinedload(SubRecord.failed_files),
         joinedload(TransactionRecord.warnings),
     )
     if id:
         query = query.filter(TransactionRecord.id == id)
+    elif transaction_id:
+        query = query.filter(TransactionRecord.transaction_id == transaction_id)
     else:
         if user:
             query = query.filter(TransactionRecord.user == user)
@@ -58,7 +62,7 @@ def query_monitor_db(user, group, state, record_state, id, start_time, end_time,
 
     trec = query.all()
 
-    nlds_monitor.end_session()
+    session.end_session()
     
     if record_state:
         for record in trec[:]:
@@ -72,7 +76,7 @@ def print_simple_monitor(record_list, stat_string):
     """Print a multi-line set of status for monitor"""
     click.echo(stat_string)
     click.echo(
-            f"{'':<4}{'user':<16}{'id':<6}{'action':<16}{'job label':<16}"
+            f"{'':<4}{'user':<16}{'group':<16}{'id':<6}{'action':<16}{'job label':<16}"
             f"{'state':<23}{'last update':<20}"
         )
     for record in record_list:
@@ -82,7 +86,7 @@ def print_simple_monitor(record_list, stat_string):
         else:
             job_label = ""
         click.echo(
-            f"{'':<4}{record.user:<16}{record.id:<6}{record.api_action:<16}"
+            f"{'':<4}{record.user:<16}{record.group:<16}{record.id:<6}{record.api_action:<16}"
             f"{job_label:16}{state.name:<23}{(record.creation_time)}"
         )
 
@@ -158,6 +162,13 @@ def print_complex_monitor(record_list, stat_string):
     help="Display the selected record in complex view using id.",
 )
 @click.option(
+    "-ti",
+    "--transaction-id",
+    default=None,
+    type=str,
+    help="Display the selected record in complex view using the transaction id.",
+)
+@click.option(
     "-st",
     "--start-time",
     default=(datetime.now() - timedelta(days=30)),
@@ -192,6 +203,7 @@ def view_jobs(
     state,
     record_state,
     id,
+    transaction_id,
     start_time,
     end_time,
     complex,
@@ -223,12 +235,16 @@ def view_jobs(
             click.echo(f"Invalid state: {record_state}")
             return
 
+    # Connect to the monitor database
+    session = connect_to_monitor()
     query = query_monitor_db(
+        session,
         user,
         group,
         state,
         record_state,
         id,
+        transaction_id,
         start_time,
         end_time,
         order,
@@ -241,6 +257,8 @@ def view_jobs(
     stat_string = "State of transactions for "
     if id:
         details.append(f"id: {id}")
+    elif transaction_id:
+        details.append(f"transaction id: {transaction_id}")
     else:
         if user:
             details.append(f"user: {user}")
@@ -268,7 +286,7 @@ def view_jobs(
 
     stat_string += req_details
 
-    if complex or id:
+    if complex or id or transaction_id:
         print_complex_monitor(query, stat_string)
     else:
         print_simple_monitor(query, stat_string)
