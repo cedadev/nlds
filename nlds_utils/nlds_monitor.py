@@ -25,7 +25,18 @@ def connect_to_monitor():
 
     return nlds_monitor
 
-def query_monitor_db(session, user, group, state, record_state, id, transaction_id, start_time, end_time, order):
+def query_monitor_db(
+    session,
+    user,
+    group,
+    state,
+    record_state,
+    id,
+    transaction_id,
+    start_time,
+    end_time,
+    order,
+):
     """Returns a list of TransactionRecords"""
     query = session.session.query(TransactionRecord).options(
         joinedload(TransactionRecord.sub_records).joinedload(SubRecord.failed_files),
@@ -86,8 +97,9 @@ def print_simple_monitor(record_list, stat_string):
         else:
             job_label = ""
         click.echo(
-            f"{'':<4}{record.user:<16}{record.group:<16}{record.id:<6}{record.api_action:<16}"
-            f"{job_label:16}{state.name:<23}{(record.creation_time)}"
+            f"{'':<4}{record.user:<16}{record.group:<16}{record.id:<6}"
+            f"{record.api_action:<16}{job_label:16}{state.name:<23}"
+            f"{(record.creation_time)}"
         )
 
 def print_complex_monitor(record_list, stat_string):
@@ -171,7 +183,7 @@ def print_complex_monitor(record_list, stat_string):
 @click.option(
     "-st",
     "--start-time",
-    default=(datetime.now() - timedelta(days=30)),
+    default=(datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
     type=click.DateTime(formats=["%Y-%m-%d"]),
     help="Filter start time in YYYY-MM-DD format "
     "(leave blank for values from 30 days ago)",
