@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from nlds.utils.permissions import check_permissions
 import nlds.rabbit.message_keys as MSG
+from nlds.errors import MessageError
 
 # Patch the JSONEncoder so that a custom json serialiser can be run instead of
 # of the default, if one exists. This patches for ALL json.dumps calls.
@@ -93,7 +94,7 @@ class PathLocations(BaseModel):
 
     def add(self, location: PathLocation) -> None:
         if location.storage_type in self.locations:
-            raise PathDetailsError(
+            raise MessageError(
                 f"PathLocations already contains a PathLocation of the type "
                 f"{location.storage_type}"
             )
