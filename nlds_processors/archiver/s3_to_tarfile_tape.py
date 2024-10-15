@@ -64,7 +64,8 @@ class S3ToTarfileTape(S3ToTarfileStream):
         The holding_prefix is calculated from the message body in the archive_put or
         archive_get worker process.
         """
-        assert self.filelist == []
+        if self.filelist != []:
+            raise ValueError("self.filelist is not empty")
         self.filelist = filelist
         self.holding_prefix = holding_prefix
 
@@ -127,26 +128,35 @@ class S3ToTarfileTape(S3ToTarfileStream):
     def holding_tapepath(self):
         """Get the holding tapepath (i.e. the enclosing directory), to be used with
         XRDClient functions on that directory."""
-        assert self.tape_base_dir
-        assert self.holding_prefix
+        if not self.tape_base_dir:
+            raise ValueError("self.tape_base_dir is None")
+        if not self.holding_prefix:
+            raise ValueError("self.holding_prefix is None")
         return f"{self.tape_base_dir}/{self.holding_prefix}"
 
     @property
     def tarfile_tapepath(self):
         """Get the tapepath of the tar file, to be used with the XRDClient functions."""
-        assert self.tape_base_dir
-        assert self.holding_prefix
-        assert self.filelist_hash
+        if not self.tape_base_dir:
+            raise ValueError("self.tape_base_dir is None")
+        if not self.holding_prefix:
+            raise ValueError("self.holding_prefix is None")
+        if not self.filelist_hash:
+            raise ValueError("self.filelist_hash is None")
         return f"{self.tape_base_dir}/{self.holding_prefix}/{self.filelist_hash}.tar"
 
     @property
     def tarfile_absolute_tapepath(self):
         """Get the absolute tapepath of the tar file, to be used with the XRDClient.
         File functions / constructor, i.e. for the object that is to be streamed to."""
-        assert self.tape_base_dir
-        assert self.holding_prefix
-        assert self.filelist_hash
-        assert self.tape_server_url
+        if not self.tape_base_dir:
+            raise ValueError("self.tape_base_dir is None")
+        if not self.holding_prefix:
+            raise ValueError("self.holding_prefix is None")
+        if not self.filelist_hash:
+            raise ValueError("self.filelist_hash is None")
+        if not self.tape_server_url:
+            raise ValueError("self.tape_server_url is None")
         return (
             f"root://{self.tape_server_url}/{self.tape_base_dir}/"
             f"{self.holding_prefix}/{self.filelist_hash}.tar"
@@ -240,25 +250,25 @@ class S3ToTarfileTape(S3ToTarfileStream):
         else:
             try:
                 method, value = result.decode().split()
-                assert method == "adler32"
+                if method != "adler32":
+                    raise ValueError("method is not adler32")
                 # Convert checksum from hex to int for comparison
                 checksum = int(value[:8], 16)
-                assert(checksum == tarfile_checksum)
+                if checksum != tarfile_checksum:
+                    # If it fails at this point then attempt to delete.  It will be
+                    # scheduled to happend again, so long as the files are added to 
+                    # failed_list
+                    reason = (
+                        f"XRootD checksum {checksum} differs from that calculated during "
+                        f"streaming upload {tarfile_checksum}."
+                    )
+                    self.log(reason, RK.LOG_ERROR)
+                    raise S3StreamError(
+                        f"Failure occurred during tape-write " f"({reason})."
+                    )
             except ValueError as e:
                 self.log(
                     f"Exception {e} when attempting to parse tarfile checksum from "
                     f"xrootd",
                     RK.LOG_ERROR,
-                )
-            except AssertionError as e:
-                # If it fails at this point then attempt to delete.  It will be
-                # scheduled to happend again, so long as the files are added to 
-                # failed_list
-                reason = (
-                    f"XRootD checksum {checksum} differs from that calculated during "
-                    f"streaming upload {tarfile_checksum}."
-                )
-                self.log(reason, RK.LOG_ERROR)
-                raise S3StreamError(
-                    f"Failure occurred during tape-write " f"({reason})."
                 )

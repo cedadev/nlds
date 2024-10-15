@@ -15,11 +15,9 @@ import json
 from typing import List, Dict, Tuple
 from enum import Enum
 
-from nlds_processors.transferers.base_transfer import (
-    BaseTransferConsumer,
-    TransferError,
-)
-from nlds.errors import CallbackError
+from nlds_processors.transferers.base_transfer import BaseTransferConsumer
+from nlds_processors.utils.aggregations import bin_files
+
 from nlds.details import PathDetails
 from nlds.rabbit.consumer import State
 import nlds.rabbit.routing_keys as RK
@@ -39,7 +37,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     _TAPE_URL = "tape_url"
     _CHUNK_SIZE = "chunk_size"
     _QUERY_CHECKSUM = "query_checksum_fl"
-    _MAX_RETRIES = "max_retries"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
     ARCHIVE_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
@@ -67,71 +64,52 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         BaseTransferConsumer) as well as some more tape-specific config
         scraping, then runs the appropriate transfer function.
         """
-        self.reset()
-
-        # Convert body from bytes to string for ease of manipulation and then to
-        # a dict
-        body = body.decode("utf-8")
-        body_dict = json.loads(body)
-
-        if self._is_system_status_check(body_json=body_dict, properties=properties):
+        if not self._callback_common(ch, method, properties, body, connection):
             return
 
-        # Verify routing key is appropriate
-        try:
-            rk_parts = self.split_routing_key(method.routing_key)
-        except ValueError as e:
+        # create aggregates
+        if self.rk_parts[2] == RK.INITIATE:
             self.log(
-                "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
+                "Aggregating filelist into appropriately sized sub-lists for each "
+                "Aggregation",
+                RK.LOG_INFO
             )
-            return
+            # Make a new routing key which returns message to this queue
+            rk_transfer_start = ".".join([self.rk_parts[0], self.rk_parts[1], RK.START])
+            # Aggregate files into bins of approximately equal size and split
+            # the transaction into subtransactions to allow parallel transfers
+            sub_lists = bin_files(self.filelist)
+            for sub_list in sub_lists:
+                self.send_pathlist(
+                    sub_list,
+                    rk_transfer_start,
+                    self.body_json,
+                    state=State.INITIALISING,
+                )
+        elif self.rk_parts[2] == RK.START:
+            try:
+                tape_url = self.get_tape_config(self.body_json)
+            except ArchiveError as e:
+                self.log(
+                    "Tape config unobtainable or invalid, exiting callback.",
+                    RK.LOG_ERROR,
+                )
+                self.log(str(e), RK.LOG_DEBUG)
+                raise e
 
-        filelist = self.parse_filelist(body_dict)
-
-        ###
-        # Verify and load message contents
-
-        try:
-            transaction_id = body_dict[MSG.DETAILS][MSG.TRANSACT_ID]
-        except KeyError:
-            self.log("Transaction id unobtainable, exiting callback.", RK.LOG_ERROR)
-            return
-
-        # Set uid and gid from message contents if configured to check
-        # permissions
-        if self.check_permissions_fl:
-            self.log("Check permissions flag is set, setting uid and gids now.")
-            self.set_ids(body_dict)
-
-        try:
-            access_key, secret_key, tenancy = self.get_objectstore_config(body_dict)
-        except TransferError:
-            self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
-            raise
-
-        try:
-            tape_url = self.get_tape_config(body_dict)
-        except ArchiveError as e:
-            self.log(
-                "Tape config unobtainable or invalid, exiting callback.",
-                RK.LOG_ERROR,
+            self.transfer(
+                self.transaction_id,
+                self.tenancy,
+                self.access_key,
+                self.secret_key,
+                tape_url,
+                self.filelist,
+                self.rk_parts[0],
+                self.body_json,
             )
-            self.log(str(e), RK.LOG_DEBUG)
-            raise
+        else:
+            raise ArchiveError(f"Unknown routing key {self.rk_parts[2]}")
 
-        # Append route info to message to track the route of the message
-        body_dict = self.append_route_info(body_dict)
-
-        self.transfer(
-            transaction_id,
-            tenancy,
-            access_key,
-            secret_key,
-            tape_url,
-            filelist,
-            rk_parts[0],
-            body_dict,
-        )
 
     def get_tape_config(self, body_dict) -> Tuple:
         """Convenience function to extract tape relevant config from the message

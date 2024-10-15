@@ -18,30 +18,30 @@ class State(Enum):
     # Generic states
     INITIALISING = -1
     ROUTING = 0
-    COMPLETE = 100
-    FAILED = 101
-    COMPLETE_WITH_ERRORS = 102
-    COMPLETE_WITH_WARNINGS = 103
     # PUT workflow states
     SPLITTING = 1
     INDEXING = 2
     CATALOG_PUTTING = 3
     TRANSFER_PUTTING = 4
     CATALOG_ROLLBACK = 5
-    CATALOG_UPDATE = 6
+    CATALOG_UPDATING = 6
     # GET workflow states
     CATALOG_GETTING = 10
     ARCHIVE_GETTING = 11
     TRANSFER_GETTING = 12
     # ARCHIVE_PUT workflow states
     ARCHIVE_INIT = 20
-    ARCHIVE_AGGREGATING = 21
     ARCHIVE_PUTTING = 22
     CATALOG_ARCHIVE_UPDATING = 23
     # Shared ARCHIVE states
     CATALOG_ARCHIVE_REMOVING = 40
     CATALOG_DELETE_ROLLBACK = 41
     CATALOG_RESTORING = 42
+    # Complete states
+    COMPLETE = 100
+    FAILED = 101
+    COMPLETE_WITH_ERRORS = 102
+    COMPLETE_WITH_WARNINGS = 103
     # Initial state for searching for sub-states
     SEARCHING = 1000
 
@@ -57,8 +57,7 @@ class State(Enum):
     def get_final_states(cls):
         final_states = (
             cls.TRANSFER_GETTING,
-            #cls.TRANSFER_PUTTING,
-            cls.CATALOG_UPDATE,
+            cls.CATALOG_UPDATING,
             cls.CATALOG_ARCHIVE_UPDATING,
             cls.CATALOG_ROLLBACK,
             cls.CATALOG_ARCHIVE_REMOVING,

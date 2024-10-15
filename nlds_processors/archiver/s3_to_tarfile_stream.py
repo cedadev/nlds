@@ -54,7 +54,8 @@ class S3ToTarfileStream:
         # Generate a name for the tarfile by hashing the combined filelist.
         # Length of the hash will be 16.
         # NOTE: this breaks if a problem file is removed from an aggregation
-        assert self.filelist != []
+        if self.filelist == []:
+            raise ValueError("self.filelist is empty")
         filenames = [f.original_path for f in self.filelist]
         filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8)
         return filelist_hash
@@ -75,57 +76,62 @@ class S3ToTarfileStream:
                     "Could not unpack bucket and object info from path_details"
                 )
                 failed_list.append(path_details)
+                continue
+
             try:
                 # Check the bucket exists
-                assert self.s3_client.bucket_exists(check_bucket)
-            except AssertionError  as e:
-                path_details.failure_reason = (
-                    f"Could not verify that bucket {check_bucket} exists before "
-                    f"writing to tape."
-                )
-                failed_list.append(path_details)
+                if not self.s3_client.bucket_exists(check_bucket):
+                    path_details.failure_reason = (
+                        f"Could not verify that bucket {check_bucket} exists before "
+                        f"writing to tape."
+                    )
+                    failed_list.append(path_details)
+                    continue
             except (S3Error, HTTPError) as e:
                 path_details.failure_reason = (
                     f"Could not verify that bucket {check_bucket} exists before "
                     f"writing to tape. Original exception: {e}"
                 )
                 failed_list.append(path_details)
-            
+                continue
+        
             try:
                 # Check that the object is in the bucket and the names match
                 obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
-                assert check_object == obj_stat_result.object_name
-            except AssertionError:
-                path_details.failure_reason = (
-                    f"Could not verify file {check_bucket}:{check_object} before "
-                    f"writing to tape. File name differs between original name and "
-                    f"object name."
-                )
-                failed_list.append(path_details)
+                if check_object != obj_stat_result.object_name:
+                    path_details.failure_reason = (
+                        f"Could not verify file {check_bucket}:{check_object} before "
+                        f"writing to tape. File name differs between original name and "
+                        f"object name."
+                    )
+                    failed_list.append(path_details)
+                    continue
             except (S3Error, HTTPError) as e:
                 path_details.failure_reason = (
                     f"Could not verify file {check_bucket}:{check_object} exists "
                     f"before writing to tape. Original exception {e}."
                 )
                 failed_list.append(path_details)
-            
+                continue
+
             try:
                 # Check that the object is in the bucket and the names match
                 obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
-                assert path_details.size == obj_stat_result.size
-            except AssertionError:
-                path_details.failure_reason = (
-                    f"Could not verify file {check_bucket}:{check_object} before "
-                    f"writing to tape. File size differs between original size and "
-                    f"object size."
-                )
-                failed_list.append(path_details)
+                if path_details.size != obj_stat_result.size:
+                    path_details.failure_reason = (
+                        f"Could not verify file {check_bucket}:{check_object} before "
+                        f"writing to tape. File size differs between original size and "
+                        f"object size."
+                    )
+                    failed_list.append(path_details)
+                    continue
             except (S3Error, HTTPError) as e:
                 path_details.failure_reason = (
                     f"Could not verify that file {check_bucket}:{check_object} exists "
                     f"before writing to tape. Original exception {e}."
                 )
                 failed_list.append(path_details)
+                continue
         return [], failed_list
 
     def _stream_to_fileobject(

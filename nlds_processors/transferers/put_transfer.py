@@ -37,7 +37,8 @@ class PutTransferConsumer(BaseTransferConsumer):
         return bucket_name
 
     def _make_bucket(self, transaction_id: str):
-        assert self.client is not None
+        if self.client is None:
+            raise RuntimeError("self.client is None")
 
         bucket_name = self._get_bucket_name(transaction_id)
         # Check that bucket exists, and create if not
@@ -54,7 +55,6 @@ class PutTransferConsumer(BaseTransferConsumer):
                     f"already exists",
                     RK.LOG_INFO,
                 )
-            return None
         except minio.error.S3Error as e:
             raise TransferError(message=str(e))
 
@@ -71,14 +71,15 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
         bucket_name = self._get_bucket_name(transaction_id)
 
-        assert self.client is not None
+        if self.client is None:
+            raise RuntimeError("self.client is None")
 
         for path_details in filelist:
             item_path = path_details.path
 
             # If check_permissions active then check again that file exists and
             # is accessible.
-            if self.check_permissions_fl and not self.check_path_access(item_path):
+            if not self.check_path_access(item_path):
                 reason = f"Path:{path_details.path} is inaccessible."
                 self.log(reason, RK.LOG_DEBUG)
                 path_details.failure_reason = reason

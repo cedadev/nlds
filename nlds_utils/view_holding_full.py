@@ -96,7 +96,7 @@ def print_file(file: File):
 
 def print_location(location: Location):
     click.echo(f"{'':<8}+-+ {'id':<16}: {location.id}")
-    click.echo(f"{'':<8}{'':<4}{'type':<16}: {str(location.storage_type)[8:]}")
+    click.echo(f"{'':<8}{'':<4}{'type':<16}: {str(location.storage_type)}")
     click.echo(f"{'':<8}{'':<4}{'url scheme':<16}: {location.url_scheme}")
     click.echo(f"{'':<8}{'':<4}{'url netloc':<16}: {location.url_netloc}")
     click.echo(f"{'':<8}{'':<4}{'root':<16}: {location.root}")
@@ -166,6 +166,7 @@ def view_holding(user: str, group: str, holding_id: int) -> None:
             print_aggregation(a)
             click.echo(f"{'':<8}+-+{' Files':<16}")
             for l in a.locations:
+                f = File(id=l.file_id)
                 f = nlds_cat.get_location_file(l)
                 click.echo(f"{'':<12}{f.original_path}")
 

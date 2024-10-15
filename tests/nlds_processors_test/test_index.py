@@ -138,7 +138,6 @@ def test_check_path_access(monkeypatch, default_indexer):
     # Point to non-existent test file
     p = Path("test.py")
 
-    print(default_indexer.check_permissions_fl)
     # Should fail with uninitialised uid and gid
     with pytest.raises(ValueError):
         default_indexer.check_path_access(p, access=os.R_OK)
@@ -155,9 +154,6 @@ def test_check_path_access(monkeypatch, default_indexer):
     default_indexer.gids = [100]
     assert default_indexer.check_path_access(p, access=os.R_OK) == False
 
-    # Set permissions checking to false for now
-    default_indexer.check_permissions_fl = False
-
     monkeypatch.setattr(Path, "exists", lambda _: True)
     mp_exists = Path("test.py")
     assert default_indexer.check_path_access(mp_exists) == True
@@ -165,9 +161,6 @@ def test_check_path_access(monkeypatch, default_indexer):
     monkeypatch.setattr(Path, "exists", lambda _: False)
     mp_no_exists = Path("test.py")
     assert default_indexer.check_path_access(mp_no_exists) == False
-
-    # Now we test if checking permissions will work
-    default_indexer.check_permissions_fl = True
 
     # Will need a mock stat result
     StatResult = namedtuple("StatResult", "st_mode st_uid st_gid")

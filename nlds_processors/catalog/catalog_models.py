@@ -12,6 +12,9 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 """Declare the SQLAlchemy ORM models for the NLDS Catalog database"""
 
+import enum
+from urllib.parse import urlunsplit
+
 from sqlalchemy import (
     Integer,
     String,
@@ -20,12 +23,13 @@ from sqlalchemy import (
     Enum,
     BigInteger,
     UniqueConstraint,
-    Boolean,
+    Boolean
 )
+
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 
-import enum
+
 from nlds.details import PathType
 from nlds_processors.catalog.catalog_error import CatalogError
 import nlds.rabbit.message_keys as MSG
@@ -153,6 +157,9 @@ class Storage(enum.Enum):
             return cls(cls.TAPE)
         else:
             raise CatalogError(f"{storage_type}: unknown Storage_Type in Storage")
+        
+    def __str__(self):
+        return [MSG.OBJECT_STORAGE, MSG.TAPE][self.value-1]
 
 
 class Location(CatalogBase):
@@ -182,6 +189,25 @@ class Location(CatalogBase):
     # storage_type must be unique per file_id, i.e. each file can only have one
     # each location
     __table_args__ = (UniqueConstraint("storage_type", "file_id"),)
+
+    @property
+    def url(self) -> str | None:
+        """Get the 1st object storage location and return the url
+        url = f"{}
+        """
+        if self.storage_type == Storage.OBJECT_STORAGE:
+            # only object storage returns a URL
+            return urlunsplit(
+                (
+                    self.url_scheme,
+                    self.url_netloc,
+                    f"nlds.{self.root}/{self.path}",
+                    "",
+                    "",
+                )
+            )
+        else:
+            return ""
 
 
 class Checksum(CatalogBase):

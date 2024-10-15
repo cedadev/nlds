@@ -88,18 +88,13 @@ class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_PUT}." f"{RK.WILD}"
     DEFAULT_STATE = State.ARCHIVE_GETTING
 
-    _PREPARE_REQUEUE_DELAY = "prepare_requeue"
-    ARCHIVE_GET_CONSUMER_CONFIG = {
-        _PREPARE_REQUEUE_DELAY: timedelta(seconds=30).total_seconds() * 1000,
-    }
     DEFAULT_CONSUMER_CONFIG = (
-        BaseArchiveConsumer.DEFAULT_CONSUMER_CONFIG | ARCHIVE_GET_CONSUMER_CONFIG
+        BaseArchiveConsumer.DEFAULT_CONSUMER_CONFIG
     )
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-        self.prepare_requeue_delay = self.load_config_value(self._PREPARE_REQUEUE_DELAY)
 
     def transfer(
         self,
@@ -112,8 +107,31 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         rk_origin: str,
         body_json: Dict[str, Any],
     ):
+        # Make the routing keys
+        rk_complete = ".".join([rk_origin, RK.ARCHIVE_GET, RK.COMPLETE])
+        rk_failed = ".".join([rk_origin, RK.ARCHIVE_GET, RK.FAILED])
 
-        # Can call this with impunity as the url has been verified previously
+        # let's reject all requests
+        for path_details in filelist:
+            path_details.failure_reason = "Testing reject"
+            self.failedlist.append(path_details)
+
+        if len(self.failedlist) > 0:
+            # Send message back to worker so catalog can be scrubbed of failed puts
+            self.send_pathlist(
+                self.failedlist,
+                rk_failed,
+                body_json,
+                state=State.FAILED,
+            )
+        return
+
+        # print(rk_origin)
+        # retrieval_json = body_json[MSG.DATA][MSG.RETRIEVAL_FILELIST]
+        # print(retrieval_json)
+        # raise NotImplementedError
+
+        # Can call this as the url has been verified previously
         tape_server, tape_base_dir = self.split_tape_url(tape_url)
 
         try:

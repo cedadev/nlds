@@ -61,7 +61,8 @@ class GetTransferConsumer(BaseTransferConsumer):
     def _get_and_check_bucket_name_object_name(self, path_details):
         """Get the bucket and object name and perform an existence check on the
         bucket"""
-        assert self.client is not None
+        if self.client is None:
+            raise RuntimeError("self.client is None")
 
         if path_details.bucket_name is not None:
             bucket_name = path_details.bucket_name
@@ -116,7 +117,8 @@ class GetTransferConsumer(BaseTransferConsumer):
         return download_path
 
     def _transfer(self, bucket_name, object_name, download_path):
-        assert self.client is not None
+        if self.client is None:
+            raise RuntimeError("self.client is None")
         download_path_str = str(download_path)
         # Attempt the download!
         try:
@@ -127,12 +129,6 @@ class GetTransferConsumer(BaseTransferConsumer):
             )
         except Exception as e:
             reason = f"Download-time exception occurred: {e}"
-            self.log(reason, RK.LOG_DEBUG)
-            self.log(
-                f"Exception encountered during download, adding "
-                f"{object_name} to failed list.",
-                RK.LOG_INFO,
-            )
             raise TransferError(message=reason)
 
     def _change_permissions(self, download_path, path_details):
@@ -140,7 +136,7 @@ class GetTransferConsumer(BaseTransferConsumer):
         download_path_str = str(download_path)
         self.log(
             f"Changing permissions and ownership of file " f"{download_path}",
-            RK.LOG_ERROR,
+            RK.LOG_INFO,
         )
         try:
             # Attempt to change back to original permissions
@@ -186,17 +182,18 @@ class GetTransferConsumer(BaseTransferConsumer):
             # If bucketname inserted into object path (i.e. from catalogue) then
             # extract both
             try:
+                bucket_name, object_name = (
+                    self._get_and_check_bucket_name_object_name(path_details)
+                )
                 self.log(
                     f"Attempting to get file {object_name} from {bucket_name}",
                     RK.LOG_DEBUG,
-                )
-                bucket_name, object_name = (
-                    self._get_and_check_bucket_name_object_name(path_details)
                 )
                 download_path = self._get_download_path(path_details, target_path)
                 self._transfer(bucket_name, object_name, download_path)
             except TransferError as e:
                 path_details.failure_reason = e.message
+                self.log(e.message, RK.LOG_DEBUG)
                 self.append_and_send(
                     self.failedlist,
                     path_details,

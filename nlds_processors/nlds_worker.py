@@ -131,7 +131,7 @@ class NLDSWorkerConsumer(RMQC):
         self.log(f"Catalog successful, sending filelist for transfer", RK.LOG_INFO)
 
         queue = f"{RK.TRANSFER_PUT}"
-        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
+        new_routing_key = ".".join([RK.ROOT, queue, RK.INITIATE])
         self.log(
             f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
@@ -188,7 +188,7 @@ class NLDSWorkerConsumer(RMQC):
         # Can simply call the same process used at catalog_get complete
         self._process_rk_catalog_get_complete(rk_parts, body_json)
 
-    def _process_rk_catalog_get_reroute_archive(
+    def _process_rk_catalog_get_archive_restore(
         self, rk_parts: List, body_json: Dict
     ) -> None:
         # forward confirmation to monitor
@@ -196,11 +196,16 @@ class NLDSWorkerConsumer(RMQC):
         new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
         self.publish_and_log_message(new_routing_key, body_json)
 
-        # forward to archive_get
-        queue = f"{RK.ARCHIVE_GET}"
+        # forward to archive_get - use START rather than INITIATE as we don't want
+        # and splitting to take place, as the messages are already sub-divided on
+        # aggregate and we want to pull the whole aggregate back from tape in a single
+        # call. (we don't want to pull the aggregate back multiple times, which is what
+        # would happen if we split the messages here)
+        queue = RK.ARCHIVE_GET
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing key {new_routing_key}",
+            f"Sending  message to {queue} queue with routing key "
+            f"{new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -212,7 +217,7 @@ class NLDSWorkerConsumer(RMQC):
             RK.LOG_INFO,
         )
 
-        queue = f"{RK.CATALOG_ARCHIVE_DEL}"
+        queue = f"{RK.CATALOG_ARCHIVE_REMOVE}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
             f"Sending  message to {queue} queue with routing key {new_routing_key}",
@@ -351,10 +356,10 @@ class NLDSWorkerConsumer(RMQC):
             elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
                 self._process_rk_archive_put_complete(rk_parts, body_json)
 
-        # If a reroute has happened from the catalog then we need to get from
+        # If a archive-restore has happened from the catalog then we need to get from
         # archive before we can do the transfer from object store.
-        elif rk_parts[2] == f"{RK.REROUTE_ARCHIVE}":
-            self._process_rk_catalog_get_reroute_archive(rk_parts, body_json)
+        elif rk_parts[2] == f"{RK.ARCHIVE_RESTORE}":
+            self._process_rk_catalog_get_archive_restore(rk_parts, body_json)
 
         # If a transfer/archive task has failed, remove something from the
         # catalog

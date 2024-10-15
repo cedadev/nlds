@@ -270,7 +270,8 @@ class Monitor(DBMixin):
         self, transaction_record: TransactionRecord, warning: str
     ) -> Warning:
         """Create a warning and add it to the TransactionRecord"""
-        assert self.session != None
+        if self.session is None:
+            raise RuntimeError("self.session is None")
         try:
             warning = Warning(
                 warning=warning, transaction_record_id=transaction_record.id

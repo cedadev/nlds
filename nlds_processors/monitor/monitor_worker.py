@@ -90,8 +90,9 @@ class MonitorConsumer(RMQC):
         # get the user id from the details section of the message
         try:
             user = body[MSG.DETAILS][MSG.USER]
-            assert user is not None
-        except (KeyError, AssertionError):
+            if user is None:
+                raise ValueError
+        except (KeyError, ValueError):
             msg = "User not in message, exiting callback."
             self.log(msg, RK.LOG_ERROR)
             raise MonitorError(message=msg)
@@ -101,8 +102,9 @@ class MonitorConsumer(RMQC):
         # get the group from the details section of the message
         try:
             group = body[MSG.DETAILS][MSG.GROUP]
-            assert group is not None
-        except (KeyError, AssertionError):
+            if group is None:
+                raise ValueError
+        except (KeyError, ValueError):
             msg = "Group not in message, exiting callback."
             self.log(msg, RK.LOG_ERROR)
             raise MonitorError(message=msg)
