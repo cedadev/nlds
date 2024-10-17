@@ -209,11 +209,13 @@ class CatalogConsumer(RMQC):
 
     def _parse_tenancy(self, body: Dict) -> str:
         # Get the tenancy from message, if none found then use the configured default
-        tenancy = self.default_tenancy
-        try:
+        if (
+            MSG.TENANCY in body[MSG.DETAILS]
+            and body[MSG.DETAILS][MSG.TENANCY] is not None
+        ):
             tenancy = body[MSG.DETAILS][MSG.TENANCY]
-        except KeyError:
-            pass
+        else:
+            tenancy = self.default_tenancy
         return tenancy
 
     def _parse_metadata_vars(self, body: Dict) -> Tuple:
@@ -235,11 +237,13 @@ class CatalogConsumer(RMQC):
 
     def _parse_tape_url(self, body: Dict) -> str:
         # Get the tape_url from message, if none found then use the configured default
-        tape_url = self.default_tape_url
-        try:
+        if (
+            MSG.TAPE_URL in body[MSG.DETAILS]
+            and body[MSG.DETAILS][MSG.TAPE_URL] is not None
+        ):
             tape_url = body[MSG.DETAILS][MSG.TAPE_URL]
-        except KeyError:
-            pass
+        else:
+            tape_url = self.default_tape_url
         return tape_url
 
     def _parse_aggregation_id(self, body: Dict) -> str:
@@ -531,23 +535,23 @@ class CatalogConsumer(RMQC):
                     access_time = datetime.now()
                 else:
                     access_time = pl.access_time
-                # check if location exists - this can happen on archive-restore, but it 
+                # check if location exists - this can happen on archive-restore, but it
                 # should be empty
                 st = Storage.from_str(pl.storage_type)
                 location = self.catalog.get_location(file, st)
                 if location:
                     # check empty
-                    if location.url_scheme !="" or location.url_netloc != "":
+                    if location.url_scheme != "" or location.url_netloc != "":
                         raise CatalogError(
                             f"{pl.storage_type} for file {pd.original_path} will be "
                             f"overwritten, the Storage Location should be empty"
                         )
                     # otherwise update if exists and not empty
-                    location.url_scheme=pl.url_scheme
-                    location.url_netloc=pl.url_netloc
-                    location.root=pl.root
-                    location.path=pl.path
-                    location.access_time=access_time
+                    location.url_scheme = pl.url_scheme
+                    location.url_netloc = pl.url_netloc
+                    location.root = pl.root
+                    location.path = pl.path
+                    location.access_time = access_time
                 else:
                     # create if it doesn't exist
                     location = self.catalog.create_location(
@@ -623,6 +627,9 @@ class CatalogConsumer(RMQC):
         # start the database transactions, reset lists and
         self.catalog.start_session()
 
+        # what's the tenancy kenneth?
+        print(f"!!!! {tenancy}")
+
         for filepath in filelist:
             filepath_details = PathDetails.from_dict(filepath)
             try:
@@ -649,6 +656,8 @@ class CatalogConsumer(RMQC):
                 for file in files:
                     pd = PathDetails.from_filemodel(file)
                     if pd.locations.count == 0:
+                        # empty storage location denotes that it is still in its initial
+                        # transfer to OBJECT STORAGE
                         pd.failure_reason = (
                             f"No Storage Location found for file with original path: "
                             f"{pd.original_path}.  Has it completed transfer?"
@@ -665,9 +674,9 @@ class CatalogConsumer(RMQC):
                                 "Storage."
                             )
                             self.log(pd.failure_reason, RK.LOG_ERROR)
+                            self.failedlist.append(pd)
                         else:
                             self.completelist.append(pd)
-                        self.failedlist.append(pd)
 
                     elif pd.locations.has_storage_type(MSG.TAPE):
                         # get the aggregation
@@ -695,9 +704,14 @@ class CatalogConsumer(RMQC):
                             self.tapedict[agg.tarname][MSG.FILELIST].append(pd)
                         else:
                             self.tapedict[agg.tarname] = {
+                                # Holding id required for updating holding on return
                                 MSG.HOLDING_ID: tr.holding_id,
+                                MSG.CHECKSUM: agg.checksum,
                                 MSG.FILELIST: [pd],
                             }
+                        # create the OBJECT STORAGE Path Location for the message (not
+                        # the database)
+                        pd.set_object_store(tenancy=tenancy, bucket=tr.transaction_id)
                         self.tapelist.append(pd)
 
                     else:
@@ -735,9 +749,10 @@ class CatalogConsumer(RMQC):
         # NEED RETRIEVING FROM TAPE
         if len(self.tapedict) > 0 and len(self.tapelist) > 0:
             rk_restore = ".".join([rk_origin, RK.ROUTE, RK.ARCHIVE_RESTORE])
-            # Include the original files requested in the message body so they can be
-            # moved to disk after retrieval
-            body[MSG.DATA][MSG.RETRIEVAL_FILELIST] = self.tapedict
+            # Include the original files requested in the message body (tapelist)
+            # so they can be moved to disk after retrieval, as well as the aggregate
+            # dictionary (tapedict)
+            body[MSG.DATA][MSG.RETRIEVAL_DICT] = self.tapedict
             self.log(
                 f"Rerouting PathList from CATALOG_GET to ARCHIVE_GET for archive "
                 f"retrieval ({self.tapelist})",
@@ -842,8 +857,8 @@ class CatalogConsumer(RMQC):
         self.catalog.end_session()
 
     def _catalog_archive_update(
-            self, body: Dict, rk_origin: str, storage_type: Storage
-        ) -> None:
+        self, body: Dict, rk_origin: str, storage_type: Storage
+    ) -> None:
         """Update the aggregation record following successful archive write to fill in
         the missing checksum information.
         """
@@ -1269,9 +1284,7 @@ class CatalogConsumer(RMQC):
             )
             for f in files:
                 # get the transaction and the holding:
-                t = self.catalog.get_transaction(
-                    id=f.transaction_id
-                )
+                t = self.catalog.get_transaction(id=f.transaction_id)
                 h = self.catalog.get_holding(
                     user, group, groupall=groupall, holding_id=t.holding_id
                 )[0]
@@ -1469,9 +1482,9 @@ class CatalogConsumer(RMQC):
         # can get very long.
         if not api_method == RK.STAT:
             self.log(
-                f"Received {json.dumps(body, indent=4)} from "
-                f"{self.queues[0].name} ({method.routing_key})",
+                f"Received from {self.queues[0].name} ({method.routing_key})",
                 RK.LOG_DEBUG,
+                body_json=body
             )
 
         self.log(

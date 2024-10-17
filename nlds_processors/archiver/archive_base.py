@@ -11,9 +11,7 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from abc import ABC, abstractmethod
-import json
-from typing import List, Dict, Tuple
-from enum import Enum
+from typing import List, Dict, Tuple, Any
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
 from nlds_processors.utils.aggregations import bin_files
@@ -36,13 +34,11 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     _TAPE_POOL = "tape_pool"
     _TAPE_URL = "tape_url"
     _CHUNK_SIZE = "chunk_size"
-    _QUERY_CHECKSUM = "query_checksum_fl"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
     ARCHIVE_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
         _TAPE_URL: None,
         _CHUNK_SIZE: 5 * (1024**2),  # Default to 5 MiB
-        _QUERY_CHECKSUM: True,
         _PRINT_TRACEBACKS: False,
     }
     DEFAULT_CONSUMER_CONFIG = (
@@ -55,7 +51,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         self.tape_pool = self.load_config_value(self._TAPE_POOL)
         self.tape_url = self.load_config_value(self._TAPE_URL)
         self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
-        self.query_checksum_fl = self.load_config_value(self._QUERY_CHECKSUM)
         self.reset()
 
     def callback(self, ch, method, properties, body, connection):
@@ -72,7 +67,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             self.log(
                 "Aggregating filelist into appropriately sized sub-lists for each "
                 "Aggregation",
-                RK.LOG_INFO
+                RK.LOG_INFO,
             )
             # Make a new routing key which returns message to this queue
             rk_transfer_start = ".".join([self.rk_parts[0], self.rk_parts[1], RK.START])
@@ -110,7 +105,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         else:
             raise ArchiveError(f"Unknown routing key {self.rk_parts[2]}")
 
-
     def get_tape_config(self, body_dict) -> Tuple:
         """Convenience function to extract tape relevant config from the message
         details section. Currently this is just the tape
@@ -134,6 +128,20 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             raise ArchiveError(reason)
 
         return tape_url
+
+    @classmethod
+    def get_holding_prefix(cls, body: Dict[str, Any], holding_id: int=-1) -> str:
+        """Get the uneditable holding information from the message body to
+        reproduce the holding prefix made in the catalog"""
+        try:
+            if holding_id == -1:
+                holding_id = body[MSG.META][MSG.HOLDING_ID]
+            user = body[MSG.DETAILS][MSG.USER]
+            group = body[MSG.DETAILS][MSG.GROUP]
+        except KeyError as e:
+            raise ArchiveError(f"Could not make holding prefix, original error: {e}")
+
+        return f"nlds.{holding_id}.{user}.{group}"
 
     @abstractmethod
     def transfer(

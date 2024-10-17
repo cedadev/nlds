@@ -102,6 +102,9 @@ async def get(
     target: Optional[str] = None,
     job_label: Optional[str] = None,
     tenancy: Optional[str] = None,
+    label: Optional[str] = None,
+    holding_id: Optional[int] = None,
+    tag: Optional[str] = None,
     access_key: str = "",
     secret_key: str = "",
 ):
@@ -155,6 +158,22 @@ async def get(
         response.job_label = job_label
     if tenancy:
         response.tenancy = tenancy
+
+    # add the metadata
+    meta_dict = {}
+    if label:
+        meta_dict[MSG.LABEL] = label
+        response.label = label
+    if holding_id:
+        meta_dict[MSG.HOLDING_ID] = holding_id
+        response.holding_id = holding_id
+    if tag:
+        tag_dict = tag.strip('').split(':')
+        meta_dict[MSG.TAG] = {tag_dict[0]:tag_dict[1]}
+        response.tag = tag_dict
+
+    if len(meta_dict) > 0:
+        msg_dict[MSG.META] = meta_dict
 
     rabbit_publisher.publish_message(routing_key, msg_dict)
     return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=response.json())

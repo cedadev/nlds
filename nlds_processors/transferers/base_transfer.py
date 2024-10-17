@@ -62,9 +62,9 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             return False
 
         self.log(
-            f"Received {json.dumps(self.body_json, indent=4)} from "
-            f"{self.queues[0].name} ({method.routing_key})",
+            f"Received from {self.queues[0].name} ({method.routing_key})",
             RK.LOG_DEBUG,
+            body_json=self.body_json
         )
 
         # Verify routing key is appropriate

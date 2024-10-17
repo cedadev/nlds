@@ -105,9 +105,9 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             raise S3StreamError(msg)
         except S3StreamError as e:
             msg = (
-                f"Exception occurred during write of tarfile "
-                f"{self.tarfile_diskpath}.  This file will now be deleted from the"
-                f"DISKTAPE. Original exception: {e}"
+                f"Exception occurred during write of tarfile {self.tarfile_diskpath}. "
+                f"This file will now be deleted from the DISKTAPE. "
+                f"Original exception: {e}"
             )
             self.log(msg, RK.LOG_ERROR)
             self._remove_tarfile_from_disktape()
@@ -135,6 +135,37 @@ class S3ToTarfileDisk(S3ToTarfileStream):
                 tarfile=f"{self.filelist_hash}.tar",
             )
         return completelist, failedlist, self.tarfile_diskpath, checksum
+
+    def get(
+        self,
+        holding_prefix: str,
+        tarfile: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+        """Stream from a tarfile on disk to Object Store"""
+        if self.filelist != []:
+            raise ValueError(f"self.filelist is not Empty: {self.filelist[0]}")
+        self.filelist = filelist
+        self.holding_prefix = holding_prefix
+        try:
+            # open the tarfile to read from
+            with open(tarfile, "rb") as file:
+                file_object = Adler32File(file, debug_fl=False)
+                completelist, failedlist, checksum = self._stream_to_s3object(
+                    file_object, self.filelist, chunk_size
+                )
+        except FileNotFoundError:
+            msg = f"Couldn't open tarfile ({self.tarfile_diskpath})."
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+        except S3StreamError as e:
+            msg = f"Exception occurred during read of tarfile {self.tarfile_diskpath}."
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+
+        #raise NotImplementedError
+        return [], []
 
     @property
     def holding_diskpath(self):

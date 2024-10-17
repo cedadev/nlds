@@ -307,9 +307,9 @@ class NLDSWorkerConsumer(RMQC):
         body_json = json.loads(body)
 
         self.log(
-            f"Received {json.dumps(body_json, indent=4)} \nwith "
-            f"routing_key: {method.routing_key}",
+            f"Received with routing_key: {method.routing_key}",
             RK.LOG_INFO,
+            body_json=body_json
         )
 
         # If received system test message, reply to it (this is for system status check)

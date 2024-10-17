@@ -20,11 +20,12 @@ from nlds_processors.archiver.archive_base import (
     ArchiveError,
 )
 
-USE_DISKTAPE = True
+from nlds.nlds_setup import USE_DISKTAPE, DISKTAPE_LOC
 if USE_DISKTAPE:
     from nlds_processors.archiver.s3_to_tarfile_disk import S3ToTarfileDisk
 else:
     from nlds_processors.archiver.s3_to_tarfile_tape import S3ToTarfileTape
+
 from nlds_processors.archiver.s3_to_tarfile_stream import S3StreamError
 
 from nlds.rabbit.consumer import State
@@ -60,9 +61,9 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # Create the S3 to tape or disk streamer
         try:
             if USE_DISKTAPE:
-                disk_loc = os.path.expanduser("~/DISKTAPE")
+                disk_loc = os.path.expanduser(DISKTAPE_LOC)
                 self.log(
-                    f"Starting disk transfer between {disk_loc} and object store " 
+                    f"Starting disk transfer between {disk_loc} and object store "
                     f"{tenancy}",
                     RK.LOG_INFO,
                 )
@@ -75,7 +76,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 )
             else:
                 self.log(
-                    f"Starting tape transfer between {tape_url} and object store " 
+                    f"Starting tape transfer between {tape_url} and object store "
                     f"{tenancy}",
                     RK.LOG_INFO,
                 )
@@ -115,7 +116,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # Send whatever remains after all items have been put
         if len(self.completelist) > 0:
             self.log(
-                "Archive complete, passing lists back to worker for cataloguing.",
+                "Archive put complete, passing lists back to worker for cataloguing.",
                 RK.LOG_INFO,
             )
             self.send_pathlist(
@@ -130,21 +131,6 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 body_json,
                 state=State.FAILED,
             )
-
-    @classmethod
-    def get_holding_prefix(cls, body: Dict[str, Any]) -> str:
-        """Get the uneditable holding information from the message body to
-        reproduce the holding prefix made in the catalog"""
-        try:
-            holding_id = body[MSG.META][MSG.HOLDING_ID]
-            user = body[MSG.DETAILS][MSG.USER]
-            group = body[MSG.DETAILS][MSG.GROUP]
-        except KeyError as e:
-            raise ArchiveError(
-                f"Could not make holding prefix, original error: {e}"
-            )
-
-        return f"nlds.{holding_id}.{user}.{group}"
 
 
 def main():

@@ -94,7 +94,7 @@ class S3ToTarfileStream:
                 )
                 failed_list.append(path_details)
                 continue
-        
+
             try:
                 # Check that the object is in the bucket and the names match
                 obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
@@ -185,3 +185,26 @@ class S3ToTarfileStream:
                         # If it can't be closed then dw
                         pass
         return completelist, failedlist, file_object.checksum
+
+    def _stream_to_s3object(
+        self, file_object, filelist: List[PathDetails], chunk_size: int
+    ):
+        # Stream from the a tar file to the S3 Object Store that is created via the 
+        # file_object - this is usually an Adler32File
+        with tarfile.open(mode="r", fileobj=file_object, copybufsize=chunk_size) as tar:
+            # local versions of the completelist and failedlist
+            completelist = []
+            failedlist = []
+
+            for path_details in filelist:
+                pd = PathDetails.from_dict(path_details)
+                self.log(
+                    f"Streaming file {pd.path} from tape archive to object store",
+                    RK.LOG_DEBUG,
+                )
+                bucket_name = pd.bucket_name
+                object_name = pd.object_name
+                # tar_info = tarfile.TarInfo(name=object_name)
+                # tar_info.size = int(pd.size)
+    
+        return [], [], 0
