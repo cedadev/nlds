@@ -152,7 +152,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             # open the tarfile to read from
             with open(tarfile, "rb") as file:
                 file_object = Adler32File(file, debug_fl=False)
-                completelist, failedlist, checksum = self._stream_to_s3object(
+                completelist, failedlist = self._stream_to_s3object(
                     file_object, self.filelist, chunk_size
                 )
         except FileNotFoundError:
@@ -164,8 +164,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             self.log(msg, RK.LOG_ERROR)
             raise S3StreamError(msg)
 
-        #raise NotImplementedError
-        return [], []
+        return completelist, failedlist
 
     @property
     def holding_diskpath(self):

@@ -109,6 +109,10 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 )
                 # get the list of files to retrieve from the tarfile / aggregate
                 aggregate_filelist = item[MSG.FILELIST]
+                # convert to PathDetails object
+                aggregate_filelist = [
+                    PathDetails.from_dict(ag) for ag in aggregate_filelist
+                ]
                 # empty streamer.filelist for new aggregate
                 streamer.filelist.clear()
                 try:
@@ -121,11 +125,6 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         path_details.failure_reason = e.message
                         self.failedlist.append(path_details)
                     checksum = None
-
-        #raise NotImplementedError
-        for f in self.filelist:
-            f.failure_reason = "Test"
-            self.failedlist.append(f)
 
         if len(self.completelist) > 0:
             # Send whatever remains after all items have been got
