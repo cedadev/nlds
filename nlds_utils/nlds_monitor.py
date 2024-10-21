@@ -12,18 +12,20 @@ from nlds_processors.monitor.monitor_models import (
 from nlds.rabbit.consumer import State
 import nlds.server_config as CFG
 
+
 def connect_to_monitor():
     """Connects to the monitor database"""
     config = CFG.load_config()
     db_engine = config["monitor_q"]["db_engine"]
     db_options = config["monitor_q"]["db_options"]
-    db_options['echo'] = False
+    db_options["echo"] = False
 
     nlds_monitor = Monitor(db_engine=db_engine, db_options=db_options)
     nlds_monitor.connect(create_db_fl=False)
     nlds_monitor.start_session()
 
     return nlds_monitor
+
 
 def query_monitor_db(
     session,
@@ -66,30 +68,35 @@ def query_monitor_db(
                 between(TransactionRecord.creation_time, start_time, end_time)
             )
 
-    if order == 'ascending':
+    if order == "ascending":
         query = query.order_by(asc(TransactionRecord.creation_time))
-    elif order == 'descending':
+    elif order == "descending":
         query = query.order_by(desc(TransactionRecord.creation_time))
 
     trec = query.all()
 
     session.end_session()
-    
+
     if record_state:
         for record in trec[:]:
-            state = record.get_state()
-            if state != record_state:
+            sr_list = record.sub_records
+            hit = False
+            for sr in sr_list:
+                if sr.state == record_state:
+                    hit = True
+                    continue
+            if hit == False:
                 trec.remove(record)
+    return trec
 
-    return(trec)
 
 def print_simple_monitor(record_list, stat_string):
     """Print a multi-line set of status for monitor"""
     click.echo(stat_string)
     click.echo(
-            f"{'':<4}{'user':<16}{'group':<16}{'id':<6}{'action':<16}{'job label':<16}"
-            f"{'state':<23}{'last update':<20}"
-        )
+        f"{'':<4}{'user':<16}{'group':<16}{'id':<6}{'action':<16}{'job label':<16}"
+        f"{'state':<23}{'last update':<20}"
+    )
     for record in record_list:
         state = record.get_state()
         if "job_label" in record.__dict__ and record.__dict__["job_label"]:
@@ -101,6 +108,7 @@ def print_simple_monitor(record_list, stat_string):
             f"{record.api_action:<16}{job_label:16}{state.name:<23}"
             f"{(record.creation_time)}"
         )
+
 
 def print_complex_monitor(record_list, stat_string):
     """Print a multi-line set of status for monitor in more detail, with a list of
@@ -119,7 +127,7 @@ def print_complex_monitor(record_list, stat_string):
         if "warnings" in record.__dict__:
             warn_str = ""
             for w in record.warnings:
-                warn_str += w + f"\n{'':<22}"
+                warn_str += w.warning + f"\n{'':<22}"
             click.echo(f"{'':<4}{'warnings':<16}: {warn_str[:-23]}")
 
         click.echo(f"{'':<4}{'sub records':<16}->")
@@ -135,6 +143,7 @@ def print_complex_monitor(record_list, stat_string):
                 for ff in sr.failed_files:
                     click.echo(f"{'':<9}{'+':<4} {'filepath':<8} : {ff.filepath}")
                     click.echo(f"{'':<9}{'':>4} {'reason':<8} : {ff.reason}")
+
 
 @click.command()
 @click.option(
@@ -183,7 +192,7 @@ def print_complex_monitor(record_list, stat_string):
 @click.option(
     "-st",
     "--start-time",
-    default=(datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    default=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"),
     type=click.DateTime(formats=["%Y-%m-%d"]),
     help="Filter start time in YYYY-MM-DD format "
     "(leave blank for values from 30 days ago)",
@@ -222,30 +231,30 @@ def view_jobs(
     order,
 ) -> None:
     """Returns all NLDS jobs filtered by user options."""
-    
+
     if not order:
         order = "ascending"
     else:
         order = "descending"
-    
+
     if start_time and end_time:
         if start_time > end_time:
             click.echo("Error: Start time must be before end time.")
-            return
+            exit()
 
     if state:
         try:
             state = State[state.upper()]
         except KeyError:
             click.echo(f"Invalid state: {state}")
-            return
+            exit()
 
     if record_state:
         try:
             record_state = State[record_state.upper()]
         except KeyError:
             click.echo(f"Invalid state: {record_state}")
-            return
+            exit()
 
     # Connect to the monitor database
     session = connect_to_monitor()
@@ -261,7 +270,6 @@ def view_jobs(
         end_time,
         order,
     )
-
 
     details = []
 
@@ -304,16 +312,7 @@ def view_jobs(
         print_simple_monitor(query, stat_string)
 
 
-
-
 if __name__ == "__main__":
     view_jobs()
 
-                                                                                # TODO add pytests
-
-
-                                                                                # TODO consider how this would work as a website
-
-
-# cd nlds/nlds_utils
 # python nlds_monitor.py
