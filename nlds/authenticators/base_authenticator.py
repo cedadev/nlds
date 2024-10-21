@@ -49,6 +49,6 @@ class BaseAuthenticator(ABC):
         """Get the information about the given service."""
         return NotImplementedError
     
-    def extract_tape_quota(self, oauth_token: str, service_name: str):
+    def get_tape_quota(self, oauth_token: str, service_name: str):
         """Process the service inforrmation to return the tape quota value."""
         return NotImplementedError

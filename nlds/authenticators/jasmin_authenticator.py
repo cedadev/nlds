@@ -322,7 +322,7 @@ class JasminAuthenticator(BaseAuthenticator):
             raise RuntimeError(f"Error getting data for {service_name}")
         
         
-    def extract_tape_quota(self, oauth_token: str, service_name: str):
+    def get_tape_quota(self, oauth_token: str, service_name: str):
         """Get the service information then process it to extract the quota for the service."""
         try:
             result = self.get_service_information(self, oauth_token, service_name)

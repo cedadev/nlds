@@ -413,11 +413,11 @@ class TestGetProjectsServices:
             JasminAuthenticator.get_projects_services("dummy_oauth_token", "test_service")
 
 
-class TestExtractTapeQuota:
+class TestGetTapeQuota:
     """Get the tape quota from the list of projects services."""
 
-    def test_extract_tape_quota_success(monkeypatch):
-        """Test a successful instance of extract_tape_quota"""
+    def test_get_tape_quota_success(monkeypatch):
+        """Test a successful instance of get_tape_quota"""
 
         def mock_get_projects_services(*args, **kwargs):
             """Mock the response from get_projects_services to gvie the response for
@@ -433,12 +433,12 @@ class TestExtractTapeQuota:
         
         monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.get_projects_services", mock_get_projects_services)
 
-        # extract_tape_quota should return the quota value of 100
-        result = JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+        # get_tape_quota should return the quota value of 100
+        result = JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
         assert result == 100
 
-    def test_extract_tape_quota_no_requirements(monkeypatch, quotas):
-        """Test an unsuccessful instance of extract_tape_quota due to no requirements."""
+    def test_get_tape_quota_no_requirements(monkeypatch, quotas):
+        """Test an unsuccessful instance of get_tape_quota due to no requirements."""
 
         def mock_get_projects_services(*args, **kwargs):
             """Mock the response from get_projects_services to give the response for
@@ -449,10 +449,10 @@ class TestExtractTapeQuota:
 
         # A ValueError should be raised saying there's no requirements found.
         with pytest.raises(ValueError, match="Cannot find any requirements for test_service"):
-            JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
 
-    def test_extract_tape_quota_no_tape_resource(monkeypatch):
-        """Test an unsuccessful instance of extract_tape_quota due to no tape resources."""
+    def test_get_tape_quota_no_tape_resource(monkeypatch):
+        """Test an unsuccessful instance of get_tape_quota due to no tape resources."""
 
         def mock_get_projects_services(*args, **kwargs):
             """Mock the response from get_projects_services to give the response for
@@ -472,10 +472,10 @@ class TestExtractTapeQuota:
         with pytest.raises(
             ValueError, match="No tape resources could be found for test_service"
         ):
-            JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
 
-    def test_extract_tape_quota_services_runtime_error(monkeypatch):
-        """Test an unsuccessful instance of extract_tape_quota due to a runtime error when
+    def test_get_tape_quota_services_runtime_error(monkeypatch):
+        """Test an unsuccessful instance of get_tape_quota due to a runtime error when
         getting services from the projects portal."""
 
         def mock_get_projects_services(*args, **kwargs):
@@ -489,10 +489,10 @@ class TestExtractTapeQuota:
             RuntimeError,
             match="Error getting information for test_service: Runtime error occurred",
         ):
-            JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
 
-    def test_extract_tape_quota_services_value_error(monkeypatch):
-        """Test an unsuccessful instance of extract_tape_quota due to a value error
+    def test_get_tape_quota_services_value_error(monkeypatch):
+        """Test an unsuccessful instance of get_tape_quota due to a value error
         getting services from the projects portal."""
 
         def mock_get_projects_services(*args, **kwargs):
@@ -506,10 +506,10 @@ class TestExtractTapeQuota:
             ValueError,
             match="Error getting information for test_service: Value error occurred",
         ):
-            JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
 
-    def test_extract_tape_quota_no_gws(monkeypatch):
-        """Test an unsuccessful instance of extract_tape_quota due to the given service
+    def test_get_tape_quota_no_gws(monkeypatch):
+        """Test an unsuccessful instance of get_tape_quota due to the given service
         not being a GWS."""
 
         def mock_get_projects_services(*args, **kwargs):
@@ -526,10 +526,10 @@ class TestExtractTapeQuota:
             ValueError,
             match="Cannot find a Group Workspace with the name test_service. Check the category.",
         ):
-            JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
 
-    def test_extract_quota_zero_quota(monkeypatch):
-        """Test an unsuccessful instance of extract_tape_quota due to the quota being zero."""
+    def get_quota_zero_quota(monkeypatch):
+        """Test an unsuccessful instance of get_tape_quota due to the quota being zero."""
 
         def mock_get_projects_services(*args, **kwargs):
             """Mock the response from get_projects_services to give a quota of 0."""
@@ -552,10 +552,10 @@ class TestExtractTapeQuota:
         with pytest.raises(
             ValueError, match="Issue getting tape quota for test_service. Quota is zero."
         ):
-            JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
 
-    def test_extract_tape_quota_no_quota(monkeypatch):
-        """Test an unsuccessful instance of extract_tape_quota due to there being no quota field."""
+    def test_get_tape_quota_no_quota(monkeypatch):
+        """Test an unsuccessful instance of get_tape_quota due to there being no quota field."""
 
         def mock_get_projects_services(*args, **kwargs):
             """Mock the response from get_projects_services to give no 'amount field."""
@@ -578,10 +578,10 @@ class TestExtractTapeQuota:
             KeyError,
             match="Issue getting tape quota for test_service. No 'value' field exists.",
         ):
-            JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
 
-    def test_extract_tape_quota_no_provisioned_resources(monkeypatch):
-        """Test an unsuccessful instance of extract_tape_quota due to there being no provisioned resources."""
+    def test_get_tape_quota_no_provisioned_resources(monkeypatch):
+        """Test an unsuccessful instance of get_tape_quota due to there being no provisioned resources."""
 
         def mock_get_projects_services(*args, **kwargs):
             """Mock the response from get_projects_services to give no provisioned resources (status 50)."""
@@ -604,4 +604,4 @@ class TestExtractTapeQuota:
             ValueError,
             match="No provisioned requirements found for test_service. Check the status of your requested resources.",
         ):
-            JasminAuthenticator.extract_tape_quota("dummy_oauth_token", "test_service")
+            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")

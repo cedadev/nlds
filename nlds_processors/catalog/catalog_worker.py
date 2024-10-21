@@ -1868,7 +1868,7 @@ class CatalogConsumer(RMQC):
             user, group, token = message_vars
 
         try:
-            group_quota = Authenticator.extract_tape_quota(oauth_token=token, service_name=group)
+            group_quota = Authenticator.get_tape_quota(oauth_token=token, service_name=group)
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
