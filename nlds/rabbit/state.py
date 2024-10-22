@@ -25,6 +25,7 @@ class State(Enum):
     TRANSFER_PUTTING = 4
     CATALOG_ROLLBACK = 5
     CATALOG_UPDATING = 6
+    CATALOG_REMOVING = 7
     # GET workflow states
     CATALOG_GETTING = 10
     ARCHIVE_GETTING = 11
@@ -32,9 +33,8 @@ class State(Enum):
     # ARCHIVE_PUT workflow states
     ARCHIVE_INIT = 20
     ARCHIVE_PUTTING = 22
-    CATALOG_ARCHIVE_UPDATING = 23
     # Shared ARCHIVE states
-    CATALOG_ARCHIVE_REMOVING = 40
+    CATALOG_ARCHIVE_UPDATING = 23
     CATALOG_DELETE_ROLLBACK = 41
     CATALOG_RESTORING = 42
     # Complete states
@@ -60,15 +60,14 @@ class State(Enum):
             cls.CATALOG_UPDATING,
             cls.CATALOG_ARCHIVE_UPDATING,
             cls.CATALOG_ROLLBACK,
-            cls.CATALOG_ARCHIVE_REMOVING,
-            cls.CATALOG_RESTORING,
+            cls.CATALOG_REMOVING,
             cls.FAILED,
         )
         return final_states
 
     @classmethod
     def get_failed_states(cls):
-        return (cls.CATALOG_ROLLBACK, cls.CATALOG_ARCHIVE_REMOVING, cls.FAILED)
+        return (cls.CATALOG_ROLLBACK, cls.CATALOG_REMOVING, cls.FAILED)
 
     def to_json(self):
         return self.value
