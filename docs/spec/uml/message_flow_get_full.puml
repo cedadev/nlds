@@ -111,60 +111,8 @@ loop #SpringGreen for file in //filelist//
     end
 end 
 
-catalog_get -> wex : key=""nlds-api.catalog-get.archive-restore""
-
-activate wex
-wex -> qw : key=""nlds-api.catalog-get.archive-restore""
-deactivate wex
-activate qw
-qw -> work : key=""nlds-api.catalog-get.archive-restore""
-deactivate qw
-activate work
-work -> qag : key=""nlds-api.archive-get.start""
-deactivate work
-activate qag
-qag -> archive_gets : key=""nlds-api.archive-get.start""
-deactivate qag
-
-' activate archive_gets
-' alt #LightPink //filelist// needs to be prepared
-'     loop #MistyRose Pre-get verification - for file in //filelist//
-'         archive_gets->archive_gets: Verify filelist contents
-'         archive_gets->tape: Ping tape server and check base_dir
-'         archive_gets->obj: Verify object integrity
-'         archive_gets->archive_gets: Add to //preparelist//, add to //original_filelist_map//
-'     end
-'     archive_gets->tape: Prepare //preparelist//
-'     archive_gets->archive_gets: Mark as prepared
-' else //filelist// has been prepared
-'     archive_gets->tape: Get prepare status
-'     alt #MistyRose Prepare has finished
-'         archive_gets->archive_gets: Continue to get
-'     else Prepare still in progress
-'         archive_gets->qag: Requeue filelist
-'     end
-' end
-' loop #LightPink for aggregate in //aggregate_list//
-'     archive_gets -> tape : get aggregate from tape
-'     tape -> archive_gets
-'     alt #MistyRose Tape retrieval succeeded
-'         loop #FFF8F8 for file in aggregate
-'             archive_gets->obj : Extract file from aggregate
-'             obj->archive_gets
-'             alt #FFFDFD Extract succeeded
-'                 archive_gets->archive_gets : Add file record to //transferable_list//
-'             else
-'                 archive_gets->archive_gets : Add file record to //failed_list//
-'             end
-'         end
-'     else else
-'         archive_gets->archive_gets : Add aggregate to //failed_list//
-'     end
-' end
-
-' ' catalog_get failed block
+' catalog_get failed block
 catalog_get -> wex : key=""nlds-api.catalog-get.failed""
-deactivate catalog_get
 
 activate wex
 wex -> qw : key=""nlds-api.catalog-get.failed""
@@ -174,102 +122,104 @@ activate qw
 qw -> work : key=""nlds-api.catalog-get.failed""
 deactivate qw
 
+' archive-restore block
+catalog_get -> wex : key=""nlds-api.catalog-get.archive-restore""
+
+activate wex
+wex -> qw : key=""nlds-api.catalog-get.archive-restore""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.catalog-get.archive-restore""
+deactivate qw
+activate work
+work -> wex : key=""nlds-api.archive-get.start""
+deactivate work
+activate wex 
+wex -> qag : key=""nlds-api.archive-get.start""
+deactivate wex
+activate qag
+qag -> archive_gets : key=""nlds-api.archive-get.start""
+deactivate qag
+activate archive_gets
+
+' catalog_get completed block
+catalog_get -> wex : key=""nlds-api.catalog-get.complete""
+deactivate catalog_get
+
+activate wex
+wex -> qw : key=""nlds-api.catalog-get.complete""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.catalog-get.complete""
+deactivate qw
+
+activate work #Gold 
+
+loop #LightPink for aggregate in //tape_dict//
+    archive_gets -> tape : get aggregate from tape
+    tape -> archive_gets
+    alt #MistyRose Tape retrieval succeeded
+        loop #FFF8F8 for file in aggregate
+            archive_gets->obj : Extract file from aggregate
+            obj->archive_gets
+            alt #FFFDFD Extract succeeded
+                archive_gets->archive_gets : Add file record to //object_store_list//
+            else
+                archive_gets->archive_gets : Add file record to //failed_list//
+            end
+        end
+    else else
+        archive_gets->archive_gets : Add all files in aggregate to //failed_list//
+    end
+end
+
 ' archive_get failed block
-' archive_gets -> wex : key=""nlds-api.archive-get.failed""
-' activate wex
-' wex -> qw : key=""nlds-api.archive-get.failed""
-' deactivate wex
+archive_gets -> wex : key=""nlds-api.archive-get.failed""
 
-' activate qw
-' qw -> work : key=""nlds-api.archive-get.failed""
-' deactivate qw
+activate wex
+wex -> qw : key=""nlds-api.archive-get.failed""
+deactivate wex
 
+activate qw
+qw -> work : key=""nlds-api.archive-get.failed""
+deactivate qw
 
-' ' catalog_get completed block
-' catalog_get -> wex : key=""nlds-api.catalog-get.complete""
-' deactivate catalog_get
+activate work
+work -> wex : key=""nlds-api.catalog-remove.start""
+deactivate work
 
-' activate wex
-' wex -> qw : key=""nlds-api.catalog-get.complete""
-' deactivate wex
+activate wex
+wex -> qc : key=""nlds-api.catalog-remove.start""
+deactivate wex
 
-' activate qw
-' qw -> work : key=""nlds-api.catalog-get.complete""
-' deactivate qw
+activate qc
+qc -> catalog_get : key=""nlds-api.catalog-remove.start""
+deactivate qc
 
+activate catalog_get
+loop #LightGreen for file in failed_list
+catalog_get -> catalog_db : remove OBJECT STORAGE storage location from file record
+end
+catalog_get -> wex : key=""nlds-api.catalog-remove.complete""
+deactivate catalog_get
 
-' activate work
+activate wex
+wex -> work : key=""nlds-api.catalog-remove.complete""
+deactivate wex
+' end archive_get failed block
 
-' ' archive_get completed block
-' archive_gets -> wex : key=""nlds-api.archive-get.complete""
-' deactivate archive_gets
+' archive_get completed block
+archive_gets -> wex : key=""nlds-api.archive-get.complete""
+deactivate archive_gets
 
-' activate wex
-' wex -> qw : key=""nlds-api.archive-get.complete""
-' deactivate wex
+activate wex
+wex -> qw : key=""nlds-api.archive-get.complete""
+deactivate wex
 
-' activate qw
-' qw -> work : key=""nlds-api.archive-get.complete""
-' deactivate qw
-
-' work -> wex : key=""nlds-api.transfer-get.init""
-' deactivate work
-
-' activate wex
-' wex -> qt : key=""nlds-api.transfer-get.init""
-' deactivate wex
-
-' activate qt
-' qt -> transfer_get : key=""nlds-api.transfer-get.init""
-' deactivate qt
-
-' activate transfer_get
-
-' loop #Gold for file in transferable_list[::1000]
-' transfer_get -> transfer_get : add file to transfer_list
-' end
-' activate wex
-' transfer_get -> wex : key=""nlds-api.transfer-get.start""
-' deactivate transfer_get
-
-' wex -> qt : key=""nlds-api.transfer-get.start""
-' deactivate wex
-
-' activate qt
-' qt -> transfer_get : key=""nlds-api.transfer-get.start""
-' deactivate qt
-
-' activate transfer_get
-
-' loop #Gold for file in //transfer_list//
-'     transfer_get -> obj : copy file to target
-'     obj -> disk : copy file
-'     disk -> transfer_get
-'     alt #PaleGoldenRod the copy succeeded
-'         transfer_get -> transfer_get : add file record to //completed_list//
-'     else else
-'         transfer_get -> transfer_get : add file record to //failed_list//
-'     end
-' end
-' transfer_get -> wex : key=""nlds-api.transfer-get.complete""
-' activate wex
-' wex -> qw : key=""nlds-api.transfer-get.complete""
-' deactivate wex
-' activate qw
-' qw -> work : key=""nlds-api.transfer-get.complete""
-' deactivate qw
-
-' transfer_get -> wex : key=""nlds-api.transfer-get.failed""
-' deactivate transfer_get
-
-' activate wex
-' wex -> qw : key=""nlds-api.transfer-get.failed""
-' deactivate wex
-' activate qw
-' qw -> work : key=""nlds-api.transfer-get.failed""
-' deactivate qw
-
-' deactivate transfer_get
+activate qw
+qw -> work : key=""nlds-api.archive-get.complete""
+deactivate qw
 
 activate work
 work -> wex : key=""nlds-api.catalog-update.start""
@@ -289,11 +239,118 @@ loop #LightGreen for file in //transferred_list//
     catalog_get -> catalog_db : update OBJECT STORAGE details
 end
 catalog_get -> wex : key=""nlds-api.catalog-update.complete""
-
-loop #LightGreen for file in failed_list
-catalog_get -> catalog_db : remove OBJECT STORAGE storage location from file record
-end
-catalog_get -> wex : key=""nlds-api.catalog-archive-remove.complete""
 deactivate catalog_get
+
+activate wex
+wex -> work : key=""nlds-api.catalog-update.complete""
+deactivate wex
+
+activate work
+work -> wex : key=""nlds-api.transfer-get.init""
+deactivate work
+
+activate wex
+wex -> qt : key=""nlds-api.transfer-get.init""
+deactivate wex
+
+activate qt
+qt -> transfer_get : key=""nlds-api.transfer-get.init""
+deactivate qt
+
+activate transfer_get
+
+' end archive_get complete block
+
+' activate archive_gets ' this is for the actual, actual tape
+' alt #LightPink //filelist// needs to be prepared
+'     loop #MistyRose Pre-get verification - for file in //filelist//
+'         archive_gets->archive_gets: Verify filelist contents
+'         archive_gets->tape: Ping tape server and check base_dir
+'         archive_gets->obj: Verify object integrity
+'         archive_gets->archive_gets: Add to //preparelist//, add to //original_filelist_map//
+'     end
+'     archive_gets->tape: Prepare //preparelist//
+'     archive_gets->archive_gets: Mark as prepared
+' else //filelist// has been prepared
+'     archive_gets->tape: Get prepare status
+'     alt #MistyRose Prepare has finished
+'         archive_gets->archive_gets: Continue to get
+'     else Prepare still in progress
+'         archive_gets->qag: Requeue filelist
+'     end
+' end
+
+work -> wex : key=""nlds-api.transfer-get.init""
+deactivate work
+
+activate wex
+wex -> qt : key=""nlds-api.transfer-get.init""
+deactivate wex
+
+activate qt
+qt -> transfer_get : key=""nlds-api.transfer-get.init""
+deactivate qt
+
+
+loop #Gold for file in object_store_list[::1000]
+transfer_get -> transfer_get : add file to transfer_list
+end
+transfer_get -> wex : key=""nlds-api.transfer-get.start""
+deactivate transfer_get
+
+activate wex
+wex -> qt : key=""nlds-api.transfer-get.start""
+deactivate wex
+
+activate qt
+qt -> transfer_get : key=""nlds-api.transfer-get.start""
+deactivate qt
+
+
+activate transfer_get
+
+loop #Gold for file in //transfer_list//
+    transfer_get -> obj : copy file to target
+    obj -> disk : copy file
+    disk -> transfer_get
+    alt #PaleGoldenRod the copy succeeded
+        transfer_get -> transfer_get : add file record to //completed_list//
+    else else
+        transfer_get -> transfer_get : add file record to //failed_list//
+    end
+end
+transfer_get -> wex : key=""nlds-api.transfer-get.complete""
+activate wex
+wex -> qw : key=""nlds-api.transfer-get.complete""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.transfer-get.complete""
+deactivate qw
+
+transfer_get -> wex : key=""nlds-api.transfer-get.failed""
+deactivate transfer_get
+
+activate wex
+wex -> qw : key=""nlds-api.transfer-get.failed""
+deactivate wex
+activate qw
+qw -> work : key=""nlds-api.transfer-get.failed""
+deactivate qw
+
+deactivate transfer_get
+
+' activate work
+' work -> wex : key=""nlds-api.catalog-update.start""
+' deactivate work
+
+' activate wex
+' wex -> qc : key=""nlds-api.catalog-update.start""
+' deactivate wex
+
+' activate qc
+' qc -> catalog_get : key=""nlds-api.catalog-update.start""
+' deactivate qc
+
+
 
 @enduml
