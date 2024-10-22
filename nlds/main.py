@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from .nlds_setup import API_VERSION
 
-from .routers import list, files, probe, status, find, meta, system, init
+from .routers import list, files, probe, status, find, meta, system, info, init
 
 nlds = FastAPI()
 
@@ -65,6 +65,13 @@ nlds.include_router(
         "system",
     ],
     prefix="/system",
+)
+nlds.include_router(
+    info.router,
+    tags=[
+        "info",
+    ],
+    prefix=PREFIX + "/info",
 )
 nlds.include_router(
     init.router,
