@@ -454,10 +454,10 @@ def test_incorrect_state(setup_test, start_time):
         ],
     )
 
-    expected_output = "Invalid state: fail"
+    expected_output = "Error: Invalid state: fail"
 
-    # Assert no errors
-    assert result.exit_code == 0
+    # Assert has an error
+    assert result.exit_code == 1
 
     # Assert the output from click.echo matches expectations
     assert expected_output in result.output
@@ -588,10 +588,10 @@ def test_incorrect_record_state(setup_test, start_time):
             "success",
         ],
     )
-    expected_output = "Invalid state: success"
+    expected_output = "Error: Invalid state: success"
 
-    # Assert no errors
-    assert result.exit_code == 0
+    # Assert has an error
+    assert result.exit_code == 1
 
     # Assert the output from click.echo matches expectations
     assert expected_output in result.output
@@ -901,8 +901,8 @@ def test_time_endtime_before_start_time(setup_test):
 
     expected_output = "Error: Start time must be before end time."
 
-    # Assert no errors
-    assert result.exit_code == 0
+    # Assert has an error
+    assert result.exit_code == 1
 
     # Assert the output from click.echo matches expectations
     assert expected_output in result.output
