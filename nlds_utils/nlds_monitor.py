@@ -115,8 +115,9 @@ def print_complex_monitor(records_dict_list, stat_string):
         click.echo(f"{'':<4}{'user':<16}: {record['user']}")
         click.echo(f"{'':<4}{'group':<16}: {record['group']}")
         click.echo(f"{'':<4}{'action':<16}: {record['api_action']}")
+        click.echo(f"{'':<4}{'job label':<16}: {record['job_label']}")
         click.echo(f"{'':<4}{'transaction id':<16}: {record['transaction_id']}")
-        click.echo(f"{'':<4}{'creation time':<16}: {(record['creation_time'])}")
+        click.echo(f"{'':<4}{'last update':<16}: {(record['creation_time'])}")
         click.echo(f"{'':<4}{'state':<16}: {record['state']}")
 
         warn_str = ""
