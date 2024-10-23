@@ -23,6 +23,8 @@ JASMIN USER stages a specified set of files and/or directories by specifying an 
 JASMIN USER 2 in the same GWS as JASMIN USER 1, accesses files staged by JASMIN USER 1                                      | 1.2 | 1.3 |
 File staged by a user are purged according to policy.
 JASMIN USER accesses files in persistent staging location, for successive stage/unstage cycles                              | 1.2 | 1.3 | 
+Access control list is created on PUT, giving access to ALL users to staged data (initial placeholder functionality)        | 1.2 | 1.3 | Rationale: if it's there, users can edit it to restrict as they wish (via S3 portal)
+Access control lists (ACLs) created on PUT, that restrict URL access to staged data, to members of the GWS                  | 1.2 | 1.3 | 
 **User DELETE**|||
 JASMIN USER deletes a specified file from the NLDS.                                                                         | 1.1 | 1.3 | requires roles
 JASMIN USER recursively deletes a directory from the NLDS.                                                                  | 1.1 | 1.3 | requires roles
