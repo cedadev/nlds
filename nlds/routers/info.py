@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -31,7 +31,10 @@ def get_records(user=None, group=None, state=None, recordState=None, recordId=No
     if not startTime:
         startTime = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     
-    state, recordState = nlds_monitor.validate_inputs(startTime, endTime, state, recordState)
+    try:
+        state, recordState = nlds_monitor.validate_inputs(startTime, endTime, state, recordState)
+    except SystemExit as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
     session = nlds_monitor.connect_to_monitor()
 

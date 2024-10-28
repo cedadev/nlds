@@ -9,12 +9,15 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from .nlds_setup import API_VERSION
 
 from .routers import list, files, probe, status, find, meta, system, info, init
 
 nlds = FastAPI()
+
+nlds.mount("/static", StaticFiles(directory="nlds/nlds/static"), name="static")
 
 PREFIX = "/api/" + API_VERSION
 nlds.include_router(
