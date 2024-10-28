@@ -1,12 +1,14 @@
 import os
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+from typing import Optional
 
 from fastapi.templating import Jinja2Templates
-from click.testing import CliRunner
 
-from nlds.nlds_utils.nlds_monitor import view_jobs
+from nlds.nlds_utils import nlds_monitor
 
 router = APIRouter()
 
@@ -14,25 +16,92 @@ template_dir = os.path.join(os.path.dirname(__file__), "../templates/")
 
 templates = Jinja2Templates(directory=template_dir)
 
-@router.get(
-    "/",
-)
-async def get(
+class FilterRequest(BaseModel):
+    user: Optional[str] = None
+    group: Optional[str] = None
+    state: Optional[str] = None
+    recordState: Optional[str] = None
+    recordId: Optional[int] = None
+    transactionId: Optional[str] = None
+    startTime: Optional[str] = None
+    endTime: Optional[str] = None
+    order: str
+
+def get_records(user=None, group=None, state=None, recordState=None, recordId=None, transactionId=None, startTime=None, endTime=None, order=None):
+    if not startTime:
+        startTime = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    
+    state, recordState = nlds_monitor.validate_inputs(startTime, endTime, state, recordState)
+    
+    session = nlds_monitor.connect_to_monitor()
+
+    record_list = nlds_monitor.query_monitor_db(
+        session,
+        user=user,
+        group=group,
+        state=state,
+        record_state=recordState,
+        id=recordId,
+        transaction_id=transactionId,
+        start_time=startTime,
+        end_time=endTime,
+        order=order,
+    )
+    result = nlds_monitor.construct_record_dict(record_list)
+    
+    for record in result:
+        record["creation_time"] = str(record["creation_time"])
+        for sub_record in record["sub_records"]:
+            sub_record["last_updated"] = str(sub_record["last_updated"])
+    
+    stat_string = nlds_monitor.construct_stat_string(
+        recordId,
+        transactionId,
+        user,
+        group,
+        state,
+        recordState,
+        startTime,
+        endTime,
+        order,
+    )
+    
+    return result, stat_string
+
+@router.get("/")
+def get(
     request: Request,
 ):
-    runner = CliRunner()
-    
-    result = runner.invoke(view_jobs, ["-u", "wcross"])
-    
-    response = {"test": "this works"}
-    response = {"test": result.output}
+    result, _ = get_records()
+
     return templates.TemplateResponse(
-        "info.html", context={"request": request, "info": response}
+        "info.html", context={"request": request, "info": result}
     )
 
+@router.post("/")
+def get_filtered_records(filter_request: FilterRequest):
+    user=filter_request.user
+    group=filter_request.group
+    state=filter_request.state
+    recordState=filter_request.recordState
+    recordId=filter_request.recordId
+    transactionId=filter_request.transactionId
+    startTime=filter_request.startTime
+    endTime=filter_request.endTime
+    order=filter_request.order
 
-# TODO do in monitor tools, make new pr, merge changes into this branch
-# TODO move stuff out of the click function into their own function
-# TODO use those functions here so I can get an easy dictionary
+    result, stat_string = get_records(
+        user,
+        group,
+        state,
+        recordState,
+        recordId,
+        transactionId,
+        startTime,
+        endTime,
+        order,
+    )
+    
+    return JSONResponse(content={"records": result, "message": stat_string})
 
 # no authentication required for the moment

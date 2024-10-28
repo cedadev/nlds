@@ -71,7 +71,7 @@ nlds.include_router(
     tags=[
         "info",
     ],
-    prefix=PREFIX + "/info",
+    prefix="/info",
 )
 nlds.include_router(
     init.router,

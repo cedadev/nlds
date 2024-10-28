@@ -1,66 +1,307 @@
 <!DOCTYPE html>
 <html>
-<head>
-<style>
-table {
-  font-family: arial, sans-serif;
-  border-collapse: collapse;
-  width: 100%;
-}
+    <head>
+        <style>
+            /* Hide everything in this class by default */
+            .complex {
+                display: none;
+            }
+            .simple {
+                display: block;
+            }
+            table {
+                font-family: arial, sans-serif;
+                border-collapse: collapse;
+                width: 100%;
+                padding-top: 20px;
+                margin-top: 20px;
+            }
 
-td, th {
-  border: 1px solid #dddddd;
-  text-align: left;
-  padding: 8px;
-}
+            td, th {
+                border: 1px solid #000000;
+                text-align: left;
+                padding: 8px;
+            }
 
-tr:nth-child(even) {
-  background-color: #dddddd;
-}
-</style>
-</head>
-<body>
+            .hover:hover {
+                background-color: #f5f5f5;
+                cursor: pointer; /* Makes the table row appear clickable */
+            }
+        </style>
+    </head>
+    <body>
 
-<h2>HTML Table</h2>
-<p>{{ info.test }}</p>
-<table>
-  <tr>
-    <th>Company</th>
-    <th>Contact</th>
-    <th>Country</th>
-  </tr>
-  <tr>
-    <td>Alfreds Futterkiste</td>
-    <td>Maria Anders</td>
-    <td>Germany</td>
-  </tr>
-  <tr>
-    <td>Centro comercial Moctezuma</td>
-    <td>Francisco Chang</td>
-    <td>Mexico</td>
-  </tr>
-  <tr>
-    <td>Ernst Handel</td>
-    <td>Roland Mendel</td>
-    <td>Austria</td>
-  </tr>
-  <tr>
-    <td>Island Trading</td>
-    <td>Helen Bennett</td>
-    <td>UK</td>
-  </tr>
-  <tr>
-    <td>Laughing Bacchus Winecellars</td>
-    <td>Yoshi Tannamuri</td>
-    <td>Canada</td>
-  </tr>
-  <tr>
-    <td>Magazzini Alimentari Riuniti</td>
-    <td>Giovanni Rovelli</td>
-    <td>Italy</td>
-  </tr>
-</table>
+        <h2 class="simple">Monitor records table</h2>
+        <h3 class="simple" id="message"></h3>
 
-</body>
+        <table id = recordTable class="simple">
+            <tr>
+                <th>user</th>
+                <th>group</th>
+                <th>id</th>
+                <th>action</th>
+                <th>job label</th>
+                <th>state</th>
+                <th>last update</th>
+            </tr>
+            {% for record in info %}
+                <tr class="hover" onclick="activateComplexView('record_{{ record.id }}')">
+                    <td>{{ record.user }}</td>
+                    <td>{{ record.group }}</td>
+                    <td>{{ record.id }}</td>
+                    <td>{{ record.api_action }}</td>
+                    <td>{{ record.job_label }}</td>
+                    <td>{{ record.state }}</td>
+                    <td>{{ record.creation_time }}</td>
+                    <input type="hidden" id="record_{{ record.id }}" value='{{ record | tojson }}'>
+                </tr>
+            {% endfor %}
+        </table>
+
+        <h2 class="complex">Monitor record complex table</h2>
+        <br>
+        <h3 class="complex">Transaction Record</h3>
+        <div id="complexTable" class="complex"></div>
+        <br>
+        <h3 class="complex">Warnings</h3>
+        <div id="warnings" class="complex"></div>
+        <h3 class="complex">Sub Records</h3>
+        <div id="subRecords" class="complex"></div>
+        <br>
+        <button onclick="toggleVisibility()" class="complex">Return</button>
+
+        <form id="filterBy" class="simple">
+            <label for="user">User:</label><br>
+            <input type="text" id="user" name="user"><br>
+        
+            <label for="group">Group:</label><br>
+            <input type="text" id="group" name="group"><br>
+        
+            <label for="state">State:</label><br>
+            <input type="text" id="state" name="state"><br>
+
+            <label for="recordState">Record state:</label><br>
+            <input type="text" id="recordState" name="recordState"><br>
+
+            <label for="startTime">Start time:</label><br>
+            <input type="date" id="startTime" name="startTime"><br>
+
+            <label for="endTime">End time:</label><br>
+            <input type="date" id="endTime" name="endTime"><br>
+
+            <div>Order:</div>
+            <SELECT id="order">
+                <OPTION Value="ascending">Ascending</OPTION>
+                <OPTION Value="descending">Descending</OPTION>
+            </SELECT><br><br>
+
+            <div>Single row response...</div>
+            <label for="recordId">Id:</label><br>
+            <input type="number" id="recordId" name="recordId"><br>
+
+            <label for="transactionId">Transaction ID:</label><br>
+            <input type="text" id="transactionId" name="transactionId"><br>
+        
+            <input class="filter" type="submit" value="Filter">
+        </form>
+        <div id="response" class="simple"></div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', (event) => {
+                document.getElementById("filterBy").addEventListener("submit", function (e) {
+                    e.preventDefault(); // Prevent the default form submission
+                    let form = document.getElementById("filterBy");
+                    
+                    // Create an object to hold the form values
+                    const formData = {
+                        user: form.user.value || null,
+                        group: form.group.value || null,
+                        state: form.state.value || null,
+                        recordState: form.recordState.value || null,
+                        recordId: form.recordId.value || null,
+                        transactionId: form.transactionId.value || null,
+                        startTime: form.startTime.value || null,
+                        endTime: form.endTime.value || null,
+                        order: form.order.value || null,
+                    };
+            
+                    // Use the existing fetch structure
+                    fetch('/info', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData),
+                    })
+                    .then(resp => resp.json())
+                    .then(data => {
+                        // Extract records and message from the response
+                        const records = data.records
+                        const message = data.message
+
+                        document.getElementById("message").textContent = message;
+
+                        // Clear existing table rows
+                        let tableBody = document.querySelector("#recordTable tbody");
+                        tableBody.innerHTML = "";
+
+                        // Recreate the header row
+                        const headerRow = `
+                            <tr>
+                                <th>user</th>
+                                <th>group</th>
+                                <th>id</th>
+                                <th>action</th>
+                                <th>job label</th>
+                                <th>state</th>
+                                <th>last update</th>
+                            </tr>
+                        `;
+                        tableBody.insertAdjacentHTML('afterbegin', headerRow);
+            
+                        // Populate the table with new records
+                        records.forEach(record => {
+                            let row = document.createElement("tr");
+                            row.classList.add("hover");
+                            row.onclick = () => activateComplexView(`record_${record.id}`);
+            
+                            row.innerHTML = `
+                                <td>${record.user || ''}</td>
+                                <td>${record.group || ''}</td>
+                                <td>${record.id || ''}</td>
+                                <td>${record.api_action || ''}</td>
+                                <td>${record.job_label || ''}</td>
+                                <td>${record.state || ''}</td>
+                                <td>${record.creation_time || ''}</td>
+                                <input type="hidden" id="record_${record.id}" value='${JSON.stringify(record)}'>
+                            `;
+                            tableBody.appendChild(row);
+                        });
+                    })
+                    .catch(error => {
+                        console.error("Error fetching records:", error);
+                    });
+                });
+            });
+
+            function toggleVisibility() {
+                const simpleElements = document.querySelectorAll(".simple");
+                simpleElements.forEach((element) => {
+                    element.style.display = element.style.display === "none" ? "block" : "none";
+                });
+
+                const complexElements = document.querySelectorAll(".complex");
+                complexElements.forEach((element) => {
+                    element.style.display = element.style.display === "block" ? "none" : "block";
+                });
+            }
+
+            function buildTable(records, values, headers, id) {
+                // Clear any existing content from the table body
+                let tableContainer = document.getElementById(id);
+                tableContainer.innerHTML = "";
+            
+                // Create a new table element
+                let newTable = document.createElement("table");
+            
+                // Create a header row
+                let headerRow = document.createElement("tr");
+                headers.forEach(header => {
+                    let th = document.createElement("th");
+                    th.textContent = header;
+                    headerRow.appendChild(th);
+                });
+                newTable.appendChild(headerRow);
+            
+                // Create data rows
+                records.forEach(record => {
+                    let dataRow = document.createElement("tr");
+                    values.forEach(value => {
+                        let td = document.createElement("td");
+            
+                        // Special handling for "failed_files"
+                        if (value === "failed_files") {
+                            if (record.failed_files && record.failed_files.length > 0) {
+                                // Create a nested table for failed files
+                                let failedTable = document.createElement("table");
+                                let failedHeaderRow = document.createElement("tr");
+            
+                                // Add headers for the failed files table
+                                ["File Name"].forEach(failedHeader => {
+                                    let th = document.createElement("th");
+                                    th.textContent = failedHeader;
+                                    failedHeaderRow.appendChild(th);
+                                });
+                                failedTable.appendChild(failedHeaderRow);
+            
+                                // Create rows for each failed file
+                                record.failed_files.forEach(failedFile => {
+                                    let failedRow = document.createElement("tr");
+                                    let failedFileCell = document.createElement("td");
+                                    failedFileCell.textContent = failedFile;  // Add the failed file name
+                                    failedRow.appendChild(failedFileCell);
+                                    failedTable.appendChild(failedRow);
+                                });
+            
+                                // Append the nested failed files table to the cell
+                                td.appendChild(failedTable);
+                            } else {
+                                // If no failed files, show "None"
+                                td.textContent = "None";
+                            }
+                        } else {
+                            // Normal cell content
+                            td.textContent = record[value];
+                        }
+                        dataRow.appendChild(td);
+                    });
+                    newTable.appendChild(dataRow);
+                });
+            
+                // Append the new table to the container
+                tableContainer.appendChild(newTable);
+            }
+            
+
+            function activateComplexView(recordId) {
+                const recordStr = document.getElementById(recordId).value;
+                const record = JSON.parse(recordStr);
+                toggleVisibility()
+
+
+                let complexValues = ["id", "user", "group", "api_action", "job_label", "transaction_id", "creation_time", "state"];
+                let complexHeaders = ["id", "user", "group", "action", "job label", "transaction id", "last update", "state"];
+                buildTable([record], complexValues, complexHeaders, "complexTable")
+
+                if (record.warnings && record.warnings.length > 0) {
+                    let warningValues = ["id", "warning"];
+                    buildTable(record, warningValues, warningValues, "warnings")
+                } else {
+                    // TODO test with warnings (does this need to be cleared each time?)
+                    document.getElementById("warnings").textContent = "None";
+                }
+
+                let subValues = ["id", "sub_id", "state", "last_updated", "failed_files"];
+                let subHeaders = ["id", "sub_id", "state", "last updated", "failed files"];
+                buildTable(record["sub_records"], subValues, subHeaders, "subRecords")
+            }
+        </script>
+    </body>
 </html>
 
+
+<!--
+TODO commit and push (so working version exists somewhere)
+
+TODO add error handling in case the user is an idiot (AHHH JUST REMEMBERD SQL INJECTIONS)
+TODO give suitable message to user if they where an idiot
+
+TODO format everythong, clear away pointless code and comments
+
+TODO test with warnings (does this need to be cleared each time?)
+TODO test failed files (might need clearing as well)
+TODO make sure the for loop works for building the table (test for multiple sub_records)
+TODO maybe create its own script and style files? (I mean look at that js)
+
+TODO write pytests
+-->
