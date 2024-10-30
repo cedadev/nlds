@@ -8,7 +8,11 @@ from typing import Optional
 
 from fastapi.templating import Jinja2Templates
 
-from nlds.nlds_utils import nlds_monitor
+try:
+    from nlds.nlds_utils import nlds_monitor
+except ImportError:
+    # The pytest requires an alternative import option
+    from nlds_utils import nlds_monitor
 
 router = APIRouter()
 
