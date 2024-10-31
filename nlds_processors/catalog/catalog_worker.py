@@ -1224,7 +1224,7 @@ class CatalogConsumer(RMQC):
                 self.completelist,
                 routing_key=rk_complete,
                 body_json=body,
-                state=State.CATALOG_ROLLBACK,
+                state=State.CATALOG_DELETING,
             )
         # FAILED
         if len(self.failedlist) > 0:
