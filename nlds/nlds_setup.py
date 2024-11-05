@@ -11,7 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 API_VERSION = "0.1"
 CONFIG_FILE_LOCATION = "/etc/nlds/server_config"
-USE_DISKTAPE = True
+USE_DISKTAPE = False
 if USE_DISKTAPE:
     DISKTAPE_LOC = "~/DISKTAPE"
 else:

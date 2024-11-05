@@ -93,6 +93,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 path_details.failure_reason = e.message
                 self.failedlist.append(path_details)
             checksum = None
+            tarfile = None
         else:
             # NOTE: For the purposes of tape reading and writing, the holding prefix
             # has 'nlds.' prepended
@@ -108,6 +109,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     path_details.failure_reason = e.message
                     self.failedlist.append(path_details)
                 checksum = None
+                tarfile = None
             # assign the return data for the aggregation.  Need to know the tarfile name
             # and its checksum
             body_json[MSG.DATA][MSG.CHECKSUM] = checksum

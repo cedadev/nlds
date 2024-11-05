@@ -533,9 +533,14 @@ class CatalogConsumer(RMQC):
             #   1. find the file,
             #   2. create the object storage location,
             #   3. add the details to the object storage location from the PathDetails
-            pl = pd.get_object_store()  # this returns a PathLocation object
             # get the file
             try:
+                pl = pd.get_object_store()  # this returns a PathLocation object
+                if pl is None:
+                    raise CatalogError(
+                        f"No object store location in PathDetails for file "
+                        f"{pd.original_path}"
+                    )
                 file = self.catalog.get_files(
                     user,
                     group,
@@ -1025,6 +1030,11 @@ class CatalogConsumer(RMQC):
             pl = pd.get_tape()
             # get the file
             try:
+                # recreate the path location if it was deleted
+                if pl is None:
+                    raise CatalogError(
+                        f"No tape location in PathDetails for file {pd.original_path}"
+                    )
                 # just one file
                 file = self.catalog.get_files(
                     user, group, holding_id=holding_id, original_path=pd.original_path

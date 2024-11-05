@@ -152,6 +152,9 @@ def view_holding(user: str, group: str, holding_id: int) -> None:
         click.echo(f"{'':<4}+-+ Files")
         aggregations = []
         for f in t.files:
+            if f is None:
+                click.echo(f"{'':<8}** None **")
+                continue
             print_file(f)
             click.echo(f"{'':<6}+-+ Locations")
             for l in f.locations:
@@ -163,6 +166,9 @@ def view_holding(user: str, group: str, holding_id: int) -> None:
                         aggregations.append(agg)
         click.echo(f"{'':<4}+-+ Aggregations")
         for a in aggregations:
+            if a is None:
+                click.echo(f"{'':<8}** None **")
+                continue
             print_aggregation(a)
             click.echo(f"{'':<8}+-+{' Files':<16}")
             for l in a.locations:

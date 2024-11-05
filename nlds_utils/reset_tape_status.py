@@ -78,6 +78,12 @@ def reset_tape_status(user: str, group: str, holding_id: int, force: bool) -> No
                         click.echo(
                             f"Removed TAPE location for {f.original_path}"
                         )
+                        if l.aggregation_id is not None:
+                            agg = nlds_cat.get_aggregation(l.aggregation_id)
+                            nlds_cat.delete_aggregation(agg)
+                            click.echo(
+                            f"Removed TAPE aggregation for {f.original_path}"
+                            )
     nlds_cat.save()
     nlds_cat.end_session()
 

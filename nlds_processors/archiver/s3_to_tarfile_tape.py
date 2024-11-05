@@ -1,6 +1,7 @@
 """
 s3_to_tarfile_tape.py
 """
+
 __author__ = "Neil Massey"
 __date__ = "18 Sep 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -8,6 +9,7 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from typing import Tuple, List
+import os
 
 from XRootD import client as XRDClient
 from XRootD.client.flags import StatInfoFlags, MkDirFlags, OpenFlags, QueryCode
@@ -28,6 +30,10 @@ class S3ToTarfileTape(S3ToTarfileStream):
     The streams are defined in these directions:
     PUT : S3 -> Tarfile
     GET : Tarfile -> S3"""
+
+    # constants for environment variables
+    XRD_SECRET_PROTOCOL = "XrdSecPROTOCOL"
+    XRD_SECRET_KEYTAB = "XrdSecSSSKT"
 
     def __init__(
         self,
@@ -52,12 +58,26 @@ class S3ToTarfileTape(S3ToTarfileStream):
             RK.LOG_INFO,
         )
 
+        # check that the environment variables are set:
+        # XrdSecPROTOCOL & XrdSecSSSKT are needed for the XrootD authentication
+        if S3ToTarfileTape.XRD_SECRET_KEYTAB not in os.environ:
+            raise RuntimeError(
+                f"{S3ToTarfileTape.XRD_SECRET_KEYTAB} environment variable not set."
+            )
+
+        if S3ToTarfileTape.XRD_SECRET_PROTOCOL not in os.environ:
+            raise RuntimeError(
+                f"{S3ToTarfileTape.XRD_SECRET_PROTOCOL} environment variable not set."
+            )
+
         # create the connection to the tape server
         self.tape_client = XRDClient.FileSystem(f"root://{self.tape_server_url}")
         self._verify_tape_server()
-        self.log(f"Connected to tape server: {self.tape_server_url}")
+        self.log(f"Connected to tape server: {self.tape_server_url}", RK.LOG_INFO)
 
-    def put(self, holding_prefix: str, filelist: List[PathDetails]):
+    def put(
+        self, holding_prefix: str, filelist: List[PathDetails], chunk_size: int
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """
         Put the filelist to the tape server using the already created S3 client and
          tape client.
@@ -72,7 +92,9 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # self._generate_filelist_hash and self._check_files_exist use the member
         # variables already set and the function definitions are in the parent class
         self.filelist_hash = self._generate_filelist_hash()
-        self._check_files_exist()
+        completelist, failedlist = self._check_files_exist()
+        if len(failedlist) > 0:
+            return [], failedlist, None
 
         # Make or find holding folder on the tape server
         status, _ = self.tape_client.mkdir(self.holding_tapepath, MkDirFlags.MAKEPATH)
@@ -94,7 +116,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
                     )
                 file_object = Adler32XRDFile(XRD_file, debug_fl=False)
                 completelist, failedlist, checksum = self._stream_to_fileobject(
-                    file_object
+                    file_object, filelist, chunk_size
                 )
         except S3StreamError as e:
             msg = (
@@ -103,24 +125,33 @@ class S3ToTarfileTape(S3ToTarfileStream):
                 f"from the tape system disk cache. Original exception: {e}"
             )
             self.log(msg, RK.LOG_ERROR)
-            self._remove_tarfile_from_tape()
-            # need to set all completed_files to failed
-            failedlist.extend(completelist)
-            completelist.clear()
+            try:
+                self._remove_tarfile_from_tape()
+            except S3StreamError as e:
+                msg += f" {e.message}"
             raise S3StreamError(msg)
         # now verify the checksum
         try:
             self._validate_tarfile_checksum(checksum)
         except S3StreamError as e:
-            msg = (f"Exception occurred during validation of tarfile "
-                   f"{self.tarfile_tapepath}.  Original exception: {e}")
-            self.log(msg)
-            self._remove_tarfile_from_tape()
-            # need to set all completed_files to failed
-            failedlist.extend(completelist)
-            completelist.clear()
+            msg = (
+                f"Exception occurred during validation of tarfile "
+                f"{self.tarfile_tapepath}.  Original exception: {e}"
+            )
+            self.log(msg, RK.LOG_ERROR)
+            try:
+                self._remove_tarfile_from_tape()
+            except S3StreamError as e:
+                msg += f" {e.message}"
             raise S3StreamError(msg)
-        return completelist, failedlist, checksum
+        # add the location to the completelist
+        for f in completelist:
+            f.set_tape(
+                server="",
+                tapepath=self.holding_tapepath,
+                tarfile=f"{self.filelist_hash}.tar",
+            )
+        return completelist, failedlist, self.tarfile_tapepath, checksum
 
     """Note that there are a number of different methods below to get the tapepaths"""
 
@@ -217,7 +248,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         doing so we'll need to remove the tarfile from the disk cache on the tape
         system before it gets written to tape, hence this function.
         """
-        
+
         status, _ = self.tape_client.rm(self.tarfile_tapepath)
         if status.status != 0:
             reason = "Could not delete file from disk-cache"
@@ -256,11 +287,11 @@ class S3ToTarfileTape(S3ToTarfileStream):
                 checksum = int(value[:8], 16)
                 if checksum != tarfile_checksum:
                     # If it fails at this point then attempt to delete.  It will be
-                    # scheduled to happend again, so long as the files are added to 
+                    # scheduled to happend again, so long as the files are added to
                     # failed_list
                     reason = (
-                        f"XRootD checksum {checksum} differs from that calculated during "
-                        f"streaming upload {tarfile_checksum}."
+                        f"XRootD checksum {checksum} differs from that calculated "
+                        f"during streaming upload {tarfile_checksum}."
                     )
                     self.log(reason, RK.LOG_ERROR)
                     raise S3StreamError(
@@ -272,3 +303,4 @@ class S3ToTarfileTape(S3ToTarfileStream):
                     f"xrootd",
                     RK.LOG_ERROR,
                 )
+                raise e

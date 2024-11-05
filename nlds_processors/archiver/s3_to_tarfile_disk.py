@@ -110,7 +110,10 @@ class S3ToTarfileDisk(S3ToTarfileStream):
                 f"Original exception: {e}"
             )
             self.log(msg, RK.LOG_ERROR)
-            self._remove_tarfile_from_disktape()
+            try:
+                self._remove_tarfile_from_disktape()
+            except S3StreamError as e:
+                msg += f" {e.message}"
             raise S3StreamError(msg)
 
         # now verify the checksum

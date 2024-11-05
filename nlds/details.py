@@ -356,10 +356,8 @@ class PathDetails(BaseModel):
         """Get the PathLocation for the tape file."""
         # note - this only returns the first object - this is fine for now, but might
         # need amending if users want to use different tenancies
-        for pl in self.locations.locations:
-            if pl.storage_type == MSG.TAPE:
-                return pl
-        return None
+        """Get the PathLocation for the object storage file."""
+        return self._get_location(MSG.TAPE)
 
     @property
     def tape_name(self) -> str | None:
