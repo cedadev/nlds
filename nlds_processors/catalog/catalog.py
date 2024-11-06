@@ -663,27 +663,28 @@ class Catalog(DBMixin):
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
-            # Get all archived holdings
-            archived_holdings_q = self.session.query(Holding.id).filter(
-                Transaction.holding_id == Holding.id,
-                File.transaction_id == Transaction.id,
-                Location.file_id == File.id,
-                Location.storage_type == Storage.TAPE,
-            )
+            # To get unarchived Holdings we need to find Transactions in a holding that
+            # contains files that do not have a Tape location
+            # however, they do have to have a Object Storage location, as this shows
+            # that the file was successfully transferred to Object Storage.
+            # There are four cases:
+            # 1. Files without either a Object Storage or Tape location are mid transfer
+            #    to the Object Store
+            # 2. Files with an Object Storage, but no Tape location are on the Object  
+            #    Storage but require backing up to tape
+            # 3. Files with an Object Storage and Tape location are on the Object 
+            #    Storage and have already been backed up to Tape
+            # 4. Files with a Tape location, but no Object Storage location have been 
+            #    removed from Object Storage due to space constraints, and will need to 
+            #    be fetched from Tape on a user GET
 
-            # Get the first of the holdings which are not in the archived
-            # holdings query - need to ensure that the files are on object storage
-            # already and not mid-transfer
-            all_holdings_q = self.session.query(Holding).filter(
+            next_holding = self.session.query(Holding).filter(
                 Transaction.holding_id == Holding.id,
                 File.transaction_id == Transaction.id,
-                Location.file_id == File.id,
-                Location.storage_type == Storage.OBJECT_STORAGE,
-            )
-            unarchived_holdings_q = all_holdings_q.filter(
-                Holding.id.not_in(archived_holdings_q.correlate(Holding))
-            )
-            next_holding = unarchived_holdings_q.order_by(Holding.id).first()
+                ~File.locations.any(Location.storage_type == Storage.TAPE),
+                File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE)
+            ).order_by(Holding.id).first()
+
         except (NoResultFound, KeyError):
             raise CatalogError(f"Couldn't get unarchived holdings")
         return next_holding
@@ -697,23 +698,11 @@ class Catalog(DBMixin):
             # Get all files for the given holding. Again we have to ensure that the
             # transfer to object storage has completed and the files are not
             # mid-transfer
-            all_files_q = self.session.query(File).filter(
+            unarchived_files = self.session.query(File).filter(
                 Transaction.holding_id == holding.id,
                 File.transaction_id == Transaction.id,
-                Location.file_id == File.id,
-                Location.storage_type == Storage.OBJECT_STORAGE,
-                Location.storage_type != Storage.TAPE,
-            )
-            # Get the subset of files which are archived
-            archived_files_q = self.session.query(File.id).filter(
-                Transaction.holding_id == holding.id,
-                File.transaction_id == Transaction.id,
-                Location.file_id == File.id,
-                Location.storage_type == Storage.TAPE,
-            )
-            # Get the remainder of files which are unarchived
-            unarchived_files = all_files_q.filter(
-                File.id.not_in(archived_files_q.correlate(File)),
+                ~File.locations.any(Location.storage_type == Storage.TAPE),
+                File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE)
             ).all()
         except (NoResultFound, KeyError):
             raise CatalogError(
