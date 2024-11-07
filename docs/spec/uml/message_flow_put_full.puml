@@ -84,12 +84,13 @@ activate qs
 qs -> index : key=""nlds-api.index.init""
 deactivate qs
 activate index
-loop #lightblue for subfile in filelist[::1000]
-    index -> wex : key=""nlds-api.index.start""
-    activate wex
+loop #lightblue for subfile in //filelist//[::1000]
+    index -> index : add file to //subfilelist//
 end
+index -> wex : key=""nlds-api.index.start""
 deactivate index
 
+activate wex
 wex -> qs : key=""nlds-api.index.start""
 deactivate wex
 
@@ -155,8 +156,23 @@ qw -> work: key=""nlds-api.catalog-put.complete""
 deactivate qw
 
 activate work
-work -> wex  : key=""nlds-api.transfer-put.start""
+work -> wex  : key=""nlds-api.transfer-put.init""
 deactivate work
+
+activate wex
+wex -> qt : key=""nlds-api.transfer-put.init""
+deactivate wex
+
+activate qt
+qt -> transfer_puts : key=""nlds-api.transfer-put.init""
+deactivate qt
+
+activate transfer_puts
+loop #Gold for subfile in //catalogued_list//[::1000]
+    transfer_puts -> transfer_puts : add file to //subfilelist//
+end
+transfer_puts -> wex : key=""nlds-api.transfer-put.start""
+deactivate transfer_puts
 
 activate wex
 wex -> qt : key=""nlds-api.transfer-put.start""
