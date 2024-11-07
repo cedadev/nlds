@@ -109,6 +109,29 @@ def print_aggregation(aggregation: Aggregation):
     click.echo(f"{'':<6}{'':<4}{'checksum':<16}: {aggregation.checksum}")
     click.echo(f"{'':<6}{'':<4}{'algorithm':<16}: {aggregation.algorithm}")
 
+def print_file_compact_header():
+    click.echo(
+        f"{'':<6}{'':<4}{'Original Path':<48}{'User':<6}{'Group':<7}"
+        f"{'Size':<8}{'Type':<8}{'Location':<24}{'Aggregation':48}"
+    )
+
+def print_file_compact(file: File, nlds_cat: object):
+    location_str = ""
+    for l in file.locations:
+        location_str += str(l.storage_type) + ", "
+    location_str = location_str[:-2]
+    output_str = (
+        f"{'':<6}{'':<4}{file.original_path:<48}{file.user:<6}{file.group:<7}"
+        f"{pretty_size(file.size):<8}{file.path_type:<8}{location_str:<24}"
+    )
+    for l in file.locations:
+        if l.storage_type == Storage.TAPE:
+            agg = nlds_cat.get_aggregation(l.aggregation_id)
+            output_str += f"{agg.tarname:<32}"
+
+    click.echo(output_str)
+
+
 @click.command()
 @click.option(
     "-u",
@@ -127,7 +150,15 @@ def print_aggregation(aggregation: Aggregation):
     type=int,
     help="The numeric id of the holding to view.",
 )
-def view_holding(user: str, group: str, holding_id: int) -> None:
+@click.option(
+    "-C",
+    "--compact",
+    is_flag=True,
+    default=False,
+    type=bool,
+    help="Display in compact format, one file per line"
+)
+def view_holding(user: str, group: str, holding_id: int, compact: bool) -> None:
     """View the full Holding, including Transactions, Tags, Files, Locations and
     Aggregations."""
     if user is None:
@@ -136,7 +167,7 @@ def view_holding(user: str, group: str, holding_id: int) -> None:
         raise click.UsageError("Error - group not specified")
     if holding_id is None:
         raise click.UsageError("Error - holding id not specified")
-
+    
     nlds_cat = _connect_to_catalog()
     nlds_cat.start_session()
 
@@ -151,7 +182,12 @@ def view_holding(user: str, group: str, holding_id: int) -> None:
         print_transaction(t)
         click.echo(f"{'':<4}+-+ Files")
         aggregations = []
+        if compact:
+            print_file_compact_header()
         for f in t.files:
+            if compact:
+                print_file_compact(f, nlds_cat)
+                continue
             if f is None:
                 click.echo(f"{'':<8}** None **")
                 continue
@@ -164,17 +200,18 @@ def view_holding(user: str, group: str, holding_id: int) -> None:
                     agg = nlds_cat.get_aggregation(l.aggregation_id)
                     if l is not None and agg not in aggregations:
                         aggregations.append(agg)
-        click.echo(f"{'':<4}+-+ Aggregations")
-        for a in aggregations:
-            if a is None:
-                click.echo(f"{'':<8}** None **")
-                continue
-            print_aggregation(a)
-            click.echo(f"{'':<8}+-+{' Files':<16}")
-            for l in a.locations:
-                f = File(id=l.file_id)
-                f = nlds_cat.get_location_file(l)
-                click.echo(f"{'':<12}{f.original_path}")
+        if not compact:
+            click.echo(f"{'':<4}+-+ Aggregations")
+            for a in aggregations:
+                if a is None:
+                    click.echo(f"{'':<8}** None **")
+                    continue
+                print_aggregation(a)
+                click.echo(f"{'':<8}+-+{' Files':<16}")
+                for l in a.locations:
+                    f = File(id=l.file_id)
+                    f = nlds_cat.get_location_file(l)
+                    click.echo(f"{'':<12}{f.original_path}")
 
     nlds_cat.end_session()
 
