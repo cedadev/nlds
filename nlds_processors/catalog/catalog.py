@@ -313,7 +313,7 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         original_path: str = None,
         tag: dict = None,
-        one: bool = False
+        one: bool = False,
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -337,10 +337,11 @@ class Catalog(DBMixin):
 
         # (permissions have been checked by get_holding)
         file_list = []
+        ingest_time = None
         try:
             for h in holding:
                 # build the file query bit by bit
-                file_q = self.session.query(File).filter(
+                file_q = self.session.query(File, Transaction).filter(
                     File.transaction_id == Transaction.id,
                     Transaction.holding_id == h.id,
                 )
@@ -348,24 +349,32 @@ class Catalog(DBMixin):
                     file_q = file_q.filter(File.original_path.regexp_match(search_path))
                 else:
                     file_q = file_q.filter(File.original_path == search_path)
-                # limit to the newest file if one is selected
-                # get_files does this to get the most recent if a file has been entered
-                # into multiple holdings
-                if one:
-                    file_q = file_q.order_by(Transaction.ingest_time)
-                    file = [file_q.first()]
-                else:
-                    file = file_q.all()
-                for f in file:
-                    if f is None:
+
+                result = file_q.all()
+                for r in result:
+                    if r.File is None:
                         continue
                     # check user has permission to access this file
-                    if f and not self._user_has_get_file_permission(user, group, f):
+                    if r.File and not self._user_has_get_file_permission(
+                        user, group, r.File
+                    ):
                         raise CatalogError(
                             f"User:{user} in group:{group} does not have permission to "
-                            f"access the file with original path:{f.original_path}."
+                            f"access the file with original path:{r.File.original_path}."
                         )
-                    file_list.append(f)
+
+                    # limit to the newest file if one is selected
+                    # get_files does this to get the most recent if a file has been
+                    # entered into multiple holdings
+                    if one:
+                        if ingest_time is None:
+                            file_list = [r.File]
+                            ingest_time = r.Transaction.ingest_time
+                        elif r.Transaction.ingest_time > ingest_time:
+                            file_list = [r.File]
+                            ingest_time = r.Transaction.ingest_time
+                    else:
+                        file_list.append(r.File)
             # no files found
             if len(file_list) == 0:
                 raise KeyError
@@ -670,20 +679,25 @@ class Catalog(DBMixin):
             # There are four cases:
             # 1. Files without either a Object Storage or Tape location are mid transfer
             #    to the Object Store
-            # 2. Files with an Object Storage, but no Tape location are on the Object  
+            # 2. Files with an Object Storage, but no Tape location are on the Object
             #    Storage but require backing up to tape
-            # 3. Files with an Object Storage and Tape location are on the Object 
+            # 3. Files with an Object Storage and Tape location are on the Object
             #    Storage and have already been backed up to Tape
-            # 4. Files with a Tape location, but no Object Storage location have been 
-            #    removed from Object Storage due to space constraints, and will need to 
+            # 4. Files with a Tape location, but no Object Storage location have been
+            #    removed from Object Storage due to space constraints, and will need to
             #    be fetched from Tape on a user GET
 
-            next_holding = self.session.query(Holding).filter(
-                Transaction.holding_id == Holding.id,
-                File.transaction_id == Transaction.id,
-                ~File.locations.any(Location.storage_type == Storage.TAPE),
-                File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE)
-            ).order_by(Holding.id).first()
+            next_holding = (
+                self.session.query(Holding)
+                .filter(
+                    Transaction.holding_id == Holding.id,
+                    File.transaction_id == Transaction.id,
+                    ~File.locations.any(Location.storage_type == Storage.TAPE),
+                    File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                )
+                .order_by(Holding.id)
+                .first()
+            )
 
         except (NoResultFound, KeyError):
             raise CatalogError(f"Couldn't get unarchived holdings")
@@ -698,12 +712,16 @@ class Catalog(DBMixin):
             # Get all files for the given holding. Again we have to ensure that the
             # transfer to object storage has completed and the files are not
             # mid-transfer
-            unarchived_files = self.session.query(File).filter(
-                Transaction.holding_id == holding.id,
-                File.transaction_id == Transaction.id,
-                ~File.locations.any(Location.storage_type == Storage.TAPE),
-                File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE)
-            ).all()
+            unarchived_files = (
+                self.session.query(File)
+                .filter(
+                    Transaction.holding_id == holding.id,
+                    File.transaction_id == Transaction.id,
+                    ~File.locations.any(Location.storage_type == Storage.TAPE),
+                    File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                )
+                .all()
+            )
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Couldn't find unarchived files for holding with id:{holding.id}"
