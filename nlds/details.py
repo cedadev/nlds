@@ -103,7 +103,7 @@ class PathLocations(BaseModel):
 
     def reset(self) -> None:
         self.count = 0
-        self.locations = []
+        self.locations.clear()
 
     def to_json(self) -> Dict:
         out_dict = {}
