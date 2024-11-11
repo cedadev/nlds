@@ -30,6 +30,7 @@ class State(Enum):
     # ARCHIVE_PUT workflow states
     ARCHIVE_INIT = 20
     ARCHIVE_PUTTING = 21
+    ARCHIVE_PREPARING = 22
     # CATALOG manipulation workflow states
     CATALOG_DELETING = 30
     CATALOG_UPDATING = 31
