@@ -204,7 +204,7 @@ class NLDSWorkerConsumer(RMQC):
         self, rk_parts: List, body_json: Dict
     ) -> None:
         # After a successful CATALOG_UPDATE, as part of the GET workflow, the files
-        # are get from the Object Store using TRANSFER_GET
+        # are got from the Object Store using TRANSFER_GET
         # this is the same as the when catalog get is complete
         try:
             api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
@@ -224,13 +224,20 @@ class NLDSWorkerConsumer(RMQC):
         new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
         self.publish_and_log_message(new_routing_key, body_json)
 
-        # forward to archive_get - use START rather than INITIATE as we don't want
-        # and splitting to take place, as the messages are already sub-divided on
-        # aggregate and we want to pull the whole aggregate back from tape in a single
-        # call. (we don't want to pull the aggregate back multiple times, which is what
-        # would happen if we split the messages here)
+        # forward to archive_get - use PREPARE rather than INITIATE for two reasons:
+        # 1. We don't want and splitting to take place, as the messages are already
+        #    sub-divided on aggregate and we want to pull the whole aggregate back from
+        #    tape in a single call. (we don't want to pull the aggregate back multiple
+        #    times, which is what would happen if we split the messages here)
+        # 2. We might (probably will) need to prepare aggregates on the tape system.
+        #    this involves fetching the aggregate from tape and staging it on the small
+        #    amount of cache that the tape system has.  This obviously takes time so,
+        #    after the prepare call to XrootD, a PREPARE_CHECK message is queued that
+        #    will poll the tape system to determine if the aggregate has been staged
+        #    yet.  After that, the ARCHIVE_GET.START message is queued.
+
         queue = RK.ARCHIVE_GET
-        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
+        new_routing_key = ".".join([RK.ROOT, queue, RK.PREPARE])
         self.log(
             f"Sending  message to {queue} queue with routing key " f"{new_routing_key}",
             RK.LOG_INFO,
@@ -377,12 +384,16 @@ class NLDSWorkerConsumer(RMQC):
 
             # If finished with aggregation of unarchived holding, then send for
             # archive write
-            elif rk_parts[1] == RK.CATALOG_ARCHIVE_NEXT:
+            elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_NEXT}":
                 self._process_rk_catalog_archive_next_complete(rk_parts, body_json)
 
             # If finished with archive write, then pass checksum info to catalog
             elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
                 self._process_rk_archive_put_complete(rk_parts, body_json)
+
+            # If finished with catalog update then pass for transfer get
+            elif rk_parts[1] == f"{RK.CATALOG_UPDATE}":
+                self._process_rk_catalog_update_complete(rk_parts, body_json)
 
         # If a archive-restore has happened from the catalog then we need to get from
         # archive before we can do the transfer from object store.
