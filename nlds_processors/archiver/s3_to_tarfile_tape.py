@@ -153,6 +153,28 @@ class S3ToTarfileTape(S3ToTarfileStream):
             )
         return completelist, failedlist, self.tarfile_tapepath, checksum
 
+    def get(
+        self,
+        holding_prefix: str,
+        tarfile: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+        raise NotImplementedError
+
+    def prepare_required(self) -> bool:
+        """Query the storage system as to whether a file needs to be prepared (staged)."""
+        raise NotImplementedError
+
+    def prepare_request(self) -> int:
+        """Request the storage system for a file to be prepared (staged)."""
+        raise NotImplementedError
+
+    def prepare_complete(self, prepare_id: int) -> bool:
+        """Query the storage system whether the prepare (staging) for a file has been
+        completed."""
+        raise NotImplementedError
+
     """Note that there are a number of different methods below to get the tapepaths"""
 
     @property
