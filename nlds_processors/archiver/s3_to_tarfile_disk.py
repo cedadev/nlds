@@ -29,6 +29,8 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     PUT : S3 -> Tarfile
     GET : Tarfile -> S3"""
 
+    prepare_id = 0
+
     def __init__(
         self,
         s3_tenancy: str,
@@ -168,6 +170,21 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             raise S3StreamError(msg)
 
         return completelist, failedlist
+
+    def prepare_required(self, tarfile: str) -> bool:
+        """Query the storage system as to whether a file needs to be prepared."""
+        # return True for the disktape / faketape™ for every other request
+        return (S3ToTarfileDisk.prepare_id % 2 == 0)
+
+    def prepare_request(self, tarfile: str) -> int:
+        """Request the storage system for a file to be prepared"""
+        S3ToTarfileDisk.prepare_id += 1
+        return S3ToTarfileDisk.prepare_id
+
+    def prepare_complete(self, prepare_id: int) -> bool:
+        """Query the storage system whether the prepare for a file has been completed."""
+        # always return True for the disktape / faketape™
+        return True
 
     @property
     def holding_diskpath(self):
