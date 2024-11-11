@@ -15,16 +15,7 @@ import os
 from minio.error import S3Error
 from retry import retry
 
-from nlds_processors.archiver.archive_base import (
-    BaseArchiveConsumer,
-    ArchiveError,
-)
-
-from nlds.nlds_setup import USE_DISKTAPE, DISKTAPE_LOC
-if USE_DISKTAPE:
-    from nlds_processors.archiver.s3_to_tarfile_disk import S3ToTarfileDisk
-else:
-    from nlds_processors.archiver.s3_to_tarfile_tape import S3ToTarfileTape
+from nlds_processors.archiver.archive_base import BaseArchiveConsumer
 
 from nlds_processors.archiver.s3_to_tarfile_stream import S3StreamError
 
@@ -60,33 +51,12 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Create the S3 to tape or disk streamer
         try:
-            if USE_DISKTAPE:
-                disk_loc = os.path.expanduser(DISKTAPE_LOC)
-                self.log(
-                    f"Starting disk transfer between {disk_loc} and object store "
-                    f"{tenancy}",
-                    RK.LOG_INFO,
-                )
-                streamer = S3ToTarfileDisk(
-                    s3_tenancy=tenancy,
-                    s3_access_key=access_key,
-                    s3_secret_key=secret_key,
-                    disk_location=disk_loc,
-                    logger=self.log,
-                )
-            else:
-                self.log(
-                    f"Starting tape transfer between {tape_url} and object store "
-                    f"{tenancy}",
-                    RK.LOG_INFO,
-                )
-                streamer = S3ToTarfileTape(
-                    s3_tenancy=tenancy,
-                    s3_access_key=access_key,
-                    s3_secret_key=secret_key,
-                    tape_url=tape_url,
-                    logger=self.log,
-                )
+            streamer = self._create_streamer(
+                tenancy=tenancy,
+                access_key=access_key,
+                secret_key=secret_key,
+                tape_url=tape_url,
+            )
         except S3StreamError as e:
             # if a S3StreamError occurs then all files have failed
             for path_details in filelist:
@@ -110,10 +80,10 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     self.failedlist.append(path_details)
                 checksum = None
                 tarfile = None
-            # assign the return data for the aggregation.  Need to know the tarfile name
-            # and its checksum
-            body_json[MSG.DATA][MSG.CHECKSUM] = checksum
-            body_json[MSG.DATA][MSG.TARFILE] = tarfile
+        # assign the return data for the aggregation.  Need to know the tarfile name
+        # and its checksum
+        body_json[MSG.DATA][MSG.CHECKSUM] = checksum
+        body_json[MSG.DATA][MSG.TARFILE] = tarfile
 
         # Send whatever remains after all items have been put
         if len(self.completelist) > 0:
@@ -133,6 +103,34 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 body_json,
                 state=State.FAILED,
             )
+
+    def prepare(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
+        """Put shouldn't have a prepare method"""
+        raise NotImplementedError
+
+    def prepare_check(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
+        """Put shouldn't have a prepare check method"""
+        raise NotImplementedError
 
 
 def main():
