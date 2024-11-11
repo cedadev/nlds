@@ -625,7 +625,7 @@ class CatalogConsumer(RMQC):
         self.catalog.start_session()
         self.reset()
 
-        # loop over the aggregaton dict
+        # loop over the aggregation dict
         for key, agg in aggregation_dict.items():
             # get the holding id
             try:
