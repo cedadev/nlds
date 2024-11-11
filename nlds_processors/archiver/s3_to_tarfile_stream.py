@@ -13,6 +13,7 @@ from typing import List
 from urllib3.exceptions import HTTPError
 import tarfile
 from datetime import datetime
+from abc import abstractmethod
 
 import minio
 from minio.error import S3Error
@@ -291,3 +292,34 @@ class S3ToTarfileStream:
                     )
                     completelist.append(path_details)
         return completelist, failedlist
+
+    @abstractmethod
+    def put(
+        self, holding_prefix: str, filelist: List[PathDetails], chunk_size: int
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get(
+        self,
+        holding_prefix: str,
+        tarfile: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare_required(self, tarfile) -> bool:
+        """Query the storage system as to whether a file needs to be prepared."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare_request(self, tarfile) -> int:
+        """Request the storage system for a file to be prepared"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare_complete(self, prepare_id: int) -> bool:
+        """Query the storage system whether the prepare for a file has been completed."""
+        raise NotImplementedError
