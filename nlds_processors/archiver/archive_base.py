@@ -12,6 +12,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Tuple, Any
+import os
 
 from nlds_processors.transferers.base_transfer import BaseTransferConsumer
 from nlds_processors.utils.aggregations import bin_files
@@ -20,6 +21,13 @@ from nlds.details import PathDetails
 from nlds.rabbit.consumer import State
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
+
+from nlds.nlds_setup import USE_DISKTAPE, DISKTAPE_LOC
+
+if USE_DISKTAPE:
+    from nlds_processors.archiver.s3_to_tarfile_disk import S3ToTarfileDisk
+else:
+    from nlds_processors.archiver.s3_to_tarfile_tape import S3ToTarfileTape
 
 
 class ArchiveError(Exception):
@@ -53,6 +61,43 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
         self.reset()
 
+    def _create_streamer(
+        self,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+    ):
+        """Helper function to create a streamer based on status of USE_DISK_TAPE"""
+        if USE_DISKTAPE:
+            disk_loc = os.path.expanduser(DISKTAPE_LOC)
+            self.log(
+                f"Starting disk transfer between {disk_loc} and object store "
+                f"{tenancy}",
+                RK.LOG_INFO,
+            )
+            streamer = S3ToTarfileDisk(
+                s3_tenancy=tenancy,
+                s3_access_key=access_key,
+                s3_secret_key=secret_key,
+                disk_location=disk_loc,
+                logger=self.log,
+            )
+        else:
+            self.log(
+                f"Starting tape transfer between {tape_url} and object store "
+                f"{tenancy}",
+                RK.LOG_INFO,
+            )
+            streamer = S3ToTarfileTape(
+                s3_tenancy=tenancy,
+                s3_access_key=access_key,
+                s3_secret_key=secret_key,
+                tape_url=tape_url,
+                logger=self.log,
+            )
+        return streamer
+
     def callback(self, ch, method, properties, body, connection):
         """Callback for the base archiver consumer. Takes the message contents
         in body and runs some standard objectstore verification (reused from the
@@ -61,6 +106,18 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         """
         if not self._callback_common(ch, method, properties, body, connection):
             return
+
+        # get tape_url for those routes that need it
+        if self.rk_parts[2] in [RK.START, RK.PREPARE, RK.PREPARE_CHECK]:
+            try:
+                tape_url = self.get_tape_config(self.body_json)
+            except ArchiveError as e:
+                self.log(
+                    "Tape config unobtainable or invalid, exiting callback.",
+                    RK.LOG_ERROR,
+                )
+                self.log(str(e), RK.LOG_DEBUG)
+                raise e
 
         # create aggregates
         if self.rk_parts[2] == RK.INITIATE:
@@ -82,17 +139,29 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                     state=State.INITIALISING,
                 )
         elif self.rk_parts[2] == RK.START:
-            try:
-                tape_url = self.get_tape_config(self.body_json)
-            except ArchiveError as e:
-                self.log(
-                    "Tape config unobtainable or invalid, exiting callback.",
-                    RK.LOG_ERROR,
-                )
-                self.log(str(e), RK.LOG_DEBUG)
-                raise e
-
             self.transfer(
+                self.transaction_id,
+                self.tenancy,
+                self.access_key,
+                self.secret_key,
+                tape_url,
+                self.filelist,
+                self.rk_parts[0],
+                self.body_json,
+            )
+        elif self.rk_parts[2] == RK.PREPARE:
+            self.prepare(
+                self.transaction_id,
+                self.tenancy,
+                self.access_key,
+                self.secret_key,
+                tape_url,
+                self.filelist,
+                self.rk_parts[0],
+                self.body_json,
+            )
+        elif self.rk_parts[2] == RK.PREPARE_CHECK:
+            self.prepare_check(
                 self.transaction_id,
                 self.tenancy,
                 self.access_key,
@@ -130,7 +199,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         return tape_url
 
     @classmethod
-    def get_holding_prefix(cls, body: Dict[str, Any], holding_id: int=-1) -> str:
+    def get_holding_prefix(cls, body: Dict[str, Any], holding_id: int = -1) -> str:
         """Get the uneditable holding information from the message body to
         reproduce the holding prefix made in the catalog"""
         try:
@@ -154,5 +223,33 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         filelist: List[PathDetails],
         rk_origin: str,
         body_dict: Dict[str, str],
+    ):
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare_check(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
     ):
         raise NotImplementedError
