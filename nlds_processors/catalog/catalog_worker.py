@@ -713,7 +713,7 @@ class CatalogConsumer(RMQC):
                 self.completelist,
                 routing_key=rk_complete,
                 body_json=body,
-                state=State.CATALOG_UPDATING,
+                state=State.TRANSFER_INIT,
             )
         # FAILED
         if len(self.failedlist) > 0:

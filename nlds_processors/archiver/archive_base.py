@@ -136,7 +136,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                     sub_list,
                     rk_transfer_start,
                     self.body_json,
-                    state=State.INITIALISING,
+                    state=State.ARCHIVE_INIT,
                 )
         elif self.rk_parts[2] == RK.START:
             self.transfer(

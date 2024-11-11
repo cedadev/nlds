@@ -27,6 +27,7 @@ class State(Enum):
     CATALOG_GETTING = 10
     ARCHIVE_GETTING = 11
     TRANSFER_GETTING = 12
+    TRANSFER_INIT = 13
     # ARCHIVE_PUT workflow states
     ARCHIVE_INIT = 20
     ARCHIVE_PUTTING = 21

@@ -137,7 +137,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                     sub_list,
                     rk_transfer_start,
                     self.body_json,
-                    state=State.INITIALISING,
+                    state=State.TRANSFER_INIT,
                 )
         elif self.rk_parts[2] == RK.START:
             # Start transfer - this is implementation specific and handled by
