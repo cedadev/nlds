@@ -10,22 +10,13 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from typing import List, Dict, Tuple, Any
-import os
+from typing import List, Dict, Any
+from copy import copy
 from minio.error import S3Error
 from retry import retry
+from enum import Enum
 
-from nlds_processors.archiver.archive_base import (
-    BaseArchiveConsumer,
-    ArchiveError,
-)
-
-from nlds.nlds_setup import USE_DISKTAPE, DISKTAPE_LOC
-
-if USE_DISKTAPE:
-    from nlds_processors.archiver.s3_to_tarfile_disk import S3ToTarfileDisk
-else:
-    from nlds_processors.archiver.s3_to_tarfile_tape import S3ToTarfileTape
+from nlds_processors.archiver.archive_base import BaseArchiveConsumer
 
 from nlds_processors.archiver.s3_to_tarfile_stream import S3StreamError
 
@@ -37,8 +28,13 @@ import nlds.rabbit.message_keys as MSG
 
 class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_QUEUE_NAME = "archive_get_q"
-    DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_PUT}." f"{RK.WILD}"
+    DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.ARCHIVE_GET}." f"{RK.WILD}"
     DEFAULT_STATE = State.ARCHIVE_GETTING
+
+    class Phase(Enum):
+        PREPARE_REQUEST = 0
+        PREPARE_CHECK = 1
+        PREPARE_COMPLETE = 2
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
@@ -54,51 +50,29 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         filelist: List[PathDetails],
         rk_origin: str,
         body_json: Dict[str, Any],
-    ):
+    ) -> None:
         # Make the routing keys
         rk_complete = ".".join([rk_origin, RK.ARCHIVE_GET, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.ARCHIVE_GET, RK.FAILED])
 
         # create the S3 to tape or disk streamer
         try:
-            if USE_DISKTAPE:
-                disk_loc = os.path.expanduser(DISKTAPE_LOC)
-                self.log(
-                    f"Starting disk transfer between {disk_loc} and object store "
-                    f"{tenancy}",
-                    RK.LOG_INFO,
-                )
-                streamer = S3ToTarfileDisk(
-                    s3_tenancy=tenancy,
-                    s3_access_key=access_key,
-                    s3_secret_key=secret_key,
-                    disk_location=disk_loc,
-                    logger=self.log,
-                )
-            else:
-                self.log(
-                    f"Starting tape transfer between {tape_url} and object store "
-                    f"{tenancy}",
-                    RK.LOG_INFO,
-                )
-                streamer = S3ToTarfileTape(
-                    s3_tenancy=tenancy,
-                    s3_access_key=access_key,
-                    s3_secret_key=secret_key,
-                    tape_url=tape_url,
-                    logger=self.log,
-                )
+            streamer = self._create_streamer(
+                tenancy=tenancy,
+                access_key=access_key,
+                secret_key=secret_key,
+                tape_url=tape_url,
+            )
         except S3StreamError as e:
             # if a S3StreamError occurs then all files have failed
             for path_details in filelist:
                 path_details.failure_reason = e.message
                 self.failedlist.append(path_details)
-            checksum = None
         else:
             # For archive_get, the message is structured as a dictionary stored in
             # ['data']['retrieval_dict'] and a filelist stored in ['data']['filelist']
             # there is also a filelist in ['data']['retrieval_dict']['filelist'] which
-            # contains the files to be retrieved from the tarfile / aggregate:
+            # contains the files to be retrieved each individual tarfile / aggregate:
             retrieval_dict = body_json[MSG.DATA][MSG.RETRIEVAL_DICT]
             # looping over the aggregates
             for tarfile, item in retrieval_dict.items():
@@ -116,15 +90,37 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 # empty streamer.filelist for new aggregate
                 streamer.filelist.clear()
                 try:
-                    self.completelist, self.failedlist = streamer.get(
+                    completelist, failedlist = streamer.get(
                         holding_prefix, tarfile, aggregate_filelist, self.chunk_size
                     )
+                    for path_details in completelist:
+                        self.append_and_send(
+                            self.completelist,
+                            path_details,
+                            routing_key=rk_complete,
+                            body_json=body_json,
+                            state=State.ARCHIVE_GETTING,
+                        )
+                    for path_details in failedlist:
+                        self.append_and_send(
+                            self.failedlist,
+                            path_details,
+                            routing_key=rk_failed,
+                            body_json=body_json,
+                            state=State.FAILED,
+                        )
                 except S3StreamError as e:
-                    # if a S3StreamError occurs then all files have failed
-                    for path_details in filelist:
+                    # if a S3StreamError occurs then all files in the aggregate have
+                    # failed
+                    for path_details in aggregate_filelist:
                         path_details.failure_reason = e.message
-                        self.failedlist.append(path_details)
-                    checksum = None
+                        self.append_and_send(
+                            self.failedlist,
+                            path_details,
+                            routing_key=rk_failed,
+                            body_json=body_json,
+                            state=State.FAILED,
+                        )
 
         if len(self.completelist) > 0:
             # Send whatever remains after all items have been got
@@ -133,18 +129,197 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 RK.LOG_INFO,
             )
             self.send_pathlist(
-                self.completelist, rk_complete, body_json, state=State.ARCHIVE_GETTING
+                self.completelist,
+                routing_key=rk_complete,
+                body_json=body_json,
+                state=State.ARCHIVE_GETTING,
             )
 
         if len(self.failedlist) > 0:
-            # Send message back to worker so catalog can be scrubbed of failed puts
+            # Send message back to worker so catalog can be scrubbed of failed gets
             self.send_pathlist(
                 self.failedlist,
                 rk_failed,
                 body_json,
                 state=State.FAILED,
             )
-        return
+
+    def __prepare(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, Any],
+        phase: Phase,
+    ) -> None:
+        """Use the streamer object to prepare files for staging, if it is required,
+        or to check the progress of staging, depending on the phase variable.
+        1. Those that do need staging will get a prepare_id and passed back to the
+           message queue with ARCHIVE_GET.PREPARE_CHECK as the routing key.
+           They will be checked for completed staging when this message is processed in
+           the `prepare_check` function below.
+        2. Those that do not need staging will be passed to the message queue with
+           ARCHIVE_GET.START and will be processed by the `transfer` function above.
+        """
+        # Make the routing keys
+        rk_complete = ".".join([rk_origin, RK.ARCHIVE_GET, RK.START])
+        rk_check = ".".join([rk_origin, RK.ARCHIVE_GET, RK.PREPARE_CHECK])
+        rk_failed = ".".join([rk_origin, RK.ARCHIVE_GET, RK.FAILED])
+
+        # create the S3 to tape or disk streamer
+        try:
+            streamer = self._create_streamer(
+                tenancy=tenancy,
+                access_key=access_key,
+                secret_key=secret_key,
+                tape_url=tape_url,
+            )
+        except S3StreamError as e:
+            # if a S3StreamError occurs then all files have failed
+            for path_details in filelist:
+                path_details.failure_reason = e.message
+                self.failedlist.append(path_details)
+        else:
+            # For archive_prepare, the message is structured as a dictionary stored in
+            # ['data']['retrieval_dict'] and a filelist stored in ['data']['filelist']
+            retrieval_dict = body_json[MSG.DATA][MSG.RETRIEVAL_DICT]
+            # reset completed filelist
+            self.completelist.clear()
+            prepare_check_list = []
+            # new retrieval dictionaries for the tarfiles that are complete, and those
+            # that need to be checked - each will be a subset of the retrieval_dict
+            # passed in via the body_json
+            complete_retrieval_dict = {}
+            check_retrieval_dict = {}
+            # looping over the aggregates
+            for tarfile, item in retrieval_dict.items():
+                # empty streamer.filelist for new aggregate
+                streamer.filelist.clear()
+                # get the list of files to retrieve from the tarfile / aggregate
+                # this will be used for the completelist, the prepare_check list
+                # or the failedlist. Convert to PathDetails object
+                aggregate_filelist = [
+                    PathDetails.from_dict(ag) for ag in item[MSG.FILELIST]
+                ]
+                # now switch on the phase
+                try:
+                    if phase == GetArchiveConsumer.Phase.PREPARE_REQUEST:
+                        if streamer.prepare_required(tarfile):
+                            prepare_id = streamer.prepare_request(tarfile)
+                            prepare_check_list.extend(aggregate_filelist)
+                            check_retrieval_dict[tarfile] = retrieval_dict[tarfile]
+                            # add the prepare id
+                            check_retrieval_dict[tarfile][MSG.PREPARE_ID] = prepare_id
+                        else:
+                            self.completelist.extend(aggregate_filelist)
+                            complete_retrieval_dict[tarfile] = retrieval_dict[tarfile]
+                    elif phase == GetArchiveConsumer.Phase.PREPARE_CHECK:
+                        # get the prepare id from the dictionary
+                        prepare_id = item[MSG.PREPARE_ID]
+                        # if complete then add to complete list and dictionary
+                        if streamer.prepare_complete(prepare_id):
+                            self.completelist.extend(aggregate_filelist)
+                            complete_retrieval_dict[tarfile] = retrieval_dict[tarfile]
+                        else:
+                            # if not complete then send it out again
+                            prepare_check_list.extend(aggregate_filelist)
+                            check_retrieval_dict[tarfile] = retrieval_dict[tarfile]
+                except S3StreamError as e:
+                    for path_details in aggregate_filelist:
+                        path_details.failure_reason = e.message
+                        self.failedlist.append(path_details)
+
+        if len(self.completelist) > 0:
+            self.log(
+                "Archive prepare not required, passing lists back to archive_get for "
+                "transfer.",
+                RK.LOG_INFO,
+            )
+            # We need to pass back the
+            # need to copy the JSON as it will also be used below in prepare_check_list
+            body_json_complete = copy(body_json)
+            body_json_complete[MSG.DATA][MSG.RETRIEVAL_DICT] = complete_retrieval_dict
+            self.send_pathlist(
+                self.completelist,
+                rk_complete,
+                body_json_complete,
+                state=State.ARCHIVE_PREPARING,
+            )
+
+        if len(prepare_check_list) > 0:
+            self.log(
+                "Archive prepare required, passing lists back to archive_get for "
+                "checking prepare is complete.",
+                RK.LOG_INFO,
+            )
+            # remap the retrieval dictionary
+            body_json_check = copy(body_json)
+            body_json_check[MSG.DATA][MSG.RETRIEVAL_DICT] = check_retrieval_dict
+            self.send_pathlist(
+                prepare_check_list,
+                routing_key=rk_check,
+                body_json=body_json_check,
+                state=State.ARCHIVE_PREPARING,
+            )
+
+        if len(self.failedlist) > 0:
+            self.send_pathlist(
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body_json,
+                state=State.FAILED,
+            )
+
+    def prepare(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, Any],
+    ) -> None:
+
+        self.__prepare(
+            transaction_id,
+            tenancy,
+            access_key,
+            secret_key,
+            tape_url,
+            filelist,
+            rk_origin,
+            body_json,
+            phase=GetArchiveConsumer.Phase.PREPARE_REQUEST,
+        )
+
+    def prepare_check(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, Any],
+    ) -> None:
+        self.__prepare(
+            transaction_id,
+            tenancy,
+            access_key,
+            secret_key,
+            tape_url,
+            filelist,
+            rk_origin,
+            body_json,
+            phase=GetArchiveConsumer.Phase.PREPARE_CHECK,
+        )
 
     # def transfer_old(
     #     self,
