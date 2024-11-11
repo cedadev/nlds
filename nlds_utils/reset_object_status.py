@@ -15,7 +15,6 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 import click
-import json
 import minio
 
 from nlds_processors.catalog.catalog import Catalog
