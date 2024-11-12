@@ -31,12 +31,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.ARCHIVE_GET}." f"{RK.WILD}"
     DEFAULT_STATE = State.ARCHIVE_GETTING
 
-    class Phase(Enum):
-        PREPARE_REQUEST = 0
-        PREPARE_CHECK = 1
-        PREPARE_COMPLETE = 2
-
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
+        self.preparelist = []
         super().__init__(queue=queue)
 
     @retry(S3Error, tries=5, delay=1, logger=None)
@@ -144,7 +140,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 state=State.FAILED,
             )
 
-    def __prepare(
+    def prepare(
         self,
         transaction_id: str,
         tenancy: str,
@@ -154,10 +150,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         filelist: List[PathDetails],
         rk_origin: str,
         body_json: Dict[str, Any],
-        phase: Phase,
     ) -> None:
-        """Use the streamer object to prepare files for staging, if it is required,
-        or to check the progress of staging, depending on the phase variable.
+        """Use the streamer object to prepare files for staging, if it is required
         1. Those that do need staging will get a prepare_id and passed back to the
            message queue with ARCHIVE_GET.PREPARE_CHECK as the routing key.
            They will be checked for completed staging when this message is processed in
@@ -169,6 +163,11 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         rk_complete = ".".join([rk_origin, RK.ARCHIVE_GET, RK.START])
         rk_check = ".".join([rk_origin, RK.ARCHIVE_GET, RK.PREPARE_CHECK])
         rk_failed = ".".join([rk_origin, RK.ARCHIVE_GET, RK.FAILED])
+
+        # clear lists
+        self.failedlist.clear()
+        self.completelist.clear()
+        self.preparelist.clear()
 
         # create the S3 to tape or disk streamer
         try:
@@ -187,48 +186,40 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             # For archive_prepare, the message is structured as a dictionary stored in
             # ['data']['retrieval_dict'] and a filelist stored in ['data']['filelist']
             retrieval_dict = body_json[MSG.DATA][MSG.RETRIEVAL_DICT]
-            # reset completed filelist
-            self.completelist.clear()
-            prepare_check_list = []
-            # new retrieval dictionaries for the tarfiles that are complete, and those
-            # that need to be checked - each will be a subset of the retrieval_dict
-            # passed in via the body_json
-            complete_retrieval_dict = {}
-            check_retrieval_dict = {}
-            # looping over the aggregates
+            complete_dict = {}
+            prepare_dict = {}
             for tarfile, item in retrieval_dict.items():
-                # empty streamer.filelist for new aggregate
-                streamer.filelist.clear()
                 # get the list of files to retrieve from the tarfile / aggregate
                 # this will be used for the completelist, the prepare_check list
                 # or the failedlist. Convert to PathDetails object
                 aggregate_filelist = [
                     PathDetails.from_dict(ag) for ag in item[MSG.FILELIST]
                 ]
-                # now switch on the phase
                 try:
-                    if phase == GetArchiveConsumer.Phase.PREPARE_REQUEST:
-                        if streamer.prepare_required(tarfile):
-                            prepare_id = streamer.prepare_request(tarfile)
-                            prepare_check_list.extend(aggregate_filelist)
-                            check_retrieval_dict[tarfile] = retrieval_dict[tarfile]
-                            # add the prepare id
-                            check_retrieval_dict[tarfile][MSG.PREPARE_ID] = prepare_id
-                        else:
-                            self.completelist.extend(aggregate_filelist)
-                            complete_retrieval_dict[tarfile] = retrieval_dict[tarfile]
-                    elif phase == GetArchiveConsumer.Phase.PREPARE_CHECK:
-                        # get the prepare id from the dictionary
-                        prepare_id = item[MSG.PREPARE_ID]
-                        # if complete then add to complete list and dictionary
-                        if streamer.prepare_complete(prepare_id):
-                            self.completelist.extend(aggregate_filelist)
-                            complete_retrieval_dict[tarfile] = retrieval_dict[tarfile]
-                        else:
-                            # if not complete then send it out again
-                            prepare_check_list.extend(aggregate_filelist)
-                            check_retrieval_dict[tarfile] = retrieval_dict[tarfile]
+                    # check for prepare on this tarfile
+                    if streamer.prepare_required(tarfile):
+                        self.preparelist.extend(aggregate_filelist)
+                        prepare_dict[tarfile] = retrieval_dict[tarfile]
+                    else:
+                        # no prepare needed, so add all the aggregate files to the 
+                        # complete list, and the tarfile part of the dictionary to the
+                        # complete dictionary
+                        self.completelist.extend(aggregate_filelist)
+                        complete_dict[tarfile] = retrieval_dict[tarfile]
                 except S3StreamError as e:
+                    for path_details in aggregate_filelist:
+                        path_details.failure_reason = e.message
+                        self.failedlist.append(path_details)
+
+            # now have a list of tarfiles we need to prepare in the prepare_dict keys
+            try:
+                prepare_id = streamer.prepare_request(prepare_dict.keys())
+            except S3StreamError as e:
+                # fail all in the prepare dict if the prepare_id failed
+                for tarfile, item in prepare_dict.items():
+                    aggregate_filelist = [
+                        PathDetails.from_dict(ag) for ag in item[MSG.FILELIST]
+                    ]
                     for path_details in aggregate_filelist:
                         path_details.failure_reason = e.message
                         self.failedlist.append(path_details)
@@ -239,10 +230,11 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 "transfer.",
                 RK.LOG_INFO,
             )
-            # We need to pass back the
-            # need to copy the JSON as it will also be used below in prepare_check_list
+            # remap the retrieval dictionary for the complete (don't need staging) 
+            # tarfiles
+            # need to copy the JSON as it will also be used below in preparelist
             body_json_complete = copy(body_json)
-            body_json_complete[MSG.DATA][MSG.RETRIEVAL_DICT] = complete_retrieval_dict
+            body_json_complete[MSG.DATA][MSG.RETRIEVAL_DICT] = complete_dict
             self.send_pathlist(
                 self.completelist,
                 rk_complete,
@@ -250,17 +242,19 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 state=State.ARCHIVE_PREPARING,
             )
 
-        if len(prepare_check_list) > 0:
+        if len(self.preparelist) > 0:
             self.log(
                 "Archive prepare required, passing lists back to archive_get for "
                 "checking prepare is complete.",
                 RK.LOG_INFO,
             )
-            # remap the retrieval dictionary
+            # remap the retrieval dictionary for the tarfiles that need staging
             body_json_check = copy(body_json)
-            body_json_check[MSG.DATA][MSG.RETRIEVAL_DICT] = check_retrieval_dict
+            body_json_check[MSG.DATA][MSG.RETRIEVAL_DICT] = prepare_dict
+            # put the prepare_id in the dictionary
+            body_json_check[MSG.DATA][MSG.PREPARE_ID] = str(prepare_id)
             self.send_pathlist(
-                prepare_check_list,
+                self.preparelist,
                 routing_key=rk_check,
                 body_json=body_json_check,
                 state=State.ARCHIVE_PREPARING,
@@ -274,29 +268,6 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 state=State.FAILED,
             )
 
-    def prepare(
-        self,
-        transaction_id: str,
-        tenancy: str,
-        access_key: str,
-        secret_key: str,
-        tape_url: str,
-        filelist: List[PathDetails],
-        rk_origin: str,
-        body_json: Dict[str, Any],
-    ) -> None:
-
-        self.__prepare(
-            transaction_id,
-            tenancy,
-            access_key,
-            secret_key,
-            tape_url,
-            filelist,
-            rk_origin,
-            body_json,
-            phase=GetArchiveConsumer.Phase.PREPARE_REQUEST,
-        )
 
     def prepare_check(
         self,
@@ -309,17 +280,90 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         rk_origin: str,
         body_json: Dict[str, Any],
     ) -> None:
-        self.__prepare(
-            transaction_id,
-            tenancy,
-            access_key,
-            secret_key,
-            tape_url,
-            filelist,
-            rk_origin,
-            body_json,
-            phase=GetArchiveConsumer.Phase.PREPARE_CHECK,
-        )
+        """Use the streamer object to check whether the prepared files have completed
+           staging.
+        1. Those that have not completed staging will be passed back to the message 
+           queue with ARCHIVE_GET.PREPARE_CHECK as the routing key.
+           They will be checked again for completed staging when this message is 
+           processed subsequently in this function.
+        2. Those that have completed will be passed to the message queue with
+           ARCHIVE_GET.START and will be subsequently processed by the `transfer` 
+           function above.
+        """
+        # Make the routing keys
+        rk_complete = ".".join([rk_origin, RK.ARCHIVE_GET, RK.START])
+        rk_check = ".".join([rk_origin, RK.ARCHIVE_GET, RK.PREPARE_CHECK])
+        rk_failed = ".".join([rk_origin, RK.ARCHIVE_GET, RK.FAILED])
+
+        # clear lists
+        self.failedlist.clear()
+        self.completelist.clear()
+        self.preparelist.clear()
+
+        # create the S3 to tape or disk streamer
+        try:
+            streamer = self._create_streamer(
+                tenancy=tenancy,
+                access_key=access_key,
+                secret_key=secret_key,
+                tape_url=tape_url,
+            )
+        except S3StreamError as e:
+            # if a S3StreamError occurs then all files have failed
+            for path_details in filelist:
+                path_details.failure_reason = e.message
+                self.failedlist.append(path_details)
+        else:
+            retrieval_dict = body_json[MSG.DATA][MSG.RETRIEVAL_DICT]
+            prepare_id = body_json[MSG.DATA][MSG.PREPARE_ID]
+            tarfile_list = retrieval_dict.keys()
+            try:
+                complete = streamer.prepare_complete(prepare_id, tarfile_list)
+            except S3StreamError as e:
+                # fail all in the prepare dict if the prepare_id failed
+                for tarfile, item in retrieval_dict:
+                    aggregate_filelist = [
+                        PathDetails.from_dict(ag) for ag in item[MSG.FILELIST]
+                    ]
+                    for path_details in aggregate_filelist:
+                        path_details.failure_reason = e.message
+                        self.failedlist.append(path_details)
+
+        # only three outcomes here - either all the tarfiles (and, by extension, all 
+        # files) are complete, are not complete, or everything failed
+        if len(self.failedlist) > 0:
+            self.send_pathlist(
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body_json,
+                state=State.FAILED,
+            )
+        else:
+            if complete:
+                self.log(
+                    "Archive prepare complete, passing lists back to archive_get for "
+                    "transfer.",
+                    RK.LOG_INFO,
+                )
+                self.send_pathlist(
+                    self.filelist,
+                    rk_complete,
+                    body_json,
+                    state=State.ARCHIVE_PREPARING,
+                )
+            else:
+                self.log(
+                    "Archive prepare not complete, passing lists back to prepare_check "
+                    "for additional waiting.",
+                    RK.LOG_INFO,
+                )
+                self.send_pathlist(
+                    self.preparelist,
+                    routing_key=rk_check,
+                    body_json=body_json,
+                    state=State.ARCHIVE_PREPARING,
+                )
+
 
     # def transfer_old(
     #     self,
