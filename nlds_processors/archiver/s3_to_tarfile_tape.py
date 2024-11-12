@@ -10,6 +10,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from typing import Tuple, List
 import os
+import json
 
 from XRootD import client as XRDClient
 from XRootD.client.flags import StatInfoFlags, MkDirFlags, OpenFlags, QueryCode
@@ -162,18 +163,37 @@ class S3ToTarfileTape(S3ToTarfileStream):
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         raise NotImplementedError
 
-    def prepare_required(self) -> bool:
+    def prepare_required(self, tarfile: str) -> bool:
         """Query the storage system as to whether a file needs to be prepared (staged)."""
-        raise NotImplementedError
+        # XrootD use the .stat method on the FileSystem client
+        status, response = self.tape_client.stat(tarfile)
+        # check status for success
+        if not status.ok:
+            raise S3StreamError(
+                f"Could not query status of tarfile via XrootD {tarfile}. "
+                f"Reason: {status.message}"
+            )
+        # check whether file is OFFLINE in response StatInfoFlags
+        return (response.flags & StatInfoFlags.OFFLINE)
 
-    def prepare_request(self) -> int:
+    def prepare_request(self, tarfilelist: List[str]) -> str:
         """Request the storage system for a file to be prepared (staged)."""
         raise NotImplementedError
 
-    def prepare_complete(self, prepare_id: int) -> bool:
+    def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
         """Query the storage system whether the prepare (staging) for a file has been
         completed."""
-        raise NotImplementedError
+        # requires query_args to be built with new line separator
+        query_args = "\n".join([prepare_id, *tarfilelist])
+        status, response = self.tape_client.query(QueryCode.PREPARE, query_args)
+        if status.status != 0:
+            raise S3StreamError(
+                f"Could not check status of prepare request " f"{prepare_id}. "
+                f"Reason: {status.message}"
+            )
+        # get the response and convert to a dictionary
+        jr = json.loads(response.decode())["responses"]
+        print(jr)
 
     """Note that there are a number of different methods below to get the tapepaths"""
 
