@@ -176,14 +176,18 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         # return True for the disktape / faketape™ for every other request
         return (S3ToTarfileDisk.prepare_id % 2 == 0)
 
-    def prepare_request(self, tarfile: str) -> int:
+    def prepare_request(self, tarfilelist: List[str]) -> str:
         """Request the storage system for a file to be prepared"""
+        for tarfile in tarfilelist:
+            self.log(f"Preparing tarfile: {tarfile}", RK.LOG_INFO)
         S3ToTarfileDisk.prepare_id += 1
-        return S3ToTarfileDisk.prepare_id
+        return str(S3ToTarfileDisk.prepare_id)
 
-    def prepare_complete(self, prepare_id: int) -> bool:
+    def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
         """Query the storage system whether the prepare for a file has been completed."""
         # always return True for the disktape / faketape™
+        for tarfile in tarfilelist:
+            self.log(f"Prepare complete for tarfile: {tarfile}", RK.LOG_INFO)
         return True
 
     @property
