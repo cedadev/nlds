@@ -62,6 +62,7 @@ class State(Enum):
             cls.CATALOG_DELETING,
             cls.CATALOG_REMOVING,
             cls.FAILED,
+            cls.COMPLETE,
         )
         return final_states
 
