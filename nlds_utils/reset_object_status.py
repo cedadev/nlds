@@ -133,7 +133,7 @@ def reset_object_status(
                         pd = PathDetails.from_filemodel(f)
                         # delete from object storage - 
                         s3_client.remove_object(pd.bucket_name, pd.object_name)
-                        click.echo(f"Deleted object: {pd.url}")
+                        click.echo(f"Deleted object: {pd.get_object_store().url}")
                     # delete from catalog
                     nlds_cat.delete_location(f, Storage.OBJECT_STORAGE)
                     click.echo(f"Removed OBJECT STORAGE location for {f.original_path}")
