@@ -379,9 +379,8 @@ class MonitorConsumer(RMQC):
         # If reached the end of a workflow then check for completeness
         if state in State.get_final_states():
             self.log(
-                "This sub_record is now in its final state for this "
-                "workflow, now checking if all others have reached a "
-                "final state.",
+                "This sub_record is now in its final state for this workflow, now "
+                "checking if all others have reached a final state.",
                 RK.LOG_INFO,
             )
             try:
