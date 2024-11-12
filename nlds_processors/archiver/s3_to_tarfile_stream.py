@@ -310,16 +310,16 @@ class S3ToTarfileStream:
         raise NotImplementedError
 
     @abstractmethod
-    def prepare_required(self, tarfile) -> bool:
+    def prepare_required(self, tarfile: str) -> bool:
         """Query the storage system as to whether a file needs to be prepared."""
         raise NotImplementedError
 
     @abstractmethod
-    def prepare_request(self, tarfile) -> int:
+    def prepare_request(self, tarfilelist: List[str]) -> int:
         """Request the storage system for a file to be prepared"""
         raise NotImplementedError
 
     @abstractmethod
-    def prepare_complete(self, prepare_id: int) -> bool:
+    def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
         """Query the storage system whether the prepare for a file has been completed."""
         raise NotImplementedError
