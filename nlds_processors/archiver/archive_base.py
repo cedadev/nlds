@@ -72,7 +72,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         if USE_DISKTAPE:
             disk_loc = os.path.expanduser(DISKTAPE_LOC)
             self.log(
-                f"Starting disk transfer between {disk_loc} and object store "
+                f"Starting connection between {disk_loc} and object store "
                 f"{tenancy}",
                 RK.LOG_INFO,
             )
@@ -85,7 +85,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             )
         else:
             self.log(
-                f"Starting tape transfer between {tape_url} and object store "
+                f"Starting connecting between {tape_url} and object store "
                 f"{tenancy}",
                 RK.LOG_INFO,
             )
