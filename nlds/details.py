@@ -16,12 +16,14 @@ from pathlib import Path
 import stat
 import os
 from os import stat_result
+from urllib import parse as urlparse
 
 from pydantic import BaseModel
 
 from nlds.utils.permissions import check_permissions
 import nlds.rabbit.message_keys as MSG
 from nlds.errors import MessageError
+
 
 # Patch the JSONEncoder so that a custom json serialiser can be run instead of
 # of the default, if one exists. This patches for ALL json.dumps calls.
@@ -82,6 +84,12 @@ class PathLocation(BaseModel):
             root=dictionary["root"],
             path=dictionary["path"],
             access_time=dictionary["access_time"],
+        )
+
+    @property
+    def url(self):
+        return urlparse.urlunparse(
+            [self.url_scheme, self.url_netloc, self.root + self.path, None, None, None]
         )
 
 
