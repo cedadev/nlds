@@ -1143,7 +1143,7 @@ class CatalogConsumer(RMQC):
                             self.completelist.append(f)
                         else:
                             f.failure_reason = (
-                                f"{str(storage_type.value)} location not empty details"
+                                f"{str(storage_type.name)} location not empty details"
                             )
                             self.failedlist.append(f)
 
