@@ -153,6 +153,7 @@ class PathDetails(BaseModel):
     locations: Optional[LocationsType] = PathLocations()
 
     failure_reason: Optional[str] = None
+    holding_id: Optional[int] = None
 
     @property
     def path(self) -> str:
@@ -171,6 +172,7 @@ class PathDetails(BaseModel):
                 "mode": self.mode,
                 "access_time": self.access_time,
                 "failure_reason": self.failure_reason,
+                "holding_id": self.holding_id,
             },
             **self.locations.to_json(),
         }
