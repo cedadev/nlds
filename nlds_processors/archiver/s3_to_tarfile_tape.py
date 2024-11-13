@@ -13,7 +13,13 @@ import os
 import json
 
 from XRootD import client as XRDClient
-from XRootD.client.flags import StatInfoFlags, MkDirFlags, OpenFlags, QueryCode
+from XRootD.client.flags import (
+    StatInfoFlags,
+    MkDirFlags,
+    OpenFlags,
+    QueryCode,
+    PrepareFlags,
+)
 
 from nlds.details import PathDetails
 from nlds_processors.archiver.s3_to_tarfile_stream import (
@@ -22,7 +28,6 @@ from nlds_processors.archiver.s3_to_tarfile_stream import (
 )
 from nlds_processors.archiver.adler32file import Adler32XRDFile
 import nlds.rabbit.routing_keys as RK
-
 
 class S3ToTarfileTape(S3ToTarfileStream):
     """Class to stream files from / to an S3 resource (AWS, minio, DataCore Swarm etc.)
@@ -148,7 +153,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # add the location to the completelist
         for f in completelist:
             f.set_tape(
-                server="",
+                server=self.tape_server_url,
                 tapepath=self.holding_tapepath,
                 tarfile=f"{self.filelist_hash}.tar",
             )
@@ -161,7 +166,41 @@ class S3ToTarfileTape(S3ToTarfileStream):
         filelist: List[PathDetails],
         chunk_size: int,
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
-        raise NotImplementedError
+        """Stream from a tarfile on tape to Object Store"""
+        if self.filelist != []:
+            raise ValueError(f"self.filelist is not Empty: {self.filelist[0]}")
+        self.filelist = filelist
+        self.holding_prefix = holding_prefix
+        try:
+            tarfile_tapepath = (
+                f"root://{self.tape_server_url}/{tarfile}"
+            )
+            # open the tar file to read from
+            with XRDClient.File() as file:
+                # open on the XRD system
+                status, _ = file.open(tarfile_tapepath, OpenFlags.READ)
+                if not status.ok:
+                    raise S3StreamError(
+                        f"Could not open tarfile on XRootD: {tarfile_tapepath}. "
+                        f"Reason: {status}"
+                    )
+                file_object = Adler32XRDFile(file, debug_fl=True)
+                completelist, failedlist = self._stream_to_s3object(
+                   file_object, self.filelist, chunk_size
+                )
+        except FileNotFoundError:
+            msg = f"Couldn't open tarfile ({tarfile})."
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+        except S3StreamError as e:
+            msg = (
+                f"Exception occurred during read of tarfile {tarfile}. "
+                f"Original Exception: {e}"
+            )
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+
+        return completelist, failedlist
 
     def prepare_required(self, tarfile: str) -> bool:
         """Query the storage system as to whether a file needs to be prepared (staged)."""
@@ -174,11 +213,29 @@ class S3ToTarfileTape(S3ToTarfileStream):
                 f"Reason: {status.message}"
             )
         # check whether file is OFFLINE in response StatInfoFlags
-        return (response.flags & StatInfoFlags.OFFLINE)
+        prepare = bool(response.flags & StatInfoFlags.OFFLINE)
+        return prepare
 
     def prepare_request(self, tarfilelist: List[str]) -> str:
         """Request the storage system for a file to be prepared (staged)."""
-        raise NotImplementedError
+        # tarfilelist is a list of strings, which is fine for XRootD >= 5.6,
+        # but for versions < 5.5.5 the list of tar names need to be encoded as bytes,
+        # from the utf-8 string, e.g. tar_list = [i.decode("utf_8") for i in tar_list]
+        # shouldn't be neccessary for us, though!
+        if len(tarfilelist) == 0:
+            # trap this as it causes a seg-fault if it is passed to XRD.prepare
+            raise S3StreamError("tarfilelist is empty in prepare_request")
+        status, response = self.tape_client.prepare(
+            tarfilelist, PrepareFlags.STAGE
+        )
+        if not status.ok:
+            raise S3StreamError(
+                f"Could not prepare tarfile list: {tarfilelist}. "
+                f"Reason: {status.method}"
+            )
+        else:
+            prepare_id = response.decode()[:-1]
+        return prepare_id
 
     def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
         """Query the storage system whether the prepare (staging) for a file has been
@@ -186,14 +243,19 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # requires query_args to be built with new line separator
         query_args = "\n".join([prepare_id, *tarfilelist])
         status, response = self.tape_client.query(QueryCode.PREPARE, query_args)
-        if status.status != 0:
+        if not status.ok:
             raise S3StreamError(
-                f"Could not check status of prepare request " f"{prepare_id}. "
+                f"Could not check status of prepare request {prepare_id}. "
                 f"Reason: {status.message}"
             )
         # get the response and convert to a dictionary
         jr = json.loads(response.decode())["responses"]
-        print(jr)
+        # loop over all responses, if all 'online' flags are set then the prepare is
+        # complete
+        prepare_complete = True
+        for r in jr:
+            prepare_complete &= r['online']
+        return prepare_complete
 
     """Note that there are a number of different methods below to get the tapepaths"""
 

@@ -211,27 +211,13 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         path_details.failure_reason = e.message
                         self.failedlist.append(path_details)
 
-            # now have a list of tarfiles we need to prepare in the prepare_dict keys
-            try:
-                prepare_id = streamer.prepare_request(prepare_dict.keys())
-            except S3StreamError as e:
-                # fail all in the prepare dict if the prepare_id failed
-                for tarfile, item in prepare_dict.items():
-                    aggregate_filelist = [
-                        PathDetails.from_dict(ag) for ag in item[MSG.FILELIST]
-                    ]
-                    for path_details in aggregate_filelist:
-                        path_details.failure_reason = e.message
-                        self.failedlist.append(path_details)
-
         if len(self.completelist) > 0:
             self.log(
                 "Archive prepare not required, passing lists back to archive_get for "
                 "transfer.",
                 RK.LOG_INFO,
             )
-            # remap the retrieval dictionary for the complete (don't need staging) 
-            # tarfiles
+            # remap the retrieval dictionary for the tarfiles that don't need staging
             # need to copy the JSON as it will also be used below in preparelist
             body_json_complete = copy(body_json)
             body_json_complete[MSG.DATA][MSG.RETRIEVAL_DICT] = complete_dict
@@ -243,6 +229,20 @@ class GetArchiveConsumer(BaseArchiveConsumer):
             )
 
         if len(self.preparelist) > 0:
+            # In this codepath we have a list of tarfiles we need to prepare in the 
+            # prepare_dict keys
+            try:
+                agg_prepare_list = list(prepare_dict.keys())
+                prepare_id = streamer.prepare_request(agg_prepare_list)
+            except S3StreamError as e:
+                # fail all in the prepare dict if the prepare_id failed
+                for tarfile, item in prepare_dict.items():
+                    aggregate_filelist = [
+                        PathDetails.from_dict(ag) for ag in item[MSG.FILELIST]
+                    ]
+                    for path_details in aggregate_filelist:
+                        path_details.failure_reason = e.message
+                        self.failedlist.append(path_details)
             self.log(
                 "Archive prepare required, passing lists back to archive_get for "
                 "checking prepare is complete.",
@@ -316,7 +316,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         else:
             retrieval_dict = body_json[MSG.DATA][MSG.RETRIEVAL_DICT]
             prepare_id = body_json[MSG.DATA][MSG.PREPARE_ID]
-            tarfile_list = retrieval_dict.keys()
+            # need to convert the retrieval_dict keys to a list of tarfiles
+            tarfile_list = list(retrieval_dict.keys())
             try:
                 complete = streamer.prepare_complete(prepare_id, tarfile_list)
             except S3StreamError as e:

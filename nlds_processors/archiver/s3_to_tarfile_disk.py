@@ -165,7 +165,11 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             self.log(msg, RK.LOG_ERROR)
             raise S3StreamError(msg)
         except S3StreamError as e:
-            msg = f"Exception occurred during read of tarfile {self.tarfile_diskpath}."
+            msg = (
+                f"Exception occurred during read of tarfile {self.tarfile_diskpath}. "
+                f"Original Exception: {e}"
+            )
+                   
             self.log(msg, RK.LOG_ERROR)
             raise S3StreamError(msg)
 
