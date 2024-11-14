@@ -192,7 +192,7 @@ class PathDetails(BaseModel):
         return pd
 
     @classmethod
-    def from_filemodel(cls, file: Enum):
+    def from_filemodel(cls, file: BaseModel):
         """Create from a File model returned from the database."""
         # copy the basic info
         pd = cls()
@@ -375,5 +375,5 @@ class PathDetails(BaseModel):
         if pl is None:
             return None
         else:
-            tape_name = f"{pl.url_netloc}/{pl.root}/{pl.path}"
+            tape_name = f"{pl.url_scheme}://{pl.url_netloc}/{pl.root}/{pl.path}"
             return tape_name
