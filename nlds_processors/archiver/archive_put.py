@@ -68,7 +68,6 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             # NOTE: For the purposes of tape reading and writing, the holding prefix
             # has 'nlds.' prepended
             holding_prefix = self.get_holding_prefix(body_json)
-
             try:
                 self.completelist, self.failedlist, tarfile, checksum = streamer.put(
                     holding_prefix, filelist, self.chunk_size

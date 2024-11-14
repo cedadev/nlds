@@ -23,7 +23,7 @@ from nlds_processors.catalog.catalog_models import (
     Location,
     Aggregation,
 )
-from reset_tape_status import _connect_to_catalog
+from reset_storage_status import _connect_to_catalog
 
 
 def integer_permissions_to_string(intperm):

@@ -381,13 +381,17 @@ class Catalog(DBMixin):
 
         except (IntegrityError, KeyError, OperationalError):
             if holding_label:
-                err_msg = f"File with holding_label:{holding_label} not found "
+                err_msg = (
+                    f"File not found in holding with holding_label:{holding_label}"
+                )
             elif holding_id:
-                err_msg = f"File with holding_id:{holding_id} not found "
+                err_msg = f"File not found in holding with holding_id:{holding_id}"
             elif transaction_id:
-                err_msg = f"File with transaction_id:{transaction_id} not found "
+                err_msg = (
+                    f"File not found in holding with transaction_id:{transaction_id}"
+                )
             elif tag:
-                err_msg = f"File with tag:{tag} not found"
+                err_msg = f"File not found in holding with tag:{tag}"
             else:
                 err_msg = f"File with original_path:{original_path} not found "
             raise CatalogError(err_msg)

@@ -56,11 +56,12 @@ class State(Enum):
     @classmethod
     def get_final_states(cls):
         final_states = (
-            cls.TRANSFER_GETTING,
-            cls.CATALOG_UPDATING,
-            cls.CATALOG_ARCHIVE_UPDATING,
-            cls.CATALOG_DELETING,
-            cls.CATALOG_REMOVING,
+            # Make final states explicit
+            # cls.TRANSFER_GETTING,
+            # cls.CATALOG_UPDATING,
+            # cls.CATALOG_ARCHIVE_UPDATING,
+            # cls.CATALOG_DELETING,
+            # cls.CATALOG_REMOVING,
             cls.FAILED,
             cls.COMPLETE,
         )

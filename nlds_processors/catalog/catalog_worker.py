@@ -41,7 +41,7 @@ from nlds.errors import CallbackError
 
 from nlds_processors.catalog.catalog import Catalog
 from nlds_processors.catalog.catalog_error import CatalogError
-from nlds_processors.catalog.catalog_models import Storage
+from nlds_processors.catalog.catalog_models import Storage, File
 from nlds.details import PathDetails
 from nlds_processors.db_mixin import DBError
 
@@ -96,6 +96,26 @@ def format_datetime(date: datetime):
     return datetime_str
 
 
+def build_retrieval_dict(filelist: List[PathDetails], fullpath: bool = False):
+    """Build a retrieval dict from the filelist.  The retrieval dict contains a
+    tarfile name, a holding id, and the list of files to retrieve from the tarfile.
+    """
+    retrieval_dict = {}
+    for file in filelist:
+        # get the tape location for File or FileSystem
+        tarfile = file.tape_name
+        # if it has not been added before then create a new record
+        if not tarfile in retrieval_dict:
+            retrieval_dict[tarfile] = {
+                "holding_id": file.holding_id,
+                "filelist": [file],
+            }
+        else:
+            # if it has been added before then append to the filelist
+            retrieval_dict[tarfile]["filelist"].append(file)
+    return retrieval_dict
+
+
 class CatalogConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "catalog_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}.{RK.CATALOG}.{RK.WILD}"
@@ -137,7 +157,6 @@ class CatalogConsumer(RMQC):
 
         self.catalog = None
         self.tapelist = []
-        self.tapedict = {}
 
     @property
     def database(self):
@@ -150,7 +169,6 @@ class CatalogConsumer(RMQC):
         self.failedlist.clear()
         # New list for rerouting to tape archive if not found on object store
         self.tapelist.clear()
-        self.tapedict.clear()
 
     def _parse_filelist(self, body: Dict) -> list[str]:
         # get the filelist from the data section of the message
@@ -173,18 +191,6 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
 
         return filelist
-
-    def _parse_aggregation_dict(self, body: Dict) -> list[str]:
-        try:
-            aggregations = body[MSG.DATA][MSG.RETRIEVAL_DICT]
-        except KeyError as e:
-            self.log(
-                f"Invalid message contents, filelist should be in the data "
-                f"section of the message body.",
-                RK.LOG_ERROR,
-            )
-            return
-        return aggregations
 
     def _parse_user_vars(self, body: Dict) -> Tuple:
         # get the user id from the details section of the message
@@ -437,6 +443,8 @@ class CatalogConsumer(RMQC):
         for f in filelist:
             # convert to PathDetails class
             pd = PathDetails.from_dict(f)
+            # add the holding id to the PathDetails
+            pd.holding_id = holding.id
             try:
                 # Search first for file existence within holding, fail if present
                 try:
@@ -506,18 +514,21 @@ class CatalogConsumer(RMQC):
                 warning=tag_warnings,
             )
 
-    def _catalog_update(self, body: Dict, rk_origin: str) -> None:
+    def _catalog_update(self, body: Dict, rk_origin: str, create: bool) -> None:
         """Upon completion of a TRANSFER_PUT, the list of completed files is returned
         back to the NLDS worker, but with location on Object Storage of the files
         appended to each PathDetails JSON object.
         The NLDS worker then passes this message to the Catalog, and this function
         processes the PathDetails and updates each file's record in the database to
-        contain the Object Storage location."""
+        contain the Object Storage location.
+
+        Upon completion of an ARCHIVE_GET, the list of completed files is returned
+        back to the NLDS worker.  The information for each completed file is enough to  amend the OBJECT STORAGE location in the catalog database.
+        """
         # Parse the message body for required variables
         try:
             filelist = self._parse_filelist(body)
             user, group = self._parse_user_vars(body)
-            transaction_id = self._parse_transaction_id(body, mandatory=True)
         except CatalogError as e:
             # functions above handled message logging, here we just return
             raise e
@@ -531,7 +542,7 @@ class CatalogConsumer(RMQC):
             pd = PathDetails.from_dict(f)
             # need to
             #   1. find the file,
-            #   2. create the object storage location,
+            #   2. find or create the object storage location (if create==True),
             #   3. add the details to the object storage location from the PathDetails
             # get the file
             try:
@@ -544,32 +555,53 @@ class CatalogConsumer(RMQC):
                 file = self.catalog.get_files(
                     user,
                     group,
-                    transaction_id=transaction_id,
+                    holding_id=pd.holding_id,
                     original_path=pd.original_path,
                 )[0]
-                # access time is now, if None
+                # access time is now if None
                 if pl.access_time is None:
                     access_time = datetime.now()
                 else:
-                    access_time = pl.access_time
+                    access_time = datetime.fromtimestamp(pl.access_time)
                 st = Storage.from_str(pl.storage_type)
-                # create location
-                location = self.catalog.create_location(
-                    file,
-                    storage_type=st,
-                    url_scheme=pl.url_scheme,
-                    url_netloc=pl.url_netloc,
-                    root=pl.root,
-                    path=pl.path,
-                    access_time=access_time,
-                )
-                self.completelist.append(pd)
+                # get the location
+                location = self.catalog.get_location(file, st)
+                if location:
+                    # check empty
+                    if location.url_scheme != "" or location.url_netloc != "":
+                        raise CatalogError(
+                            f"{pl.storage_type} for file {pd.original_path} will be"
+                            f" overwritten, the Storage Location should be empty."
+                        )
+                    # otherwise update if exists and not empty
+                    location.url_scheme = pl.url_scheme
+                    location.url_netloc = pl.url_netloc
+                    location.root = pl.root
+                    location.path = pl.path
+                    location.access_time = access_time
+                    self.completelist.append(pd)
+                elif create:
+                    # create location
+                    location = self.catalog.create_location(
+                        file,
+                        storage_type=st,
+                        url_scheme=pl.url_scheme,
+                        url_netloc=pl.url_netloc,
+                        root=pl.root,
+                        path=pl.path,
+                        access_time=access_time,
+                    )
+                    self.completelist.append(pd)
+                else:
+                    raise CatalogError(
+                        f"{pl.storage_type} for file {pd.original_path} can not be "
+                        "found."
+                    )
             except CatalogError as e:
                 # the file wasn't found or the location couldn't be created
                 pd.failure_reason = e.message
                 self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
-                continue
 
         # stop db transitions and commit
         self.catalog.save()
@@ -588,132 +620,6 @@ class CatalogConsumer(RMQC):
                 routing_key=rk_complete,
                 body_json=body,
                 state=State.CATALOG_UPDATING,
-            )
-        # FAILED
-        if len(self.failedlist) > 0:
-            rk_failed = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.FAILED])
-            self.log(
-                f"Sending failed PathList from CATALOG_UPDATE {self.failedlist}",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(
-                self.failedlist,
-                routing_key=rk_failed,
-                body_json=body,
-                state=State.FAILED,
-            )
-
-    def _catalog_update_from_archive_get(self, body: Dict, rk_origin: str) -> None:
-        """
-        Upon completion of an ARCHIVE_GET, the list of completed files is returned
-        back to the NLDS worker.  The completed files are arranged in a dictionary
-        indexed by the aggregation name.  Inside each aggregation is the holding that
-        the files in that aggregation belong to.  This information is used to amend
-        the OBJECT STORAGE location in the catalog database.
-
-        This process is sufficiently different to _catalog_update to warrant its own
-        function.
-        """
-        # Parse the message body for required variables
-        try:
-            user, group = self._parse_user_vars(body)
-            aggregation_dict = self._parse_aggregation_dict(body)
-        except CatalogError as e:
-            # functions above handled message logging, here we just return
-            raise e
-
-        self.catalog.start_session()
-        self.reset()
-
-        # loop over the aggregation dict
-        for key, agg in aggregation_dict.items():
-            # get the holding id
-            try:
-                holding_id = agg[MSG.HOLDING_ID]
-            except KeyError:
-                raise CatalogError(f"{MSG.HOLDING_ID} not in aggregation dictionary")
-            # get the filelist
-            try:
-                filelist = agg[MSG.FILELIST]
-            except KeyError:
-                raise CatalogError(f"{MSG.FILELIST} not in aggregation dictionary")
-            # get the holding
-            try:
-                holding = self.catalog.get_holding(user, group, holding_id=holding_id)
-            except CatalogError as e:
-                for f in filelist:
-                    f.failure_reason = e.message
-                    self.failedlist.append(f)
-                continue  # next aggregation
-
-            # loop over the files
-            for f in filelist:
-                # convert to PathDetails class
-                pd = PathDetails.from_dict(f)
-                # need to
-                #   1. find the file,
-                #   2. get the object storage location,
-                #   3. update the details to the object storage location from the
-                #      PathDetails
-                pl = pd.get_object_store()  # this returns a PathLocation object
-                # get the file
-                try:
-                    file = self.catalog.get_files(
-                        user,
-                        group,
-                        holding_id=holding_id,
-                        original_path=pd.original_path,
-                    )[0]
-                    # access time is now
-                    access_time = datetime.now()
-
-                    st = Storage.from_str(pl.storage_type)
-                    # get the location
-                    location = self.catalog.get_location(file, st)
-                    if location:
-                        # check empty
-                        if location.url_scheme != "" or location.url_netloc != "":
-                            raise CatalogError(
-                                f"{pl.storage_type} for file {pd.original_path} will be"
-                                f" overwritten, the Storage Location should be empty."
-                            )
-                        # otherwise update if exists and not empty
-                        location.url_scheme = pl.url_scheme
-                        location.url_netloc = pl.url_netloc
-                        location.root = pl.root
-                        location.path = pl.path
-                        location.access_time = access_time
-                    else:
-                        raise CatalogError(
-                            f"{pl.storage_type} for file {pd.original_path} can not be "
-                            "found."
-                        )
-                    # add to complete list
-                    self.completelist.append(pd)
-                except CatalogError as e:
-                    # the file wasn't found or the location couldn't be created
-                    pd.failure_reason = e.message
-                    self.failedlist.append(pd)
-                    self.log(e.message, RK.LOG_ERROR)
-                    continue
-
-        # stop db transitions and commit
-        self.catalog.save()
-        self.catalog.end_session()
-
-        # log the successful and non-successful catalog updates
-        # SUCCESS
-        if len(self.completelist) > 0:
-            rk_complete = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.COMPLETE])
-            self.log(
-                f"Sending completed PathList from CATALOG_UPDATE {self.completelist}",
-                RK.LOG_DEBUG,
-            )
-            self.send_pathlist(
-                self.completelist,
-                routing_key=rk_complete,
-                body_json=body,
-                state=State.TRANSFER_INIT,
             )
         # FAILED
         if len(self.failedlist) > 0:
@@ -776,9 +682,8 @@ class CatalogConsumer(RMQC):
                     )
                 # There should only be one file as we set one=True in get_files above
                 file = files[0]
-
                 # determine the storage location - None, OBJECT_STORAGE and/or TAPE
-                pd = PathDetails.from_filemodel(file)
+                pd = self._filemodel_to_path_details(file)
                 if pd.locations.count == 0:
                     # empty storage location denotes that it is still in its initial
                     # transfer to OBJECT STORAGE
@@ -805,11 +710,13 @@ class CatalogConsumer(RMQC):
                     pl = pd.get_tape()
                     agg = self.catalog.get_aggregation(pl.aggregation_id)
                     tr = self.catalog.get_transaction(file.transaction_id)
-                    # create a mostly empty OBJECT STORAGE location in the database
                     if pl.access_time is None:
                         access_time = datetime.now()
                     else:
                         access_time = datetime.fromtimestamp(pl.access_time)
+
+                    # create a mostly empty OBJECT STORAGE location in the database as
+                    # a marker that the file is currently transferring
                     self.catalog.create_location(
                         file_=file,
                         storage_type=Storage.OBJECT_STORAGE,
@@ -825,17 +732,6 @@ class CatalogConsumer(RMQC):
                     # the database)
                     pd.set_object_store(tenancy=tenancy, bucket=tr.transaction_id)
                     self.tapelist.append(pd)
-
-                    # add the file to a dictionary indexed by tarname
-                    if agg.tarname in self.tapedict:
-                        self.tapedict[agg.tarname][MSG.FILELIST].append(pd)
-                    else:
-                        self.tapedict[agg.tarname] = {
-                            # Holding id required for updating holding on return
-                            MSG.HOLDING_ID: tr.holding_id,
-                            MSG.CHECKSUM: agg.checksum,
-                            MSG.FILELIST: [pd],
-                        }
                 else:
                     # this shouldn't occur but we'll trap the error anyway
                     reason = (
@@ -867,12 +763,8 @@ class CatalogConsumer(RMQC):
             )
 
         # NEED RETRIEVING FROM TAPE
-        if len(self.tapedict) > 0 and len(self.tapelist) > 0:
+        if len(self.tapelist) > 0:
             rk_restore = ".".join([rk_origin, RK.ROUTE, RK.ARCHIVE_RESTORE])
-            # Include the original files requested in the message body (tapelist)
-            # so they can be moved to disk after retrieval, as well as the aggregate
-            # dictionary (tapedict)
-            body[MSG.DATA][MSG.RETRIEVAL_DICT] = self.tapedict
             self.log(
                 f"Rerouting PathList from CATALOG_GET to ARCHIVE_GET for archive "
                 f"retrieval ({self.tapelist})",
@@ -899,6 +791,12 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
+    def _filemodel_to_path_details(self, file: File):
+        pd = PathDetails.from_filemodel(file)
+        t = self.catalog.get_transaction(id=file.transaction_id)
+        pd.holding_id = t.holding_id
+        return pd
+
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location for it and pass it
         for aggregating to the Archive Put process."""
@@ -920,7 +818,7 @@ class CatalogConsumer(RMQC):
         # loop over the files and modify the database to have a TAPE storage location
         self.reset()
         for f in filelist:
-            pd = PathDetails.from_filemodel(f)
+            pd = self._filemodel_to_path_details(f)
             pl = pd.get_object_store()  # this returns a PathLocation object
             # get the access time of the object store to mirror to tape, or set to now
             # if no access_time present
@@ -942,7 +840,7 @@ class CatalogConsumer(RMQC):
                     aggregation=None,
                 )
                 # update the pd now with new location
-                pd = PathDetails.from_filemodel(f)
+                pd = self._filemodel_to_path_details(f)
                 # add to the completelist ready for sending
                 self.completelist.append(pd)
             except CatalogError as e:
@@ -1434,7 +1332,6 @@ class CatalogConsumer(RMQC):
                     ret_dict[h.label][MSG.TRANSACTIONS][t.transaction_id] = t_rec
                 # get the locations
                 locations = []
-                pd = PathDetails.from_filemodel(f)
                 for l in f.locations:
                     l_rec = {
                         "storage_type": l.storage_type,
@@ -1453,6 +1350,7 @@ class CatalogConsumer(RMQC):
                     MSG.USER: f.user,
                     MSG.GROUP: f.group,
                     "permissions": f.file_permissions,
+                    "holding_id": h.id,
                     "locations": locations,
                 }
                 t_rec[MSG.FILELIST].append(f_rec)
@@ -1632,7 +1530,7 @@ class CatalogConsumer(RMQC):
                 elif rk_parts[1] == RK.CATALOG_REMOVE:
                     self._catalog_remove(body, rk_parts[0], Storage.OBJECT_STORAGE)
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
-                    self._catalog_update_from_archive_get(body, rk_parts[0])
+                    self._catalog_update(body, rk_parts[0], create=False)
 
         elif api_method in (RK.PUTLIST, RK.PUT):
             # split the routing key
@@ -1652,7 +1550,7 @@ class CatalogConsumer(RMQC):
                 elif rk_parts[1] == RK.CATALOG_DEL:
                     self._catalog_del(body, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
-                    self._catalog_update(body, rk_parts[0])
+                    self._catalog_update(body, rk_parts[0], create=True)
 
         # Archive put requires getting from the catalog
         elif api_method == RK.ARCHIVE_PUT:
