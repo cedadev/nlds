@@ -282,6 +282,15 @@ class RabbitMQConsumer(ABC, RMQP):
         self.publish_message(monitoring_rk, body_json)
         self.sent_message_count += 1
 
+    def send_complete(self,
+        routing_key: str,
+        body_json: Dict[str, Any],
+    ):
+        body_json[MSG.DETAILS][MSG.STATE] = State.COMPLETE
+        monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
+        self.publish_message(monitoring_rk, body_json)
+        self.sent_message_count += 1
+
     def setup_logging(
         self,
         enable=False,
