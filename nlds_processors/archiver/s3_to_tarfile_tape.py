@@ -266,6 +266,43 @@ class S3ToTarfileTape(S3ToTarfileStream):
             prepare_complete &= r['online']
         return prepare_complete
 
+    def evict(self, tarfilelist: List[str]):
+        """Evict any files from the XrootD cache to ensure that it doesn't fill up."""
+        if len(tarfilelist) == 0:
+            # trap this as it causes a seg-fault if it is passed to XRD.prepare
+            raise S3StreamError("tarfilelist is empty in evict")
+
+        self.log(
+            f"Querying whether tarfiles {tarfilelist} can be evicted from the "
+            "XrootD cache.",
+            RK.LOG_INFO,
+        )
+        # First check whether the tarfiles have already been requested by another 
+        # prepare
+        clean_tarlist = S3ToTarfileTape.__relative_tarfile_list(tarfilelist)
+        # prepare id of * returns prepare status of all files in clean_tarlist
+        query_args = "\n".join(["*", *clean_tarlist])
+        status, response = self.tape_client.query(QueryCode.PREPARE, query_args)
+        if not status.ok:
+            raise S3StreamError(
+                f"Could not check status of prepare request. Reason: {status.message}"
+            )
+        # get the response and convert to a dictionary
+        jr = json.loads(response.decode())
+        if len(jr) > 0:
+            # build the eviction list
+            evict_list = [
+                response["path"]
+                for response in jr["responses"]
+                if not response["requested"]
+            ]
+            # now do the actual eviction
+            status, _ = self.tape_client.prepare(evict_list, PrepareFlags.EVICT)
+            if status.status != 0:
+                raise S3StreamError(
+                    f"Could not evict tar files {tarfilelist} from tape cache."
+                )
+
     """Note that there are a number of different methods below to get the tapepaths"""
 
     @property

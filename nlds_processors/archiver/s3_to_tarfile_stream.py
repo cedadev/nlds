@@ -323,3 +323,8 @@ class S3ToTarfileStream:
     def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
         """Query the storage system whether the prepare for a file has been completed."""
         raise NotImplementedError
+
+    @abstractmethod
+    def evict(self, tarfilelist: List[str]):
+        """Evict any files from the temporary storage cache on the storage system."""
+        raise NotImplementedError

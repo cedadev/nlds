@@ -194,6 +194,11 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             self.log(f"Prepare complete for tarfile: {tarfile}", RK.LOG_INFO)
         return True
 
+    def evict(self, tarfilelist: List[str]):
+        """Evict any files from the temporary storage cache on the storage system."""
+        # Do nothing for disktape
+        return
+
     @property
     def holding_diskpath(self):
         """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
