@@ -59,9 +59,9 @@ def send_archive_next():
     }
     routing_key = f"{RK.ROOT}.{RK.CATALOG_ARCHIVE_NEXT}.{RK.START}"
 
-    print(f"Sending message to {routing_key}: \n{json.dumps(msg_dict, indent=4)}")
+    click.echo(f"Sending message to {routing_key}: \n{json.dumps(msg_dict, indent=4)}")
     rabbit_publisher.publish_message(routing_key, msg_dict)
-    print("Message sent!")
+    click.echo("Message sent!")
 
 
 if __name__ == "__main__":
