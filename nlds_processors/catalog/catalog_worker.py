@@ -851,7 +851,7 @@ class CatalogConsumer(RMQC):
                 self.failedlist.append(pd)
                 continue
 
-        # Forward successful file details to archiver for tape write
+        # Forward successful file details to archive for tape write
         rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.COMPLETE])
 
         body[MSG.DETAILS][MSG.USER] = next_holding.user

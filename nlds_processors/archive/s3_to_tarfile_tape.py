@@ -22,11 +22,11 @@ from XRootD.client.flags import (
 )
 
 from nlds.details import PathDetails
-from nlds_processors.archiver.s3_to_tarfile_stream import (
+from nlds_processors.archive.s3_to_tarfile_stream import (
     S3ToTarfileStream,
     S3StreamError,
 )
-from nlds_processors.archiver.adler32file import Adler32XRDFile
+from nlds_processors.archive.adler32file import Adler32XRDFile
 import nlds.rabbit.routing_keys as RK
 
 class S3ToTarfileTape(S3ToTarfileStream):

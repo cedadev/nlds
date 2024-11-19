@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Tuple, Any
 import os
 
-from nlds_processors.transferers.base_transfer import BaseTransferConsumer
+from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds_processors.utils.aggregations import bin_files
 
 from nlds.details import PathDetails
@@ -25,9 +25,9 @@ import nlds.rabbit.message_keys as MSG
 from nlds.nlds_setup import USE_DISKTAPE, DISKTAPE_LOC
 
 if USE_DISKTAPE:
-    from nlds_processors.archiver.s3_to_tarfile_disk import S3ToTarfileDisk
+    from nlds_processors.archive.s3_to_tarfile_disk import S3ToTarfileDisk
 else:
-    from nlds_processors.archiver.s3_to_tarfile_tape import S3ToTarfileTape
+    from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape
 
 
 class ArchiveError(Exception):
@@ -99,7 +99,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         return streamer
 
     def callback(self, ch, method, properties, body, connection):
-        """Callback for the base archiver consumer. Takes the message contents
+        """Callback for the base archive consumer. Takes the message contents
         in body and runs some standard objectstore verification (reused from the
         BaseTransferConsumer) as well as some more tape-specific config
         scraping, then runs the appropriate transfer function.

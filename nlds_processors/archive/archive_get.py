@@ -15,9 +15,9 @@ from copy import copy
 from minio.error import S3Error
 from retry import retry
 
-from nlds_processors.archiver.archive_base import BaseArchiveConsumer
+from nlds_processors.archive.archive_base import BaseArchiveConsumer
 
-from nlds_processors.archiver.s3_to_tarfile_stream import S3StreamError
+from nlds_processors.archive.s3_to_tarfile_stream import S3StreamError
 
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails

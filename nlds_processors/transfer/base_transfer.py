@@ -20,7 +20,7 @@ from nlds.rabbit.consumer import State
 from nlds_processors.utils.aggregations import bin_files
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-from nlds_processors.transferers.transfer_error import TransferError
+from nlds_processors.transfer.transfer_error import TransferError
 
 
 class BaseTransferConsumer(StattingConsumer, ABC):

@@ -16,15 +16,15 @@ from sqlalchemy.sql.expression import text
 
 from nlds_processors.catalog.catalog_models import Storage
 from nlds_processors.catalog.catalog_worker import CatalogConsumer
-from nlds_processors.transferers.put_transfer import PutTransferConsumer
-from nlds_processors.transferers.get_transfer import GetTransferConsumer
-# Import archiver consumers, some of which import xrootd and may break on 
+from nlds_processors.transfer.put_transfer import PutTransferConsumer
+from nlds_processors.transfer.get_transfer import GetTransferConsumer
+# Import archive consumers, some of which import xrootd and may break on 
 # unprepared environments
-from nlds_processors.archiver.archive_base import BaseArchiveConsumer as BAC
-from nlds_processors.archiver.archive_base import ArchiveError
+from nlds_processors.archive.archive_base import BaseArchiveConsumer as BAC
+from nlds_processors.archive.archive_base import ArchiveError
 try:
-    from nlds_processors.archiver.archive_get import GetArchiveConsumer
-    from nlds_processors.archiver.archive_put import PutArchiveConsumer
+    from nlds_processors.archive.archive_get import GetArchiveConsumer
+    from nlds_processors.archive.archive_put import PutArchiveConsumer
 except ModuleNotFoundError:
     PutArchiveConsumer = None
     GetArchiveConsumer = None
