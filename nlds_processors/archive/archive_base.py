@@ -1,8 +1,6 @@
 # encoding: utf-8
 """
 archive_base.py
-NOTE: This module is imported into a revision, and so should be very defensive 
-with how it imports external modules (like xrootd). 
 """
 __author__ = "Jack Leland and Neil Massey"
 __date__ = "30 Nov 2021"
