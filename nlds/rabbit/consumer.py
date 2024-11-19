@@ -248,6 +248,7 @@ class RabbitMQConsumer(ABC, RMQP):
         body_json: Dict[str, Any],
         state: State = None,
         warning: List[str] = None,
+        delay = 0
     ) -> None:
         """Convenience function which sends the given list of PathDetails
         objects to the exchange with the given routing key and message body.
@@ -271,7 +272,7 @@ class RabbitMQConsumer(ABC, RMQP):
         body_json[MSG.DATA][MSG.FILELIST] = pathlist
         body_json[MSG.DETAILS][MSG.STATE] = state.value
 
-        self.publish_message(routing_key, body_json)
+        self.publish_message(routing_key, body_json, delay=delay)
 
         # Send message to monitoring to keep track of state
         # add any warning
@@ -279,7 +280,8 @@ class RabbitMQConsumer(ABC, RMQP):
             body_json[MSG.DETAILS][MSG.WARNING] = warning
 
         monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
-        self.publish_message(monitoring_rk, body_json)
+        # added the delay back in for the PREPARE method
+        self.publish_message(monitoring_rk, body_json, delay=delay)
         self.sent_message_count += 1
 
     def send_complete(self,
