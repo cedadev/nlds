@@ -235,6 +235,10 @@ class S3ToTarfileTape(S3ToTarfileStream):
             raise S3StreamError("tarfilelist is empty in prepare_request")
 
         clean_tarlist = S3ToTarfileTape.__relative_tarfile_list(tarfilelist)
+        self.log(
+            f"Preparing tarfiles {clean_tarlist} for staging to the XrootD cache.",
+            RK.LOG_INFO,
+        )
         status, response = self.tape_client.prepare(clean_tarlist, PrepareFlags.STAGE)
         if not status.ok:
             raise S3StreamError(
@@ -251,6 +255,10 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # requires query_args to be built with new line separator
         clean_tarlist = S3ToTarfileTape.__relative_tarfile_list(tarfilelist)
         query_args = "\n".join([prepare_id, *clean_tarlist])
+        self.log(
+            f"Querying prepare status of tarfiles {clean_tarlist}.",
+            RK.LOG_INFO,
+        )
         status, response = self.tape_client.query(QueryCode.PREPARE, query_args)
         if not status.ok:
             raise S3StreamError(
@@ -272,14 +280,14 @@ class S3ToTarfileTape(S3ToTarfileStream):
             # trap this as it causes a seg-fault if it is passed to XRD.prepare
             raise S3StreamError("tarfilelist is empty in evict")
 
-        self.log(
-            f"Querying whether tarfiles {tarfilelist} can be evicted from the "
-            "XrootD cache.",
-            RK.LOG_INFO,
-        )
         # First check whether the tarfiles have already been requested by another 
         # prepare
         clean_tarlist = S3ToTarfileTape.__relative_tarfile_list(tarfilelist)
+        self.log(
+            f"Querying whether tarfiles {clean_tarlist} can be evicted from the "
+            "XrootD cache.",
+            RK.LOG_INFO,
+        )
         # prepare id of * returns prepare status of all files in clean_tarlist
         query_args = "\n".join(["*", *clean_tarlist])
         status, response = self.tape_client.query(QueryCode.PREPARE, query_args)
