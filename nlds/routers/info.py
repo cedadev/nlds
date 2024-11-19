@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -20,6 +20,7 @@ template_dir = os.path.join(os.path.dirname(__file__), "../templates/")
 
 templates = Jinja2Templates(directory=template_dir)
 
+
 class FilterRequest(BaseModel):
     user: Optional[str] = None
     group: Optional[str] = None
@@ -31,15 +32,28 @@ class FilterRequest(BaseModel):
     endTime: Optional[str] = None
     order: str
 
-def get_records(user=None, group=None, state=None, recordState=None, recordId=None, transactionId=None, startTime=None, endTime=None, order=None):
+
+def get_records(
+    user=None,
+    group=None,
+    state=None,
+    recordState=None,
+    recordId=None,
+    transactionId=None,
+    startTime=None,
+    endTime=None,
+    order=None,
+):
     if not startTime:
         startTime = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    
+
     try:
-        state, recordState = nlds_monitor.validate_inputs(startTime, endTime, state, recordState)
+        state, recordState = nlds_monitor.validate_inputs(
+            startTime, endTime, state, recordState
+        )
     except SystemExit as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     session = nlds_monitor.connect_to_monitor()
 
     record_list = nlds_monitor.query_monitor_db(
@@ -55,12 +69,12 @@ def get_records(user=None, group=None, state=None, recordState=None, recordId=No
         order=order,
     )
     result = nlds_monitor.construct_record_dict(record_list)
-    
+
     for record in result:
         record["creation_time"] = str(record["creation_time"])
         for sub_record in record["sub_records"]:
             sub_record["last_updated"] = str(sub_record["last_updated"])
-    
+
     stat_string = nlds_monitor.construct_stat_string(
         recordId,
         transactionId,
@@ -72,8 +86,9 @@ def get_records(user=None, group=None, state=None, recordState=None, recordId=No
         endTime,
         order,
     )
-    
+
     return result, stat_string
+
 
 @router.get("/")
 def get(
@@ -85,17 +100,18 @@ def get(
         "info.html", context={"request": request, "info": result}
     )
 
+
 @router.post("/")
 def get_filtered_records(filter_request: FilterRequest):
-    user=filter_request.user
-    group=filter_request.group
-    state=filter_request.state
-    recordState=filter_request.recordState
-    recordId=filter_request.recordId
-    transactionId=filter_request.transactionId
-    startTime=filter_request.startTime
-    endTime=filter_request.endTime
-    order=filter_request.order
+    user = filter_request.user
+    group = filter_request.group
+    state = filter_request.state
+    recordState = filter_request.recordState
+    recordId = filter_request.recordId
+    transactionId = filter_request.transactionId
+    startTime = filter_request.startTime
+    endTime = filter_request.endTime
+    order = filter_request.order
 
     result, stat_string = get_records(
         user,
@@ -108,7 +124,14 @@ def get_filtered_records(filter_request: FilterRequest):
         endTime,
         order,
     )
-    
+
     return JSONResponse(content={"records": result, "message": stat_string})
 
+
 # no authentication required for the moment
+
+# nlds-up nlds-api
+# http://127.0.0.1:8000/info/
+
+
+# Warning: make sure any data is younger than a month or you will get an empty table

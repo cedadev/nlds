@@ -18,8 +18,8 @@
             <th>id</th>
             <th>action</th>
             <th>job label</th>
-            <th>state</th>
             <th>last update</th>
+            <th>state</th>
         </tr>
         {% for record in info %}
         <tr class="hover" onclick="activateComplexView('record_{{ record.id }}')">
@@ -28,8 +28,8 @@
             <td>{{ record.id }}</td>
             <td>{{ record.api_action }}</td>
             <td>{{ record.job_label }}</td>
-            <td>{{ record.state }}</td>
             <td>{{ record.creation_time }}</td>
+            <td>{{ record.state }}</td>
             <input type="hidden" id="record_{{ record.id }}" value='{{ record | tojson }}'>
         </tr>
         {% endfor %}
@@ -54,11 +54,39 @@
         <label for="group">Group:</label><br>
         <input type="text" id="group" name="group"><br>
 
+        <!--
         <label for="state">State:</label><br>
         <input type="text" id="state" name="state"><br>
+        -->
 
-        <label for="recordState">Record state:</label><br>
-        <input type="text" id="recordState" name="recordState"><br>
+        <div>State:</div>
+        <SELECT id="state">
+            <OPTION Value="INITIALISING">INITIALISING</OPTION>
+            <OPTION Value="ROUTING">ROUTING</OPTION>
+            <OPTION Value="SPLITTING">SPLITTING</OPTION>
+            <OPTION Value="INDEXING">INDEXING</OPTION>
+            <OPTION Value="CATALOG_PUTTING">CATALOG_PUTTING</OPTION>
+            <OPTION Value="TRANSFER_PUTTING">TRANSFER_PUTTING</OPTION>
+            <OPTION Value="CATALOG_ROLLBACK">CATALOG_ROLLBACK</OPTION>
+            <OPTION Value="CATALOG_UPDATING">CATALOG_UPDATING</OPTION>
+            <OPTION Value="CATALOG_GETTING">CATALOG_GETTING</OPTION>
+            <OPTION Value="ARCHIVE_GETTING">ARCHIVE_GETTING</OPTION>
+            <OPTION Value="TRANSFER_GETTING">TRANSFER_GETTING</OPTION>
+            <OPTION Value="ARCHIVE_INIT">ARCHIVE_INIT</OPTION>
+            <OPTION Value="ARCHIVE_PUTTING">ARCHIVE_PUTTING</OPTION>
+            <OPTION Value="CATALOG_ARCHIVE_UPDATING">CATALOG_ARCHIVE_UPDATING</OPTION>
+            <OPTION Value="CATALOG_ARCHIVE_REMOVING">CATALOG_ARCHIVE_REMOVING</OPTION>
+            <OPTION Value="CATALOG_DELETE_ROLLBACK">CATALOG_DELETE_ROLLBACK</OPTION>
+            <OPTION Value="CATALOG_RESTORING">CATALOG_RESTORING</OPTION>
+            <OPTION Value="COMPLETE">COMPLETE</OPTION>
+            <OPTION Value="FAILED">FAILED</OPTION>
+            <OPTION Value="COMPLETE_WITH_ERRORS">COMPLETE_WITH_ERRORS</OPTION>
+            <OPTION Value="COMPLETE_WITH_WARNINGS">COMPLETE_WITH_WARNINGS</OPTION>
+            <OPTION Value="SEARCHING">SEARCHING</OPTION>
+        </SELECT><br><br>
+
+        <!--<label for="recordState">Record state:</label><br>
+        <input type="text" id="recordState" name="recordState"><br>-->
 
         <label for="startTime">Start time:</label><br>
         <input type="date" id="startTime" name="startTime"><br>

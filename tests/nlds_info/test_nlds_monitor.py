@@ -128,7 +128,7 @@ def setup_test(monkeypatch):
     yield _setup_test
 
     # Teardown database session
-    monitor.end_session
+    monitor.end_session()
 
 
 def test_user_correct(setup_test, start_time):

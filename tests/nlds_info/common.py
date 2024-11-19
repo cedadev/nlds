@@ -8,6 +8,7 @@ from nlds_processors.monitor.monitor_models import (
 import uuid
 from nlds.rabbit.consumer import State
 from datetime import datetime, timedelta
+
 def mock_monitor():
     """Function to mock the monitor database with in-memory SQLite for testing."""
     db_engine = "sqlite"
@@ -20,11 +21,13 @@ def mock_monitor():
 
     # Provide the monitor instance to the test without any pre-existing records
     return monitor
+
 def generate_uuid_list(num):
     uuid_list = []
     for i in range(num):
         uuid_list.append(str(uuid.uuid4()))
     return uuid_list
+
 def sample_record(
     id=1,
     uuid=generate_uuid_list(1),

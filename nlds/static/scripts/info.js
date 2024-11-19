@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
             user: form.user.value || null,
             group: form.group.value || null,
             state: form.state.value || null,
-            recordState: form.recordState.value || null,
+            recordState: null, // form.recordState.value || null,
             recordId: form.recordId.value || null,
             transactionId: form.transactionId.value || null,
             startTime: form.startTime.value || null,
@@ -56,8 +56,8 @@ document.addEventListener('DOMContentLoaded', (event) => {
                     <th>id</th>
                     <th>action</th>
                     <th>job label</th>
-                    <th>state</th>
                     <th>last update</th>
+                    <th>state</th>
                 </tr>
             `;
                 tableBody.insertAdjacentHTML('afterbegin', headerRow);
@@ -74,8 +74,8 @@ document.addEventListener('DOMContentLoaded', (event) => {
                     <td>${record.id || ''}</td>
                     <td>${record.api_action || ''}</td>
                     <td>${record.job_label || ''}</td>
-                    <td>${record.state || ''}</td>
                     <td>${record.creation_time || ''}</td>
+                    <td>${record.state || ''}</td>
                     <input type="hidden" id="record_${record.id}" value='${JSON.stringify(record)}'>
                 `;
                     tableBody.appendChild(row);
@@ -191,7 +191,7 @@ function activateComplexView(recordId) {
         document.getElementById("warnings").textContent = "None";
     }
 
-    let subValues = ["id", "sub_id", "state", "last_updated", "failed_files"];
-    let subHeaders = ["id", "sub_id", "state", "last updated", "failed files"];
+    let subValues = ["id", "sub_id", "last_updated", "state", "failed_files"];
+    let subHeaders = ["id", "sub_id", "last updated", "state", "failed files"];
     buildTable(record["sub_records"], subValues, subHeaders, "subRecords")
 }
