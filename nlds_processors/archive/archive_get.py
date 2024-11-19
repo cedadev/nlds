@@ -30,6 +30,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_QUEUE_NAME = "archive_get_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.ARCHIVE_GET}." f"{RK.WILD}"
     DEFAULT_STATE = State.ARCHIVE_GETTING
+    PREPARE_DELAY = 60 * 1000 # 60 seconds delay between PREPARE_check requests
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         self.preparelist = []
@@ -107,8 +108,8 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     # if a S3StreamError occurs then all files in the aggregate have
                     # failed
                     self.log(
-                        f"Error when streaming file {tarfile}. Reason: {e.message}", 
-                        RK.LOG_ERROR
+                        f"Error when streaming file {tarfile}. Reason: {e.message}",
+                        RK.LOG_ERROR,
                     )
                     # add failure message and dispatch
                     for path_details in aggregate_filelist:
@@ -122,6 +123,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         )
             # try to evict the retrieved files from any cache the storage system has
             try:
+                # retrieval_dict.keys() is the list of tarfiles
                 streamer.evict(retrieval_dict.keys())
             except S3StreamError as e:
                 # just log the error message as a warning - failure to evict shouldn't
@@ -258,6 +260,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     routing_key=rk_check,
                     body_json=body_json_check,
                     state=State.ARCHIVE_PREPARING,
+                    delay=GetArchiveConsumer.PREPARE_DELAY
                 )
 
         if len(self.failedlist) > 0:
@@ -323,11 +326,11 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 complete = streamer.prepare_complete(prepare_id, tarfile_list)
             except S3StreamError as e:
                 self.log(
-                    f"Could not check prepare id: {prepare_id}. Reason: {e}.", 
-                    RK.LOG_ERROR
+                    f"Could not check prepare id: {prepare_id}. Reason: {e}.",
+                    RK.LOG_ERROR,
                 )
                 # fail all in the prepare dict if the prepare_id failed
-                for tarfile, item in retrieval_dict:
+                for _, item in retrieval_dict.items():
                     aggregate_filelist = item[MSG.FILELIST]
                     for path_details in aggregate_filelist:
                         path_details.failure_reason = e.message
@@ -349,12 +352,17 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     "transfer.",
                     RK.LOG_INFO,
                 )
-                self.send_pathlist(
-                    self.filelist,
-                    rk_complete,
-                    body_json,
-                    state=State.ARCHIVE_PREPARING,
-                )
+                # Split the messages so that a message is sent per tarfile. This
+                # increases the parallelisation and allows multiple consumers to perform
+                # the streaming from tape cache to object storage
+                for _, item in retrieval_dict.items():
+                    aggregate_filelist = item[MSG.FILELIST]
+                    self.send_pathlist(
+                        aggregate_filelist,
+                        rk_complete,
+                        body_json,
+                        state=State.ARCHIVE_PREPARING,
+                    )
             else:
                 self.log(
                     "Archive prepare not complete, passing lists back to prepare_check "
@@ -362,8 +370,18 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     RK.LOG_INFO,
                 )
                 self.send_pathlist(
-                    self.filelist,      # send the filelist again
+                    filelist,  # send the filelist again
                     routing_key=rk_check,
                     body_json=body_json,
                     state=State.ARCHIVE_PREPARING,
+                    delay=GetArchiveConsumer.PREPARE_DELAY
                 )
+
+
+def main():
+    consumer = GetArchiveConsumer()
+    consumer.run()
+
+
+if __name__ == "__main__":
+    main()
