@@ -15,17 +15,9 @@ import os
 from minio.error import S3Error
 from retry import retry
 
-from nlds_processors.archiver.archive_base import (
-    BaseArchiveConsumer,
-    ArchiveError,
-)
+from nlds_processors.archive.archive_base import BaseArchiveConsumer
 
-USE_DISKTAPE = True
-if USE_DISKTAPE:
-    from nlds_processors.archiver.s3_to_tarfile_disk import S3ToTarfileDisk
-else:
-    from nlds_processors.archiver.s3_to_tarfile_tape import S3ToTarfileTape
-from nlds_processors.archiver.s3_to_tarfile_stream import S3StreamError
+from nlds_processors.archive.s3_to_tarfile_stream import S3StreamError
 
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
@@ -59,44 +51,23 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Create the S3 to tape or disk streamer
         try:
-            if USE_DISKTAPE:
-                disk_loc = os.path.expanduser("~/DISKTAPE")
-                self.log(
-                    f"Starting disk transfer between {disk_loc} and object store " 
-                    f"{tenancy}",
-                    RK.LOG_INFO,
-                )
-                streamer = S3ToTarfileDisk(
-                    s3_tenancy=tenancy,
-                    s3_access_key=access_key,
-                    s3_secret_key=secret_key,
-                    disk_location=disk_loc,
-                    logger=self.log,
-                )
-            else:
-                self.log(
-                    f"Starting tape transfer between {tape_url} and object store " 
-                    f"{tenancy}",
-                    RK.LOG_INFO,
-                )
-                streamer = S3ToTarfileTape(
-                    s3_tenancy=tenancy,
-                    s3_access_key=access_key,
-                    s3_secret_key=secret_key,
-                    tape_url=tape_url,
-                    logger=self.log,
-                )
+            streamer = self._create_streamer(
+                tenancy=tenancy,
+                access_key=access_key,
+                secret_key=secret_key,
+                tape_url=tape_url,
+            )
         except S3StreamError as e:
             # if a S3StreamError occurs then all files have failed
             for path_details in filelist:
                 path_details.failure_reason = e.message
                 self.failedlist.append(path_details)
             checksum = None
+            tarfile = None
         else:
             # NOTE: For the purposes of tape reading and writing, the holding prefix
             # has 'nlds.' prepended
             holding_prefix = self.get_holding_prefix(body_json)
-
             try:
                 self.completelist, self.failedlist, tarfile, checksum = streamer.put(
                     holding_prefix, filelist, self.chunk_size
@@ -107,15 +78,16 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     path_details.failure_reason = e.message
                     self.failedlist.append(path_details)
                 checksum = None
-            # assign the return data for the aggregation.  Need to know the tarfile name
-            # and its checksum
-            body_json[MSG.DATA][MSG.CHECKSUM] = checksum
-            body_json[MSG.DATA][MSG.TARFILE] = tarfile
+                tarfile = None
+        # assign the return data for the aggregation.  Need to know the tarfile name
+        # and its checksum
+        body_json[MSG.DATA][MSG.CHECKSUM] = checksum
+        body_json[MSG.DATA][MSG.TARFILE] = tarfile
 
         # Send whatever remains after all items have been put
         if len(self.completelist) > 0:
             self.log(
-                "Archive complete, passing lists back to worker for cataloguing.",
+                "Archive put complete, passing lists back to worker for cataloguing.",
                 RK.LOG_INFO,
             )
             self.send_pathlist(
@@ -131,20 +103,33 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                 state=State.FAILED,
             )
 
-    @classmethod
-    def get_holding_prefix(cls, body: Dict[str, Any]) -> str:
-        """Get the uneditable holding information from the message body to
-        reproduce the holding prefix made in the catalog"""
-        try:
-            holding_id = body[MSG.META][MSG.HOLDING_ID]
-            user = body[MSG.DETAILS][MSG.USER]
-            group = body[MSG.DETAILS][MSG.GROUP]
-        except KeyError as e:
-            raise ArchiveError(
-                f"Could not make holding prefix, original error: {e}"
-            )
+    def prepare(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
+        """Put shouldn't have a prepare method"""
+        raise NotImplementedError
 
-        return f"nlds.{holding_id}.{user}.{group}"
+    def prepare_check(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        tape_url: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
+        """Put shouldn't have a prepare check method"""
+        raise NotImplementedError
 
 
 def main():

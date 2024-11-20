@@ -214,18 +214,19 @@ class Monitor(DBMixin):
 
         return srecs
 
-    def update_sub_record(
-        self, sub_record: SubRecord, new_state: State
-    ) -> SubRecord:
+    def update_sub_record(self, sub_record: SubRecord, new_state: State) -> SubRecord:
         """Update a retrieved SubRecord to reflect the new monitoring info.
         Furthest state is updated, if required.
         """
         # Upgrade state to new_state, but throw exception if regressing state
-        # (staying the same is fine)
-        if new_state.value < sub_record.state.value:
+        # from COMPLETE or FAILED to a state below that
+        if (
+            sub_record.state.value >= State.COMPLETE.value
+            and new_state.value < State.COMPLETE.value
+        ):
             raise MonitorError(
-                f"Monitoring state cannot go backwards or skip steps. Attempted"
-                f" {sub_record.state}->{new_state}"
+                f"Monitoring state cannot go backwards from {sub_record.state}. "
+                f"Attempted {sub_record.state}->{new_state}"
             )
         sub_record.state = new_state
         self.session.flush()

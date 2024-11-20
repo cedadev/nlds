@@ -15,11 +15,11 @@ from minio.error import S3Error
 from retry import retry
 from urllib3.exceptions import HTTPError
 
-from nlds_processors.transferers.base_transfer import BaseTransferConsumer
+from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
-from nlds_processors.transferers.transfer_error import TransferError
+from nlds_processors.transfer.transfer_error import TransferError
 
 
 class PutTransferConsumer(BaseTransferConsumer):

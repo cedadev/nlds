@@ -1,6 +1,7 @@
 """
 s3_to_tarfile_tape.py
 """
+
 __author__ = "Neil Massey"
 __date__ = "18 Sep 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -8,18 +9,25 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from typing import Tuple, List
+import os
+import json
 
 from XRootD import client as XRDClient
-from XRootD.client.flags import StatInfoFlags, MkDirFlags, OpenFlags, QueryCode
+from XRootD.client.flags import (
+    StatInfoFlags,
+    MkDirFlags,
+    OpenFlags,
+    QueryCode,
+    PrepareFlags,
+)
 
 from nlds.details import PathDetails
-from nlds_processors.archiver.s3_to_tarfile_stream import (
+from nlds_processors.archive.s3_to_tarfile_stream import (
     S3ToTarfileStream,
     S3StreamError,
 )
-from nlds_processors.archiver.adler32file import Adler32XRDFile
+from nlds_processors.archive.adler32file import Adler32XRDFile
 import nlds.rabbit.routing_keys as RK
-
 
 class S3ToTarfileTape(S3ToTarfileStream):
     """Class to stream files from / to an S3 resource (AWS, minio, DataCore Swarm etc.)
@@ -28,6 +36,10 @@ class S3ToTarfileTape(S3ToTarfileStream):
     The streams are defined in these directions:
     PUT : S3 -> Tarfile
     GET : Tarfile -> S3"""
+
+    # constants for environment variables
+    XRD_SECRET_PROTOCOL = "XrdSecPROTOCOL"
+    XRD_SECRET_KEYTAB = "XrdSecSSSKT"
 
     def __init__(
         self,
@@ -52,12 +64,26 @@ class S3ToTarfileTape(S3ToTarfileStream):
             RK.LOG_INFO,
         )
 
+        # check that the environment variables are set:
+        # XrdSecPROTOCOL & XrdSecSSSKT are needed for the XrootD authentication
+        if S3ToTarfileTape.XRD_SECRET_KEYTAB not in os.environ:
+            raise RuntimeError(
+                f"{S3ToTarfileTape.XRD_SECRET_KEYTAB} environment variable not set."
+            )
+
+        if S3ToTarfileTape.XRD_SECRET_PROTOCOL not in os.environ:
+            raise RuntimeError(
+                f"{S3ToTarfileTape.XRD_SECRET_PROTOCOL} environment variable not set."
+            )
+
         # create the connection to the tape server
         self.tape_client = XRDClient.FileSystem(f"root://{self.tape_server_url}")
         self._verify_tape_server()
-        self.log(f"Connected to tape server: {self.tape_server_url}")
+        self.log(f"Connected to tape server: {self.tape_server_url}", RK.LOG_INFO)
 
-    def put(self, holding_prefix: str, filelist: List[PathDetails]):
+    def put(
+        self, holding_prefix: str, filelist: List[PathDetails], chunk_size: int
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """
         Put the filelist to the tape server using the already created S3 client and
          tape client.
@@ -72,7 +98,9 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # self._generate_filelist_hash and self._check_files_exist use the member
         # variables already set and the function definitions are in the parent class
         self.filelist_hash = self._generate_filelist_hash()
-        self._check_files_exist()
+        completelist, failedlist = self._check_files_exist()
+        if len(failedlist) > 0:
+            return [], failedlist, None
 
         # Make or find holding folder on the tape server
         status, _ = self.tape_client.mkdir(self.holding_tapepath, MkDirFlags.MAKEPATH)
@@ -94,7 +122,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
                     )
                 file_object = Adler32XRDFile(XRD_file, debug_fl=False)
                 completelist, failedlist, checksum = self._stream_to_fileobject(
-                    file_object
+                    file_object, filelist, chunk_size
                 )
         except S3StreamError as e:
             msg = (
@@ -103,24 +131,185 @@ class S3ToTarfileTape(S3ToTarfileStream):
                 f"from the tape system disk cache. Original exception: {e}"
             )
             self.log(msg, RK.LOG_ERROR)
-            self._remove_tarfile_from_tape()
-            # need to set all completed_files to failed
-            failedlist.extend(completelist)
-            completelist.clear()
+            try:
+                self._remove_tarfile_from_tape()
+            except S3StreamError as e:
+                msg += f" {e.message}"
             raise S3StreamError(msg)
         # now verify the checksum
         try:
             self._validate_tarfile_checksum(checksum)
         except S3StreamError as e:
-            msg = (f"Exception occurred during validation of tarfile "
-                   f"{self.tarfile_tapepath}.  Original exception: {e}")
-            self.log(msg)
-            self._remove_tarfile_from_tape()
-            # need to set all completed_files to failed
-            failedlist.extend(completelist)
-            completelist.clear()
+            msg = (
+                f"Exception occurred during validation of tarfile "
+                f"{self.tarfile_tapepath}.  Original exception: {e}"
+            )
+            self.log(msg, RK.LOG_ERROR)
+            try:
+                self._remove_tarfile_from_tape()
+            except S3StreamError as e:
+                msg += f" {e.message}"
             raise S3StreamError(msg)
-        return completelist, failedlist, checksum
+        # add the location to the completelist
+        for f in completelist:
+            f.set_tape(
+                server=self.tape_server_url,
+                tapepath=self.holding_tapepath,
+                tarfile=f"{self.filelist_hash}.tar",
+            )
+        return completelist, failedlist, self.tarfile_tapepath, checksum
+
+    def get(
+        self,
+        holding_prefix: str,
+        tarfile: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+        """Stream from a tarfile on tape to Object Store"""
+        if self.filelist != []:
+            raise ValueError(f"self.filelist is not Empty: {self.filelist[0]}")
+        
+        self.filelist = filelist
+        self.holding_prefix = holding_prefix
+        try:
+            # open the tar file to read from
+            with XRDClient.File() as file:
+                # open on the XRD system
+                status, _ = file.open(tarfile, OpenFlags.READ)
+                if not status.ok:
+                    raise S3StreamError(
+                        f"Could not open tarfile on XRootD: {tarfile}. "
+                        f"Reason: {status}"
+                    )
+                file_object = Adler32XRDFile(file, debug_fl=True)
+                completelist, failedlist = self._stream_to_s3object(
+                   file_object, self.filelist, chunk_size
+                )
+        except FileNotFoundError:
+            msg = f"Couldn't open tarfile ({tarfile})."
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+        except S3StreamError as e:
+            msg = (
+                f"Exception occurred during read of tarfile {tarfile}. "
+                f"Original Exception: {e}"
+            )
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+
+        return completelist, failedlist
+
+    def __relative_tarfile(tarfile):
+        # tarfile has the full name here, including the root://server/ part of it
+        # we only need the path on the FileSystem
+        return("/"+tarfile.split("//")[2])
+    
+    def __relative_tarfile_list(tarfile_list):
+        # clean up the tarfilelist by removing the root://server/ part of each file name
+        return [S3ToTarfileTape.__relative_tarfile(t) for t in tarfile_list]
+
+    def prepare_required(self, tarfile: str) -> bool:
+        """Query the storage system as to whether a file needs to be prepared (staged)."""
+        tarfile_path = S3ToTarfileTape.__relative_tarfile(tarfile)
+        # XrootD use the .stat method on the FileSystem client
+        status, response = self.tape_client.stat(tarfile_path)
+        # check status for success
+        if not status.ok:
+            raise S3StreamError(
+                f"Could not query status of tarfile via XrootD {tarfile}. "
+                f"Reason: {status.message}"
+            )
+        # check whether file is OFFLINE in response StatInfoFlags
+        prepare = bool(response.flags & StatInfoFlags.OFFLINE)
+        return prepare
+
+    def prepare_request(self, tarfilelist: List[str]) -> str:
+        """Request the storage system for a file to be prepared (staged)."""
+        # tarfilelist is a list of strings, which is fine for XRootD >= 5.6,
+        # but for versions < 5.5.5 the list of tar names need to be encoded as bytes,
+        # from the utf-8 string, e.g. tar_list = [i.decode("utf_8") for i in tar_list]
+        # shouldn't be neccessary for us, though!
+        if len(tarfilelist) == 0:
+            # trap this as it causes a seg-fault if it is passed to XRD.prepare
+            raise S3StreamError("tarfilelist is empty in prepare_request")
+
+        clean_tarlist = S3ToTarfileTape.__relative_tarfile_list(tarfilelist)
+        self.log(
+            f"Preparing tarfiles {clean_tarlist} for staging to the XrootD cache.",
+            RK.LOG_INFO,
+        )
+        status, response = self.tape_client.prepare(clean_tarlist, PrepareFlags.STAGE)
+        if not status.ok:
+            raise S3StreamError(
+                f"Could not prepare tarfile list: {clean_tarlist}. "
+                f"Reason: {status.message}"
+            )
+        else:
+            prepare_id = response.decode()[:-1]
+        return prepare_id
+
+    def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
+        """Query the storage system whether the prepare (staging) for a file has been
+        completed."""
+        # requires query_args to be built with new line separator
+        clean_tarlist = S3ToTarfileTape.__relative_tarfile_list(tarfilelist)
+        query_args = "\n".join([prepare_id, *clean_tarlist])
+        self.log(
+            f"Querying prepare status of tarfiles {clean_tarlist}.",
+            RK.LOG_INFO,
+        )
+        status, response = self.tape_client.query(QueryCode.PREPARE, query_args)
+        if not status.ok:
+            raise S3StreamError(
+                f"Could not check status of prepare request {prepare_id}. "
+                f"Reason: {status.message}"
+            )
+        # get the response and convert to a dictionary
+        jr = json.loads(response.decode())["responses"]
+        # loop over all responses, if all 'online' flags are set then the prepare is
+        # complete
+        prepare_complete = True
+        for r in jr:
+            prepare_complete &= r['online']
+        return prepare_complete
+
+    def evict(self, tarfilelist: List[str]):
+        """Evict any files from the XrootD cache to ensure that it doesn't fill up."""
+        if len(tarfilelist) == 0:
+            # trap this as it causes a seg-fault if it is passed to XRD.prepare
+            raise S3StreamError("tarfilelist is empty in evict")
+
+        # First check whether the tarfiles have already been requested by another 
+        # prepare
+        clean_tarlist = S3ToTarfileTape.__relative_tarfile_list(tarfilelist)
+        self.log(
+            f"Querying whether tarfiles {clean_tarlist} can be evicted from the "
+            "XrootD cache.",
+            RK.LOG_INFO,
+        )
+        # prepare id of * returns prepare status of all files in clean_tarlist
+        query_args = "\n".join(["*", *clean_tarlist])
+        status, response = self.tape_client.query(QueryCode.PREPARE, query_args)
+        if not status.ok:
+            raise S3StreamError(
+                f"Could not check status of prepare request. Reason: {status.message}"
+            )
+        # get the response and convert to a dictionary
+        jr = json.loads(response.decode())
+        if len(jr) > 0:
+            # build the eviction list
+            evict_list = [
+                response["path"]
+                for response in jr["responses"]
+                if not response["requested"]
+            ]
+            # now do the actual eviction
+            status, _ = self.tape_client.prepare(evict_list, PrepareFlags.EVICT)
+            if status.status != 0:
+                raise S3StreamError(
+                    f"Could not evict tar files {tarfilelist} from tape cache."
+                )
 
     """Note that there are a number of different methods below to get the tapepaths"""
 
@@ -217,7 +406,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         doing so we'll need to remove the tarfile from the disk cache on the tape
         system before it gets written to tape, hence this function.
         """
-        
+
         status, _ = self.tape_client.rm(self.tarfile_tapepath)
         if status.status != 0:
             reason = "Could not delete file from disk-cache"
@@ -256,11 +445,11 @@ class S3ToTarfileTape(S3ToTarfileStream):
                 checksum = int(value[:8], 16)
                 if checksum != tarfile_checksum:
                     # If it fails at this point then attempt to delete.  It will be
-                    # scheduled to happend again, so long as the files are added to 
+                    # scheduled to happend again, so long as the files are added to
                     # failed_list
                     reason = (
-                        f"XRootD checksum {checksum} differs from that calculated during "
-                        f"streaming upload {tarfile_checksum}."
+                        f"XRootD checksum {checksum} differs from that calculated "
+                        f"during streaming upload {tarfile_checksum}."
                     )
                     self.log(reason, RK.LOG_ERROR)
                     raise S3StreamError(
@@ -272,3 +461,4 @@ class S3ToTarfileTape(S3ToTarfileStream):
                     f"xrootd",
                     RK.LOG_ERROR,
                 )
+                raise e

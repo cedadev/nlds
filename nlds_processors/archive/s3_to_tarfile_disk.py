@@ -13,11 +13,11 @@ from typing import List
 from zlib import adler32
 
 from nlds.details import PathDetails
-from nlds_processors.archiver.s3_to_tarfile_stream import (
+from nlds_processors.archive.s3_to_tarfile_stream import (
     S3ToTarfileStream,
     S3StreamError,
 )
-from nlds_processors.archiver.adler32file import Adler32File
+from nlds_processors.archive.adler32file import Adler32File
 import nlds.rabbit.routing_keys as RK
 
 
@@ -28,6 +28,8 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     The streams are defined in these directions:
     PUT : S3 -> Tarfile
     GET : Tarfile -> S3"""
+
+    prepare_id = 0
 
     def __init__(
         self,
@@ -105,12 +107,15 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             raise S3StreamError(msg)
         except S3StreamError as e:
             msg = (
-                f"Exception occurred during write of tarfile "
-                f"{self.tarfile_diskpath}.  This file will now be deleted from the"
-                f"DISKTAPE. Original exception: {e}"
+                f"Exception occurred during write of tarfile {self.tarfile_diskpath}. "
+                f"This file will now be deleted from the DISKTAPE. "
+                f"Original exception: {e}"
             )
             self.log(msg, RK.LOG_ERROR)
-            self._remove_tarfile_from_disktape()
+            try:
+                self._remove_tarfile_from_disktape()
+            except S3StreamError as e:
+                msg += f" {e.message}"
             raise S3StreamError(msg)
 
         # now verify the checksum
@@ -135,6 +140,64 @@ class S3ToTarfileDisk(S3ToTarfileStream):
                 tarfile=f"{self.filelist_hash}.tar",
             )
         return completelist, failedlist, self.tarfile_diskpath, checksum
+
+    def get(
+        self,
+        holding_prefix: str,
+        tarfile: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+        """Stream from a tarfile on disk to Object Store"""
+        if self.filelist != []:
+            raise ValueError(f"self.filelist is not Empty: {self.filelist[0]}")
+        self.filelist = filelist
+        self.holding_prefix = holding_prefix
+        try:
+            # open the tarfile to read from
+            with open(tarfile, "rb") as file:
+                file_object = Adler32File(file, debug_fl=False)
+                completelist, failedlist = self._stream_to_s3object(
+                    file_object, self.filelist, chunk_size
+                )
+        except FileNotFoundError:
+            msg = f"Couldn't open tarfile ({self.tarfile_diskpath})."
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+        except S3StreamError as e:
+            msg = (
+                f"Exception occurred during read of tarfile {self.tarfile_diskpath}. "
+                f"Original Exception: {e}"
+            )
+                   
+            self.log(msg, RK.LOG_ERROR)
+            raise S3StreamError(msg)
+
+        return completelist, failedlist
+
+    def prepare_required(self, tarfile: str) -> bool:
+        """Query the storage system as to whether a file needs to be prepared."""
+        # return True for the disktape / faketape™ for every other request
+        return (S3ToTarfileDisk.prepare_id % 2 == 0)
+
+    def prepare_request(self, tarfilelist: List[str]) -> str:
+        """Request the storage system for a file to be prepared"""
+        for tarfile in tarfilelist:
+            self.log(f"Preparing tarfile: {tarfile}", RK.LOG_INFO)
+        S3ToTarfileDisk.prepare_id += 1
+        return str(S3ToTarfileDisk.prepare_id)
+
+    def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
+        """Query the storage system whether the prepare for a file has been completed."""
+        # always return True for the disktape / faketape™
+        for tarfile in tarfilelist:
+            self.log(f"Prepare complete for tarfile: {tarfile}", RK.LOG_INFO)
+        return True
+
+    def evict(self, tarfilelist: List[str]):
+        """Evict any files from the temporary storage cache on the storage system."""
+        # Do nothing for disktape
+        return
 
     @property
     def holding_diskpath(self):

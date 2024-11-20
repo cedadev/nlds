@@ -23,20 +23,20 @@ class State(Enum):
     INDEXING = 2
     CATALOG_PUTTING = 3
     TRANSFER_PUTTING = 4
-    CATALOG_ROLLBACK = 5
-    CATALOG_UPDATING = 6
     # GET workflow states
     CATALOG_GETTING = 10
     ARCHIVE_GETTING = 11
     TRANSFER_GETTING = 12
+    TRANSFER_INIT = 13
     # ARCHIVE_PUT workflow states
     ARCHIVE_INIT = 20
-    ARCHIVE_PUTTING = 22
-    CATALOG_ARCHIVE_UPDATING = 23
-    # Shared ARCHIVE states
-    CATALOG_ARCHIVE_REMOVING = 40
-    CATALOG_DELETE_ROLLBACK = 41
-    CATALOG_RESTORING = 42
+    ARCHIVE_PUTTING = 21
+    ARCHIVE_PREPARING = 22
+    # CATALOG manipulation workflow states
+    CATALOG_DELETING = 30
+    CATALOG_UPDATING = 31
+    CATALOG_ARCHIVE_UPDATING = 32
+    CATALOG_REMOVING = 33
     # Complete states
     COMPLETE = 100
     FAILED = 101
@@ -56,19 +56,20 @@ class State(Enum):
     @classmethod
     def get_final_states(cls):
         final_states = (
-            cls.TRANSFER_GETTING,
-            cls.CATALOG_UPDATING,
-            cls.CATALOG_ARCHIVE_UPDATING,
-            cls.CATALOG_ROLLBACK,
-            cls.CATALOG_ARCHIVE_REMOVING,
-            cls.CATALOG_RESTORING,
+            # Make final states explicit
+            # cls.TRANSFER_GETTING,
+            # cls.CATALOG_UPDATING,
+            # cls.CATALOG_ARCHIVE_UPDATING,
+            # cls.CATALOG_DELETING,
+            # cls.CATALOG_REMOVING,
             cls.FAILED,
+            cls.COMPLETE,
         )
         return final_states
 
     @classmethod
     def get_failed_states(cls):
-        return (cls.CATALOG_ROLLBACK, cls.CATALOG_ARCHIVE_REMOVING, cls.FAILED)
+        return (cls.CATALOG_DELETING, cls.CATALOG_REMOVING, cls.FAILED)
 
     def to_json(self):
         return self.value

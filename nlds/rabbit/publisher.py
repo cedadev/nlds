@@ -448,11 +448,19 @@ class RabbitMQPublisher:
         self.publish_message(routing_key, message)
 
     def log(
-        self, log_message: str, log_level: str, target: str = None, **kwargs
+        self,
+        log_message: str,
+        log_level: str,
+        target: str = None,
+        body_json: str = None,
+        **kwargs,
     ) -> None:
         # Attempt to log to publisher's name
         if not target:
             target = self.name
+        # convert string json to nice formatted json and append to message
+        if body_json:
+            log_message += f"\n{json.dumps(body_json, indent=4)}\n"
         self._log(log_message, log_level, target, **kwargs)
 
     def create_log_message(

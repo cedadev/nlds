@@ -11,6 +11,14 @@
                     {
                         "exchange": "{{ rabbit_exchange_name }}",
                         "routing_key": "*.archive-get.init"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.archive-get.prepare"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.archive-get.prepare-check"
                     }
                 ]
             }

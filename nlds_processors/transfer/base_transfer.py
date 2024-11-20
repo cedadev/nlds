@@ -20,7 +20,7 @@ from nlds.rabbit.consumer import State
 from nlds_processors.utils.aggregations import bin_files
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-from nlds_processors.transferers.transfer_error import TransferError
+from nlds_processors.transfer.transfer_error import TransferError
 
 
 class BaseTransferConsumer(StattingConsumer, ABC):
@@ -62,9 +62,9 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             return False
 
         self.log(
-            f"Received {json.dumps(self.body_json, indent=4)} from "
-            f"{self.queues[0].name} ({method.routing_key})",
+            f"Received from {self.queues[0].name} ({method.routing_key})",
             RK.LOG_DEBUG,
+            body_json=self.body_json
         )
 
         # Verify routing key is appropriate
@@ -118,8 +118,9 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         #       transfer-get  : to parallelise download from the object storage
         #       archive-put   : to form the aggregates on the tape
         # Note: archive-get does not have an INITIATE phase.  This is because the
-        #  messages are already split across aggregates by catalog-get, and we only
-        #  want to recall an aggregate once.
+        # aggregates need to be prepared (staged to cache) and, for efficiency they
+        # should be prepared (staged) all at once. Once they are staged, the files are
+        # split by aggregate into separate messages.
 
         if self.rk_parts[2] == RK.INITIATE:
             self.log(
@@ -137,7 +138,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                     sub_list,
                     rk_transfer_start,
                     self.body_json,
-                    state=State.INITIALISING,
+                    state=State.TRANSFER_INIT,
                 )
         elif self.rk_parts[2] == RK.START:
             # Start transfer - this is implementation specific and handled by

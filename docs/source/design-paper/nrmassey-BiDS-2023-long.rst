@@ -10,7 +10,7 @@ A SCALABLE NEAR-LINE STORAGE SOLUTION FOR VERY BIG DATA
 
 2: Departments of Meteorology and Computer Science, University of Reading, Reading, UK. and National Centre for Atmospheric Science, UK.
 
-This is an expanded version of the paper that appears in `Proceedings of the 2023 conference on Big Data from Space, Soille, P., Lumnitz, S. and Albani, S. editor(s), Publications Office of the European Union, Luxembourg, 2023, doi:10.2760/46796, JRC135493.<https://publications.jrc.ec.europa.eu/repository/handle/JRC135493>`_
+This is an expanded version of the paper that appears in `Proceedings of the 2023 conference on Big Data from Space, Soille, P., Lumnitz, S. and Albani, S. editor(s), Publications Office of the European Union, Luxembourg, 2023, doi:10.2760/46796, JRC135493. <https://publications.jrc.ec.europa.eu/repository/handle/JRC135493>`_
 
 .. _`sec:intro`:
 

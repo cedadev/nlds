@@ -379,9 +379,8 @@ class MonitorConsumer(RMQC):
         # If reached the end of a workflow then check for completeness
         if state in State.get_final_states():
             self.log(
-                "This sub_record is now in its final state for this "
-                "workflow, now checking if all others have reached a "
-                "final state.",
+                "This sub_record is now in its final state for this workflow, now "
+                "checking if all others have reached a final state.",
                 RK.LOG_INFO,
             )
             try:
@@ -492,7 +491,7 @@ class MonitorConsumer(RMQC):
                 t_rec["sub_records"].append(s_rec)
 
         self.monitor.end_session()
-            
+
         ret_list = []
         for id_ in trecs_dict:
             if len(trecs_dict[id_]["sub_records"]) > 0:
@@ -522,9 +521,9 @@ class MonitorConsumer(RMQC):
         body = json.loads(body)
 
         self.log(
-            f"Received {json.dumps(body, indent=4)} from "
-            f"{self.queues[0].name} ({method.routing_key})",
+            f"Received from {self.queues[0].name} ({method.routing_key})",
             RK.LOG_INFO,
+            body_json=body,
         )
 
         if self._is_system_status_check(body_json=body, properties=properties):

@@ -139,7 +139,7 @@ class NLDSWorkerConsumer(RMQC):
         self.publish_and_log_message(new_routing_key, body_json)
 
     def _process_rk_transfer_put_complete(self, body_json: Dict) -> None:
-        # After a successfull TRANSFER_PUT, the catalog is updated with the locations
+        # After a successful TRANSFER_PUT, the catalog is updated with the locations
         # of the files on the OBJECT STORAGE
         self.log(
             f"Transfer successful, sending filelist with object storage locations to "
@@ -153,6 +153,13 @@ class NLDSWorkerConsumer(RMQC):
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
+
+    def _process_rk_transfer_get_complete(self, body_json: Dict) -> None:
+        # After a successful TRANSFER_GET, the sub records in the Monitor need to be
+        # notified that they have complete
+
+        new_routing_key = ".".join([RK.ROOT, RK.TRANSFER_GET, RK.COMPLETE])
+        self.send_complete(new_routing_key, body_json)
 
     def _process_rk_transfer_put_failed(self, body_json: Dict) -> None:
         self.log(
@@ -185,8 +192,43 @@ class NLDSWorkerConsumer(RMQC):
         self.publish_and_log_message(new_routing_key, body_json)
 
     def _process_rk_archive_get_complete(self, rk_parts: List, body_json: Dict) -> None:
-        # Can simply call the same process used at catalog_get complete
-        self._process_rk_catalog_get_complete(rk_parts, body_json)
+        # After a successful ARCHIVE_GET, the catalog is updated with the locations
+        # of the files on the OBJECT STORAGE
+        self.log(
+            f"Archive get successful, sending filelist with object storage locations "
+            "to be modified in the catalog",
+            RK.LOG_INFO,
+        )
+        queue = f"{RK.CATALOG_UPDATE}"
+        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
+        self.log(
+            f"Sending  message to {queue} queue with routing key {new_routing_key}",
+            RK.LOG_INFO,
+        )
+        self.publish_and_log_message(new_routing_key, body_json)
+
+    def _process_rk_catalog_update_complete(
+        self, rk_parts: List, body_json: Dict
+    ) -> None:
+        try:
+            api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
+            # For the GET and GETLIST method, this code path occurs after the files have
+            # been fetched from Tape.  They are now passed to TRANSFER_GET, which is
+            # the same code path as after a CATALOG_GET, i.e. the files are now fetched
+            # from the Object Store
+            if api_method == RK.GET or api_method == RK.GETLIST:
+                self._process_rk_catalog_get_complete(rk_parts, body_json)
+            # For the PUT and PUTLIST method, this is the final state - i.e. the catalog
+            # is updated to contain the new Object Store path
+            elif api_method == RK.PUT or api_method == RK.PUTLIST:
+                new_routing_key = ".".join([RK.ROOT, RK.CATALOG_UPDATE, RK.COMPLETE])
+                self.send_complete(new_routing_key, body_json)
+
+        except KeyError:
+            self.log(
+                f"Message did not contain an appropriate api_action.",
+                RK.LOG_ERROR,
+            )
 
     def _process_rk_catalog_get_archive_restore(
         self, rk_parts: List, body_json: Dict
@@ -196,16 +238,22 @@ class NLDSWorkerConsumer(RMQC):
         new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
         self.publish_and_log_message(new_routing_key, body_json)
 
-        # forward to archive_get - use START rather than INITIATE as we don't want
-        # and splitting to take place, as the messages are already sub-divided on
-        # aggregate and we want to pull the whole aggregate back from tape in a single
-        # call. (we don't want to pull the aggregate back multiple times, which is what
-        # would happen if we split the messages here)
+        # forward to archive_get - use PREPARE rather than INITIATE for two reasons:
+        # 1. We don't want and splitting to take place, as the messages are already
+        #    sub-divided on aggregate and we want to pull the whole aggregate back from
+        #    tape in a single call. (we don't want to pull the aggregate back multiple
+        #    times, which is what would happen if we split the messages here)
+        # 2. We might (probably will) need to prepare aggregates on the tape system.
+        #    this involves fetching the aggregate from tape and staging it on the small
+        #    amount of cache that the tape system has.  This obviously takes time so,
+        #    after the prepare call to XrootD, a PREPARE_CHECK message is queued that
+        #    will poll the tape system to determine if the aggregate has been staged
+        #    yet.  After that, the ARCHIVE_GET.START message is queued.
+
         queue = RK.ARCHIVE_GET
-        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
+        new_routing_key = ".".join([RK.ROOT, queue, RK.PREPARE])
         self.log(
-            f"Sending  message to {queue} queue with routing key "
-            f"{new_routing_key}",
+            f"Sending  message to {queue} queue with routing key " f"{new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
@@ -217,7 +265,7 @@ class NLDSWorkerConsumer(RMQC):
             RK.LOG_INFO,
         )
 
-        queue = f"{RK.CATALOG_ARCHIVE_REMOVE}"
+        queue = f"{RK.CATALOG_REMOVE}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
             f"Sending  message to {queue} queue with routing key {new_routing_key}",
@@ -268,16 +316,9 @@ class NLDSWorkerConsumer(RMQC):
     def _process_rk_catalog_archive_update_complete(
         self, rk_parts: List, body_json: Dict
     ) -> None:
-        self.log(
-            "Checksum successfully updated for aggregation, archive-put "
-            "is now complete.",
-            RK.LOG_INFO,
-        )
-
         # forward confirmation to monitor
-        self.log(f"Sending message to {RK.MONITOR} queue", RK.LOG_INFO)
         new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
-        self.publish_and_log_message(new_routing_key, body_json)
+        self.send_complete(new_routing_key, body_json)
 
     def _process_rk_archive_put_failed(self, body_json: Dict) -> None:
         self.log(
@@ -286,7 +327,7 @@ class NLDSWorkerConsumer(RMQC):
             RK.LOG_INFO,
         )
 
-        queue = f"{RK.CATALOG_ARCHIVE_REMOVE}"
+        queue = f"{RK.CATALOG_REMOVE}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
             f"Sending  message to {queue} queue with routing key {new_routing_key}",
@@ -307,9 +348,9 @@ class NLDSWorkerConsumer(RMQC):
         body_json = json.loads(body)
 
         self.log(
-            f"Received {json.dumps(body_json, indent=4)} \nwith "
-            f"routing_key: {method.routing_key}",
+            f"Received with routing_key: {method.routing_key}",
             RK.LOG_INFO,
+            body_json=body_json,
         )
 
         # If received system test message, reply to it (this is for system status check)
@@ -339,22 +380,38 @@ class NLDSWorkerConsumer(RMQC):
             elif rk_parts[1] == f"{RK.TRANSFER_PUT}":
                 self._process_rk_transfer_put_complete(body_json)
 
+            # If transfer_get completed then finish get workflow
+            elif rk_parts[1] == f"{RK.TRANSFER_GET}":
+                self._process_rk_transfer_get_complete(body_json)
+
             # if catalog_get completed then we need to decide whether it was
             # part of a regular get or an archive_put workflow
             elif rk_parts[1] == f"{RK.CATALOG_GET}":
                 self._process_rk_catalog_get_complete(rk_parts, body_json)
+            elif rk_parts[1] == f"{RK.CATALOG_PUT}":
+                self._process_rk_catalog_put_complete(rk_parts, body_json)
 
-            # If finished with archive retrieval then pass for transfer-get
+            # If finished with archive retrieval then pass for catalog-update
             elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
                 self._process_rk_archive_get_complete(rk_parts, body_json)
 
             # If finished with aggregation of unarchived holding, then send for
             # archive write
-            elif rk_parts[1] == RK.CATALOG_ARCHIVE_NEXT:
+            elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_NEXT}":
                 self._process_rk_catalog_archive_next_complete(rk_parts, body_json)
+
             # If finished with archive write, then pass checksum info to catalog
             elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
                 self._process_rk_archive_put_complete(rk_parts, body_json)
+
+            # If finished with catalog update then pass for transfer get
+            elif rk_parts[1] == f"{RK.CATALOG_UPDATE}":
+                self._process_rk_catalog_update_complete(rk_parts, body_json)
+
+            # if finished with catalog archive update then mark ARCHIVE_PUT flow as
+            # complete
+            elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_UPDATE}":
+                self._process_rk_catalog_archive_update_complete(rk_parts, body_json)
 
         # If a archive-restore has happened from the catalog then we need to get from
         # archive before we can do the transfer from object store.

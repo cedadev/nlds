@@ -113,9 +113,9 @@ class IndexerConsumer(StattingConsumer):
         body_json = json.loads(body)
 
         self.log(
-            f"Received {json.dumps(body_json, indent=4)} from "
-            f"{self.queues[0].name} ({method.routing_key})",
+            f"Received from {self.queues[0].name} ({method.routing_key})",
             RK.LOG_DEBUG,
+            body_json=body_json
         )
 
         # Check for system status

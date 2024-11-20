@@ -17,13 +17,13 @@ import minio
 from minio.error import S3Error
 from retry import retry
 
-from nlds_processors.transferers.base_transfer import BaseTransferConsumer
+from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 from nlds.errors import CallbackError
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
-from nlds_processors.transferers.transfer_error import TransferError
+from nlds_processors.transfer.transfer_error import TransferError
 
 
 class GetTransferConsumer(BaseTransferConsumer):
@@ -201,20 +201,19 @@ class GetTransferConsumer(BaseTransferConsumer):
                     body_json=body_json,
                     state=State.FAILED,
                 )
-                continue
+            else:
+                # change ownership and permissions
+                self._change_permissions(download_path, path_details)
 
-            # change ownership and permissions
-            self._change_permissions(download_path, path_details)
-
-            # all finished successfully!
-            self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
-            self.append_and_send(
-                self.completelist,
-                path_details,
-                routing_key=rk_complete,
-                body_json=body_json,
-                state=State.TRANSFER_GETTING,
-            )
+                # all finished successfully!
+                self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
+                self.append_and_send(
+                    self.completelist,
+                    path_details,
+                    routing_key=rk_complete,
+                    body_json=body_json,
+                    state=State.TRANSFER_GETTING,
+                )
 
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(

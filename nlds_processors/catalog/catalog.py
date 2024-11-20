@@ -313,7 +313,7 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         original_path: str = None,
         tag: dict = None,
-        one: bool = False
+        one: bool = False,
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -337,10 +337,11 @@ class Catalog(DBMixin):
 
         # (permissions have been checked by get_holding)
         file_list = []
+        ingest_time = None
         try:
             for h in holding:
                 # build the file query bit by bit
-                file_q = self.session.query(File).filter(
+                file_q = self.session.query(File, Transaction).filter(
                     File.transaction_id == Transaction.id,
                     Transaction.holding_id == h.id,
                 )
@@ -348,37 +349,49 @@ class Catalog(DBMixin):
                     file_q = file_q.filter(File.original_path.regexp_match(search_path))
                 else:
                     file_q = file_q.filter(File.original_path == search_path)
-                # limit to the newest file if one is selected
-                # get_files does this to get the most recent if a file has been entered
-                # into multiple holdings
-                if one:
-                    file_q = file_q.order_by(Transaction.ingest_time)
-                    file = [file_q.first()]
-                else:
-                    file = file_q.all()
-                for f in file:
-                    if f is None:
+
+                result = file_q.all()
+                for r in result:
+                    if r.File is None:
                         continue
                     # check user has permission to access this file
-                    if f and not self._user_has_get_file_permission(user, group, f):
+                    if r.File and not self._user_has_get_file_permission(
+                        user, group, r.File
+                    ):
                         raise CatalogError(
                             f"User:{user} in group:{group} does not have permission to "
-                            f"access the file with original path:{f.original_path}."
+                            f"access the file with original path:{r.File.original_path}."
                         )
-                    file_list.append(f)
+
+                    # limit to the newest file if one is selected
+                    # get_files does this to get the most recent if a file has been
+                    # entered into multiple holdings
+                    if one:
+                        if ingest_time is None:
+                            file_list = [r.File]
+                            ingest_time = r.Transaction.ingest_time
+                        elif r.Transaction.ingest_time > ingest_time:
+                            file_list = [r.File]
+                            ingest_time = r.Transaction.ingest_time
+                    else:
+                        file_list.append(r.File)
             # no files found
             if len(file_list) == 0:
                 raise KeyError
 
         except (IntegrityError, KeyError, OperationalError):
             if holding_label:
-                err_msg = f"File with holding_label:{holding_label} not found "
+                err_msg = (
+                    f"File not found in holding with holding_label:{holding_label}"
+                )
             elif holding_id:
-                err_msg = f"File with holding_id:{holding_id} not found "
+                err_msg = f"File not found in holding with holding_id:{holding_id}"
             elif transaction_id:
-                err_msg = f"File with transaction_id:{transaction_id} not found "
+                err_msg = (
+                    f"File not found in holding with transaction_id:{transaction_id}"
+                )
             elif tag:
-                err_msg = f"File with tag:{tag} not found"
+                err_msg = f"File not found in holding with tag:{tag}"
             else:
                 err_msg = f"File with original_path:{original_path} not found "
             raise CatalogError(err_msg)
@@ -663,27 +676,33 @@ class Catalog(DBMixin):
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
-            # Get all archived holdings
-            archived_holdings_q = self.session.query(Holding.id).filter(
-                Transaction.holding_id == Holding.id,
-                File.transaction_id == Transaction.id,
-                Location.file_id == File.id,
-                Location.storage_type == Storage.TAPE,
+            # To get unarchived Holdings we need to find Transactions in a holding that
+            # contains files that do not have a Tape location
+            # however, they do have to have a Object Storage location, as this shows
+            # that the file was successfully transferred to Object Storage.
+            # There are four cases:
+            # 1. Files without either a Object Storage or Tape location are mid transfer
+            #    to the Object Store
+            # 2. Files with an Object Storage, but no Tape location are on the Object
+            #    Storage but require backing up to tape
+            # 3. Files with an Object Storage and Tape location are on the Object
+            #    Storage and have already been backed up to Tape
+            # 4. Files with a Tape location, but no Object Storage location have been
+            #    removed from Object Storage due to space constraints, and will need to
+            #    be fetched from Tape on a user GET
+
+            next_holding = (
+                self.session.query(Holding)
+                .filter(
+                    Transaction.holding_id == Holding.id,
+                    File.transaction_id == Transaction.id,
+                    ~File.locations.any(Location.storage_type == Storage.TAPE),
+                    File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                )
+                .order_by(Holding.id)
+                .first()
             )
 
-            # Get the first of the holdings which are not in the archived
-            # holdings query - need to ensure that the files are on object storage
-            # already and not mid-transfer
-            all_holdings_q = self.session.query(Holding).filter(
-                Transaction.holding_id == Holding.id,
-                File.transaction_id == Transaction.id,
-                Location.file_id == File.id,
-                Location.storage_type == Storage.OBJECT_STORAGE,
-            )
-            unarchived_holdings_q = all_holdings_q.filter(
-                Holding.id.not_in(archived_holdings_q.correlate(Holding))
-            )
-            next_holding = unarchived_holdings_q.order_by(Holding.id).first()
         except (NoResultFound, KeyError):
             raise CatalogError(f"Couldn't get unarchived holdings")
         return next_holding
@@ -697,24 +716,16 @@ class Catalog(DBMixin):
             # Get all files for the given holding. Again we have to ensure that the
             # transfer to object storage has completed and the files are not
             # mid-transfer
-            all_files_q = self.session.query(File).filter(
-                Transaction.holding_id == holding.id,
-                File.transaction_id == Transaction.id,
-                Location.file_id == File.id,
-                Location.storage_type == Storage.OBJECT_STORAGE,
-                Location.storage_type != Storage.TAPE,
+            unarchived_files = (
+                self.session.query(File)
+                .filter(
+                    Transaction.holding_id == holding.id,
+                    File.transaction_id == Transaction.id,
+                    ~File.locations.any(Location.storage_type == Storage.TAPE),
+                    File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                )
+                .all()
             )
-            # Get the subset of files which are archived
-            archived_files_q = self.session.query(File.id).filter(
-                Transaction.holding_id == holding.id,
-                File.transaction_id == Transaction.id,
-                Location.file_id == File.id,
-                Location.storage_type == Storage.TAPE,
-            )
-            # Get the remainder of files which are unarchived
-            unarchived_files = all_files_q.filter(
-                File.id.not_in(archived_files_q.correlate(File)),
-            ).all()
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Couldn't find unarchived files for holding with id:{holding.id}"

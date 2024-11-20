@@ -16,12 +16,14 @@ from pathlib import Path
 import stat
 import os
 from os import stat_result
+from urllib import parse as urlparse
 
 from pydantic import BaseModel
 
 from nlds.utils.permissions import check_permissions
 import nlds.rabbit.message_keys as MSG
 from nlds.errors import MessageError
+
 
 # Patch the JSONEncoder so that a custom json serialiser can be run instead of
 # of the default, if one exists. This patches for ALL json.dumps calls.
@@ -84,6 +86,12 @@ class PathLocation(BaseModel):
             access_time=dictionary["access_time"],
         )
 
+    @property
+    def url(self):
+        return urlparse.urlunparse(
+            [self.url_scheme, self.url_netloc, self.root + self.path, None, None, None]
+        )
+
 
 LocationType = TypeVar("LocationType", bound=PathLocation)
 
@@ -103,7 +111,7 @@ class PathLocations(BaseModel):
 
     def reset(self) -> None:
         self.count = 0
-        self.locations = []
+        self.locations.clear()
 
     def to_json(self) -> Dict:
         out_dict = {}
@@ -145,6 +153,7 @@ class PathDetails(BaseModel):
     locations: Optional[LocationsType] = PathLocations()
 
     failure_reason: Optional[str] = None
+    holding_id: Optional[int] = None
 
     @property
     def path(self) -> str:
@@ -163,6 +172,7 @@ class PathDetails(BaseModel):
                 "mode": self.mode,
                 "access_time": self.access_time,
                 "failure_reason": self.failure_reason,
+                "holding_id": self.holding_id,
             },
             **self.locations.to_json(),
         }
@@ -182,7 +192,7 @@ class PathDetails(BaseModel):
         return pd
 
     @classmethod
-    def from_filemodel(cls, file: Enum):
+    def from_filemodel(cls, file: BaseModel):
         """Create from a File model returned from the database."""
         # copy the basic info
         pd = cls()
@@ -356,10 +366,8 @@ class PathDetails(BaseModel):
         """Get the PathLocation for the tape file."""
         # note - this only returns the first object - this is fine for now, but might
         # need amending if users want to use different tenancies
-        for pl in self.locations.locations:
-            if pl.storage_type == MSG.TAPE:
-                return pl
-        return None
+        """Get the PathLocation for the object storage file."""
+        return self._get_location(MSG.TAPE)
 
     @property
     def tape_name(self) -> str | None:
@@ -367,5 +375,5 @@ class PathDetails(BaseModel):
         if pl is None:
             return None
         else:
-            tape_name = f"{pl.url_netloc}/{pl.root}/{pl.path}"
+            tape_name = f"{pl.url_scheme}://{pl.url_netloc}/{pl.root}/{pl.path}"
             return tape_name

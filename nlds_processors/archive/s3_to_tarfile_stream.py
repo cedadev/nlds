@@ -12,6 +12,8 @@ from hashlib import shake_256
 from typing import List
 from urllib3.exceptions import HTTPError
 import tarfile
+from datetime import datetime
+from abc import abstractmethod
 
 import minio
 from minio.error import S3Error
@@ -94,7 +96,7 @@ class S3ToTarfileStream:
                 )
                 failed_list.append(path_details)
                 continue
-        
+
             try:
                 # Check that the object is in the bucket and the names match
                 obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
@@ -137,6 +139,9 @@ class S3ToTarfileStream:
     def _stream_to_fileobject(
         self, file_object, filelist: List[PathDetails], chunk_size: int
     ):
+        if self.s3_client is None:
+            raise RuntimeError("self.s3_client is None")
+
         # Stream from the S3 Object Store to a tar file that is created using the
         # file_object - this is usually an Adler32File
         with tarfile.open(mode="w", fileobj=file_object, copybufsize=chunk_size) as tar:
@@ -164,7 +169,7 @@ class S3ToTarfileStream:
                     tar.addfile(tar_info, fileobj=stream)
 
                 except (HTTPError, S3Error) as e:
-                    # Catch error, log and then rethrow error to ensure file is deleted
+                    # Catch error, add to failed list
                     reason = (
                         f"Stream-time exception occurred: " f"{type(e).__name__}: {e}"
                     )
@@ -185,3 +190,141 @@ class S3ToTarfileStream:
                         # If it can't be closed then dw
                         pass
         return completelist, failedlist, file_object.checksum
+
+    def _make_bucket(self, bucket_name, create: bool = False):
+        """Check bucket exists and create it if it doesn't"""
+        try:
+            if not self.s3_client.bucket_exists(bucket_name):
+                if not create:
+                    return False
+                else:
+                    self.s3_client.make_bucket(bucket_name)
+        except minio.error.S3Error as e:
+            raise S3StreamError(message=str(e))
+        return True
+
+    def _stream_to_s3object(
+        self, file_object, filelist: List[PathDetails], chunk_size: int
+    ):
+        if self.s3_client is None:
+            raise RuntimeError("self.s3_client is None")
+
+        # Ensure minimum part_size is met for put_object to function
+        chunk_size = max(5 * 1024 * 1024, chunk_size)
+
+        # Stream from the a tar file to the S3 Object Store that is created via the
+        # file_object - this is usually an Adler32File
+        with tarfile.open(mode="r", fileobj=file_object, copybufsize=chunk_size) as tar:
+            # local versions of the completelist and failedlist
+            completelist = []
+            failedlist = []
+
+            for path_details in filelist:
+                self.log(
+                    f"Streaming file {path_details.path} from tape archive to object store",
+                    RK.LOG_DEBUG,
+                )
+                bucket_name = path_details.bucket_name
+                object_name = path_details.object_name
+                # Stream the object directly from the tarfile object to s3
+                # create bucket first if it doesn't exist
+                try:
+                    tarinfo = tar.getmember(path_details.original_path)
+                except KeyError:
+                    # not found in tar so add to failed list
+                    reason = (
+                        f"Could not find tar member for path details object "
+                        f"{path_details}"
+                    )
+                    path_details.failure_reason = reason
+                    failedlist.append(path_details)
+                    continue
+
+                try:
+                    # get or create the bucket
+                    if not self._make_bucket(bucket_name):
+                        raise S3StreamError(f"Cannot make bucket {bucket_name}")
+                    self.log(
+                        f"Starting stream of {tarinfo.name} to object store bucket "
+                        f"{bucket_name}.",
+                        RK.LOG_INFO,
+                    )
+                    # Extract the file as a file object
+                    f = tar.extractfile(tarinfo)
+                    write_result = self.s3_client.put_object(
+                        bucket_name,
+                        object_name,
+                        f,
+                        -1,
+                        part_size=chunk_size,
+                    )
+                    self.log(
+                        f"Finished stream of {tarinfo.name} to object store",
+                        RK.LOG_INFO,
+                    )
+                except (HTTPError, S3Error) as e:
+                    reason = (
+                        f"Stream-time exception occurred: ({type(e).__name__}: {e})"
+                    )
+                    path_details.failure_reason = reason
+                    self.log(reason, RK.LOG_DEBUG)
+                    failedlist.append(path_details)
+                except S3StreamError as e:
+                    path_details.failure_reason = e.message
+                    failedlist.append(path_details)
+                except Exception as e:
+                    reason = (
+                        f"Unexpected exception occurred during stream {e}",
+                        RK.LOG_ERROR,
+                    )
+                    self.log(reason, RK.LOG_DEBUG)
+                    failedlist.append(path_details)
+                else:
+                    # success
+                    self.log(
+                        f"Successfully retrieved {path_details.path} from the archive "
+                        "and streamed to object store",
+                        RK.LOG_INFO,
+                    )
+                    # set access time as now
+                    path_details.get_object_store().access_time = (
+                        datetime.now().timestamp()
+                    )
+                    completelist.append(path_details)
+        return completelist, failedlist
+
+    @abstractmethod
+    def put(
+        self, holding_prefix: str, filelist: List[PathDetails], chunk_size: int
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get(
+        self,
+        holding_prefix: str,
+        tarfile: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare_required(self, tarfile: str) -> bool:
+        """Query the storage system as to whether a file needs to be prepared."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare_request(self, tarfilelist: List[str]) -> int:
+        """Request the storage system for a file to be prepared"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
+        """Query the storage system whether the prepare for a file has been completed."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def evict(self, tarfilelist: List[str]):
+        """Evict any files from the temporary storage cache on the storage system."""
+        raise NotImplementedError

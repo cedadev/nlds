@@ -11,7 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 import pytest
 
 pyxrootd = pytest.importorskip("pyxrootd")
-from nlds_processors.archiver.archive_base import ArchiveError, BaseArchiveConsumer
+from nlds_processors.archive.archive_base import ArchiveError, BaseArchiveConsumer
 
 
 class TestSplitTapeUrl:
