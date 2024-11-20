@@ -1,0 +1,15 @@
+{ 
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "transfer_del_q",
+                "bindings": [
+                    { 
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.transfer-del.start"
+                    } 
+                ]
+            }
+        ]
+    }
+}

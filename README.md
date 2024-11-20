@@ -96,8 +96,8 @@ Running the Server
     FastAPI displays automatically generated documentation for the REST-API, to 
     browse this go to http://127.0.0.1:8000/docs/
 
-2.  To run the microservices, you have two options:
-    *   In individual terminals, after activating the virtual env, (e.g. 
+2.  To run the microservices, you have three options:
+    1.  In individual terminals, after activating the virtual env, (e.g. 
         `source ~/nlds-venv/bin/activate`), start each of the microservice 
         consumers:
         ```
@@ -107,17 +107,35 @@ Running the Server
         transfer_put_q   
         transfer_get_q
         logging_q
+        monitor_q
         archive_put_q
         archive_get_q
         ```
         This will send the output of each consumer to its own terminal (as well 
         as whatever is configured in the logger).
 
-    *   Alternatively, you can use the scripts in the `test_run/` directory, 
-        notably `start_test_run.py` to start and `stop_test_run.py` to stop. 
+    2.  Alternatively, you can use the scripts in the `test_run/` directory: 
+        `start_test_run.py` to start and `stop_test_run.py` to stop. 
         This will start a [screen](https://www.gnu.org/software/screen/manual/screen.html) 
         session with all 8 processors (+ api server) in, sending each output to 
         a log in the `./nlds_log/` directory.
+        This method is good for getting a whole NLDS infrastructure up and running
+        quickly, but is not so great for debugging.
+
+    3.  Also in the `test_run/` directory is a script called `nlds-up` which will
+    activate the virtual environment and run one of the microservices listed above.
+    It requires the enviroment variable `NLDS_VENV` to be set to point to the 
+    virtual environemnt created above (e.g. `~/nlds-venv/` - however, user paths 
+    have to be expanded so, for the Mac, this would be 
+    `/Users/<your_username>/nlds-venv`).
+    It is recommended to set the environment variable in your shell profile.  For **bash** this is `~/.bash_profile`, and the environment can be set using the 
+    line: 
+    ```
+    export NLDS_VENV="/Users/<your_username>/python-venvs/nlds-venv"
+    ```
+    Running `nlds-up` then takes the name of one of the microservices above: e.g. 
+    `nlds-up catalog_q`
+
 
 Tests
 -----

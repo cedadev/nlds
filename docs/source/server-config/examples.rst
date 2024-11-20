@@ -19,21 +19,13 @@ machine - likely a laptop or single vm. This file would be saved at
                 "oauth_token_introspect_url" : "[REDACTED]"
             }
         },
-        "general": {
-            "retry_delays": [
-                1, 5, 10, 20, 30, 60, 120, 240, 480
-            ]
-        },
         "index_q":{
             "logging":{
                 "enable": true
             },
             "filelist_threshold": 10000,
             "check_permissions_fl": true,
-            "max_filesize": 5000000,
-            "retry_delays": [
-                0, 0, 0
-            ]
+            "max_filesize": 5000000
         },
         "nlds_q":{
             "logging":{
@@ -45,22 +37,14 @@ machine - likely a laptop or single vm. This file would be saved at
                 "enable": true
             },
             "tenancy": "example-tenancy.s3.uk",
-            "require_secure_fl": false,
-            "retry_delays": [
-                0, 1, 2
-            ]
+            "require_secure_fl": false
         },
         "transfer_get_q":{
             "logging":{
                 "enable": true
             },
             "tenancy": "example-tenancy.s3.uk",
-            "require_secure_fl": false,
-            "retry_delays": [
-                10,
-                20,
-                30
-            ]
+            "require_secure_fl": false
         },
         "monitor_q":{
             "db_engine": "sqlite",
@@ -106,11 +90,6 @@ machine - likely a laptop or single vm. This file would be saved at
                 "db_passwd" : "",
                 "echo": false
             },
-            "retry_delays": [
-                0,
-                0,
-                0
-            ],
             "logging":{
                 "enable": true
             },
@@ -125,8 +104,6 @@ machine - likely a laptop or single vm. This file would be saved at
             "print_tracebacks_fl": false,
             "check_permissions_fl": false,
             "require_secure_fl": false,
-            "max_retries": 5,
-            "retry_delays": [0.0, 0.0, 0.0],
             "logging": {
                 "enable": true
             }
@@ -140,8 +117,6 @@ machine - likely a laptop or single vm. This file would be saved at
             "print_tracebacks_fl": false,
             "check_permissions_fl": false,
             "require_secure_fl": false,
-            "max_retries": 1,
-            "retry_delays": [0.0, 0.0, 0.0],
             "logging": {
                 "enable": true
             }

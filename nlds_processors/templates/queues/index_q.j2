@@ -1,0 +1,19 @@
+{ 
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "index_q",
+                "bindings": [
+                    { 
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.index.start"
+                    },
+                    { 
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.index.init"
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -1,0 +1,26 @@
+@startuml consumer_classes
+    class ABC
+    class RabbitMQPublisher
+    class RabbitMQConsumer
+    class RabbitMQRPCPublisher
+    class StattingConsumer
+
+    ABC <|-- RabbitMQConsumer
+    RabbitMQPublisher <|-- RabbitMQConsumer
+    RabbitMQPublisher <|-- RabbitMQRPCPublisher
+    RabbitMQConsumer <|-- StattingConsumer
+
+    class FilePathList
+    class CompletedList
+    class RetryList
+    class FailedList
+
+    FilePathList <|-- CompletedList
+    FilePathList <|-- RetryList
+    FilePathList <|-- FailedList
+
+    RabbitMQConsumer *-- CompletedList
+    RabbitMQConsumer *-- RetryList
+    RabbitMQConsumer *-- FailedList
+
+@enduml
