@@ -38,7 +38,7 @@ manage the dependencies.
 2.  Activate the nlds-venv:
 
     ```
-    source nlds-venv/bin/activate
+    source ~/nlds-venv/bin/activate
     ```
 
 3.  You could either install the nlds package with editing capability from a 
