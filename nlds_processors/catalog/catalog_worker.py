@@ -440,14 +440,24 @@ class CatalogConsumer(RMQC):
             )
         except CatalogError as e:
             # could not find holding so mark all files as failed and return
+            holding = None
             for f in filelist:
                 pd = PathDetails.from_dict(f)
                 pd.failure_reason = e.message
                 self.failedlist.append(pd)
-        else:
-            # get or create the transaction
-            transaction = self._get_or_create_transaction(transaction_id, holding)
 
+        if holding:
+            try:
+                # get or create the transaction
+                transaction = self._get_or_create_transaction(transaction_id, holding)
+            except CatalogError as e:
+                transaction = None
+                for f in filelist:
+                    pd = PathDetails.from_dict(f)
+                    pd.failure_reason = e.message
+                    self.failedlist.append(pd)
+
+        if holding and transaction:
             # loop over the filelist
             for f in filelist:
                 # convert to PathDetails class

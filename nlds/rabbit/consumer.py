@@ -570,6 +570,8 @@ class RabbitMQConsumer(ABC, RMQP):
 
         # set up SigTerm handler
         signal.signal(signal.SIGTERM, self.exit)
+        # set up SigHup handler
+        signal.signal(signal.SIGHUP, self.exit)
 
         while self.loop:
             self.get_connection()
