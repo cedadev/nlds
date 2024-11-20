@@ -132,25 +132,33 @@ function buildTable(records, values, headers, id) {
                 if (record.failed_files && record.failed_files.length > 0) {
                     // Create a nested table for failed files
                     let failedTable = document.createElement("table");
+            
+                    // Extract keys from the first failed file to use as table headers
+                    let headers = Object.keys(record.failed_files[0]);
                     let failedHeaderRow = document.createElement("tr");
-
-                    // Add headers for the failed files table
-                    ["File Name"].forEach(failedHeader => {
+            
+                    // Create a header cell for each key
+                    headers.forEach(header => {
                         let th = document.createElement("th");
-                        th.textContent = failedHeader;
+                        th.textContent = header;
                         failedHeaderRow.appendChild(th);
                     });
                     failedTable.appendChild(failedHeaderRow);
-
+            
                     // Create rows for each failed file
                     record.failed_files.forEach(failedFile => {
                         let failedRow = document.createElement("tr");
-                        let failedFileCell = document.createElement("td");
-                        failedFileCell.textContent = failedFile;  // Add the failed file name
-                        failedRow.appendChild(failedFileCell);
+            
+                        // Create a cell for each header (key)
+                        headers.forEach(header => {
+                            let failedFileCell = document.createElement("td");
+                            failedFileCell.textContent = failedFile[header] || ""; // Use value or empty string
+                            failedRow.appendChild(failedFileCell);
+                        });
+            
                         failedTable.appendChild(failedRow);
                     });
-
+            
                     // Append the nested failed files table to the cell
                     td.appendChild(failedTable);
                 } else {

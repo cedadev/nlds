@@ -132,6 +132,3 @@ def get_filtered_records(filter_request: FilterRequest):
 
 # nlds-up nlds-api
 # http://127.0.0.1:8000/info/
-
-
-# Warning: make sure any data is younger than a month or you will get an empty table
