@@ -127,8 +127,9 @@ def setup_test(monkeypatch):
 
     yield _setup_test
 
-    # Teardown database session
-    monitor.end_session()
+    # Teardown database session if not none
+    if monitor.session is not None:
+        monitor.end_session()
 
 
 def test_user_correct(setup_test, start_time):
@@ -418,9 +419,9 @@ def test_record_state_nonexistent(setup_test, start_time):
         id=1, warning=True, user="existing_user", uuid=uuid_list_1, state=[3]
     )
     record2 = sample_record(id=2, user="second_user", uuid=uuid_list_2, state=[4])
-    record3 = sample_record(id=3, state=[5])
+    record3 = sample_record(id=3, state=[10])
     record4 = sample_record(
-        id=4, sub_record_num=4, uuid=uuid_list_3, state=[6, 11, 101, 12]
+        id=4, sub_record_num=4, uuid=uuid_list_3, state=[20, 11, 101, 12]
     )
 
     stat_string = (
@@ -463,9 +464,9 @@ def test_incorrect_record_state(setup_test, start_time):
         id=1, warning=True, user="existing_user", uuid=uuid_list_1, state=[3]
     )
     record2 = sample_record(id=2, user="second_user", uuid=uuid_list_2, state=[4])
-    record3 = sample_record(id=3, state=[5])
+    record3 = sample_record(id=3, state=[10])
     record4 = sample_record(
-        id=4, sub_record_num=4, uuid=uuid_list_3, state=[6, 11, 101, 12]
+        id=4, sub_record_num=4, uuid=uuid_list_3, state=[20, 11, 101, 12]
     )
 
     stat_string = (

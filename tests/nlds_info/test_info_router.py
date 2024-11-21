@@ -202,6 +202,7 @@ def test_post_state_incorrect(monkeypatch):
     exception_instance = excinfo.value
     assert exception_instance.status_code == 400
     assert exception_instance.detail == "Error: Invalid state: state"
+    monitor.end_session()
 
 
 def test_post_recordState_incorrect(monkeypatch):
@@ -228,6 +229,7 @@ def test_post_recordState_incorrect(monkeypatch):
     exception_instance = excinfo.value
     assert exception_instance.status_code == 400
     assert exception_instance.detail == "Error: Invalid state: state"
+    monitor.end_session()
 
 
 # TODO:
