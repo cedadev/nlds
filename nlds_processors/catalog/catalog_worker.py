@@ -357,7 +357,7 @@ class CatalogConsumer(RMQC):
                     f"{holding_id}.  holding_id does not exist."
                 )
                 self.log(message, RK.LOG_DEBUG)
-                raise CallbackError(message)
+                raise CatalogError(message)
             try:
                 holding = self.catalog.create_holding(user, group, new_label)
             except CatalogError as e:
@@ -428,57 +428,76 @@ class CatalogConsumer(RMQC):
         # Start the database transactions
         self.catalog.start_session()
 
+        # blank the tag warnings
+        tag_warnings = None
         # get the (regex) search label
         search_label = self._get_search_label(label, holding_id)
 
         # get, or create the holding
-        holding = self._get_or_create_holding(
-            user, group, label=search_label, holding_id=holding_id, new_label=new_label
-        )
-
-        # get or create the transaction
-        transaction = self._get_or_create_transaction(transaction_id, holding)
-
-        # loop over the filelist
-        for f in filelist:
-            # convert to PathDetails class
-            pd = PathDetails.from_dict(f)
-            # add the holding id to the PathDetails
-            pd.holding_id = holding.id
-            try:
-                # Search first for file existence within holding, fail if present
-                try:
-                    files = self.catalog.get_files(
-                        user,
-                        group,
-                        holding_id=holding.id,
-                        original_path=pd.original_path,
-                    )
-                except CatalogError:
-                    pass  # should throw a catalog error if file(s) not found
-                else:
-                    raise CatalogError("File already exists in holding")
-
-                # create the file
-                file_ = self.catalog.create_file(
-                    transaction,
-                    pd.user,
-                    pd.group,
-                    pd.original_path,
-                    pd.path_type,
-                    pd.link_path,
-                    pd.size,
-                    pd.permissions,
-                )
-                self.completelist.append(pd)
-            except CatalogError as e:
+        try:
+            holding = self._get_or_create_holding(
+                user, group, label=search_label, holding_id=holding_id, new_label=new_label
+            )
+        except CatalogError as e:
+            # could not find holding so mark all files as failed and return
+            holding = None
+            for f in filelist:
+                pd = PathDetails.from_dict(f)
                 pd.failure_reason = e.message
                 self.failedlist.append(pd)
-                self.log(e.message, RK.LOG_ERROR)
-                continue
 
-        # Add any user tags to the holding
-        tag_warnings = self._create_tags(tags, holding, label)
+        if holding:
+            try:
+                # get or create the transaction
+                transaction = self._get_or_create_transaction(transaction_id, holding)
+            except CatalogError as e:
+                transaction = None
+                for f in filelist:
+                    pd = PathDetails.from_dict(f)
+                    pd.failure_reason = e.message
+                    self.failedlist.append(pd)
+
+        if holding and transaction:
+            # loop over the filelist
+            for f in filelist:
+                # convert to PathDetails class
+                pd = PathDetails.from_dict(f)
+                # add the holding id to the PathDetails
+                pd.holding_id = holding.id
+                try:
+                    # Search first for file existence within holding, fail if present
+                    try:
+                        files = self.catalog.get_files(
+                            user,
+                            group,
+                            holding_id=holding.id,
+                            original_path=pd.original_path,
+                        )
+                    except CatalogError:
+                        pass  # should throw a catalog error if file(s) not found
+                    else:
+                        raise CatalogError("File already exists in holding")
+
+                    # create the file
+                    file_ = self.catalog.create_file(
+                        transaction,
+                        pd.user,
+                        pd.group,
+                        pd.original_path,
+                        pd.path_type,
+                        pd.link_path,
+                        pd.size,
+                        pd.permissions,
+                    )
+                    self.completelist.append(pd)
+                except CatalogError as e:
+                    pd.failure_reason = e.message
+                    self.failedlist.append(pd)
+                    self.log(e.message, RK.LOG_ERROR)
+                    continue
+
+            # Add any user tags to the holding
+            tag_warnings = self._create_tags(tags, holding, label)
 
         # stop db transitions and commit
         self.catalog.save()
