@@ -39,6 +39,7 @@ from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
+from nlds_processors.utils.is_regex import is_regex
 from nlds_processors.catalog.catalog import Catalog
 from nlds_processors.catalog.catalog_error import CatalogError
 from nlds_processors.catalog.catalog_models import Storage, File
@@ -436,7 +437,11 @@ class CatalogConsumer(RMQC):
         # get, or create the holding
         try:
             holding = self._get_or_create_holding(
-                user, group, label=search_label, holding_id=holding_id, new_label=new_label
+                user,
+                group,
+                label=search_label,
+                holding_id=holding_id,
+                new_label=new_label,
             )
         except CatalogError as e:
             # could not find holding so mark all files as failed and return
@@ -691,7 +696,6 @@ class CatalogConsumer(RMQC):
                     transaction_id=transaction_id,
                     original_path=filepath_details.original_path,
                     tag=holding_tag,
-                    one=True,  # get only one per filename
                 )
 
                 if len(files) == 0:
@@ -699,65 +703,65 @@ class CatalogConsumer(RMQC):
                         f"Could not find file(s) with original path: "
                         f"{filepath_details.original_path}"
                     )
-                # There should only be one file as we set one=True in get_files above
-                file = files[0]
-                # determine the storage location - None, OBJECT_STORAGE and/or TAPE
-                pd = self._filemodel_to_path_details(file)
-                if pd.locations.count == 0:
-                    # empty storage location denotes that it is still in its initial
-                    # transfer to OBJECT STORAGE
-                    reason = (
-                        f"No Storage Location found for file with original path: "
-                        f"{pd.original_path}.  Has it completed transfer?"
-                    )
-                    raise CatalogError(reason)
-
-                elif pd.locations.has_storage_type(MSG.OBJECT_STORAGE):
-                    # empty OBJECT_STORAGE denotes that it is restoring from tape
-                    # we want to only fetch things from tape once.
-                    if pd.get_object_store().url_scheme == "":
+                # If the filepath was a regex then more than one file will be returned
+                for file in files:
+                    # determine the storage location - None, OBJECT_STORAGE and/or TAPE
+                    pd = self._filemodel_to_path_details(file)
+                    if pd.locations.count == 0:
+                        # empty storage location denotes that it is still in its initial
+                        # transfer to OBJECT STORAGE
                         reason = (
-                            "File is already transferring from tape to Object "
-                            "Storage."
+                            f"No Storage Location found for file with original path: "
+                            f"{pd.original_path}.  Has it completed transfer?"
                         )
                         raise CatalogError(reason)
+
+                    elif pd.locations.has_storage_type(MSG.OBJECT_STORAGE):
+                        # empty OBJECT_STORAGE denotes that it is restoring from tape
+                        # we want to only fetch things from tape once.
+                        if pd.get_object_store().url_scheme == "":
+                            reason = (
+                                "File is already transferring from tape to Object "
+                                "Storage."
+                            )
+                            raise CatalogError(reason)
+                        else:
+                            self.completelist.append(pd)
+
+                    elif pd.locations.has_storage_type(MSG.TAPE):
+                        # get the aggregation
+                        pl = pd.get_tape()
+                        agg = self.catalog.get_aggregation(pl.aggregation_id)
+                        tr = self.catalog.get_transaction(file.transaction_id)
+                        if pl.access_time is None:
+                            access_time = datetime.now()
+                        else:
+                            access_time = datetime.fromtimestamp(pl.access_time)
+
+                        # create a mostly empty OBJECT STORAGE location in the database 
+                        # as a marker that the file is currently transferring
+                        self.catalog.create_location(
+                            file_=file,
+                            storage_type=Storage.OBJECT_STORAGE,
+                            url_scheme="",
+                            url_netloc="",
+                            root="",
+                            path=file.original_path,
+                            access_time=access_time,
+                            aggregation=None,
+                        )
+
+                        # create the OBJECT STORAGE Path Location for the message (not
+                        # the database)
+                        pd.set_object_store(tenancy=tenancy, bucket=tr.transaction_id)
+                        self.tapelist.append(pd)
                     else:
-                        self.completelist.append(pd)
-
-                elif pd.locations.has_storage_type(MSG.TAPE):
-                    # get the aggregation
-                    pl = pd.get_tape()
-                    agg = self.catalog.get_aggregation(pl.aggregation_id)
-                    tr = self.catalog.get_transaction(file.transaction_id)
-                    if pl.access_time is None:
-                        access_time = datetime.now()
-                    else:
-                        access_time = datetime.fromtimestamp(pl.access_time)
-
-                    # create a mostly empty OBJECT STORAGE location in the database as
-                    # a marker that the file is currently transferring
-                    self.catalog.create_location(
-                        file_=file,
-                        storage_type=Storage.OBJECT_STORAGE,
-                        url_scheme="",
-                        url_netloc="",
-                        root="",
-                        path=file.original_path,
-                        access_time=access_time,
-                        aggregation=None,
-                    )
-
-                    # create the OBJECT STORAGE Path Location for the message (not
-                    # the database)
-                    pd.set_object_store(tenancy=tenancy, bucket=tr.transaction_id)
-                    self.tapelist.append(pd)
-                else:
-                    # this shouldn't occur but we'll trap the error anyway
-                    reason = (
-                        f"No compatible Storage Location found for file with "
-                        f"original path: {pd.original_path}."
-                    )
-                    raise CatalogError(reason)
+                        # this shouldn't occur but we'll trap the error anyway
+                        reason = (
+                            f"No compatible Storage Location found for file with "
+                            f"original path: {pd.original_path}."
+                        )
+                        raise CatalogError(reason)
 
             except CatalogError as e:
                 filepath_details.failure_reason = e.message

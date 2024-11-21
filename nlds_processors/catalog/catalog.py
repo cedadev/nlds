@@ -313,7 +313,6 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         original_path: str = None,
         tag: dict = None,
-        one: bool = False,
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -336,8 +335,7 @@ class Catalog(DBMixin):
             search_path = ".*"
 
         # (permissions have been checked by get_holding)
-        file_list = []
-        ingest_time = None
+        file_dict = {}
         try:
             for h in holding:
                 # build the file query bit by bit
@@ -351,6 +349,7 @@ class Catalog(DBMixin):
                     file_q = file_q.filter(File.original_path == search_path)
 
                 result = file_q.all()
+
                 for r in result:
                     if r.File is None:
                         continue
@@ -363,18 +362,25 @@ class Catalog(DBMixin):
                             f"access the file with original path:{r.File.original_path}."
                         )
 
-                    # limit to the newest file if one is selected
-                    # get_files does this to get the most recent if a file has been
-                    # entered into multiple holdings
-                    if one:
-                        if ingest_time is None:
-                            file_list = [r.File]
-                            ingest_time = r.Transaction.ingest_time
-                        elif r.Transaction.ingest_time > ingest_time:
-                            file_list = [r.File]
-                            ingest_time = r.Transaction.ingest_time
+                    # if the file exists in more than one holding then it will appear
+                    # in the results list more than once.  we want to return the newest
+                    # so we will build a dictionary indexed by the original path and
+                    # compare the ingest times as to whether to replace the entry in the
+                    # dictionary
+                    if r.File.original_path in file_dict:
+                        curr_ingest_time = (
+                            file_dict[r.File.original_path][1].ingest_time
+                        )
+                        file_ingest_time = r.Transaction.ingest_time
+                        if (file_ingest_time > curr_ingest_time):
+                            file_dict[r.File.original_path] = (r.File, r.Transaction)
+
                     else:
-                        file_list.append(r.File)
+                        file_dict[r.File.original_path] = (r.File, r.Transaction)
+
+            # convert file_dict (which also contains transactions) to a list of File
+            # objects
+            file_list = [fd[0] for _, fd in file_dict.items()]
             # no files found
             if len(file_list) == 0:
                 raise KeyError
