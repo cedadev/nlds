@@ -294,7 +294,7 @@ class MonitorConsumer(RMQC):
                 "callback."
             )
             self.log(msg, RK.LOG_ERROR)
-            raise MonitorError(msg=e)
+            raise MonitorError(message=msg)
         return srec
 
     def _monitor_put(self, body: Dict[str, str]) -> None:
