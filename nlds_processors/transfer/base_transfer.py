@@ -37,6 +37,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         _REQUIRE_SECURE: True,
         _PRINT_TRACEBACKS: False,
         _FILELIST_MAX_LENGTH: 1000,
+        StattingConsumer._MESSAGE_MAX_SIZE: 16 * 1000 * 1000
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -46,7 +47,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.require_secure_fl = self.load_config_value(self._REQUIRE_SECURE)
         self.print_tracebacks_fl = self.load_config_value(self._PRINT_TRACEBACKS)
         self.filelist_max_len = self.load_config_value(self._FILELIST_MAX_LENGTH)
-
+        self.message_max_size = self.load_config_value(self._MESSAGE_MAX_SIZE)
         self.reset()
 
     def _callback_common(self, cm, method, properties, body, connection):
