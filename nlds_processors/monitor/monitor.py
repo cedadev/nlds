@@ -206,7 +206,7 @@ class Monitor(DBMixin):
                 query = query.filter(TransactionRecord.user == user)
             if group is not None:
                 query = query.filter(TransactionRecord.group == group)
-            srecs = query.all()
+            srecs = query.join(TransactionRecord).all()
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"Could not return SubRecords from function get_sub_records"
