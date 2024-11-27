@@ -1,4 +1,18 @@
-{ 
+{
+    "archive_get_q": {
+        "tenancy": "{{ tenancy }}",
+        "tape_url": "{{ tape_url }}",
+        "tape_pool": {{ tape_pool|default(null) }},
+        "chunk_size": {{ chunk_size|default(262144) }},
+        "message_threshold": {{ filelist_threshold|default(10000)}},
+        "filelist_max_length": {{ filelist_max_length|default(1000) }},
+        "print_tracebacks_fl": {{ print_tracebacks|default(false) }},
+        "require_secure_fl": {{ require_secure|default(false) }},
+        "logging": {
+            "enable": true
+            "log_level" : "{{ log_level }}"
+        }
+    }, 
     "rabbitMQ": {
         "queues": [
             {

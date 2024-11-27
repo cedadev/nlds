@@ -1,0 +1,32 @@
+{
+    "transfer_get_q":{
+        "tenancy": "{{ tenancy }}",
+        "filelist_max_length": {{ filelist_max_length|default(1000) }},
+        "print_tracebacks_fl": {{ print_tracebacks|default(false) }},
+        "check_filesize_fl": {{ check_filesize_fl|default(true) }},
+        "require_secure_fl": {{ require_secure|default(false) }},
+        "message_threshold": {{ filelist_threshold|default(10000)}},
+        "filelist_max_length": {{ filelist_max_length|default(1000) }},
+        "logging":{
+            "enable": true,
+            "log_level" : "{{ log_level }}"
+        }
+    },
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "transfer_get_q",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.transfer-get.start"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",    
+                        "routing_key": "*.transfer-get.init"
+                    }
+                ]
+            }
+        ]
+    }
+}

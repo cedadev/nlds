@@ -1,4 +1,12 @@
-{ 
+{
+    "transfer_del_q":{
+        "tenancy": "{{ tenancy }}",
+        "require_secure_fl": {{ require_secure|default(false) }},
+        "logging":{
+            "enable": true,
+            "log_level" : "{{ log_level }}"
+        }
+    }, 
     "rabbitMQ": {
         "queues": [
             {

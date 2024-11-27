@@ -132,7 +132,6 @@ class CatalogConsumer(RMQC):
     _DB_ECHO = "echo"
     _DEFAULT_TENANCY = "default_tenancy"
     _DEFAULT_TAPE_URL = "default_tape_url"
-    _TARGET_AGGREGATION_SIZE = "target_aggregation_size"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -144,7 +143,6 @@ class CatalogConsumer(RMQC):
         },
         _DEFAULT_TENANCY: None,
         _DEFAULT_TAPE_URL: None,
-        _TARGET_AGGREGATION_SIZE: 5 * (1024**3),  # Default to 5 GB
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -152,9 +150,6 @@ class CatalogConsumer(RMQC):
 
         self.default_tape_url = self.load_config_value(self._DEFAULT_TAPE_URL)
         self.default_tenancy = self.load_config_value(self._DEFAULT_TENANCY)
-        self.target_aggregation_size = self.load_config_value(
-            self._TARGET_AGGREGATION_SIZE
-        )
 
         self.catalog = None
         self.tapelist = []

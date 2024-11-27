@@ -1,4 +1,15 @@
-{ 
+{
+    "index_q":{
+        "logging":{
+            "enable": true,
+            "log_level" : "{{ log_level }}"
+        },
+        "message_threshold": {{ filelist_threshold|default(10000)}},
+        "filelist_max_length": {{ filelist_max_length|default(1000) }},
+        "print_tracebacks_fl": {{ print_tracebacks|default(false) }},
+        "check_filesize_fl": {{ check_filesize_fl|default(true)}},
+        "max_filesize": {{ max_filesize|default(500000000)}}
+    }, 
     "rabbitMQ": {
         "queues": [
             {

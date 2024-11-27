@@ -102,7 +102,7 @@ class IndexerConsumer(StattingConsumer):
         self.log("Starting index scan", RK.LOG_INFO)
 
         # Index the entirety of the passed filelist and check for permissions. The size
-        # of the packet will also be evaluated and used to send lists of roughly equal 
+        # of the packet will also be evaluated and used to send lists of roughly equal
         # size.
         self.index(filelist, rk_parts[0], body_json)
         self.log(f"Scan finished.", RK.LOG_INFO)
@@ -115,7 +115,7 @@ class IndexerConsumer(StattingConsumer):
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",
             RK.LOG_DEBUG,
-            body_json=body_json
+            body_json=body_json,
         )
 
         # Check for system status

@@ -1,4 +1,19 @@
-{ 
+{
+    "catalog_q":{
+        "db_engine": "{{ db_engine }}",
+        "db_options": {
+            "db_name": "{{ db_name }}",
+            "db_user": "{{ db_user }}",
+            "db_passwd": "{{ db_passwd }}",
+            "echo": {{ db_echo|default(false) }}
+        },
+        "logging":{
+            "enable": true,
+            "log_level": "{{ log_level }}"
+        },
+        "default_tenancy": "{{ tenancy }}",
+        "default_tape_url": "{{ default_tape_url }}"
+    },
     "rabbitMQ": {
         "queues": [
             {
@@ -11,6 +26,10 @@
                     {
                         "exchange": "{{ rabbit_exchange_name }}",
                         "routing_key": "*.catalog-get.list"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.catalog-get.start"
                     },
                     {
                         "exchange": "{{ rabbit_exchange_name }}",
@@ -30,7 +49,7 @@
                     },
                     {
                         "exchange": "{{ rabbit_exchange_name }}",
-                        "routing_key": "*.catalog-archive-remove.start"
+                        "routing_key": "*.catalog-remove.start"
                     }
                 ]
             }
