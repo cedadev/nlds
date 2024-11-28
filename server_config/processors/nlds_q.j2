@@ -1,14 +1,14 @@
 {
     "nlds_q":{
         "logging":{
-            "enable": true,
+            "enable": True,
             "log_level": "{{ log_level }}"
         }
     }, 
     "rabbitMQ": {
         "queues": [
             {
-                "name": "{{ rabbit_exchange_name }}",
+                "name": "nlds_q",
                 "bindings": [
                     {
                         "exchange": "test_exchange",

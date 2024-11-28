@@ -37,15 +37,15 @@ class StattingConsumer(RMQC):
     """
 
     # The consumer configuration variables required for this consumer
+    _FILELIST_MAX_SIZE = "filelist_max_size"
     _FILELIST_MAX_LENGTH = "filelist_max_length"
-    _MESSAGE_MAX_SIZE = "message_threshold"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
 
     # The corresponding default values
     DEFAULT_CONSUMER_CONFIG = {
+        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,
         _FILELIST_MAX_LENGTH: 1000,
-        _MESSAGE_MAX_SIZE: 1000,  # in kB
         _CHECK_FILESIZE: True,
     }
 
@@ -59,8 +59,8 @@ class StattingConsumer(RMQC):
         # Memeber variable to keep track of the total filesize of a message's
         # filelist
         self.completelist_size = 0
-        self.message_max_size = StattingConsumer.DEFAULT_CONSUMER_CONFIG[
-            StattingConsumer._MESSAGE_MAX_SIZE
+        self.filelist_max_size = StattingConsumer.DEFAULT_CONSUMER_CONFIG[
+            StattingConsumer._FILELIST_MAX_SIZE
         ]
         self.filelist_max_len = StattingConsumer.DEFAULT_CONSUMER_CONFIG[
             StattingConsumer._FILELIST_MAX_LENGTH
@@ -95,8 +95,8 @@ class StattingConsumer(RMQC):
 
         NOTE: This was refactored here from the index/transfer processors.
         Might make more sense to put it somewhere else given there are specific
-        config variables required (filelist_max_length, message_max_size) which
-        could fail with an AttributeError?
+        config variables required (filelist_max_length, filelist_max_size) which could 
+        fail with an AttributeError?
         NOTE 2: NRM refactored this to remove the FilelistType, and just pass the
         completed or failed list in by reference.  If we bring retries back then we
         can do this with the retry list as well.
@@ -109,7 +109,7 @@ class StattingConsumer(RMQC):
             self.completelist_size += path_details.size
 
             # Send directly to exchange and reset filelist
-            if self.completelist_size >= self.message_max_size:
+            if self.completelist_size >= self.filelist_max_size:
                 self.send_pathlist(pathlist, routing_key, body_json, state=state)
                 pathlist.clear()
                 self.completelist_size = 0

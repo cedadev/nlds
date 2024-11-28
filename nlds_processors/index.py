@@ -32,14 +32,14 @@ class IndexerConsumer(StattingConsumer):
 
     # Possible options to set in config file
     _FILELIST_MAX_LENGTH = "filelist_max_length"
-    _MESSAGE_MAX_SIZE = "message_threshold"
+    _FILELIST_MAX_SIZE = "filelist_max_size"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
     _CHECK_FILESIZE = "check_filesize_fl"
     _MAX_FILESIZE = "max_filesize"
 
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
-        _MESSAGE_MAX_SIZE: 16 * 1000 * 1000,  # in kB
+        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,  # in kB, default = 16GB
         _PRINT_TRACEBACKS: False,
         _CHECK_FILESIZE: True,
         _MAX_FILESIZE: (500 * 1000 * 1000),  # in kB, default=500GB
@@ -50,7 +50,7 @@ class IndexerConsumer(StattingConsumer):
 
         # Load config options or fall back to default values.
         self.filelist_max_len = self.load_config_value(self._FILELIST_MAX_LENGTH)
-        self.message_max_size = self.load_config_value(self._MESSAGE_MAX_SIZE)
+        self.filelist_max_size = self.load_config_value(self._FILELIST_MAX_SIZE)
         self.print_tracebacks_fl = self.load_config_value(self._PRINT_TRACEBACKS)
         self.check_filesize_fl = self.load_config_value(self._CHECK_FILESIZE)
         self.max_filesize = self.load_config_value(self._MAX_FILESIZE)

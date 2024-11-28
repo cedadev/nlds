@@ -1,38 +1,35 @@
 {
     "authentication" : {
-        "authenticator_backend" : "jasmin_authenticator",
-        "jasmin_authenticator" : {
+        "authenticator_backend" : "{{ authenticator }}",
+        "{{ authenticator }}" : {
             "user_profile_url" : "{{ user_profile_url }}",
             "user_services_url" : "{{ user_services_url }}",
             "oauth_token_introspect_url" : "{{ token_introspect_url }}"
         }
     },
-    "rabbitMQ": {
-        "user": "{{ rabbit_user }}",
-        "password": "{{ rabbit_password }}",
-        "heartbeat": "{{ rabbit_heartbeat }}",
-        "server": "{{ rabbit_server }}",
-        "admin_port": "{{ rabbit_port }}",
-        "vhost": "{{ rabbit_vhost }}",
-        "exchange": {
-            "name": "{{ rabbit_exchange_name }}",
-            "type": "{{ rabbit_exchange_type }}",
-            "delayed": "{{ rabbit_exchange_delayed }}"
+    "rabbitMQ" : {
+        "user" : "{{ rabbit_user }}",
+        "password" : "{{ rabbit_password }}",
+        "heartbeat" : {{ rabbit_heartbeat }},
+        "server" : "{{ rabbit_server }}",
+        "admin_port" : {{ rabbit_port }},
+        "vhost" : "{{ rabbit_vhost }}",
+        "exchange" : {
+            "name" : "{{ rabbit_exchange_name }}",
+            "type" : "{{ rabbit_exchange_type }}",
+            "delayed" : "{{ rabbit_exchange_delayed }}"
         },
-        "queues": [
-            {
-            {# queues are inserted here from the individual processors template files #}
-            }
+        "queues" : [ 
         ]
     },
-    "rpc_publisher": {
-        "time_limit": "{{ rpc_publisher_time_limit }}",
-        "queue_exclusivity_fl": "{{ rpc_publisher_queue_exclusivity_fl }}"
+    "rpc_publisher" : {
+        "time_limit" : {{ rpc_publisher_time_limit }},
+        "queue_exclusivity_fl" : {{ rpc_publisher_queue_exclusivity_fl|default(true) }}
     },
-    "cronjob_publisher": {
-        "access_key": "{{ cronjob_publisher_access_key }}",
-        "secret_key": "{{ cronjob_publisher_secret_key }}",
-        "tenancy": "{{ cronjob_publisher_tenancy }}",
-        "tape_url": "{{ cronjob_publisher_tape_url }}"
+    "cronjob_publisher" : {
+        "access_key" : "{{ cronjob_publisher_access_key }}",
+        "secret_key" : "{{ cronjob_publisher_secret_key }}",
+        "tenancy" : "{{ tenancy }}",
+        "tape_url" : "{{ tape_url }}"
     }
 }

@@ -1,20 +1,20 @@
 {
-    "transfer_del_q":{
-        "tenancy": "{{ tenancy }}",
-        "require_secure_fl": {{ require_secure|default(false) }},
-        "logging":{
-            "enable": true,
+    "transfer_del_q" : {
+        "tenancy" : "{{ tenancy }}",
+        "require_secure_fl" : {{ require_secure|default(false) }},
+        "logging" : {
+            "enable" : True,
             "log_level" : "{{ log_level }}"
         }
     }, 
     "rabbitMQ": {
         "queues": [
             {
-                "name": "transfer_del_q",
-                "bindings": [
+                "name" : "transfer_del_q",
+                "bindings" : [
                     { 
-                        "exchange": "{{ rabbit_exchange_name }}",
-                        "routing_key": "*.transfer-del.start"
+                        "exchange" : "{{ rabbit_exchange_name }}",
+                        "routing_key" : "*.transfer-del.start"
                     } 
                 ]
             }
