@@ -1,0 +1,21 @@
+<rss version="2.0">
+    <channel>
+        <title>RSS Feed for {{ type }} {{ user_input }}</title>
+        <link>http://127.0.0.1:8000/info/rss/{{ type }}/{{ user_input }}</link>
+        <description>Updates for {{ user_input }}</description>
+        <pubDate>{{ rss_channel_pub_date }}</pubDate>
+        <lastBuildDate>{{ rss_channel_pub_date }}</lastBuildDate>
+        <language>en-us</language>
+        {% for entry in entries %}
+        <item>
+            <title>{{ entry.title }}</title>
+            <link>http://127.0.0.1:8000/info/{{ entry.record.id }}</link>
+            <description>
+                {{ entry.description }}
+            </description>
+            <pubDate>{{ entry.record.creation_time }}</pubDate>
+            <guid isPermaLink="true">http://127.0.0.1:8000/info/{{ entry.record.id }}</guid>
+        </item>
+        {% endfor %}
+    </channel>
+</rss>

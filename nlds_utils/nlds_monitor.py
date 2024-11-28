@@ -32,11 +32,12 @@ def query_monitor_db(
     user,
     group,
     state,
-    record_state,
+    sub_record_state,
     id,
     transaction_id,
     start_time,
     end_time,
+    all,
     order,
 ):
     """Returns a list of TransactionRecords"""
@@ -55,18 +56,13 @@ def query_monitor_db(
         if group:
             query = query.filter(TransactionRecord.group == group)
 
-        if state:
-            query = query.join(
-                SubRecord, TransactionRecord.id == SubRecord.transaction_record_id
-            )
-            query = query.filter(SubRecord.state == state)
-
-        if start_time and not end_time:
-            query = query.filter(TransactionRecord.creation_time >= start_time)
-        elif start_time and end_time:
-            query = query.filter(
-                between(TransactionRecord.creation_time, start_time, end_time)
-            )
+        if not all:
+            if start_time and not end_time:
+                query = query.filter(TransactionRecord.creation_time >= start_time)
+            elif start_time and end_time:
+                query = query.filter(
+                    between(TransactionRecord.creation_time, start_time, end_time)
+                )
 
     if order == "ascending":
         query = query.order_by(asc(TransactionRecord.creation_time))
@@ -77,12 +73,25 @@ def query_monitor_db(
 
     session.end_session()
 
-    if record_state:
+    if state:
+        if state == "end_states":
+            for record in trec[:]:
+                if (
+                    record.get_state() != State.FAILED
+                    and record.get_state() != State.COMPLETE
+                ):
+                    trec.remove(record)
+        else:
+            for record in trec[:]:
+                if record.get_state() != state:
+                    trec.remove(record)
+
+    if sub_record_state:
         for record in trec[:]:
             sr_list = record.sub_records
             hit = False
             for sr in sr_list:
-                if sr.state == record_state:
+                if sr.state == sub_record_state:
                     hit = True
                     continue
             if hit == False:
@@ -139,7 +148,7 @@ def print_complex_monitor(records_dict_list, stat_string):
                     click.echo(f"{'':<9}{'':>4} {'reason':<8} : {ff['reason']}")
 
 
-def validate_inputs(start_time, end_time, state, record_state):
+def validate_inputs(start_time, end_time, state, sub_record_state):
     """Ensures user inputs are valid before querying the database"""
     try:
         if start_time and end_time:
@@ -147,19 +156,20 @@ def validate_inputs(start_time, end_time, state, record_state):
                 raise ValueError("Error: Start time must be before end time.")
 
         if state:
-            try:
-                state = State[state.upper()]
-            except KeyError:
-                raise ValueError(f"Error: Invalid state: {state}")
+            if state != "end_states":
+                try:
+                    state = State[state.upper()]
+                except KeyError:
+                    raise ValueError(f"Error: Invalid state: {state}")
 
-        if record_state:
+        if sub_record_state:
             try:
-                record_state = State[record_state.upper()]
+                sub_record_state = State[sub_record_state.upper()]
             except KeyError:
-                raise ValueError(f"Error: Invalid state: {record_state}")
+                raise ValueError(f"Error: Invalid state: {sub_record_state}")
     except ValueError as e:
         raise SystemExit(e)
-    return state, record_state
+    return state, sub_record_state
 
 
 def construct_stat_string(
@@ -168,9 +178,10 @@ def construct_stat_string(
     user,
     group,
     state,
-    record_state,
+    sub_record_state,
     start_time,
     end_time,
+    all,
     order,
 ):
     """
@@ -190,13 +201,19 @@ def construct_stat_string(
         if group:
             details.append(f"group: {group}")
         if state:
-            details.append(f"state: {state.name}")
-        if record_state:
-            details.append(f"record state: {record_state.name}")
-        if start_time and end_time:
-            details.append(f"between: {start_time} and {end_time}")
-        elif start_time and not end_time:
-            details.append(f"from: {start_time}")
+            if state == "end_states":
+                details.append("state: COMPLETE and FAILED")
+            else:
+                details.append(f"state: {state.name}")
+        if sub_record_state:
+            details.append(f"record state: {sub_record_state.name}")
+        if not all:
+            if start_time and end_time:
+                details.append(f"between: {start_time} and {end_time}")
+            elif start_time and not end_time:
+                details.append(f"from: {start_time}")
+        else:
+            details.append(f"all time")
 
     # If no details were added, set req_details to "all records"
     if not details:
@@ -353,15 +370,15 @@ def construct_record_dict(
     "--state",
     default=None,
     type=str,
-    help="Will return any record with that state in any "
-    "of its sub-records (not record).",
+    help="Will return any record with that state",
 )
 @click.option(
     "-rs",
-    "--record-state",
+    "--sub-record-state",
     default=None,
     type=str,
-    help="Will return any record with that state.",
+    help="Will return any record with that state in any "
+    "of its sub-records (not record).",
 )
 @click.option(
     "-i",
@@ -393,6 +410,12 @@ def construct_record_dict(
     help="Filter end time in YYYY-MM-DD format (leave blank for values up to present)",
 )
 @click.option(
+    "--all",
+    is_flag=True,
+    default=False,
+    help="Display all results without a time constraint",
+)
+@click.option(
     "-c",
     "--complex",
     is_flag=True,
@@ -410,11 +433,12 @@ def view_jobs(
     user,
     group,
     state,
-    record_state,
+    sub_record_state,
     id,
     transaction_id,
     start_time,
     end_time,
+    all,
     complex,
     order,
 ) -> None:
@@ -425,7 +449,9 @@ def view_jobs(
     else:
         order = "descending"
 
-    state, record_state = validate_inputs(start_time, end_time, state, record_state)
+    state, sub_record_state = validate_inputs(
+        start_time, end_time, state, sub_record_state
+    )
 
     # Connect to the monitor database
     session = connect_to_monitor()
@@ -434,11 +460,12 @@ def view_jobs(
         user,
         group,
         state,
-        record_state,
+        sub_record_state,
         id,
         transaction_id,
         start_time,
         end_time,
+        all,
         order,
     )
 
@@ -448,9 +475,10 @@ def view_jobs(
         user,
         group,
         state,
-        record_state,
+        sub_record_state,
         start_time,
         end_time,
+        all,
         order,
     )
 

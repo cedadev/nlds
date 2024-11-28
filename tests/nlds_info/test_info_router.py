@@ -50,6 +50,30 @@ def test_get_request_success(monkeypatch):
     assert result_dict["context"]["info"] == record_dict_list
 
 
+def test_get_from_id_request_success(monkeypatch):
+    monitor = mock_monitor()
+    record1 = sample_record(user="new_user")
+    record2 = sample_record(id=2)
+    record3 = sample_record(id=3)
+    monitor.session.add(record1)
+    monitor.session.add(record2)
+    monitor.session.add(record3)
+    monitor.session.commit()
+
+    monkeypatch.setattr(nlds_monitor, "connect_to_monitor", lambda: monitor)
+
+    result = info.get_from_id(Request, input_id=2)
+    result_dict, record_dict_list = clean_output(result, [record2])
+
+    assert result_dict["status_code"] == 200
+
+    assert isinstance(result_dict["template"], jinja2.environment.Template)
+
+    assert result_dict["template"].name == "info.html"
+
+    assert result_dict["context"]["info"] == record_dict_list
+
+
 def test_post_recordID_filter(monkeypatch):
     monitor = mock_monitor()
     record1 = sample_record(user="new_user")
@@ -102,8 +126,7 @@ def test_post_transactionId_filter(monkeypatch):
     assert result.status_code == 200
 
     assert (
-        result_content["message"]
-        == "State of transactions for transaction id: "
+        result_content["message"] == "State of transactions for transaction id: "
         "17e96f14-5f7b-49de-a309-b61e39a2cfcb, order: ascending"
     )
 
@@ -146,6 +169,78 @@ def test_post_filter_success(monkeypatch):
     )
 
     assert result_content["records"] == make_record_list([record1])
+
+
+def test_user_rss_filter(monkeypatch):
+    monitor = mock_monitor()
+    record1 = sample_record(user="test_user")
+    record2 = sample_record(id=2, creation_time=(datetime.now() - timedelta(days=4)))
+    record3 = sample_record(
+        id=3,
+        creation_time=datetime(2023, 10, 2, 7, 46, 37),
+    )
+    monitor.session.add(record1)
+    monitor.session.add(record2)
+    monitor.session.add(record3)
+    monitor.session.commit()
+
+    monkeypatch.setattr(nlds_monitor, "connect_to_monitor", lambda: monitor)
+
+    result = info.user_rss(Request, username="existing_user")
+    result_dict, record_dict_list = clean_output(result, [record2, record3])
+    
+    record_information = info.create_rss_information(record_dict_list)
+
+    assert result_dict["status_code"] == 200
+
+    assert isinstance(result_dict["template"], jinja2.environment.Template)
+
+    assert result_dict["template"].name == "rss_feed.html"
+
+    assert result_dict["context"]["request"] == Request
+    assert result_dict["context"]["type"] == "user"
+    assert result_dict["context"]["user_input"] == "existing_user"
+    assert result_dict["context"]["entries"] == record_information
+    assert (
+        result_dict["context"]["rss_channel_pub_date"]
+        == record_dict_list[0]["record"]["creation_time"]
+    )
+
+
+def test_group_rss_filter(monkeypatch):
+    monitor = mock_monitor()
+    record1 = sample_record(group="new_group")
+    record2 = sample_record(id=2, creation_time=(datetime.now() - timedelta(days=4)))
+    record3 = sample_record(
+        id=3,
+        creation_time=datetime(2023, 10, 2, 7, 46, 37),
+    )
+    monitor.session.add(record1)
+    monitor.session.add(record2)
+    monitor.session.add(record3)
+    monitor.session.commit()
+
+    monkeypatch.setattr(nlds_monitor, "connect_to_monitor", lambda: monitor)
+
+    result = info.group_rss(Request, group="new_group")
+    result_dict, record_dict_list = clean_output(result, [record1])
+    
+    record_information = info.create_rss_information(record_dict_list)
+
+    assert result_dict["status_code"] == 200
+
+    assert isinstance(result_dict["template"], jinja2.environment.Template)
+
+    assert result_dict["template"].name == "rss_feed.html"
+
+    assert result_dict["context"]["request"] == Request
+    assert result_dict["context"]["type"] == "group"
+    assert result_dict["context"]["user_input"] == "new_group"
+    assert result_dict["context"]["entries"] == record_information
+    assert (
+        result_dict["context"]["rss_channel_pub_date"]
+        == record_dict_list[0]["record"]["creation_time"]
+    )
 
 
 def test_post_time_fail(monkeypatch):
@@ -205,7 +300,7 @@ def test_post_state_incorrect(monkeypatch):
     monitor.end_session()
 
 
-def test_post_recordState_incorrect(monkeypatch):
+def test_post_subRecordState_incorrect(monkeypatch):
     monitor = mock_monitor()
     record1 = sample_record(group="new_group", user="new_user")
     record2 = sample_record(
@@ -221,7 +316,7 @@ def test_post_recordState_incorrect(monkeypatch):
 
     monkeypatch.setattr(nlds_monitor, "connect_to_monitor", lambda: monitor)
 
-    filter_request_data = {"recordState": "state", "order": "ascending"}
+    filter_request_data = {"subRecordState": "state", "order": "ascending"}
     filter_request = info.FilterRequest(**filter_request_data)
 
     with pytest.raises(HTTPException) as excinfo:

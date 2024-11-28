@@ -365,7 +365,7 @@ def test_incorrect_state(setup_test, start_time):
     assert expected_output in result.output
 
 
-def test_record_state_correct(setup_test, start_time):
+def test_sub_record_state_correct(setup_test, start_time):
     """Test the record state filtering with correct state in complex view."""
 
     # Create records to test functionality
@@ -408,7 +408,7 @@ def test_record_state_correct(setup_test, start_time):
     assert expected_output in result.output
 
 
-def test_record_state_nonexistent(setup_test, start_time):
+def test_sub_record_state_nonexistent(setup_test, start_time):
     """Test the record state filtering with a non-existent state in complex view."""
 
     # Create records to test functionality
@@ -453,7 +453,7 @@ def test_record_state_nonexistent(setup_test, start_time):
     assert expected_output in result.output
 
 
-def test_incorrect_record_state(setup_test, start_time):
+def test_incorrect_sub_record_state(setup_test, start_time):
     """Test handling when an invalid record state is provided in complex view."""
 
     # Create records to test functionality
@@ -843,6 +843,38 @@ def test_time_not_datetime(setup_test, start_time):
     assert expected_output in result.output
 
 
+def test_time_all_times_selected(setup_test):
+    """Test filtering with a valid start time."""
+
+    # Create records to test functionality
+    record1 = sample_record()
+    record2 = sample_record(id=2, creation_time=(datetime.now() - timedelta(days=4)))
+    record3 = sample_record(
+        id=3,
+        creation_time=datetime(2023, 10, 2, 7, 46, 37),
+    )
+
+    stat_string = f"State of transactions for all time, order: ascending"
+
+    runner, expected_output = setup_test(
+        record_list=[record1, record2, record3],
+        output_records=[record3, record2, record1],
+        stat_string=stat_string,
+    )
+
+    # get output from nlds_monitoring.py
+    result = runner.invoke(
+        nlds_monitor.view_jobs,
+        ["--all"],
+    )
+
+    # Assert no errors
+    assert result.exit_code == 0
+
+    # Assert the output from click.echo matches expectations
+    assert expected_output in result.output
+
+
 def test_non_complex_display(setup_test, start_time):
     """Test regular view and ensure correct output."""
 
@@ -1095,7 +1127,7 @@ def test_multiple_filters(setup_test, start_time):
 
     runner, expected_output = setup_test(
         record_list=[record1, record2, record3, record4],
-        output_records=[record1, record2],
+        output_records=[record2],
         stat_string=stat_string,
         complex=True,
     )

@@ -16,10 +16,31 @@ table {
 td, th {
     border: 1px solid #000000;
     text-align: left;
-    padding: 8px;
+    padding: 12px;
 }
 
 .hover:hover {
     background-color: #f5f5f5;
     cursor: pointer; /* Makes the table row appear clickable */
+}
+
+/* Aligns the content properly */
+.container {
+    padding: 10px;
+    display: flex; /* Use flex container */
+    justify-content: flex-end; /* Push the rss content to the right */
+    align-items: center; /* Vertically align the content */
+}
+  
+/* Content occupies remaining space */
+.content {
+    flex: 1; /* Allow the content to take up the remaining space */
+    padding: 20px;
+    overflow-x: hidden; /* Prevent horizontal overflow */
+}
+  
+.rss {
+    display: flex; /* Use flexbox inside to stack its content */
+    flex-direction: column; /* Stack image and additional content vertically */
+    align-items: center; /* Center-align the content */
 }

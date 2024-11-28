@@ -1,4 +1,19 @@
 document.addEventListener('DOMContentLoaded', (event) => {
+    document.getElementById("rss-icon").addEventListener("click", function () {
+        // Get the text input value
+        const textInput = document.getElementById("text-input").value;
+        
+        // Get the selected radio button value
+        const selectedOption = document.querySelector('input[name="radio-option"]:checked')?.value;
+        
+        // Generate the link
+        const generatedLink = `http://127.0.0.1:8000/info/rss/${selectedOption}/${textInput}`;
+        
+        // Display the link
+        const linkDisplay = document.getElementById("generated-link");
+        linkDisplay.innerHTML = `<a href="${generatedLink}" target="_blank">${generatedLink}</a>`;
+    });
+
     document.getElementById("filterBy").addEventListener("submit", function (e) {
         // When filter button is pressed gets filtered records
 
@@ -13,11 +28,12 @@ document.addEventListener('DOMContentLoaded', (event) => {
             user: form.user.value || null,
             group: form.group.value || null,
             state: form.state.value || null,
-            recordState: null, // form.recordState.value || null,
+            subRecordState: null, // form.subRecordState.value || null,
             recordId: form.recordId.value || null,
             transactionId: form.transactionId.value || null,
             startTime: form.startTime.value || null,
             endTime: form.endTime.value || null,
+            all: form.allTime.checked || false,
             order: form.order.value || null,
         };
 
@@ -102,11 +118,11 @@ function toggleVisibility() {
     });
 }
 
-function buildTable(records, values, headers, id) {
+function buildTable(records, values, headers, type) {
     // Builds tables for the complex view
 
     // Clear any existing content from the table body
-    let tableContainer = document.getElementById(id);
+    let tableContainer = document.getElementById(type);
     tableContainer.innerHTML = "";
 
     // Create a new table element
@@ -193,9 +209,8 @@ function activateComplexView(recordId) {
 
     if (record.warnings && record.warnings.length > 0) {
         let warningValues = ["id", "warning"];
-        buildTable(record, warningValues, warningValues, "warnings")
+        buildTable(record["warnings"], warningValues, warningValues, "warnings")
     } else {
-        // TODO test with warnings (does this need to be cleared each time?)
         document.getElementById("warnings").textContent = "None";
     }
 

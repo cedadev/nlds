@@ -7,8 +7,38 @@
 </head>
 
 <body>
+    <div class="container">
+        <div class="content">
+            <h1>Monitor records</h1>
+        </div>
+        <span class="rss">
+            <form id="rss-form">
+                <div>
+                    <!-- Image Above Inputs -->
+                    <img src="../static/images/RSS_icon.png" alt="RSS enabled icon" width="88px" id="rss-icon" style="cursor: pointer;">
+                </div>
 
-    <h2 class="simple">Monitor records table</h2>
+                <!-- Text Input -->
+                <label for="text-input">Enter Text:</label>
+                <input type="text" id="text-input" name="text-input" placeholder="Enter your text here">
+                
+                <!-- Radio Buttons -->
+                <div>
+                    <input type="radio" id="user" name="radio-option" value="user" checked>
+                    <label for="user">Username</label>
+                    
+                    <input type="radio" id="group" name="radio-option" value="group">
+                    <label for="group">Group work space</label>
+                </div>
+                <p>Click the icon to generate the RSS link</p>
+            </form>
+    
+            <!-- Area to Display the Link -->
+            <p id="generated-link" style="margin-top: 10px; color: blue; font-weight: bold;"></p>
+        </span>
+    </div>
+    
+
     <h3 class="simple" id="message"></h3>
 
     <table id=recordTable class="simple">
@@ -35,7 +65,6 @@
         {% endfor %}
     </table>
 
-    <h2 class="complex">Monitor record complex table</h2>
     <br>
     <h3 class="complex">Transaction Record</h3>
     <div id="complexTable" class="complex"></div>
@@ -86,14 +115,17 @@
             <OPTION Value="SEARCHING">SEARCHING</OPTION>
         </SELECT><br><br>
 
-        <!--<label for="recordState">Record state:</label><br>
-        <input type="text" id="recordState" name="recordState"><br>-->
+        <!--<label for="subRecordState">Record state:</label><br>
+        <input type="text" id="subRecordState" name="subRecordState"><br>-->
 
         <label for="startTime">Start time:</label><br>
         <input type="date" id="startTime" name="startTime"><br>
 
         <label for="endTime">End time:</label><br>
         <input type="date" id="endTime" name="endTime"><br>
+
+        <label for="allTime">No time constraints:</label><br>
+        <input type="checkbox" id="allTime" name="allTime"><br>
 
         <div>Order:</div>
         <SELECT id="order">
@@ -114,14 +146,3 @@
 </body>
 
 </html>
-
-
-<!--
-TODO SQL injection avoidance?
-
-TODO test with warnings (does this need to be cleared each time?)
-TODO test failed files (might need clearing as well)
-TODO make sure the for loop works for building the table (test for multiple sub_records)
-
-TODO write pytests
--->
