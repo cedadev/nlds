@@ -232,7 +232,7 @@ def group_rss(request: Request, group: str):
     )
 
 
-# no authentication required for the moment
+# authentication required (needs to be figured out)
 
 # nlds-up nlds-api
 # http://127.0.0.1:8000/info/
