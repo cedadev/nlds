@@ -219,11 +219,10 @@ class JasminAuthenticator(BaseAuthenticator):
         if response.status_code == requests.codes.ok:  # status code 200
             try:
                 response_json = json.loads(response.text)
-                user_role = response_json["group_workspaces"]
                 # is_manager is False by default and only changes if user has a manager or deputy role.
                 is_manager = False
-                for role in user_role:
-                    if role in ["MANAGER", "DEPUTY"]:
+                for role in response_json:
+                    if role["role"]["name"] in ["MANAGER", "DEPUTY"]:
                         is_manager = True
                 return is_manager
             except KeyError:
@@ -291,17 +290,20 @@ class JasminAuthenticator(BaseAuthenticator):
 
 
     @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
-    def get_service_information(self, oauth_token: str, service_name: str):
+    def get_service_information(self, service_name: str):
         """Make a call to the JASMIN Projects Portal to get the service information."""
 
         config = self.config[self.auth_name][self.name]
         token_headers = {
             "Content-Type": "application/x-ww-form-urlencoded",
             "cache-control": "no-cache",
-            "Authorization": f"Bearer {oauth_token}",
+            # WORK THIS OUT
+            "Authorization": f"Bearer {config["client_token"]}",
         }
         # Contact the user_services_url to get the information about the services
-        url = construct_url([config["user_services_urk"]], {"name": {service_name}})
+        url = construct_url([config["project_services_url"]], {"name": {service_name}})
+        print("jasmin_authenticator.py URL:", url)
+        print("jasmin_authenticator.py token_headers:", token_headers)
         try:
             response = requests.get(
                 url,
@@ -313,6 +315,7 @@ class JasminAuthenticator(BaseAuthenticator):
         except KeyError:
             raise RuntimeError(f"Could not find 'user_services_url' key in the {self.name} section of the .server_config file.")
         if response.status_code == requests.codes.ok: # status code 200
+            print("jasmin_authenticator.py RESPONSE:", response)
             try:
                 response_json = json.loads(response.text)
                 return response_json
@@ -322,10 +325,11 @@ class JasminAuthenticator(BaseAuthenticator):
             raise RuntimeError(f"Error getting data for {service_name}")
         
         
-    def get_tape_quota(self, oauth_token: str, service_name: str):
+    def get_tape_quota(self, service_name: str):
         """Get the service information then process it to extract the quota for the service."""
+        print("REACHED GET_TPE_QUOTA")
         try:
-            result = self.get_service_information(self, oauth_token, service_name)
+            result = self.get_service_information(self, service_name)
         except (RuntimeError, ValueError) as e:
             raise type(e)(f"Error getting information for {service_name}: {e}")
         
