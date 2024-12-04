@@ -4,12 +4,6 @@ from typing import List
 from sqlalchemy import func, Enum
 from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
     NoResultFound
-from retry import retry
-import requests
-import json
-from nlds.server_config import load_config
-from nlds.utils.construct_url import construct_url
-
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Aggregation, Storage, Tag
 from nlds_processors.db_mixin import DBMixin

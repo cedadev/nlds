@@ -1,7 +1,7 @@
 from urllib.parse import urljoin, urlencode
 
 
-def construct_url(url_parts, query_params=None):
+def format_url(url_parts, query_params=None):
     """
     Constructs a URL from a list of parts.
 

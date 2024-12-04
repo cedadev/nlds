@@ -59,6 +59,7 @@ async def get(token: str = Depends(authenticate_token),
         RMQP.MSG_DATA: {},
         RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD
     }
+    print("quota.py MESSAGE DICT:", msg_dict)
     # add the metadata
     meta_dict = {}
     if (label):
@@ -94,8 +95,10 @@ async def get(token: str = Depends(authenticate_token),
     response = await rpc_publisher.call(
         msg_dict=msg_dict, routing_key=routing_key
     )
+    print("quota.py REACHED RESPONSE", response)
     # Check if response is valid or whether the request timed out
     if response is not None:
+        print('quota.py RESPONSE:', response)
         # convert byte response to str
         response = response.decode()
 

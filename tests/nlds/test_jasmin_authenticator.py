@@ -6,7 +6,7 @@ import re
 
 from nlds.authenticators.jasmin_authenticator import JasminAuthenticator
 from nlds_processors.catalog.catalog_models import Holding
-from nlds.utils.construct_url import construct_url
+from nlds.utils.format_url import format_url
 
 
 @pytest.fixture(autouse=True)
@@ -227,7 +227,7 @@ class TestAuthenticateUserGroupRole:
     ):
         """Check whether the user has a manager/deputy role within the specified group."""
         #  Create the URL
-        url = construct_url(
+        url = format_url(
             ["https://mock.url/api/v1/users", user, "grants"],
             {"category": "GWS", "service": group},
         )
@@ -289,15 +289,15 @@ class TestGetProjectsServices:
     url = f"{user_services_url}?name=test_service"
 
     @pytest.fixture()
-    def mock_construct_url(self, *args, **kwargs):
-        """Mock the construct_url function to make it return the test url."""
+    def mock_format_url(self, *args, **kwargs):
+        """Mock the format_url function to make it return the test url."""
         return self.url
 
     def test_get_projects_services_success(self,monkeypatch):
         """Test a successful instance of get_projects_services."""
         
         monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.construct_url", self.mock_construct_url)
+        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
 
         class MockResponse:
             """Mock the response to return a 200 status code and the test text."""
@@ -324,7 +324,7 @@ class TestGetProjectsServices:
         """Test an unsuccessful instance of get_projects_services due to connection error."""
 
         monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.construct_url", self.mock_construct_url)
+        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
 
         def mock_get(*args, **kwargs):
             """Mock the get function to give a ConnectionError."""
@@ -346,7 +346,7 @@ class TestGetProjectsServices:
             return {"authentication": {"jasmin_authenticator": {"other_url": "test.com"}}}
         
         monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config_key_error)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.construct_url", self.mock_construct_url)
+        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
 
         def mock_get(*args, **kwargs):
             """Mock the get function to give the KeyError."""
@@ -365,7 +365,7 @@ class TestGetProjectsServices:
         """Test an unsuccessful instance of get_projects_services due to a JSON error."""
 
         monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.construct_url", self.mock_construct_url)
+        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
 
         class MockInvalidJSONResponse:
             """Mock the response to return a 200 status code and the JSON decode error."""
@@ -392,7 +392,7 @@ class TestGetProjectsServices:
         """Test an unsuccessful instance of get_projects_services due to a 404 error."""
         
         monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.construct_url", self.mock_construct_url)
+        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
 
         class MockResponse:
             """Mock the response to return a 401 status code and the relevant text."""

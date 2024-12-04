@@ -10,7 +10,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from nlds.authenticators.base_authenticator import BaseAuthenticator
 from nlds.server_config import load_config
-from nlds.utils.construct_url import construct_url
+from nlds.utils.format_url import format_url
 from nlds_processors.catalog.catalog_models import File, Holding, Transaction
 from retry import retry
 import requests
@@ -195,7 +195,7 @@ class JasminAuthenticator(BaseAuthenticator):
             "Authorization": f"Bearer {oauth_token}",
         }
         # Construct the URL
-        url = construct_url(
+        url = format_url(
             [config["user_grants_url"], user, "grants"],
             {"category": "GWS", "service": group},
         )
@@ -301,7 +301,7 @@ class JasminAuthenticator(BaseAuthenticator):
             "Authorization": f"Bearer {config["client_token"]}",
         }
         # Contact the user_services_url to get the information about the services
-        url = construct_url([config["project_services_url"]], {"name": {service_name}})
+        url = format_url([config["project_services_url"]], {"name": service_name})
         print("jasmin_authenticator.py URL:", url)
         print("jasmin_authenticator.py token_headers:", token_headers)
         try:

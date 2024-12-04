@@ -148,6 +148,7 @@ class CatalogConsumer(RMQC):
         self.catalog = None
         self.reroutelist = []
         self.retrievedict = {}
+        self.authenticator = Authenticator()
 
 
     @property
@@ -1865,10 +1866,12 @@ class CatalogConsumer(RMQC):
             return
         else:
             # Unpack if no problems found in parsing
+            print("MESSAGE VARS", message_vars)
             user, group, token = message_vars
 
         try:
-            group_quota = Authenticator.get_tape_quota(oauth_token=token, service_name=group)
+            group_quota = self.authenticator.get_tape_quota(service_name=group)
+            print("catalog_worker.py GROUP_QUOTA:", group_quota)
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
@@ -2066,6 +2069,7 @@ class CatalogConsumer(RMQC):
 
         elif (api_method == self.RK_QUOTA):
             # don't need to split any routing key for an RPC method
+            print("catalog_worker.py ELIF LOOP !!")
             self._catalog_quota(body, properties)
 
         # If received system test message, reply to it (this is for system status check)
