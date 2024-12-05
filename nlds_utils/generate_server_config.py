@@ -47,7 +47,8 @@ all_processors = [
     "--output",
     type=str,
     help="Output path to write the config file to.",
-    required = True
+    required = False,
+    default=None
 )
 def generate_server_config(process: str, output: str) -> None:
     # get which processes to render configs for
@@ -97,9 +98,12 @@ def generate_server_config(process: str, output: str) -> None:
         server_config[process] = process_config[process]
 
     # open the output file and write out the config as json
-    with open(output, "w") as out:
-        json.dump(server_config, out, indent=4)
-    print(f"{output} file written")
+    if output is not None:
+        with open(output, "w") as out:
+            json.dump(server_config, out, indent=4)
+        print(f"{output} file written")
+    else:
+        print(json.dumps(server_config, indent=4))
 
 if __name__ == "__main__":
     generate_server_config()

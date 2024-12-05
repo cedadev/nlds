@@ -6,6 +6,8 @@
         "require_secure_fl": {{ require_secure|default(false) }},
         "filelist_max_size": {{ filelist_max_size|default(16000000000) }},
         "filelist_max_length": {{ filelist_max_length|default(1000) }},
+        "chown_cmd" : "chown_nlds",
+        "chown_fl" : True,
         "logging":{
             "enable": True,
             "log_level" : "{{ log_level }}"
