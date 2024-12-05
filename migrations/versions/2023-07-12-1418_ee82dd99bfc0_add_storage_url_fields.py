@@ -20,7 +20,7 @@ from nlds_processors.transfer.put_transfer import PutTransferConsumer
 from nlds_processors.transfer.get_transfer import GetTransferConsumer
 # Import archive consumers, some of which import xrootd and may break on 
 # unprepared environments
-from nlds_processors.archive.archive_base import BaseArchiveConsumer as BAC
+from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape
 from nlds_processors.archive.archive_base import ArchiveError
 try:
     from nlds_processors.archive.archive_get import GetArchiveConsumer
@@ -241,7 +241,7 @@ def find_default_tape_url():
     ]
     tape_url = find_default_url(consumer_priority_list)
     try: 
-        netloc = "/".join(BAC.split_tape_url(tape_url))
+        netloc = "/".join(S3ToTarfileTape._split_tape_url(tape_url))
     except ArchiveError:
         netloc = tape_url
     return "root", netloc
