@@ -12,6 +12,7 @@ import asyncio
 import requests
 import socket
 import os
+import logging
 
 from fastapi import APIRouter, status, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -21,15 +22,13 @@ from pydantic import BaseModel
 from fastapi.templating import Jinja2Templates
 from requests.auth import HTTPBasicAuth
 
-import nlds.rabbit.rpc_publisher as rpc_publisher
+from nlds.routers import rpc_publisher
 from nlds.errors import ResponseError
 import nlds.rabbit.routing_keys as RK
 
+logger = logging.getLogger("nlds.root")
+
 router = APIRouter()
-
-
-# static_dir = (os.path.join(os.path.dirname(__file__), "../static"))
-# router.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 template_dir = os.path.join(os.path.dirname(__file__), "../templates/")
 
@@ -107,22 +106,22 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
             rpc_publisher.config["vhost"],
         )
     except requests.exceptions.RequestException as e:
-        print("Failed to make request... ")
+        logger.error("Failed to make request... ")
         return {"val": ("Failed to make request"), "colour": "PURPLE"}, 0, 0
     except RequestError as e:
-        print("Failed to make request... ")
+        logger.error("Failed to make request... ")
         return {"val": ("Failed to make request"), "colour": "PURPLE"}, 0, 0
     except RabbitError as e:
-        print("The rabbit server may be offline... ")
-        print("Please try restart the consumers starting with logging_q ")
+        logger.error("The rabbit server may be offline... ")
+        logger.error("Please try restart the consumers starting with logging_q ")
         return {"val": ("Rabbit error"), "colour": "PURPLE"}, 0, 0
     except LoginError as e:
-        print("Your RabbitMQ login information is incorrect or not authorised ")
-        print("Please enter valid login information in the JASMIN .server_config file ")
+        logger.error("Your RabbitMQ login information is incorrect or not authorised ")
+        logger.error("Please enter valid login information in the JASMIN .server_config file ")
         return {"val": ("Login error"), "colour": "PURPLE"}, 0, 0
     except Error as e:
-        print("an unexpected error occurred: ")
-        print(e.json)
+        logger.error("an unexpected error occurred: ")
+        logger.error(e.json)
         return {"val": e.json, "colour": "PURPLE"}, 0, 0
 
     # if consumer_tags == "request error":
@@ -150,7 +149,7 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
                 msg_dict=msg_dict,
                 routing_key=key,
                 time_limit=time_limit,
-                correlation_id=consumer_tag,
+                correlation_id=str(consumer_tags),
             )
             if consumers:
                 consumers_count += 1

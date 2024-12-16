@@ -139,9 +139,13 @@ class RabbitMQConsumer(ABC, RMQP):
 
         # If received system test message, reply to it (this is for system status check)
         if api_method == RK.SYSTEM_STAT:
+            # if (
+            #     properties.correlation_id is not None
+            #     and properties.correlation_id != self.channel.consumer_tags[0]
+            # ):
             if (
-                properties.correlation_id is not None
-                and properties.correlation_id != self.channel.consumer_tags[0]
+                properties.correlation_id
+                and self.channel.consumer_tags[0] not in properties.correlation_id
             ):
                 return False
 
