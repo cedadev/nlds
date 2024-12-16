@@ -55,9 +55,9 @@ those microservices in. e.g. (shows a table with only the monitor row):
 <http://nlds.ceda.ac.uk/system/status/?microservice=monitor>
 
 These 
-?time_limit=2&consumer=Catalog&consumer=Monitor 
+?time_limit=2&microservice=Catalog&microservice=Monitor 
 e.g.:
-<http://nlds.ceda.ac.uk/system/status/?time_limit=2&consumer=Catalog&consumer=MonITor&consumer=2&consumer=INdeX&consumer=catalog&time_limit=2&time_limit=2&consumer=logger&>
+<http://nlds.ceda.ac.uk/system/status/?time_limit=2&microservice=Catalog&microservice=MonITor&microservice=2&microservice=INdeX&microservice=catalog&time_limit=2&time_limit=2&microservice=logger&>
 this link does actually work even though it looks very confusing it will set the time limit to 2 and open a table with catalog, monitor, index and logger rows
 and would look like this:
 
