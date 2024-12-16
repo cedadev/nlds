@@ -29,9 +29,10 @@ def mock_load_config(template_config):
 @pytest.fixture()
 def load_config(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
-    monkeypatch.setattr(
-        publ, "load_config", functools.partial(mock_load_config, template_config)
-    )
+    #monkeypatch.setattr(
+    #    publ, "load_config", functools.partial(mock_load_config, template_config)
+    #)
+    pass
 
 
 @pytest.fixture
@@ -808,4 +809,4 @@ def test_get_service_json_success(
     } == get
 
 
-# to test run python -m pytest tests/nlds/test_system_status.py in the top nlds directory
+# to test run python -m pytest tests/nlds_test/test_system_status.py in the top nlds directory
