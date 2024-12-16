@@ -81,7 +81,6 @@ class RabbitMQConsumer(ABC, RMQP):
                 # If queue specified then select only that configuration
                 if CFG.RABBIT_CONFIG_QUEUES in self.config:
                     # Load queue config if it exists in .server_config file.
-                    print(self.config)
                     self.queues = [
                         RabbitQueue(**q)
                         for q in self.config[CFG.RABBIT_CONFIG_QUEUES]
