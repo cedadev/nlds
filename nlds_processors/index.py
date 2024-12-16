@@ -179,9 +179,11 @@ class IndexerConsumer(StattingConsumer):
                 # check the filesize
                 if self.check_filesize_fl and item_path.size > self.max_filesize:
                     error_reason = (
-                        f"Filesize: {item_path.size / 1000}MB for path: {item_path.path}"
+                        f"Filesize: {item_path.size / (1000*1000)}MB for path: "
+                        f"{item_path.path}"
                         f"is too big for the NLDS tape system."
-                        f" The max allowed file size is {self.max_filesize / 1000}MB."
+                        f" The max allowed file size is "
+                        f"{self.max_filesize / (1000*1000)}MB."
                     )
                     raise IndexError(message=error_reason)
                 # add to the complete list - use append_and_send to subdivide if
