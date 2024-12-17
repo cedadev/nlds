@@ -10,8 +10,10 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from sqlalchemy.exc import ArgumentError, IntegrityError
 from sqlalchemy import create_engine
+from sqlalchemy_utils import database_exists, create_database
 from sqlalchemy.orm import Session
 from nlds.errors import MessageError
+
 
 class DBError(MessageError):
     pass
@@ -54,6 +56,8 @@ class DBMixin:
         # create the db if not already created and flag permits
         if create_db_fl:
             try:
+                if not database_exists(db_connect):
+                    create_database(db_connect)
                 self.base.metadata.create_all(self.db_engine)
             except IntegrityError as e:
                 raise DBError("Could not create database tables")
