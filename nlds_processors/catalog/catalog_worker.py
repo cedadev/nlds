@@ -1866,26 +1866,27 @@ class CatalogConsumer(RMQC):
             return
         else:
             # Unpack if no problems found in parsing
-            print("MESSAGE VARS", message_vars)
-            user, group, token = message_vars
+            print("catalog_worker.py message_vars in _catalog_quota:", message_vars)
+            user, group = message_vars
 
         try:
             group_quota = self.authenticator.get_tape_quota(service_name=group)
-            print("catalog_worker.py GROUP_QUOTA:", group_quota)
+            print("catalog_worker.py _catalog_quota group_quota:", group_quota)
         except CatalogError as e:
+            print("THROWIN A CATALOGERROR IN catalog_worker.py")
             # failed to get the holdings - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
             body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
             body[self.MSG_DATA][self.MSG_HOLDING_LIST] = []
         else:
+            print("THROWING ANOTHER ERROR IN catalog_worker.py???")
             # fill the return message with a dictionary of the holding(s)
             body[self.MSG_DATA][self.MSG_HOLDING_LIST] = group_quota
             self.log(
                 f"Quota from CATALOG_QUOTA {group_quota}",
                 self.RK_LOG_DEBUG
             )
-
-        self.catalog.end_session()
+        print("Gets through else block in catalog_Worker.py")
 
         # return message to complete RPC
         self.publish_message(
@@ -2069,7 +2070,7 @@ class CatalogConsumer(RMQC):
 
         elif (api_method == self.RK_QUOTA):
             # don't need to split any routing key for an RPC method
-            print("catalog_worker.py ELIF LOOP !!")
+            print("catalog_worker.py calling self._catalog_quota")
             self._catalog_quota(body, properties)
 
         # If received system test message, reply to it (this is for system status check)

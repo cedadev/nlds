@@ -26,6 +26,7 @@ class JasminAuthenticator(BaseAuthenticator):
         self.config = load_config()
         self.name = "jasmin_authenticator"
         self.auth_name = "authentication"
+        self.default_quota = 0
 
     @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
     def authenticate_token(self, oauth_token: str):
@@ -292,7 +293,6 @@ class JasminAuthenticator(BaseAuthenticator):
     @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
     def get_service_information(self, service_name: str):
         """Make a call to the JASMIN Projects Portal to get the service information."""
-
         config = self.config[self.auth_name][self.name]
         token_headers = {
             "Content-Type": "application/x-ww-form-urlencoded",
@@ -302,8 +302,6 @@ class JasminAuthenticator(BaseAuthenticator):
         }
         # Contact the user_services_url to get the information about the services
         url = format_url([config["project_services_url"]], {"name": service_name})
-        print("jasmin_authenticator.py URL:", url)
-        print("jasmin_authenticator.py token_headers:", token_headers)
         try:
             response = requests.get(
                 url,
@@ -315,7 +313,6 @@ class JasminAuthenticator(BaseAuthenticator):
         except KeyError:
             raise RuntimeError(f"Could not find 'user_services_url' key in the {self.name} section of the .server_config file.")
         if response.status_code == requests.codes.ok: # status code 200
-            print("jasmin_authenticator.py RESPONSE:", response)
             try:
                 response_json = json.loads(response.text)
                 return response_json
@@ -327,9 +324,8 @@ class JasminAuthenticator(BaseAuthenticator):
         
     def get_tape_quota(self, service_name: str):
         """Get the service information then process it to extract the quota for the service."""
-        print("REACHED GET_TPE_QUOTA")
         try:
-            result = self.get_service_information(self, service_name)
+            result = self.get_service_information(service_name)
         except (RuntimeError, ValueError) as e:
             raise type(e)(f"Error getting information for {service_name}: {e}")
         
@@ -355,12 +351,14 @@ class JasminAuthenticator(BaseAuthenticator):
                         tape_quota = requirement["amount"]
                         if tape_quota:
                             return tape_quota
-                        else:
-                            raise ValueError(f"Issue getting tape quota for {service_name}. Quota is zero.")
+                        # else:
+                        #     raise ValueError(f"Issue getting tape quota for {service_name}. Quota is zero.")
                     except KeyError:
-                        raise KeyError(f"Issue getting tape quota for {service_name}. No 'value' field exists.")
-                else:
-                    raise ValueError(f"No tape resources could be found for {service_name}")
-            else:
-                raise ValueError(f"No provisioned requirements found for {service_name}.Check the status of your requested resources.")
+                        # raise KeyError(f"Issue getting tape quota for {service_name}. No 'value' field exists.")
+                        continue
+            #     else:
+            #         raise ValueError(f"No tape resources could be found for {service_name}")
+            # else:
+            #     raise ValueError(f"No provisioned requirements found for {service_name}.Check the status of your requested resources.")
+        return self.default_quota
             
