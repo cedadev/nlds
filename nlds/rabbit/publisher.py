@@ -112,6 +112,7 @@ class RabbitMQPublisher():
     MSG_TIMESTAMP = "timestamp"
     MSG_USER = "user"
     MSG_GROUP = "group"
+    MSG_QUOTA = "quota"
     MSG_GROUPALL = "groupall"
     MSG_TARGET = "target"
     MSG_ROUTE = "route"
