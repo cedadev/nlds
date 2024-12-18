@@ -329,36 +329,28 @@ class JasminAuthenticator(BaseAuthenticator):
         except (RuntimeError, ValueError) as e:
             raise type(e)(f"Error getting information for {service_name}: {e}")
         
-        # Process the result to get the requirements
-        for attr in result:
-            # Check that the category is Group Workspace
-            if attr["category"] == 1:
-                # Check that there are requirements, otherwise throw an error
-                if attr["requirements"]:
-                    requirements = attr["requirements"]
-                else:
-                    raise ValueError(f"Cannot find any requirements for {service_name}.")
-            else:
-                raise ValueError(f"Cannot find a Group Workspace with the name {service_name}. Check the category.")
-            
-        # Go through the requirements to find the tape resource requirement
-        for requirement in requirements:
-            # Only return provisioned requirements
-            if requirement["status"] == 50:
-                # Find the tape resource and get its quota
-                if requirement["resource"]["short_name"] == "tape":
-                    try:
-                        tape_quota = requirement["amount"]
-                        if tape_quota:
-                            return tape_quota
-                        # else:
-                        #     raise ValueError(f"Issue getting tape quota for {service_name}. Quota is zero.")
-                    except KeyError:
-                        # raise KeyError(f"Issue getting tape quota for {service_name}. No 'value' field exists.")
-                        continue
-            #     else:
-            #         raise ValueError(f"No tape resources could be found for {service_name}")
-            # else:
-            #     raise ValueError(f"No provisioned requirements found for {service_name}.Check the status of your requested resources.")
-        return self.default_quota
-            
+        try:
+            # Filter for Group Workspace category
+            group_workspace = next(
+                service for service in result if service.get("category") == 1
+            )
+        except StopIteration:
+            raise ValueError(f"Cannot find a Group workspace with the name {service_name}. Check the category.")
+        
+        requirements = group_workspace.get("requirements")
+        if not requirements:
+            raise ValueError(f"Cannot find any requirements for {service_name}.")
+        
+        tape_quota = next(
+            (
+                req.get("amount")
+                for req in requirements
+                if req.get("status") == 50 and req.get("resource", {}).get("short_name") == "tape"
+            ),
+            None,
+        )
+
+        if tape_quota is not None:
+            return tape_quota
+        else:
+            return self.default_quota
