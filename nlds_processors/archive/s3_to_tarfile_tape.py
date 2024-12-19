@@ -100,7 +100,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         self.filelist_hash = self._generate_filelist_hash()
         completelist, failedlist = self._check_files_exist()
         if len(failedlist) > 0:
-            return [], failedlist, None
+            return [], failedlist, "", 0
 
         # Make or find holding folder on the tape server
         status, _ = self.tape_client.mkdir(self.holding_tapepath, MkDirFlags.MAKEPATH)
@@ -165,7 +165,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         tarfile: str,
         filelist: List[PathDetails],
         chunk_size: int,
-    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+    ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on tape to Object Store"""
         if self.filelist != []:
             raise ValueError(f"self.filelist is not Empty: {self.filelist[0]}")

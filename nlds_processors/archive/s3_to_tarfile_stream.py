@@ -306,7 +306,7 @@ class S3ToTarfileStream:
         tarfile: str,
         filelist: List[PathDetails],
         chunk_size: int,
-    ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
+    ) -> tuple[List[PathDetails], List[PathDetails]]:
         raise NotImplementedError
 
     @abstractmethod
