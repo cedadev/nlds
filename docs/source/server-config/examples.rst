@@ -16,6 +16,8 @@ machine - likely a laptop or single vm. This file would be saved at
             "jasmin_authenticator" : {
                 "user_profile_url" : "[REDACTED]",
                 "user_services_url" : "[REDACTED]",
+                "user_grants_url" : "[REDACTED]",
+                "projects_services_url" : "[REDACTED]",
                 "oauth_token_introspect_url" : "[REDACTED]"
             }
         },
