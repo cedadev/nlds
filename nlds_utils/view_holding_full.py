@@ -62,52 +62,52 @@ def pretty_size(size):
 
 
 def print_holding(holding: Holding):
-    click.echo(f"{'':<2}+-+ {'id':<16}: {holding.id}")
-    click.echo(f"{'':<2}|{'':<3}{'label':<16}: {holding.label}")
-    click.echo(f"{'':<2}|{'':<3}{'user':<16}: {holding.user}")
-    click.echo(f"{'':<2}|{'':<3}{'group':<16}: {holding.group}")
+    click.echo(f"{'':<2}└─┐ {'id':<17}: {holding.id}")
+    click.echo(f"{'':<4}├─ {'label':<16}: {holding.label}")
+    click.echo(f"{'':<4}├─ {'user':<16}: {holding.user}")
+    click.echo(f"{'':<4}├─ {'group':<16}: {holding.group}")
 
 
 def print_tag(tag: Tag):
-    click.echo(f"{'':<4}+-+ {'id':<16}: {tag.id}")
-    click.echo(f"{'':<4}{'':<4}{'key':<16}: {tag.key}")
-    click.echo(f"{'':<4}{'':<4}{'value':<16}: {tag.value}")
+    click.echo(f"{'':<6}├─┐ {'id':<17}: {tag.id}")
+    click.echo(f"{'':<6}│ ├─ {'key':<16}: {tag.key}")
+    click.echo(f"{'':<6}│ ├─ {'value':<16}: {tag.value}")
 
 
 def print_transaction(transaction: Transaction):
-    click.echo(f"{'':<4}+-+ {'id':<16}: {transaction.id}")
-    click.echo(f"{'':<4}{'':<4}{'transaction id':<16}: {transaction.transaction_id}")
-    click.echo(f"{'':<4}{'':<4}{'ingest time':<16}: {transaction.ingest_time}")
+    click.echo(f"{'':<6}├─┐ {'id':<17}: {transaction.id}")
+    click.echo(f"{'':<6}│ ├─ {'transaction id':<16}: {transaction.transaction_id}")
+    click.echo(f"{'':<6}│ ├─ {'ingest time':<16}: {transaction.ingest_time}")
 
 
 def print_file(file: File):
-    click.echo(f"{'':<6}+-+ {'id':<16}: {file.id}")
-    click.echo(f"{'':<6}{'':<4}{'path':<16}: {file.original_path}")
-    click.echo(f"{'':<6}{'':<4}{'type':<16}: {file.path_type}")
+    click.echo(f"{'':<6}│ │ ├─┐ {'id':<17}: {file.id}")
+    click.echo(f"{'':<6}│ │ │ ├─ {'path':<16}: {file.original_path}")
+    click.echo(f"{'':<6}│ │ │ ├─ {'type':<16}: {file.path_type}")
     if file.link_path:
-        click.echo(f"{'':<6}{'':<4}{'link path':<16}: {file.link_path}")
-    click.echo(f"{'':<6}{'':<4}{'size':<16}: {pretty_size(file.size)}")
-    click.echo(f"{'':<6}{'':<4}{'uid':<16}: {file.user}")
-    click.echo(f"{'':<6}{'':<4}{'gid':<16}: {file.group}")
+        click.echo(f"{'':<6}│ │ │ ├─ {'link path':<16}: {file.link_path}")
+    click.echo(f"{'':<6}│ │ │ ├─ {'size':<16}: {pretty_size(file.size)}")
+    click.echo(f"{'':<6}│ │ │ ├─ {'uid':<16}: {file.user}")
+    click.echo(f"{'':<6}│ │ │ ├─ {'gid':<16}: {file.group}")
     click.echo(
-        f"{'':<6}{'':<4}{'permissions':<16}: "
+        f"{'':<6}│ │ │ ├─ {'permissions':<16}: "
         f"{integer_permissions_to_string(file.file_permissions)}"
     )
 
 def print_location(location: Location):
-    click.echo(f"{'':<8}+-+ {'id':<16}: {location.id}")
-    click.echo(f"{'':<8}{'':<4}{'type':<16}: {str(location.storage_type)}")
-    click.echo(f"{'':<8}{'':<4}{'url scheme':<16}: {location.url_scheme}")
-    click.echo(f"{'':<8}{'':<4}{'url netloc':<16}: {location.url_netloc}")
-    click.echo(f"{'':<8}{'':<4}{'root':<16}: {location.root}")
-    click.echo(f"{'':<8}{'':<4}{'path':<16}: {location.path}")
-    click.echo(f"{'':<8}{'':<4}{'access time':<16}: {location.access_time}")
+    click.echo(f"{'':<6}│ │ │   ├─┐ {'id':<17}: {location.id}")
+    click.echo(f"{'':<6}│ │ │   │ ├─ {'type':<16}: {str(location.storage_type)}")
+    click.echo(f"{'':<6}│ │ │   │ ├─ {'url scheme':<16}: {location.url_scheme}")
+    click.echo(f"{'':<6}│ │ │   │ ├─ {'url netloc':<16}: {location.url_netloc}")
+    click.echo(f"{'':<6}│ │ │   │ ├─ {'root':<16}: {location.root}")
+    click.echo(f"{'':<6}│ │ │   │ ├─ {'path':<16}: {location.path}")
+    click.echo(f"{'':<6}│ │ │   │ └─ {'access time':<16}: {location.access_time}")
 
 def print_aggregation(aggregation: Aggregation):
-    click.echo(f"{'':<6}+-+ {'id':<16}: {aggregation.id}")
-    click.echo(f"{'':<6}{'':<4}{'tarfile':<16}: {aggregation.tarname}")
-    click.echo(f"{'':<6}{'':<4}{'checksum':<16}: {aggregation.checksum}")
-    click.echo(f"{'':<6}{'':<4}{'algorithm':<16}: {aggregation.algorithm}")
+    click.echo(f"{'':<8}├─┐ {'id':<16}: {aggregation.id}")
+    click.echo(f"{'':<8}│ ├─ {'tarfile':<16}: {aggregation.tarname}")
+    click.echo(f"{'':<8}│ ├─ {'checksum':<16}: {aggregation.checksum}")
+    click.echo(f"{'':<8}│ └─ {'algorithm':<16}: {aggregation.algorithm}")
 
 def print_file_compact_header():
     click.echo(
@@ -172,15 +172,15 @@ def view_holding(user: str, group: str, holding_id: int, compact: bool) -> None:
     nlds_cat.start_session()
 
     holding = nlds_cat.get_holding(user=user, group=group, holding_id=holding_id)[0]
-    click.echo(f"{'':<2}+ Holding")
+    click.echo(f"{'':<2}┐ Holding")
     print_holding(holding)
-    click.echo(f"{'':<2}+-+ Tags")
+    click.echo(f"{'':<4}├─┐ Tags")
     for tag in holding.tags:
         print_tag(tag)
-    click.echo(f"{'':<2}+-+ Transactions")
+    click.echo(f"{'':<4}└─┐ Transactions")
     for t in holding.transactions:
         print_transaction(t)
-        click.echo(f"{'':<4}+-+ Files")
+        click.echo(f"{'':<6}│ ├─┐ Files")
         aggregations = []
         if compact:
             print_file_compact_header()
@@ -192,7 +192,7 @@ def view_holding(user: str, group: str, holding_id: int, compact: bool) -> None:
                 click.echo(f"{'':<8}** None **")
                 continue
             print_file(f)
-            click.echo(f"{'':<6}+-+ Locations")
+            click.echo(f"{'':<6}│ │ │ └─┐ Locations")
             for l in f.locations:
                 print_location(l)
                 # keep a track of aggregations
@@ -201,13 +201,13 @@ def view_holding(user: str, group: str, holding_id: int, compact: bool) -> None:
                     if l is not None and agg not in aggregations:
                         aggregations.append(agg)
         if not compact:
-            click.echo(f"{'':<4}+-+ Aggregations")
+            click.echo(f"{'':<6}│ └─┐ Aggregations")
             for a in aggregations:
                 if a is None:
                     click.echo(f"{'':<8}** None **")
                     continue
                 print_aggregation(a)
-                click.echo(f"{'':<8}+-+{' Files':<16}")
+                click.echo(f"{'':<8}└─┐ {' Files':<16}")
                 for l in a.locations:
                     f = File(id=l.file_id)
                     f = nlds_cat.get_location_file(l)
