@@ -17,6 +17,13 @@ if [[ -z $1 ]]; then
     exit 1
 fi
 
+# Change to user supplied in 2nd argument (if supplied)
+if [ -n "$2" ]; then
+    USER_CMD="sudo -u $2 "
+else
+    USER_CMD=""
+fi
+
 if [[ -z $NLDS_VENV ]]; then
     echo "NLDS_VENV environment variable not set"
     exit 1
@@ -25,27 +32,27 @@ else
 fi
 
 if [ $1 = 'nlds_q' ]; then
-    nlds_q
+    $USER_CMD nlds_q
 elif [ $1 = 'catalog_q' ]; then
-    catalog_q
+    $USER_CMD catalog_q
 elif [ $1 = 'index_q' ]; then
-    index_q
+    $USER_CMD index_q
 elif [ $1 = 'monitor_q' ]; then
-    monitor_q
+    $USER_CMD monitor_q
 elif [ $1 = 'transfer_put_q' ]; then
-    transfer_put_q
+    $USER_CMD transfer_put_q
 elif [ $1 = 'transfer_get_q' ]; then
-    transfer_get_q
+    $USER_CMD transfer_get_q
 elif [ $1 = 'logging_q' ]; then
-    logging_q
+    $USER_CMD logging_q
 elif [ $1 = 'archive_put_q' ]; then
-    archive_put_q
+    $USER_CMD archive_put_q
 elif [ $1 = 'archive_get_q' ]; then
-    archive_get_q
+    $USER_CMD archive_get_q
 elif [ $1 = 'archive_next' ]; then
-    send_archive_next
+    $USER_CMD send_archive_next
 elif [ $1 = 'nlds-api' ]; then
-    uvicorn nlds.main:nlds --reload --log-level=trace --port=8000
+    $USER_CMD uvicorn nlds.main:nlds --reload --log-level=trace --port=8000
 fi
 
 deactivate
