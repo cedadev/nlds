@@ -132,7 +132,7 @@ class GetTransferConsumer(BaseTransferConsumer):
             raise TransferError(message=reason)
 
     def _change_permissions(self, download_path, path_details):
-        """Change the permission of the downloaded files"""
+        """Change the permission of the downloaded file"""
         download_path_str = str(download_path)
         self.log(
             f"Changing permissions and ownership of file " f"{download_path}",
@@ -144,14 +144,42 @@ class GetTransferConsumer(BaseTransferConsumer):
         except (KeyError, PermissionError) as e:
             self.log("Couldn't change permissions of downloaded file", RK.LOG_WARNING)
             self.log(f"Original error: {e}", RK.LOG_DEBUG)
+        self._change_owner(download_path_str)
 
+    def _change_owner(self, path_str):
         # Attempt to chown the path back to the requesting user using the
         # configured binary/command.
         try:
-            subprocess.run([self.chown_cmd, str(self.uid), download_path_str])
+            cmd = [
+                self.chown_cmd,
+                str(self.uid),
+                str(self.gids[0]),
+                path_str,
+            ]
+            try:
+                P = subprocess.run(cmd)
+                P.check_returncode()
+            except subprocess.CalledProcessError as e:
+                raise TransferError(
+                    f"Could not change owner of downloaded file: {path_str}"
+                )
         except (KeyError, PermissionError) as e:
             self.log("Couldn't change owner of downloaded file", RK.LOG_WARNING)
             self.log(f"Original error: {e}", RK.LOG_DEBUG)
+
+    def _get_parent_dirs(self, download_path, target_path):
+        # get all the directories from the download_path up to the target_path
+        pardirs = []
+        if not target_path:
+            term_path = "/"
+        else:
+            term_path = target_path
+        pardir = download_path
+        while pardir != term_path:
+            pardir = pardir.parent.absolute()
+            if pardir != target_path:
+                pardirs.append(pardir)
+        return pardirs
 
     def _transfer_files(
         self,
@@ -161,7 +189,7 @@ class GetTransferConsumer(BaseTransferConsumer):
         body_json: Dict[str, Any],
         access_key: str,
         secret_key: str,
-        target_path: str
+        target_path: str,
     ):
         # build the routing keys
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
@@ -177,13 +205,15 @@ class GetTransferConsumer(BaseTransferConsumer):
             secret_key=secret_key,
             secure=self.require_secure_fl,
         )
-
+        # keep a list of created paths so that we can change all the directories below
+        # the download path to have the same ownership
+        created_paths = []
         for path_details in filelist:
             # If bucketname inserted into object path (i.e. from catalogue) then
             # extract both
             try:
-                bucket_name, object_name = (
-                    self._get_and_check_bucket_name_object_name(path_details)
+                bucket_name, object_name = self._get_and_check_bucket_name_object_name(
+                    path_details
                 )
                 self.log(
                     f"Attempting to get file {object_name} from {bucket_name}",
@@ -203,8 +233,10 @@ class GetTransferConsumer(BaseTransferConsumer):
                 )
             else:
                 # change ownership and permissions
-                self._change_permissions(download_path, path_details)
-
+                try:
+                    self._change_permissions(download_path, path_details)
+                except TransferError as e:
+                    self.log(f"Error downloading: {e}", RK.LOG_ERROR)
                 # all finished successfully!
                 self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
                 self.append_and_send(
@@ -214,6 +246,17 @@ class GetTransferConsumer(BaseTransferConsumer):
                     body_json=body_json,
                     state=State.TRANSFER_GETTING,
                 )
+                # get the parent directories all the way up to the target_path
+                par_dirs = self._get_parent_dirs(download_path, target_path)
+                for p in par_dirs:
+                    if p not in created_paths:
+                        created_paths.append(p)
+        # change the permissions on the created paths
+        for cp in created_paths:
+            try:
+                self._change_owner(cp)
+            except TransferError as e:
+                self.log(f"Error changing directory owner: {e}", RK.LOG_ERROR)
 
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(
@@ -252,7 +295,7 @@ class GetTransferConsumer(BaseTransferConsumer):
                 body_json=body_json,
                 access_key=access_key,
                 secret_key=secret_key,
-                target_path=target_path
+                target_path=target_path,
             )
 
         # Send whatever remains after all items have been (attempted to be) put
