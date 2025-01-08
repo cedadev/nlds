@@ -181,7 +181,7 @@ class IndexerConsumer(StattingConsumer):
                     error_reason = (
                         f"Filesize: {item_path.size / (1000*1000)}MB for path: "
                         f"{item_path.path}"
-                        f"is too big for the NLDS tape system."
+                        f" is too big for the NLDS tape system."
                         f" The max allowed file size is "
                         f"{self.max_filesize / (1000*1000)}MB."
                     )
