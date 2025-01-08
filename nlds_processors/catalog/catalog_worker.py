@@ -331,14 +331,20 @@ class CatalogConsumer(RMQC):
             # this will produce a new holding
         return search_label
 
-    def _get_or_create_holding(self, user, group, label, holding_id, new_label):
-        """Get a holding via label or holding_id.
+    def _get_or_create_holding(
+        self, user, group, search_label, holding_id, transaction_id, new_label
+    ):
+        """Get a holding via label or holding_id or transaction_id.
         If the holding doesn't already exist then create it."""
         # try to get the holding to see if it already exists and can be added to
         try:
             # don't use tags to search - they are strictly for adding to the holding
             holding = self.catalog.get_holding(
-                user, group, label=label, holding_id=holding_id
+                user,
+                group,
+                label=search_label,
+                holding_id=holding_id,
+                transaction_id=transaction_id,
             )
         except (KeyError, CatalogError):
             holding = None
@@ -434,8 +440,9 @@ class CatalogConsumer(RMQC):
             holding = self._get_or_create_holding(
                 user,
                 group,
-                label=search_label,
+                search_label=search_label,
                 holding_id=holding_id,
+                transaction_id=transaction_id,
                 new_label=new_label,
             )
         except CatalogError as e:
@@ -733,7 +740,7 @@ class CatalogConsumer(RMQC):
                         else:
                             access_time = datetime.fromtimestamp(pl.access_time)
 
-                        # create a mostly empty OBJECT STORAGE location in the database 
+                        # create a mostly empty OBJECT STORAGE location in the database
                         # as a marker that the file is currently transferring
                         self.catalog.create_location(
                             file_=file,

@@ -79,23 +79,28 @@ class Catalog(DBMixin):
                     Holding.user == user,
                 )
 
+            # Note - the order of these if.elif.elif statements is very important - do 
+            # not change the order!
+            # holding id filtering - for when the user supplies a holding id
             if holding_id:
                 holding_q = holding_q.filter(
                     Holding.id == holding_id,
                 )
 
-            if transaction_id:
-                holding_q = holding_q.filter(
-                    Transaction.holding_id == Holding.id,
-                    Transaction.transaction_id == transaction_id,
-                )
-
-            # search label filtering
-            if label:
+            # search label filtering - for when the user supplies a holding label
+            elif label:
                 if is_regex(label):
                     holding_q = holding_q.filter(Holding.label.regexp_match(label))
                 else:
                     holding_q = holding_q.filter(Holding.label == label)
+
+            # transaction id filtering - for when a large upload has been split into
+            # multiple uploads
+            elif transaction_id:
+                holding_q = holding_q.filter(
+                    Transaction.holding_id == Holding.id,
+                    Transaction.transaction_id == transaction_id,
+                )
 
             # filter the query on any tags
             if tag:
