@@ -83,18 +83,18 @@ class Catalog(DBMixin):
             # not change the order!
             # holding id filtering - for when the user supplies a holding id
             if holding_id:
-                print("!!HOLDID!!", holding_id)
                 holding_q = holding_q.filter(
                     Holding.id == holding_id,
                 )
+                print("!!!HOLDING!!!", holding_id, holding_q.count())
 
             # search label filtering - for when the user supplies a holding label
             elif label:
-                print("!!LABEL!!", label)
                 if is_regex(label):
                     holding_q = holding_q.filter(Holding.label.regexp_match(label))
                 else:
                     holding_q = holding_q.filter(Holding.label == label)
+                print("!!!LABEL!!!", label, holding_q.count())
 
             # transaction id filtering - for when a large upload has been split into
             # multiple uploads
@@ -103,6 +103,7 @@ class Catalog(DBMixin):
                     Transaction.holding_id == Holding.id,
                     Transaction.transaction_id == transaction_id,
                 )
+                print("!!!TRANSID!!!", transaction_id, holding_q.count())
 
             # filter the query on any tags
             if tag:
