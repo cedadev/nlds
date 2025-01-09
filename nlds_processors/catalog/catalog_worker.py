@@ -327,7 +327,7 @@ class CatalogConsumer(RMQC):
         elif holding_id:
             search_label = ".*"  # match all labels if holding id given
         else:
-            search_label = "^$"  # match nothing if no label or holding id
+            search_label = None  # match nothing if no label or holding id (was $<)
             # this will produce a new holding
         return search_label
 
