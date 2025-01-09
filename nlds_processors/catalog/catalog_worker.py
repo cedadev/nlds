@@ -336,6 +336,7 @@ class CatalogConsumer(RMQC):
     ):
         """Get a holding via label or holding_id or transaction_id.
         If the holding doesn't already exist then create it."""
+        print("INPUT PARAMS", search_label, holding_id, transaction_id)
         # try to get the holding to see if it already exists and can be added to
         try:
             # don't use tags to search - they are strictly for adding to the holding
@@ -426,7 +427,6 @@ class CatalogConsumer(RMQC):
         else:
             # If holding id not given then new_label used to create holding
             new_label = label
-
         # Start the database transactions
         self.catalog.start_session()
 

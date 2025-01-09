@@ -83,12 +83,14 @@ class Catalog(DBMixin):
             # not change the order!
             # holding id filtering - for when the user supplies a holding id
             if holding_id:
+                print("!!HOLDID!!", holding_id)
                 holding_q = holding_q.filter(
                     Holding.id == holding_id,
                 )
 
             # search label filtering - for when the user supplies a holding label
             elif label:
+                print("!!LABEL!!", label)
                 if is_regex(label):
                     holding_q = holding_q.filter(Holding.label.regexp_match(label))
                 else:
