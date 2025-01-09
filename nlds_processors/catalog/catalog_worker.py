@@ -336,7 +336,9 @@ class CatalogConsumer(RMQC):
     ):
         """Get a holding via label or holding_id or transaction_id.
         If the holding doesn't already exist then create it."""
-        print("INPUT PARAMS", search_label, holding_id, transaction_id)
+        self.log(
+            f"!!!! HOLDING: {holding_id}, LABEL: {search_label}, TRANSID: {transaction_id}", RK.LOG_DEBUG
+        )
         # try to get the holding to see if it already exists and can be added to
         try:
             # don't use tags to search - they are strictly for adding to the holding
