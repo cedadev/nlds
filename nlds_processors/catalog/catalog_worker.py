@@ -364,7 +364,12 @@ class CatalogConsumer(RMQC):
                 self.log(message, RK.LOG_DEBUG)
                 raise CatalogError(message)
             try:
-                holding = self.catalog.create_holding(user, group, new_label)
+                # does the holding exist with the new_label?  This might happen if
+                # the transaction is interrupted
+                try:
+                    holding = self.catalog.get_holding(user, group, label=new_label)
+                except (KeyError, CatalogError):
+                    holding = self.catalog.create_holding(user, group, new_label)
             except CatalogError as e:
                 self.log(e.message, RK.LOG_ERROR)
                 raise e
