@@ -1,4 +1,5 @@
 from nlds.utils.format_url import format_url
+import pytest
 
 
 def test_no_parts():
@@ -34,3 +35,23 @@ def test_complex_query_params():
     query_params = {"q": "test search", "page": "1", "sort": "asc"}
     expected_url = "http://example.com/search?q=test+search&page=1&sort=asc"
     assert format_url(url_parts, query_params) == expected_url
+
+
+def test_string():
+    with pytest.raises(TypeError):
+        format_url("not-a-list")
+
+
+def test_int():
+    with pytest.raises(TypeError):
+        format_url(1)
+
+
+def test_float():
+    with pytest.raises(TypeError):
+        format_url(1.0)
+
+
+def test_dict():
+    with pytest.raises(TypeError):
+        format_url({"url_parts": "www.example.com"})
