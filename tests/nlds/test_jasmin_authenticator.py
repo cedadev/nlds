@@ -37,6 +37,7 @@ def mock_load_config(monkeypatch):
                 "user_profile_url": "https://mock.url/api/profile/",
                 "user_services_url": "https://mock.url/api/services/",
                 "user_grants_url": "https://mock.url/api/v1/users/",
+                "projects_services_url": "https://mock.url/api/services",
             },
         }
     }
@@ -247,11 +248,12 @@ class TestAuthenticateUserGroupRole:
             has_role = auth.authenticate_user_group_role(oauth_token, user, group)
             assert has_role == expected_result
 
+
 class TestUserPermissions:
     """Test the functions that assign permissions to get holdings, get files and to delete from holding."""
 
     @pytest.fixture()
-    def mock_holding():
+    def mock_holding(self):
         return Holding(    
             label='test-label',
             user='test-user',
@@ -277,27 +279,40 @@ class TestUserPermissions:
         def mock_authenticate_user_group_role(user, group):
             return mock_is_admin
         
-        monkeypatch.setattr(JasminAuthenticator, "authenticate_user_group_role", mock_authenticate_user_group_role)
-        result = JasminAuthenticator.user_has_delete_from_holding_permission(user, group, mock_holding)
+        auth = JasminAuthenticator()
+        
+        monkeypatch.setattr(auth, "authenticate_user_group_role", mock_authenticate_user_group_role)
+        result = auth.user_has_delete_from_holding_permission(user=user, group=group, holding=mock_holding)
         assert result == expected
 
 
 
 class TestGetProjectsServices:
     """Get the projects for a service from the JASMIN Projects Portal."""
-    user_services_url = "https://example.com/services"
+    user_services_url = "https://mock.url/api/services/"
     url = f"{user_services_url}?name=test_service"
+    auth = JasminAuthenticator()
+    config = {
+        "authentication": {
+            "jasmin_authenticator": {
+                "project_services_url": "https://mock.url/api/services/",
+                "client_token": "test_token"
+            }
+        }
+    }
+
 
     @pytest.fixture()
     def mock_format_url(self, *args, **kwargs):
         """Mock the format_url function to make it return the test url."""
         return self.url
+    
 
-    def test_get_projects_services_success(self,monkeypatch):
+    def test_get_service_information_success(self, monkeypatch):
         """Test a successful instance of get_projects_services."""
         
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
+        monkeypatch.setattr(self.auth, "config",  self.config)
+        monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         class MockResponse:
             """Mock the response to return a 200 status code and the test text."""
@@ -315,16 +330,17 @@ class TestGetProjectsServices:
         monkeypatch.setattr(requests, "get", mock_get)
 
         # Call the get_projects_services function with the mocked functions
-        result = JasminAuthenticator.get_projects_services("dummy_oauth_token", "test_service")
+        result = self.auth.get_service_information("test_service")
 
         # It should succeed and give the {"key":"value"} dict.
         assert result == {"key":"value"}
 
-    def test_get_projects_services_connection_error(self,monkeypatch, quotas):
+
+    def test_get_projects_services_connection_error(self,monkeypatch):
         """Test an unsuccessful instance of get_projects_services due to connection error."""
 
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
+        monkeypatch.setattr(self.auth, "config",  self.config)
+        monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         def mock_get(*args, **kwargs):
             """Mock the get function to give a ConnectionError."""
@@ -336,17 +352,16 @@ class TestGetProjectsServices:
         with pytest.raises(
             RuntimeError, match=re.escape(f"User services url {self.url} could not be reached.")
         ):
-            JasminAuthenticator.get_projects_services("dummy_oauth_token", "test_service")
+            self.auth.get_service_information("test_service")
+
 
     def test_get_projects_services_key_error(self,monkeypatch):
         """Test an unsuccessful instance of get_projects_services due to a key error."""
 
-        def mock_load_config_key_error():
-            """Mock the load_config function to make it return the test config with no user_services_key"""
-            return {"authentication": {"jasmin_authenticator": {"other_url": "test.com"}}}
+        config = {"authentication": {"jasmin_authenticator": {"other_url": "test.com", "client_token":"test_token"}}}
         
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config_key_error)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
+        monkeypatch.setattr(self.auth, "config", config)
+        monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         def mock_get(*args, **kwargs):
             """Mock the get function to give the KeyError."""
@@ -356,16 +371,16 @@ class TestGetProjectsServices:
 
         # Check that the KeyError in the 'get' triggers a RuntimeError with the right text.
         with pytest.raises(
-            RuntimeError,
-            match=f"Could not find 'user_services_url' key in the jasmin_authenticator section of the .server_config file.",
+            KeyError,
+            match=f"project_services_url",
         ):
-            JasminAuthenticator.get_projects_services("dummy_oauth_token", "test_service")
+            self.auth.get_service_information("test_service")
 
     def test_get_projects_services_json_error(self, monkeypatch):
         """Test an unsuccessful instance of get_projects_services due to a JSON error."""
 
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
+        monkeypatch.setattr(self.auth, "config",  self.config)
+        monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         class MockInvalidJSONResponse:
             """Mock the response to return a 200 status code and the JSON decode error."""
@@ -386,13 +401,14 @@ class TestGetProjectsServices:
             RuntimeError,
             match=re.escape(f"Invalid JSON returned from the user services url: {self.url}"),
         ):
-            JasminAuthenticator.get_projects_services("dummy_oauth_token", "test_service")
+            self.auth.get_service_information("test_service")
+
 
     def test_get_projects_services_404_error(self,monkeypatch):
         """Test an unsuccessful instance of get_projects_services due to a 404 error."""
         
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.load_config", mock_load_config)
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.format_url", self.mock_format_url)
+        monkeypatch.setattr(self.auth, "config",  self.config)
+        monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         class MockResponse:
             """Mock the response to return a 401 status code and the relevant text."""
@@ -410,16 +426,17 @@ class TestGetProjectsServices:
 
         # Check that the 401 error triggers a RuntimeError with the right text.
         with pytest.raises(RuntimeError, match=f"Error getting data for test_service"):
-            JasminAuthenticator.get_projects_services("dummy_oauth_token", "test_service")
+            self.auth.get_service_information("test_service")
 
 
 class TestGetTapeQuota:
     """Get the tape quota from the list of projects services."""
+    auth = JasminAuthenticator()
 
-    def test_get_tape_quota_success(monkeypatch):
+    def test_get_tape_quota_success(self, monkeypatch):
         """Test a successful instance of get_tape_quota"""
 
-        def mock_get_projects_services(*args, **kwargs):
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to gvie the response for
             a GWS with a provisioned tape requirement."""
             return [
@@ -431,30 +448,32 @@ class TestGetTapeQuota:
                 }
             ]
         
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.get_projects_services", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
         # get_tape_quota should return the quota value of 100
-        result = JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+        result = self.auth.get_tape_quota("test_service")
         assert result == 100
 
-    def test_get_tape_quota_no_requirements(monkeypatch, quotas):
+
+    def test_get_tape_quota_no_requirements(self, monkeypatch):
         """Test an unsuccessful instance of get_tape_quota due to no requirements."""
 
-        def mock_get_projects_services(*args, **kwargs):
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give the response for
             a GWS with no requirements."""
             return [{"category": 1, "requirements": []}]
         
-        monkeypatch.setattr("jasmin_authenticator.JasminAuthenticator.get_projects_setvices", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
         # A ValueError should be raised saying there's no requirements found.
         with pytest.raises(ValueError, match="Cannot find any requirements for test_service"):
-            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+            self.auth.get_tape_quota("test_service")
 
-    def test_get_tape_quota_no_tape_resource(monkeypatch):
-        """Test an unsuccessful instance of get_tape_quota due to no tape resources."""
 
-        def mock_get_projects_services(*args, **kwargs):
+    def test_get_tape_quota_no_tape_resource(self, monkeypatch):
+        """Test an instance of no tape resources."""
+
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give the response for
             a GWS with a requirement that isn't tape."""
             return [
@@ -466,72 +485,74 @@ class TestGetTapeQuota:
                 }
             ]
         
-        monkeypatch.setattr(JasminAuthenticator, "get_projects_services", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
         # A ValueError should be raised saying there's no tape resources.
-        with pytest.raises(
-            ValueError, match="No tape resources could be found for test_service"
-        ):
-            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+        result = self.auth.get_tape_quota("test_service")
+        assert result == 0
 
-    def test_get_tape_quota_services_runtime_error(monkeypatch):
+
+    def test_get_tape_quota_services_runtime_error(self, monkeypatch):
         """Test an unsuccessful instance of get_tape_quota due to a runtime error when
         getting services from the projects portal."""
 
-        def mock_get_projects_services(*args, **kwargs):
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give a RuntimeError."""
             raise RuntimeError("Runtime error occurred.")
         
-        monkeypatch.setattr(JasminAuthenticator, "get_projects_services", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
         # A RuntimeError should be raised saying a runtime error occurred.
         with pytest.raises(
             RuntimeError,
             match="Error getting information for test_service: Runtime error occurred",
         ):
-            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+            self.auth.get_tape_quota("test_service")
 
-    def test_get_tape_quota_services_value_error(monkeypatch):
+
+    def test_get_tape_quota_services_value_error(self, monkeypatch):
         """Test an unsuccessful instance of get_tape_quota due to a value error
         getting services from the projects portal."""
 
-        def mock_get_projects_services(*args, **kwargs):
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give a ValueError."""
             raise ValueError("Value error occurred")
         
-        monkeypatch.setattr(JasminAuthenticator, "get_projects_services", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
         # A ValueError should be raised saying a value error occurred.
         with pytest.raises(
             ValueError,
             match="Error getting information for test_service: Value error occurred",
         ):
-            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+            self.auth.get_tape_quota("test_service")
 
-    def test_get_tape_quota_no_gws(monkeypatch):
+
+    def test_get_tape_quota_no_gws(self, monkeypatch):
         """Test an unsuccessful instance of get_tape_quota due to the given service
         not being a GWS."""
 
-        def mock_get_projects_services(*args, **kwargs):
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give results with the wrong category (a GWS is 1)."""
             return [
                 {"category": 2, "requirements": []},
                 {"category": 3, "requirements": []},
             ]
         
-        monkeypatch.setattr(JasminAuthenticator, "get_projects_services", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
         # A ValueError should be raised saying it cannot find a GWS and to check the category.
         with pytest.raises(
             ValueError,
-            match="Cannot find a Group Workspace with the name test_service. Check the category.",
+            match="Cannot find a Group workspace with the name test_service. Check the category.",
         ):
-            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+            self.auth.get_tape_quota("test_service")
 
-    def get_quota_zero_quota(monkeypatch):
-        """Test an unsuccessful instance of get_tape_quota due to the quota being zero."""
 
-        def mock_get_projects_services(*args, **kwargs):
+    def test_get_quota_zero_quota(self, monkeypatch):
+        """Test an instance of the quota being zero."""
+
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give a quota of 0."""
             return [
                 {
@@ -546,18 +567,16 @@ class TestGetTapeQuota:
                 }
             ]
         
-        monkeypatch.setattr(JasminAuthenticator, "get_projects_services", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
-        # A ValueError should be raised saying there was an issue getting tape quota as it was zero.
-        with pytest.raises(
-            ValueError, match="Issue getting tape quota for test_service. Quota is zero."
-        ):
-            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+        result = self.auth.get_tape_quota("test_service")
+        assert result == 0
 
-    def test_get_tape_quota_no_quota(monkeypatch):
-        """Test an unsuccessful instance of get_tape_quota due to there being no quota field."""
 
-        def mock_get_projects_services(*args, **kwargs):
+    def test_get_tape_quota_no_quota(self, monkeypatch):
+        """Test an instance of zero quota due to there being no quota field."""
+
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give no 'amount field."""
             return [
                 {
@@ -571,19 +590,16 @@ class TestGetTapeQuota:
                 }
             ]
         
-        monkeypatch.setattr(JasminAuthenticator, "get_projects_services", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
-        # A key error should be raised saying there was an issue getting tape quota as no value field exists.
-        with pytest.raises(
-            KeyError,
-            match="Issue getting tape quota for test_service. No 'value' field exists.",
-        ):
-            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+        result = self.auth.get_tape_quota("test_service")
+        assert result == 0
 
-    def test_get_tape_quota_no_provisioned_resources(monkeypatch):
-        """Test an unsuccessful instance of get_tape_quota due to there being no provisioned resources."""
 
-        def mock_get_projects_services(*args, **kwargs):
+    def test_get_tape_quota_no_provisioned_resources(self, monkeypatch):
+        """Test an instance of zero quota due to there being no provisioned resources."""
+
+        def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give no provisioned resources (status 50)."""
             return [
                 {
@@ -597,11 +613,7 @@ class TestGetTapeQuota:
                 }
             ]
         
-        monkeypatch,setattr(JasminAuthenticator, "get_projects_services", mock_get_projects_services)
+        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
 
-        # A value error should be raised saying there were no provisioned requirements found and to check the status of requested resources.
-        with pytest.raises(
-            ValueError,
-            match="No provisioned requirements found for test_service. Check the status of your requested resources.",
-        ):
-            JasminAuthenticator.get_tape_quota("dummy_oauth_token", "test_service")
+        result = self.auth.get_tape_quota("test_service")
+        assert result == 0

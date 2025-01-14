@@ -222,8 +222,8 @@ class JasminAuthenticator(BaseAuthenticator):
                 response_json = json.loads(response.text)
                 # is_manager is False by default and only changes if user has a manager or deputy role.
                 is_manager = False
-                for role in response_json:
-                    if role["role"]["name"] in ["MANAGER", "DEPUTY"]:
+                for role in response_json['group_workspaces']:
+                    if role in ["MANAGER", "DEPUTY"]:
                         is_manager = True
                 return is_manager
             except KeyError:
@@ -273,7 +273,7 @@ class JasminAuthenticator(BaseAuthenticator):
 
         return permitted
     
-    @staticmethod
+
     def user_has_delete_from_holding_permission(self, user: str, 
                                                  group: str,
                                                  holding: Holding) -> bool:
@@ -302,6 +302,7 @@ class JasminAuthenticator(BaseAuthenticator):
         }
         # Contact the user_services_url to get the information about the services
         url = format_url([config["project_services_url"]], {"name": service_name})
+        print(url)
         try:
             response = requests.get(
                 url,
