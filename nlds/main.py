@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from .nlds_setup import API_VERSION
 
-from .routers import list, files, probe, status, find, meta, system, init
+from .routers import list, files, probe, status, find, meta, system, init, quota
 
 nlds = FastAPI()
 
@@ -31,6 +31,11 @@ nlds.include_router(
     find.router,
     tags = ["find",],
     prefix = PREFIX + "/catalog/find"
+)
+nlds.include_router(
+    quota.router,
+    tags = ["quota", ],
+    prefix = PREFIX + "/catalog/quota"
 )
 nlds.include_router(
     status.router,

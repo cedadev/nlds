@@ -28,6 +28,8 @@ client. The following fields are required in the dictionary::
         "jasmin_authenticator" : {
             "user_profile_url" : "{{ user_profile_url }}",
             "user_services_url" : "{{ user_services_url }}",
+            "user_grants_url" : "{{ user_grants_url }}",
+            "project_services_url" : "{{ project_services_url }}",
             "oauth_token_introspect_url" : "{{ token_introspect_url }}"
         }
     }
@@ -40,7 +42,7 @@ other industry standard authenticators like google and microsoft.
 The authenticator setup is then specified in a separate dictionary named after 
 the authenticator, which is specific to each authenticator. The 
 ``jasmin_authenticator`` requires, as above, values for ``user_profile_url``, 
-``user_services_url``, and ``oauth_token_introspect_url``. This cannot be 
+``user_services_url``, ``user_grants_url``, ``project_services_url`` and ``oauth_token_introspect_url``. This cannot be 
 divulged publicly on github for JASMIN, so please get in contact for the actual 
 values to use. 
 
