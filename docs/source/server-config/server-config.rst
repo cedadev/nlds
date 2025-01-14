@@ -28,8 +28,8 @@ client. The following fields are required in the dictionary::
         "jasmin_authenticator" : {
             "user_profile_url" : "{{ user_profile_url }}",
             "user_services_url" : "{{ user_services_url }}",
-            "user_grants_url" : "{{ }}",
-            "project_services_url" : "{{ }}",
+            "user_grants_url" : "{{ user_grants_url }}",
+            "project_services_url" : "{{ project_services_url }}",
             "oauth_token_introspect_url" : "{{ token_introspect_url }}"
         }
     }
