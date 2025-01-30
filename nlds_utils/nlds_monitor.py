@@ -1,3 +1,6 @@
+#! /usr/bin/env python
+# encoding: utf-8
+
 import click
 from datetime import datetime, timedelta
 
@@ -11,11 +14,12 @@ from nlds_processors.monitor.monitor_models import (
 )
 from nlds.rabbit.consumer import State
 import nlds.server_config as CFG
+from nlds.nlds_setup import CONFIG_FILE_LOCATION
 
 
-def connect_to_monitor():
+def connect_to_monitor(settings: str = CONFIG_FILE_LOCATION):
     """Connects to the monitor database"""
-    config = CFG.load_config()
+    config = CFG.load_config(settings)
     db_engine = config["monitor_q"]["db_engine"]
     db_options = config["monitor_q"]["db_options"]
     db_options["echo"] = False
@@ -406,6 +410,13 @@ def construct_record_dict(
     default=False,
     help="Switch between ascending and descending order.",
 )
+@click.option(
+    "-S",
+    "--settings",
+    default="",
+    type=str,
+    help="The location of the settings file for NLDS.",
+)
 def view_jobs(
     user,
     group,
@@ -417,6 +428,7 @@ def view_jobs(
     end_time,
     complex,
     order,
+    settings,
 ) -> None:
     """Returns all NLDS jobs filtered by user options."""
 
@@ -428,7 +440,10 @@ def view_jobs(
     state, record_state = validate_inputs(start_time, end_time, state, record_state)
 
     # Connect to the monitor database
-    session = connect_to_monitor()
+    if settings != "":
+        session = connect_to_monitor(settings)
+    else:
+        session = connect_to_monitor()
     query = query_monitor_db(
         session,
         user,
