@@ -16,6 +16,7 @@ import subprocess
 import minio
 from minio.error import S3Error
 from retry import retry
+from urllib3.exceptions import HTTPError
 
 from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
@@ -76,14 +77,29 @@ class GetTransferConsumer(BaseTransferConsumer):
             )
             raise TransferError(message=reason)
 
-        if bucket_name and not self.client.bucket_exists(bucket_name):
-            # If bucket doesn't exist then pass for failure
-            reason = f"Bucket {bucket_name} does not exist"
+        # try to get the bucket - may throw exception if user does not have access 
+        # permissions
+        try:
+            bucket_exists = self.client.bucket_exists(bucket_name)
+        except (S3Error, HTTPError) as e:
+            reason = (
+                f"Could not verify that bucket {bucket_name} exists during get "
+                f"transfer. Original exception: {e}"
+            )
             self.log(
-                f"{reason}. Adding {path_details.object_name} to failed list.",
+                f"{reason}. Adding {path_details.object_name} to failed list. ",
                 RK.LOG_ERROR,
             )
             raise TransferError(message=reason)
+        else:
+            if bucket_name and not bucket_exists:
+                # If bucket doesn't exist then pass for failure
+                reason = f"Bucket {bucket_name} does not exist"
+                self.log(
+                    f"{reason}. Adding {path_details.object_name} to failed list.",
+                    RK.LOG_ERROR,
+                )
+                raise TransferError(message=reason)
 
         return bucket_name, object_name
 
