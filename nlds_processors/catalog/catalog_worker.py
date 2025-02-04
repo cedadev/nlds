@@ -898,8 +898,8 @@ class CatalogConsumer(RMQC):
         # Forward successful file details to archive for tape write
         rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.COMPLETE])
 
-        body[MSG.DETAILS][MSG.USER] = next_holding.user
-        body[MSG.DETAILS][MSG.GROUP] = next_holding.group
+        # the user and group should be set as the NLDS user by the send_archive_next
+        # cronjob publisher
         body[MSG.META][MSG.HOLDING_ID] = next_holding.id
         if len(self.completelist) > 0:
             self.log(
