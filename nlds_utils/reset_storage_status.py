@@ -130,6 +130,13 @@ def _remove_location_from_file(
     type=str,
     help="Storage Location type to delete records for.  OBJECT_STORAGE|TAPE",
 )
+@click.option(
+    "-S",
+    "--settings",
+    default="",
+    type=str,
+    help="The location of the settings file for NLDS.",
+)
 def reset_storage_status(
     user: str,
     group: str,
@@ -139,6 +146,7 @@ def reset_storage_status(
     force: bool,
     delete: bool,
     location: str,
+    settings: str,
 ) -> None:
     """Reset the tape status of a file by deleting a STORAGE LOCATION associated
     with a file, if the details in the STORAGE LOCATION are empty.
@@ -172,7 +180,11 @@ def reset_storage_status(
     else:
         s3_client = None
 
-    nlds_cat = _connect_to_catalog()
+    if settings != "":
+        nlds_cat = _connect_to_catalog(settings)
+    else:
+        nlds_cat = _connect_to_catalog()
+
     nlds_cat.start_session()
     holding = nlds_cat.get_holding(user=user, group=group, holding_id=holding_id)[0]
 
