@@ -76,8 +76,8 @@ def _remove_location_from_file(
                 click.echo(f"Removed TAPE aggregation for {file.original_path}")
         else:
             click.echo(
-                f"URL details not empty for the file {file.original_path} and force not"
-                f" set in command line options.  Skipping."
+                f"Location URL details not empty for the file {file.original_path} and "
+                f" force not set in command line options.  Skipping."
             )
 
 
