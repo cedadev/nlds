@@ -101,7 +101,11 @@ class BaseTransferConsumer(StattingConsumer, ABC):
 
         # Set uid and gid from message contents
         self.log("Setting uid and gids now.", RK.LOG_INFO)
-        self.set_ids(self.body_json)
+        try:
+            self.set_ids(self.body_json)
+        except KeyError as e:
+            self.log("Problem running set_ids, exiting callback", RK.LOG_ERROR)
+            return
 
         # Append route info to message to track the route of the message
         self.body_json = self.append_route_info(self.body_json)
