@@ -681,9 +681,15 @@ class Catalog(DBMixin):
             )
             raise CatalogError(err_msg)
 
-    def get_next_unarchived_holding(self) -> Holding:
+    def get_next_unarchived_holding(self, tenancy: str) -> Holding:
         """The principal function for getting the next unarchived holding to
-        archive aggregate."""
+        archive aggregate.
+        A tenancy is passed in so that the only holdings attempted to be backed up are
+        those that can be accessed via the object store keys also passed in the body.
+        Otherwise, when the archive_put process tries to stream the files from the 
+        object store to the tape, the keys don't match the tenancy and an access denied
+        error is produced.
+        """
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
@@ -711,6 +717,8 @@ class Catalog(DBMixin):
                     File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
                 )
                 .order_by(Holding.id)
+                # tenancy is stored in url_netloc part of Location
+                .filter(Location.url_netloc == tenancy) 
                 .first()
             )
 
