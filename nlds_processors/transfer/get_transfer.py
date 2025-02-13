@@ -26,6 +26,8 @@ import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
 
+from urllib3.exceptions import HTTPError, MaxRetryError
+
 
 class GetTransferConsumer(BaseTransferConsumer):
     DEFAULT_QUEUE_NAME = "transfer_get_q"
@@ -81,22 +83,8 @@ class GetTransferConsumer(BaseTransferConsumer):
             )
             raise TransferError(message=reason)
 
-        # try to get the bucket - may throw exception if user does not have access 
-        # permissions
         try:
-            bucket_exists = self.client.bucket_exists(bucket_name)
-        except (S3Error, HTTPError) as e:
-            reason = (
-                f"Could not verify that bucket {bucket_name} exists during get "
-                f"transfer. Original exception: {e}"
-            )
-            self.log(
-                f"{reason}. Adding {path_details.object_name} to failed list. ",
-                RK.LOG_ERROR,
-            )
-            raise TransferError(message=reason)
-        else:
-            if bucket_name and not bucket_exists:
+            if bucket_name and not self.client.bucket_exists(bucket_name):
                 # If bucket doesn't exist then pass for failure
                 reason = f"Bucket {bucket_name} does not exist"
                 self.log(
@@ -104,6 +92,8 @@ class GetTransferConsumer(BaseTransferConsumer):
                     RK.LOG_ERROR,
                 )
                 raise TransferError(message=reason)
+        except (HTTPError, MaxRetryError) as e:
+            raise TransferError(message=str(e))
 
         return bucket_name, object_name
 
