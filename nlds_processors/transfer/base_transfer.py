@@ -37,7 +37,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         _REQUIRE_SECURE: True,
         _PRINT_TRACEBACKS: False,
         _FILELIST_MAX_LENGTH: 1000,
-        StattingConsumer._FILELIST_MAX_SIZE: 16 * 1000 * 1000
+        StattingConsumer._FILELIST_MAX_SIZE: 16 * 1000 * 1000,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -65,7 +65,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",
             RK.LOG_DEBUG,
-            body_json=self.body_json
+            body_json=self.body_json,
         )
 
         # Verify routing key is appropriate
@@ -127,7 +127,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.log(
                 "Aggregating list into more appropriately sized sub-lists for "
                 "parallelised uploads.",
-                RK.LOG_INFO
+                RK.LOG_INFO,
             )
             # Make a new routing key which returns message to this queue
             rk_transfer_start = ".".join([self.rk_parts[0], self.rk_parts[1], RK.START])
