@@ -717,6 +717,7 @@ class CatalogConsumer(RMQC):
                     transaction_id=transaction_id,
                     original_path=filepath_details.original_path,
                     tag=holding_tag,
+                    newest_only=True
                 )
 
                 if len(files) == 0:
