@@ -103,8 +103,17 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         scraping, then runs the appropriate transfer function.
         """
         if not self._callback_common(ch, method, properties, body, connection):
+            # fail all files if callback common fails
+            rk_transfer_failed = ".".join(
+                [self.rk_parts[0], self.rk_parts[1], RK.FAILED]
+            )
+            for file in self.filelist:
+                file.failure_reason = 'Failed in archive transfer init'
+                
+            self.send_pathlist(
+                self.filelist, rk_transfer_failed, self.body_json, state=State.FAILED
+            )
             return
-
         # get tape_url for those routes that need it
         if self.rk_parts[2] in [RK.START, RK.PREPARE, RK.PREPARE_CHECK]:
             try:

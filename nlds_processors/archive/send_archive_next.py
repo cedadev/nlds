@@ -30,6 +30,8 @@ def send_archive_next():
         MSG.SECRET_KEY: None,
         MSG.TAPE_URL: None,
         MSG.TENANCY: None,
+        MSG.USER: "admin-placeholder",
+        MSG.GROUP: "admin-placeholder"
     }
     # Load any cronjob config, if present
     cronjob_config = DEFAULT_CONFIG
@@ -40,8 +42,6 @@ def send_archive_next():
         MSG.DETAILS: {
             MSG.TRANSACT_ID: str(uuid4()),
             MSG.SUB_ID: str(uuid4()),
-            MSG.USER: "admin-placeholder",
-            MSG.GROUP: "admin-placeholder",
             MSG.TARGET: None,
             MSG.API_ACTION: "archive-put",
             MSG.JOB_LABEL: "archive-next",

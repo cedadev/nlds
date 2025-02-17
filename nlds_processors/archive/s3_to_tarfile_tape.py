@@ -377,8 +377,8 @@ class S3ToTarfileTape(S3ToTarfileStream):
         status, _ = self.tape_client.ping()
         if status.status != 0:
             msg = (
-                f"Failed status message: {status.message}. ",
-                f"Could not ping cta server at {self.tape_server_url}.",
+                f"Failed status message: {status.message}. "
+                f"Could not ping cta server at {self.tape_server_url}."
             )
             raise S3StreamError(msg)
 
@@ -386,17 +386,17 @@ class S3ToTarfileTape(S3ToTarfileStream):
         status, resp = self.tape_client.stat(self.tape_base_dir)
         if status.status != 0:
             msg = (
-                f"Failed status message: {status.message}. ",
-                f"Base dir {self.tape_base_dir} could not be statted",
+                f"Failed status message: {status.message}. "
+                f"Base dir {self.tape_base_dir} could not be statted"
             )
             raise S3StreamError(msg)
         # Check whether the flag indicates it's a directory
         elif not bool(resp.flags & StatInfoFlags.IS_DIR):
             msg = (
-                f"Failed status message: {status.message}. ",
-                f"Full status object: {status}. ",
-                f"Stat result for base dir {self.tape_base_dir} ",
-                f"indicates it is not a directory.",
+                f"Failed status message: {status.message}. "
+                f"Full status object: {status}. "
+                f"Stat result for base dir {self.tape_base_dir} "
+                f"indicates it is not a directory."
             )
             raise S3StreamError(msg)
 

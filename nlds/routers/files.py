@@ -412,7 +412,7 @@ async def put(
             status_code=status.HTTP_400_BAD_REQUEST, detail=response_error.json()
         )
 
-    if user not in ("jleland", "nrmassey", "nlds"):
+    if user not in ("nlds"):
         response_error = ResponseError(
             loc=["files", "archive"],
             msg=("archive action is admin-only"),

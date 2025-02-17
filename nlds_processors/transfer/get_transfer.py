@@ -16,6 +16,7 @@ import subprocess
 import minio
 from minio.error import S3Error
 from retry import retry
+from urllib3.exceptions import HTTPError
 
 from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
@@ -203,10 +204,12 @@ class GetTransferConsumer(BaseTransferConsumer):
         # build the routing keys
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
-        # set the ids for the
+        # set the ids for the files
         if self.chown_fl:
-            self.set_ids(body_json)
-
+            try:
+                self.set_ids(body_json)
+            except KeyError as e:
+                self.log("Problem running set_ids in _transfer_files", RK.LOG_ERROR)
         # Create client
         self.client = minio.Minio(
             tenancy,

@@ -95,7 +95,11 @@ class IndexerConsumer(StattingConsumer):
         body_json: Dict[str, Any],
     ) -> None:
         # First change user and group so file permissions can be checked
-        self.set_ids(body_json)
+        try:
+            self.set_ids(body_json)
+        except KeyError:
+            self.log("Problem running set_ids, exiting _scan.", RK.LOG_ERROR)
+            return
 
         # Append routing info and then run the index
         body_json = self.append_route_info(body_json)

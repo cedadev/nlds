@@ -901,6 +901,7 @@ class CatalogConsumer(RMQC):
         # Forward successful file details to archive for tape write
         rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.COMPLETE])
 
+        # the user and group need to be set here
         body[MSG.DETAILS][MSG.USER] = next_holding.user
         body[MSG.DETAILS][MSG.GROUP] = next_holding.group
         body[MSG.META][MSG.HOLDING_ID] = next_holding.id

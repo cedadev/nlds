@@ -83,13 +83,13 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.transaction_id = self.body_json[MSG.DETAILS][MSG.TRANSACT_ID]
         except KeyError:
             self.log("Transaction id unobtainable, exiting callback.", RK.LOG_ERROR)
-            return
+            return False
 
         try:
             self.filelist = self.parse_filelist(self.body_json)
         except TypeError as e:
             self.log("Filelist not parseable, exiting callback", RK.LOG_ERROR)
-            return
+            return False
 
         try:
             (self.access_key, self.secret_key, self.tenancy) = (
@@ -97,11 +97,15 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             )
         except TransferError:
             self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
-            return
+            return False
 
         # Set uid and gid from message contents
         self.log("Setting uid and gids now.", RK.LOG_INFO)
-        self.set_ids(self.body_json)
+        try:
+            self.set_ids(self.body_json)
+        except KeyError as e:
+            self.log("Problem running set_ids, exiting callback", RK.LOG_ERROR)
+            return False
 
         # Append route info to message to track the route of the message
         self.body_json = self.append_route_info(self.body_json)
@@ -110,6 +114,16 @@ class BaseTransferConsumer(StattingConsumer, ABC):
     def callback(self, ch, method, properties, body, connection):
 
         if not self._callback_common(ch, method, properties, body, connection):
+            # fail all files if callback common fails
+            rk_transfer_failed = ".".join(
+                [self.rk_parts[0], self.rk_parts[1], RK.FAILED]
+            )
+            for file in self.filelist:
+                file.failure_reason = 'Failed in transfer init'
+                
+            self.send_pathlist(
+                self.filelist, rk_transfer_failed, self.body_json, state=State.FAILED
+            )
             return
 
         # API-methods that have an INITIATE phase will split the files across
