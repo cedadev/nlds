@@ -35,7 +35,10 @@ class GetTransferConsumer(BaseTransferConsumer):
 
     _CHOWN_COMMAND = "chown_cmd"
     _CHOWN_FL = "chown_fl"
-    TRANSFER_GET_CONSUMER_CONFIG = {_CHOWN_COMMAND: "chown", _CHOWN_FL: False}
+    _CHOWN_USER = "nlds"
+    TRANSFER_GET_CONSUMER_CONFIG = {
+        _CHOWN_COMMAND: "chown", _CHOWN_FL: False, _CHOWN_USER: "nlds"
+    }
     DEFAULT_CONSUMER_CONFIG = (
         TRANSFER_GET_CONSUMER_CONFIG | BaseTransferConsumer.DEFAULT_CONSUMER_CONFIG
     )
@@ -45,6 +48,7 @@ class GetTransferConsumer(BaseTransferConsumer):
 
         self.chown_cmd = self.load_config_value(self._CHOWN_COMMAND)
         self.chown_fl = self.load_config_value(self._CHOWN_FL)
+        self.chown_user = self.load_config_value(self._CHOWN_USER)
         self.client = None
 
     def _get_target_path(self, body_json: Dict):
@@ -176,13 +180,13 @@ class GetTransferConsumer(BaseTransferConsumer):
         # get all the directories from the download_path up to the target_path
         pardirs = []
         if not target_path:
-            term_path = "/"
+            term_path = Path("/")
         else:
             term_path = target_path
         pardir = download_path
         while pardir != term_path:
             pardir = pardir.parent.absolute()
-            if pardir != target_path:
+            if pardir != target_path and pardir.owner() == self.chown_user:
                 pardirs.append(pardir)
         return pardirs
 
