@@ -172,14 +172,17 @@ class StattingConsumer(RMQC):
         if not isinstance(path, pth.Path):
             raise ValueError("No valid path object was given.")
 
-        if not path.exists():
-            # Can't access or stat something that doesn't exist
+        try:
+            if not path.exists():
+                # Can't access or stat something that doesn't exist
+                check_path = False
+            else:
+                # If no stat result is passed through then get our own
+                if stat_result is None:
+                    stat_result = path.stat()
+                check_path = check_permissions(
+                    self.uid, self.gids, access=access, stat_result=stat_result
+                )
+        except PermissionError:
             check_path = False
-        else:
-            # If no stat result is passed through then get our own
-            if stat_result is None:
-                stat_result = path.stat()
-            check_path = check_permissions(
-                self.uid, self.gids, access=access, stat_result=stat_result
-            )
         return check_path

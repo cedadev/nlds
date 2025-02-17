@@ -26,6 +26,8 @@ import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
 
+from urllib3.exceptions import HTTPError, MaxRetryError
+
 
 class GetTransferConsumer(BaseTransferConsumer):
     DEFAULT_QUEUE_NAME = "transfer_get_q"
@@ -34,7 +36,10 @@ class GetTransferConsumer(BaseTransferConsumer):
 
     _CHOWN_COMMAND = "chown_cmd"
     _CHOWN_FL = "chown_fl"
-    TRANSFER_GET_CONSUMER_CONFIG = {_CHOWN_COMMAND: "chown", _CHOWN_FL: False}
+    _CHOWN_USER = "nlds"
+    TRANSFER_GET_CONSUMER_CONFIG = {
+        _CHOWN_COMMAND: "chown", _CHOWN_FL: False, _CHOWN_USER: "nlds"
+    }
     DEFAULT_CONSUMER_CONFIG = (
         TRANSFER_GET_CONSUMER_CONFIG | BaseTransferConsumer.DEFAULT_CONSUMER_CONFIG
     )
@@ -44,6 +49,7 @@ class GetTransferConsumer(BaseTransferConsumer):
 
         self.chown_cmd = self.load_config_value(self._CHOWN_COMMAND)
         self.chown_fl = self.load_config_value(self._CHOWN_FL)
+        self.chown_user = self.load_config_value(self._CHOWN_USER)
         self.client = None
 
     def _get_target_path(self, body_json: Dict):
@@ -77,22 +83,8 @@ class GetTransferConsumer(BaseTransferConsumer):
             )
             raise TransferError(message=reason)
 
-        # try to get the bucket - may throw exception if user does not have access 
-        # permissions
         try:
-            bucket_exists = self.client.bucket_exists(bucket_name)
-        except (S3Error, HTTPError) as e:
-            reason = (
-                f"Could not verify that bucket {bucket_name} exists during get "
-                f"transfer. Original exception: {e}"
-            )
-            self.log(
-                f"{reason}. Adding {path_details.object_name} to failed list. ",
-                RK.LOG_ERROR,
-            )
-            raise TransferError(message=reason)
-        else:
-            if bucket_name and not bucket_exists:
+            if bucket_name and not self.client.bucket_exists(bucket_name):
                 # If bucket doesn't exist then pass for failure
                 reason = f"Bucket {bucket_name} does not exist"
                 self.log(
@@ -100,6 +92,8 @@ class GetTransferConsumer(BaseTransferConsumer):
                     RK.LOG_ERROR,
                 )
                 raise TransferError(message=reason)
+        except (HTTPError, MaxRetryError) as e:
+            raise TransferError(message=str(e))
 
         return bucket_name, object_name
 
@@ -187,13 +181,13 @@ class GetTransferConsumer(BaseTransferConsumer):
         # get all the directories from the download_path up to the target_path
         pardirs = []
         if not target_path:
-            term_path = "/"
+            term_path = Path("/")
         else:
             term_path = target_path
         pardir = download_path
         while pardir != term_path:
             pardir = pardir.parent.absolute()
-            if pardir != target_path:
+            if pardir != target_path and pardir.owner() == self.chown_user:
                 pardirs.append(pardir)
         return pardirs
 

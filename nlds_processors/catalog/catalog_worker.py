@@ -336,9 +336,6 @@ class CatalogConsumer(RMQC):
     ):
         """Get a holding via label or holding_id or transaction_id.
         If the holding doesn't already exist then create it."""
-        self.log(
-            f"!!!! HOLDING: {holding_id}, LABEL: {search_label}, TRANSID: {transaction_id}", RK.LOG_DEBUG
-        )
         # try to get the holding to see if it already exists and can be added to
         try:
             # don't use tags to search - they are strictly for adding to the holding
@@ -382,9 +379,7 @@ class CatalogConsumer(RMQC):
                 raise e
         else:
             if len(holding) > 1:
-                raise CatalogError(
-                    f"More than one holding found for label {new_label}"
-                )
+                raise CatalogError(f"More than one holding found for label {new_label}")
             else:
                 holding = holding[0]
         return holding
@@ -717,6 +712,7 @@ class CatalogConsumer(RMQC):
                     transaction_id=transaction_id,
                     original_path=filepath_details.original_path,
                     tag=holding_tag,
+                    newest_only=True
                 )
 
                 if len(files) == 0:
@@ -844,12 +840,19 @@ class CatalogConsumer(RMQC):
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location for it and pass it
         for aggregating to the Archive Put process."""
+
+        try:
+            tenancy = self._parse_tenancy(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
+            return
+
         # start the database transactions
         self.catalog.start_session()
 
         # Get the next holding in the catalog, by id, which has any unarchived
         # Files, i.e. any files which don't have a tape location
-        next_holding = self.catalog.get_next_unarchived_holding()
+        next_holding = self.catalog.get_next_unarchived_holding(tenancy)
 
         # If no holdings left to archive then end the callback
         if not next_holding:
