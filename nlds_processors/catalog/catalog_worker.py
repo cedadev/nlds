@@ -1856,7 +1856,7 @@ class CatalogConsumer(RMQC):
         )
 
     def _catalog_quota(self, body: Dict, properties: Header) -> None:
-        """Return the users quota for the given service."""
+        """Return the user's quota for the given group."""
         message_vars = self._parse_user_vars(body)
         if message_vars is None:
             # Check if any problems have occured in the parsing of the message
@@ -1871,17 +1871,36 @@ class CatalogConsumer(RMQC):
         try:
             group_quota = self.authenticator.get_tape_quota(service_name=group)
         except CatalogError as e:
-            # failed to get the holdings - send a return message saying so
+            # failed to get the tape quota - send a return message saying so
             self.log(e.message, self.RK_LOG_ERROR)
             body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
             body[self.MSG_DATA][self.MSG_QUOTA] = None
         else:
-            # fill the return message with a dictionary of the holding(s)
+            # fill the return message with the group quota
             body[self.MSG_DATA][self.MSG_QUOTA] = group_quota
             self.log(
                 f"Quota from CATALOG_QUOTA {group_quota}",
                 self.RK_LOG_DEBUG
             )
+
+        self.catalog.start_session()
+
+        try:
+            used_diskspace = self.catalog.get_used_diskspace(user=user, group=group)
+        except CatalogError as e:
+            # failed to get the used diskspace - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_DISKSPACE] = None
+        else:
+            # fill the return message with the used diskspace
+            body[self.MSG_DATA][self.MSG_DISKSPACE] = used_diskspace
+            self.log(
+                f"Used diskspace from CATALOG_QUOTA {used_diskspace}",
+                self.RK_LOG_DEBUG
+            )
+
+        self.catalog.end_session()
 
         # return message to complete RPC
         self.publish_message(
