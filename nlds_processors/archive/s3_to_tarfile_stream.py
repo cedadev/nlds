@@ -193,6 +193,8 @@ class S3ToTarfileStream:
 
     def _make_bucket(self, bucket_name):
         """Check bucket exists and create it if it doesn't"""
+        if self.client is None:
+            raise RuntimeError("self.client is None")
         try:
             if not self.s3_client.bucket_exists(bucket_name):
                 self.s3_client.make_bucket(bucket_name)

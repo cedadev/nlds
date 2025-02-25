@@ -21,10 +21,10 @@ from nlds_processors.catalog.catalog import Catalog
 from nlds_processors.catalog.catalog_models import Storage, File, Location
 from nlds.details import PathDetails
 import nlds.server_config as CFG
+from nlds.nlds_setup import CONFIG_FILE_LOCATION
 
-
-def _connect_to_catalog():
-    config = CFG.load_config()
+def _connect_to_catalog(config_file_path: str = CONFIG_FILE_LOCATION):
+    config = CFG.load_config(config_file_path)
 
     db_engine = config["catalog_q"]["db_engine"]
     db_options = config["catalog_q"]["db_options"]
@@ -75,8 +75,8 @@ def _remove_location_from_file(
                 click.echo(f"Removed TAPE aggregation for {file.original_path}")
         else:
             click.echo(
-                f"URL details not empty for the file {file.original_path} and force not"
-                f" set in command line options.  Skipping."
+                f"Location URL details not empty for the file {file.original_path} and "
+                f"force not set in command line options.  Skipping."
             )
 
 
@@ -129,6 +129,13 @@ def _remove_location_from_file(
     type=str,
     help="Storage Location type to delete records for.  OBJECT_STORAGE|TAPE",
 )
+@click.option(
+    "-S",
+    "--settings",
+    default="",
+    type=str,
+    help="The location of the settings file for NLDS.",
+)
 def reset_storage_status(
     user: str,
     group: str,
@@ -138,6 +145,7 @@ def reset_storage_status(
     force: bool,
     delete: bool,
     location: str,
+    settings: str,
 ) -> None:
     """Reset the tape status of a file by deleting a STORAGE LOCATION associated
     with a file, if the details in the STORAGE LOCATION are empty.
@@ -170,6 +178,11 @@ def reset_storage_status(
             raise click.UsageError("Error - secret key not specified")
     else:
         s3_client = None
+
+    if settings != "":
+        nlds_cat = _connect_to_catalog(settings)
+    else:
+        nlds_cat = _connect_to_catalog()
 
     nlds_cat = _connect_to_catalog()
     nlds_cat.start_session()

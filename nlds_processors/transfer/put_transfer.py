@@ -37,6 +37,7 @@ class PutTransferConsumer(BaseTransferConsumer):
         return bucket_name
 
     def _make_bucket(self, transaction_id: str):
+        """Check bucket exists and create it if it doesn't"""
         if self.client is None:
             raise RuntimeError("self.client is None")
 
@@ -51,7 +52,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                 )
             else:
                 self.log(
-                    f"Bucket for this transaction ({transaction_id}) already exists",
+                    f"Bucket ({bucket_name}) already exists",
                     RK.LOG_INFO,
                 )
         except minio.error.S3Error as e:

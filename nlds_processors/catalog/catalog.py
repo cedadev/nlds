@@ -195,6 +195,8 @@ class Catalog(DBMixin):
                 holding.label = new_label
                 self.session.flush()
             except IntegrityError:
+                # rollback so we can access the holding
+                self.session.rollback()
                 raise CatalogError(
                     f"Cannot change holding with label:{holding.label} and "
                     f"holding_id:{holding.id} to new label:{new_label}. New "
@@ -318,6 +320,7 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         original_path: str = None,
         tag: dict = None,
+        newest_only: bool = False
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -340,20 +343,25 @@ class Catalog(DBMixin):
             search_path = ".*"
 
         # (permissions have been checked by get_holding)
-        file_dict = {}
+        file_list = []
         try:
             for h in holding:
                 # build the file query bit by bit
                 file_q = self.session.query(File, Transaction).filter(
                     File.transaction_id == Transaction.id,
                     Transaction.holding_id == h.id,
-                )
+                ).order_by(Transaction.ingest_time)
                 if is_regex(search_path):
                     file_q = file_q.filter(File.original_path.regexp_match(search_path))
                 else:
                     file_q = file_q.filter(File.original_path == search_path)
 
                 result = file_q.all()
+                # only want one file if newest_only is set: (this is for downloading
+                # when only the path is specified and no holding id or label is given)
+                # the results have been orderd by the Transaction ingest time
+                if newest_only:
+                    result = [result[0]]
 
                 for r in result:
                     if r.File is None:
@@ -366,26 +374,8 @@ class Catalog(DBMixin):
                             f"User:{user} in group:{group} does not have permission to "
                             f"access the file with original path:{r.File.original_path}."
                         )
+                    file_list.append(r.File)
 
-                    # if the file exists in more than one holding then it will appear
-                    # in the results list more than once.  we want to return the newest
-                    # so we will build a dictionary indexed by the original path and
-                    # compare the ingest times as to whether to replace the entry in the
-                    # dictionary
-                    if r.File.original_path in file_dict:
-                        curr_ingest_time = (
-                            file_dict[r.File.original_path][1].ingest_time
-                        )
-                        file_ingest_time = r.Transaction.ingest_time
-                        if (file_ingest_time > curr_ingest_time):
-                            file_dict[r.File.original_path] = (r.File, r.Transaction)
-
-                    else:
-                        file_dict[r.File.original_path] = (r.File, r.Transaction)
-
-            # convert file_dict (which also contains transactions) to a list of File
-            # objects
-            file_list = [fd[0] for _, fd in file_dict.items()]
             # no files found
             if len(file_list) == 0:
                 raise KeyError
@@ -681,9 +671,16 @@ class Catalog(DBMixin):
             )
             raise CatalogError(err_msg)
 
-    def get_next_unarchived_holding(self) -> Holding:
+    def get_next_unarchived_holding(self, tenancy: str) -> Holding:
         """The principal function for getting the next unarchived holding to
-        archive aggregate."""
+        archive aggregate.
+        A tenancy is passed in so that the only holdings attempted to be backed up are
+        those that can be accessed via the object store keys also passed in the body.
+        Otherwise, when the archive_put process tries to stream the files from the 
+        object store to the tape, the keys don't match the tenancy and an access denied
+        error is produced.
+        """
+
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
@@ -711,6 +708,8 @@ class Catalog(DBMixin):
                     File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
                 )
                 .order_by(Holding.id)
+                # tenancy is stored in url_netloc part of Location
+                .filter(Location.url_netloc == tenancy) 
                 .first()
             )
 

@@ -30,8 +30,6 @@ def send_archive_next():
         MSG.SECRET_KEY: None,
         MSG.TAPE_URL: None,
         MSG.TENANCY: None,
-        MSG.USER: "admin-placeholder",
-        MSG.GROUP: "admin-placeholder"
     }
     # Load any cronjob config, if present
     cronjob_config = DEFAULT_CONFIG
@@ -45,6 +43,8 @@ def send_archive_next():
             MSG.TARGET: None,
             MSG.API_ACTION: "archive-put",
             MSG.JOB_LABEL: "archive-next",
+            MSG.USER: "admin-placeholder",
+            MSG.GROUP: "admin-placeholder",
             MSG.STATE: State.ARCHIVE_INIT.value,
             **cronjob_config,
         },

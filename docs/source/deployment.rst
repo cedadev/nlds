@@ -351,11 +351,11 @@ everything on this page, this was true at the time of writing (2024-03-06).
      - on ``db5`` - ``nlds_{db_name}_staging``
      - on ``db5`` - ``nlds_{db_name}``
    * - Logging
-     - To ``fluentbit`` with tags ``nlds_statging_{service_name}_log``
+     - To ``fluentbit`` with tags ``nlds_staging_{service_name}_log``
      - To ``fluentbit`` with tags ``nlds_prod_{service_name}_log``
    * - Object store
-     - Uses the ``cedaproc-o`` tenancy 
-     - Uses ``nlds-cache-02-o`` tenancy, ``nlds-cache-01-o`` also available
+     - Uses the ``nlds-staging-o`` tenancy, ``(50TB)`` available
+     - Uses ``nlds-cache-01-o`` tenancy, ``(2PB)`` available
    * - API Server
      - `https://nlds-master.130.246.130.221.nip.io/ <https://nlds-master.130.246.130.221.nip.io/docs>`_ (firewalled)
      - `https://nlds.jasmin.ac.uk/ <https://nlds.jasmin.ac.uk/docs>`_ (public, ssl secured)

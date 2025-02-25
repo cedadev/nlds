@@ -158,7 +158,16 @@ def print_file_compact(file: File, nlds_cat: object):
     type=bool,
     help="Display in compact format, one file per line"
 )
-def view_holding(user: str, group: str, holding_id: int, compact: bool) -> None:
+@click.option(
+    "-S",
+    "--settings",
+    default="",
+    type=str,
+    help="The location of the settings file for NLDS.",
+)
+def view_holding(
+    user: str, group: str, holding_id: int, compact: bool, settings: str
+    ) -> None:
     """View the full Holding, including Transactions, Tags, Files, Locations and
     Aggregations."""
     if user is None:
@@ -167,7 +176,12 @@ def view_holding(user: str, group: str, holding_id: int, compact: bool) -> None:
         raise click.UsageError("Error - group not specified")
     if holding_id is None:
         raise click.UsageError("Error - holding id not specified")
-    
+
+    if settings != "":
+        nlds_cat = _connect_to_catalog(settings)
+    else:
+        nlds_cat = _connect_to_catalog()
+
     nlds_cat = _connect_to_catalog()
     nlds_cat.start_session()
 
