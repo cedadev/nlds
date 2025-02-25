@@ -824,3 +824,34 @@ class Catalog(DBMixin):
                 f"id:{holding.id}"
             )
         return unarchived_files
+    
+
+    def get_used_diskspace(self, user: str, group: str) -> float:
+        """Return the total amount of diskspace used by the group."""
+        if group is None:
+            raise ValueError("Group cannot be none.")
+        
+        total_diskspace = 0.0
+
+        try:
+            # Get the holdings
+            holdings = self.get_holding(user, group, groupall = True)
+            print(holdings)
+
+            # Loop through the holdings
+            for holding in holdings:
+                print(holding)
+
+                # Loop through the transactions:
+                for transaction in holding.transactions:
+                    print(transaction)
+
+                    # Loop through the files:
+                    for file in transaction.files:
+                        
+                        # Add file size to total diskspace
+                        total_diskspace += file.size
+
+        except Exception as e:
+            raise RuntimeError(f"An error occured while calculating the disk space: {e}")
+        return total_diskspace
