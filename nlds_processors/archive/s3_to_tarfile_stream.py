@@ -191,17 +191,22 @@ class S3ToTarfileStream:
                         pass
         return completelist, failedlist, file_object.checksum
 
-    def _make_bucket(self, bucket_name, create: bool = False):
+    def _make_bucket(self, bucket_name):
         """Check bucket exists and create it if it doesn't"""
         try:
             if not self.s3_client.bucket_exists(bucket_name):
-                if not create:
-                    return False
-                else:
-                    self.s3_client.make_bucket(bucket_name)
+                self.s3_client.make_bucket(bucket_name)
+                self.log(
+                    f"Creating bucket ({bucket_name}) for this transaction",
+                    RK.LOG_INFO,
+                )
+            else:
+                self.log(
+                    f"Bucket ({bucket_name}) already exists",
+                    RK.LOG_INFO,
+                )
         except minio.error.S3Error as e:
             raise S3StreamError(message=str(e))
-        return True
 
     def _stream_to_s3object(
         self, file_object, filelist: List[PathDetails], chunk_size: int
@@ -242,8 +247,12 @@ class S3ToTarfileStream:
 
                 try:
                     # get or create the bucket
-                    if not self._make_bucket(bucket_name):
-                        raise S3StreamError(f"Cannot make bucket {bucket_name}")
+                    try:
+                        self._make_bucket(bucket_name)
+                    except S3StreamError as e:
+                        raise S3StreamError(
+                            f"Cannot make bucket {bucket_name}, reason: str{e}"
+                        )
                     self.log(
                         f"Starting stream of {tarinfo.name} to object store bucket "
                         f"{bucket_name}.",

@@ -63,14 +63,12 @@ async def get(
     query_group: Optional[str] = None,
 ):
     # create the message dictionary
-    routing_key = f"{RK.ROOT}.{RK.ROUTE}.{RK.STAT}"
     api_action = f"{RK.STAT}"
 
     # logic for user/group query verification should go here. Do we want to
     # prevent the querying of users other than themselves?
 
     # Validate state at this point.
-
     if state is not None:
         # Attempt to convert to int, if can't then put in upper case for name
         # comparison

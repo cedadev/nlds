@@ -57,8 +57,6 @@ async def get(
     tag: Optional[str] = None,
 ):
     # create the message dictionary
-
-    routing_key = f"{RK.ROOT}.{RK.ROUTE}.{RK.LIST}"
     api_action = f"{RK.LIST}"
     msg_dict = {
         MSG.DETAILS: {

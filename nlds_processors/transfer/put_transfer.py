@@ -46,13 +46,12 @@ class PutTransferConsumer(BaseTransferConsumer):
             if not self.client.bucket_exists(bucket_name):
                 self.client.make_bucket(bucket_name)
                 self.log(
-                    f"Creating bucket ({bucket_name}) for this" " transaction",
+                    f"Creating bucket ({bucket_name}) for this transaction",
                     RK.LOG_INFO,
                 )
             else:
                 self.log(
-                    f"Bucket for this transaction ({transaction_id}) "
-                    f"already exists",
+                    f"Bucket for this transaction ({transaction_id}) already exists",
                     RK.LOG_INFO,
                 )
         except minio.error.S3Error as e:
