@@ -160,7 +160,7 @@ def print_file_compact(file: File, nlds_cat: object):
     is_flag=True,
     default=False,
     type=bool,
-    help="Display in compact format, one file per line",
+    help="Display in compact format, one file per line.",
 )
 @click.option(
     "-S",
@@ -186,7 +186,6 @@ def view_holding(
     else:
         nlds_cat = _connect_to_catalog()
 
-    nlds_cat = _connect_to_catalog()
     nlds_cat.start_session()
 
     holding = nlds_cat.get_holding(user=user, group=group, holding_id=holding_id)[0]

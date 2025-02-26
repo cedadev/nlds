@@ -13,7 +13,7 @@ from typing import List, Dict, Any
 import minio
 from minio.error import S3Error
 from retry import retry
-from urllib3.exceptions import HTTPError
+from urllib3.exceptions import HTTPError, MaxRetryError
 
 from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
@@ -55,7 +55,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                     f"Bucket ({bucket_name}) already exists",
                     RK.LOG_INFO,
                 )
-        except minio.error.S3Error as e:
+        except (minio.error.S3Error, MaxRetryError) as e:
             raise TransferError(message=str(e))
 
     def _transfer_files(
@@ -114,7 +114,7 @@ class PutTransferConsumer(BaseTransferConsumer):
                     body_json=body_json,
                     state=State.TRANSFER_PUTTING,
                 )
-            except (HTTPError, minio.error.S3Error) as e:
+            except (HTTPError, MaxRetryError) as e:
                 reason = (
                     f"Error uploading {path_details.path} to object " f"store: {e}."
                 )

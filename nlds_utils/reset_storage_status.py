@@ -76,7 +76,7 @@ def _remove_location_from_file(
         else:
             click.echo(
                 f"Location URL details not empty for the file {file.original_path} and "
-                f"force not set in command line options.  Skipping."
+                f" force not set in command line options.  Skipping."
             )
 
 
@@ -184,7 +184,6 @@ def reset_storage_status(
     else:
         nlds_cat = _connect_to_catalog()
 
-    nlds_cat = _connect_to_catalog()
     nlds_cat.start_session()
     holding = nlds_cat.get_holding(user=user, group=group, holding_id=holding_id)[0]
 

@@ -10,7 +10,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from hashlib import shake_256
 from typing import List
-from urllib3.exceptions import HTTPError
+from urllib3.exceptions import HTTPError, MaxRetryError
 import tarfile
 from datetime import datetime
 from abc import abstractmethod
@@ -89,7 +89,7 @@ class S3ToTarfileStream:
                     )
                     failed_list.append(path_details)
                     continue
-            except (S3Error, HTTPError) as e:
+            except (S3Error, HTTPError, MaxRetryError) as e:
                 path_details.failure_reason = (
                     f"Could not verify that bucket {check_bucket} exists before "
                     f"writing to tape. Original exception: {e}"

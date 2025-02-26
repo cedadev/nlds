@@ -362,7 +362,6 @@ class Catalog(DBMixin):
                 # the results have been orderd by the Transaction ingest time
                 if newest_only:
                     result = [result[0]]
-
                 for r in result:
                     if r.File is None:
                         continue
@@ -680,7 +679,6 @@ class Catalog(DBMixin):
         object store to the tape, the keys don't match the tenancy and an access denied
         error is produced.
         """
-
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
