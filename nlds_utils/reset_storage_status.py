@@ -21,10 +21,11 @@ from nlds_processors.catalog.catalog import Catalog
 from nlds_processors.catalog.catalog_models import Storage, File, Location
 from nlds.details import PathDetails
 import nlds.server_config as CFG
+from nlds.nlds_setup import CONFIG_FILE_LOCATION
 
 
-def _connect_to_catalog():
-    config = CFG.load_config()
+def _connect_to_catalog(config_file_path: str = CONFIG_FILE_LOCATION):
+    config = CFG.load_config(config_file_path)
 
     db_engine = config["catalog_q"]["db_engine"]
     db_options = config["catalog_q"]["db_options"]
