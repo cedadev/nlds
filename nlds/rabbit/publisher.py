@@ -50,6 +50,7 @@ class RabbitMQPublisher():
     RK_STAT = "stat"
     RK_FIND = "find"
     RK_META = "meta"
+    RK_QUOTA = "quota"
 
     # Exchange routing key parts – root
     RK_ROOT = "nlds-api"
@@ -111,6 +112,8 @@ class RabbitMQPublisher():
     MSG_TIMESTAMP = "timestamp"
     MSG_USER = "user"
     MSG_GROUP = "group"
+    MSG_QUOTA = "quota"
+    MSG_DISKSPACE = "diskspace"
     MSG_GROUPALL = "groupall"
     MSG_TARGET = "target"
     MSG_ROUTE = "route"
@@ -118,6 +121,7 @@ class RabbitMQPublisher():
     MSG_TENANCY = "tenancy"
     MSG_ACCESS_KEY = "access_key"
     MSG_SECRET_KEY = "secret_key"
+    MSG_TOKEN = "token"
     MSG_API_ACTION = "api_action"
     MSG_JOB_LABEL = "job_label"
     MSG_DATA = "data"

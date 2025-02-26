@@ -46,6 +46,8 @@ from nlds_processors.catalog.catalog_models import Storage, Location, File
 from nlds.details import PathDetails, PathType
 from nlds_processors.db_mixin import DBError
 
+from nlds.authenticators.jasmin_authenticator import JasminAuthenticator as Authenticator
+
 
 class Metadata():
     """Container class for the meta section of the message body."""
@@ -146,6 +148,7 @@ class CatalogConsumer(RMQC):
         self.catalog = None
         self.reroutelist = []
         self.retrievedict = {}
+        self.authenticator = Authenticator()
 
 
     @property
@@ -1850,7 +1853,62 @@ class CatalogConsumer(RMQC):
             msg_dict=body,
             exchange={'name': ''},
             correlation_id=properties.correlation_id
-        )       
+        )
+
+    def _catalog_quota(self, body: Dict, properties: Header) -> None:
+        """Return the user's quota for the given group."""
+        message_vars = self._parse_user_vars(body)
+        if message_vars is None:
+            # Check if any problems have occured in the parsing of the message
+            # body and exit if necessary
+            self.log("Could not parse one or more mandatory variables, exiting"
+                     "callback", self.RK_LOG_ERROR)
+            return
+        else:
+            # Unpack if no problems found in parsing
+            user, group = message_vars
+
+        try:
+            group_quota = self.authenticator.get_tape_quota(service_name=group)
+        except CatalogError as e:
+            # failed to get the tape quota - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_QUOTA] = None
+        else:
+            # fill the return message with the group quota
+            body[self.MSG_DATA][self.MSG_QUOTA] = group_quota
+            self.log(
+                f"Quota from CATALOG_QUOTA {group_quota}",
+                self.RK_LOG_DEBUG
+            )
+
+        self.catalog.start_session()
+
+        try:
+            used_diskspace = self.catalog.get_used_diskspace(user=user, group=group)
+        except CatalogError as e:
+            # failed to get the used diskspace - send a return message saying so
+            self.log(e.message, self.RK_LOG_ERROR)
+            body[self.MSG_DETAILS][self.MSG_FAILURE] = e.message
+            body[self.MSG_DATA][self.MSG_DISKSPACE] = None
+        else:
+            # fill the return message with the used diskspace
+            body[self.MSG_DATA][self.MSG_DISKSPACE] = used_diskspace
+            self.log(
+                f"Used diskspace from CATALOG_QUOTA {used_diskspace}",
+                self.RK_LOG_DEBUG
+            )
+
+        self.catalog.end_session()
+
+        # return message to complete RPC
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={'name': ''},
+            correlation_id=properties.correlation_id
+        )
 
 
     def attach_database(self, create_db_fl: bool = True):
@@ -2023,6 +2081,10 @@ class CatalogConsumer(RMQC):
 
         elif (api_method == self.RK_STAT):
             self._catalog_stat(body, properties)
+
+        elif (api_method == self.RK_QUOTA):
+            # don't need to split any routing key for an RPC method
+            self._catalog_quota(body, properties)
 
         # If received system test message, reply to it (this is for system status check)
         elif api_method == "system_stat":

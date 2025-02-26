@@ -4,11 +4,10 @@ from typing import List
 from sqlalchemy import func, Enum
 from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
     NoResultFound
-
 from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
      Location, Transaction, Aggregation, Storage, Tag
 from nlds_processors.db_mixin import DBMixin
-from nlds.authenticators.jasmin_authenticator import JasminAuthenticator
+from nlds.authenticators.jasmin_authenticator import JasminAuthenticator as Authenticator
 class CatalogError(Exception):
     def __init__(self, message, *args):
         super().__init__(args)
@@ -25,19 +24,6 @@ class Catalog(DBMixin):
         self.db_options = db_options
         self.base = CatalogBase
         self.session = None
-
-
-    @staticmethod
-    def _user_has_get_holding_permission(user: str, 
-                                         group: str,
-                                         holding: Holding) -> bool:
-        """Check whether a user has permission to view this holding.
-        When we implement ROLES this will be more complicated."""
-        permitted = True
-        #Users can view / get all holdings in their group
-        #permitted &= holding.user == user
-        permitted &= holding.group == group
-        return permitted
 
 
     def get_holding(self, 
@@ -104,7 +90,7 @@ class Catalog(DBMixin):
                 raise KeyError
             # check the user has permission to view the holding(s)
             for h in holding:
-                if not self._user_has_get_holding_permission(user, group, h):
+                if not Authenticator.user_has_get_holding_permission(user, group, h):
                     raise CatalogError(
                        f"User:{user} in group:{group} does not have permission "
                        f"to access the holding with label:{h.label}."
@@ -296,26 +282,6 @@ class Catalog(DBMixin):
                 f"Transaction with transaction_id:{transaction_id} could not "
                 "be added to the database"
             )
-        
-    def _user_has_get_file_permission(self, 
-                                      user: str, 
-                                      group: str,
-                                      file: File) -> bool:
-        """Check whether a user has permission to access a file.
-        Later, when we implement the ROLES this function will be a lot more
-        complicated!"""
-        assert(self.session != None)
-        holding = self.session.query(Holding).filter(
-            Transaction.id == file.transaction_id,
-            Holding.id == Transaction.holding_id
-        ).all()
-        permitted = True
-        for h in holding:
-            # users have get file permission if in group
-            # permitted &= h.user == user
-            permitted &= h.group == group
-
-        return permitted
 
 
     def get_file(self,
@@ -420,7 +386,7 @@ class Catalog(DBMixin):
                     # check user has permission to access this file
                     # NRM - 12/10/2023, is this necessary?
                     if (f and 
-                        not self._user_has_get_file_permission(user, group, f)
+                        not Authenticator.user_has_get_file_permission(self.session, user, group, f)
                         ):
                         raise CatalogError(
                             f"User:{user} in group:{group} does not have permission to "
@@ -478,23 +444,6 @@ class Catalog(DBMixin):
                  " the database"
             )
         return new_file
-
-
-    @staticmethod
-    def _user_has_delete_from_holding_permission(user: str, 
-                                                 group: str,
-                                                 holding: Holding) -> bool:
-        """Check whether a user has permission to delete files from this holding.
-        When we implement ROLES this will be more complicated."""
-        # is_admin == whether the user is an administrator of the group
-        # i.e. a DEPUTY or MANAGER
-        # this gives them delete permissions for all files in the group
-        is_admin = JasminAuthenticator.authenticate_user_group_role(user, group)
-        permitted = True
-        # Currently, only users can delete files from their owned holdings
-        permitted &= (holding.user == user or is_admin)
-        permitted &= holding.group == group
-        return permitted
     
 
     def delete_files(self, 
@@ -515,7 +464,7 @@ class Catalog(DBMixin):
                                holding_id=holding_id, original_path=path, 
                                tag=tag)
         holding = self.get_holding(user, group, holding_id=holding_id)[0]
-        if not Catalog._user_has_delete_from_holding_permission(
+        if not Authenticator.user_has_delete_from_holding_permission(
             user, group, holding):
             # No admins at the moment!
             raise CatalogError(
@@ -875,3 +824,34 @@ class Catalog(DBMixin):
                 f"id:{holding.id}"
             )
         return unarchived_files
+    
+
+    def get_used_diskspace(self, user: str, group: str) -> float:
+        """Return the total amount of diskspace used by the group."""
+        if group is None:
+            raise ValueError("Group cannot be none.")
+        
+        total_diskspace = 0.0
+
+        try:
+            # Get the holdings
+            holdings = self.get_holding(user, group, groupall = True)
+            print(holdings)
+
+            # Loop through the holdings
+            for holding in holdings:
+                print(holding)
+
+                # Loop through the transactions:
+                for transaction in holding.transactions:
+                    print(transaction)
+
+                    # Loop through the files:
+                    for file in transaction.files:
+                        
+                        # Add file size to total diskspace
+                        total_diskspace += file.size
+
+        except Exception as e:
+            raise RuntimeError(f"An error occured while calculating the disk space: {e}")
+        return total_diskspace
