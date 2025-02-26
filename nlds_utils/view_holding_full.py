@@ -94,6 +94,7 @@ def print_file(file: File):
         f"{integer_permissions_to_string(file.file_permissions)}"
     )
 
+
 def print_location(location: Location):
     click.echo(f"{'':<6}│ │ │   ├─┐ {'id':<17}: {location.id}")
     click.echo(f"{'':<6}│ │ │   │ ├─ {'type':<16}: {str(location.storage_type)}")
@@ -103,17 +104,20 @@ def print_location(location: Location):
     click.echo(f"{'':<6}│ │ │   │ ├─ {'path':<16}: {location.path}")
     click.echo(f"{'':<6}│ │ │   │ └─ {'access time':<16}: {location.access_time}")
 
+
 def print_aggregation(aggregation: Aggregation):
     click.echo(f"{'':<8}├─┐ {'id':<16}: {aggregation.id}")
     click.echo(f"{'':<8}│ ├─ {'tarfile':<16}: {aggregation.tarname}")
     click.echo(f"{'':<8}│ ├─ {'checksum':<16}: {aggregation.checksum}")
     click.echo(f"{'':<8}│ └─ {'algorithm':<16}: {aggregation.algorithm}")
 
+
 def print_file_compact_header():
     click.echo(
         f"{'':<6}{'':<4}{'Original Path':<48}{'User':<6}{'Group':<7}"
         f"{'Size':<8}{'Type':<8}{'Location':<24}{'Aggregation':48}"
     )
+
 
 def print_file_compact(file: File, nlds_cat: object):
     location_str = ""
@@ -156,7 +160,7 @@ def print_file_compact(file: File, nlds_cat: object):
     is_flag=True,
     default=False,
     type=bool,
-    help="Display in compact format, one file per line"
+    help="Display in compact format, one file per line",
 )
 @click.option(
     "-S",
@@ -167,7 +171,7 @@ def print_file_compact(file: File, nlds_cat: object):
 )
 def view_holding(
     user: str, group: str, holding_id: int, compact: bool, settings: str
-    ) -> None:
+) -> None:
     """View the full Holding, including Transactions, Tags, Files, Locations and
     Aggregations."""
     if user is None:
