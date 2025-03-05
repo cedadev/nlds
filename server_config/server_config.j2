@@ -31,5 +31,33 @@
         "secret_key" : "{{ cronjob_publisher_secret_key }}",
         "tenancy" : "{{ tenancy }}",
         "tape_url" : "{{ tape_url }}"
+    },
+    "object_store_access_policy": {
+        "nlds_user": {
+            "Sid": "Grant bucket access to nlds User", 
+            "Effect": "Allow", 
+            "Principal": {
+                "user": ["nlds"], 
+                "group": []
+            }, 
+            "Action": ["*"], 
+            "Resource": "*"
+        },
+        "group": {
+            "Sid": "Grant bucket access to Group",
+            "Effect": "Allow",
+            "Principal": {
+                "user": [],
+                "group": []
+            },
+            "Action": [
+                "ListBucket",
+                "GetBucket",
+                "CopyBucket",
+                "GetObject",
+                "CopyObject"
+            ],
+            "Resource": "*"
+        }
     }
 }
