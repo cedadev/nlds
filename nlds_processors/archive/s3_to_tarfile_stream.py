@@ -21,13 +21,15 @@ from minio.error import S3Error
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 from nlds.errors import MessageError
+from nlds_processors.bucket_mixin import BucketMixin
+import nlds.server_config as CFG
 
 
 class S3StreamError(MessageError):
     pass
 
 
-class S3ToTarfileStream:
+class S3ToTarfileStream(BucketMixin):
     """Class to stream files from an S3 resource (AWS, minio, DataCore Swarm etc.) to
     a tarfile that could reside on either tape (XRootD) or disk.
 
@@ -38,16 +40,28 @@ class S3ToTarfileStream:
     This class is abstract and should be overloaded.
     """
 
+    _REQUIRE_SECURE = "require_secure_fl"
+    _ARCHIVE_PUT = "archive_put_q"
+
     def __init__(
         self, s3_tenancy: str, s3_access_key: str, s3_secret_key: str, logger
     ) -> None:
         """Initialise the Minio / S3 client"""
-        require_secure_fl = False
+        # load the config - needed for the bucket mixin
+        # get the REQUIRE SECURE from the TRANSFER_PUT_Q part of the config
+        self.whole_config = CFG.load_config()
+        try:
+            self.require_secure_fl = self.whole_config[self._ARCHIVE_PUT][
+                self._REQUIRE_SECURE
+            ]
+        except KeyError:
+            raise RuntimeError(f"Could not read config value: {self._REQUIRE_SECURE}")
+
         self.s3_client = minio.Minio(
             s3_tenancy,
             access_key=s3_access_key,
             secret_key=s3_secret_key,
-            secure=require_secure_fl,
+            secure=self.require_secure_fl,
         )
         self.filelist = []
         self.log = logger
@@ -70,9 +84,9 @@ class S3ToTarfileStream:
         failed_list = []
         for path_details in self.filelist:
             try:
-                # Get bucket and object path
-                check_bucket = path_details.bucket_name
-                check_object = path_details.object_name
+                check_bucket, check_object = self._get_bucket_name_object_name(
+                    path_details
+                )
             except ValueError as e:
                 path_details.failure_reason = (
                     "Could not unpack bucket and object info from path_details"
@@ -82,7 +96,7 @@ class S3ToTarfileStream:
 
             try:
                 # Check the bucket exists
-                if not self.s3_client.bucket_exists(check_bucket):
+                if not self._bucket_exists(check_bucket):
                     path_details.failure_reason = (
                         f"Could not verify that bucket {check_bucket} exists before "
                         f"writing to tape."
@@ -157,8 +171,17 @@ class S3ToTarfileStream:
                 )
 
                 # Add file info to the tarfile
-                bucket_name = path_details.bucket_name
-                object_name = path_details.object_name
+                try:
+                    bucket_name, object_name = self._get_bucket_name_object_name(
+                        path_details
+                    )
+                except RuntimeError as e:
+                    reason = str(e)
+                    self.log(f"{reason}", RK.LOG_ERROR)
+                    path_details.failure_reason = reason
+                    failedlist.append(path_details)
+                    continue
+
                 tar_info = tarfile.TarInfo(name=object_name)
                 tar_info.size = int(path_details.size)
 
@@ -191,25 +214,6 @@ class S3ToTarfileStream:
                         pass
         return completelist, failedlist, file_object.checksum
 
-    def _make_bucket(self, bucket_name):
-        """Check bucket exists and create it if it doesn't"""
-        if self.client is None:
-            raise RuntimeError("self.client is None")
-        try:
-            if not self.s3_client.bucket_exists(bucket_name):
-                self.s3_client.make_bucket(bucket_name)
-                self.log(
-                    f"Creating bucket ({bucket_name}) for this transaction",
-                    RK.LOG_INFO,
-                )
-            else:
-                self.log(
-                    f"Bucket ({bucket_name}) already exists",
-                    RK.LOG_INFO,
-                )
-        except minio.error.S3Error as e:
-            raise S3StreamError(message=str(e))
-
     def _stream_to_s3object(
         self, file_object, filelist: List[PathDetails], chunk_size: int
     ):
@@ -231,8 +235,16 @@ class S3ToTarfileStream:
                     f"Streaming file {path_details.path} from tape archive to object store",
                     RK.LOG_DEBUG,
                 )
-                bucket_name = path_details.bucket_name
-                object_name = path_details.object_name
+                try:
+                    bucket_name, object_name = self._get_bucket_name_object_name(
+                        path_details
+                    )
+                except RuntimeError as e:
+                    reason = f"Cannot get bucket_name, object_name from PathDetails"
+                    self.log(f"{reason}", RK.LOG_ERROR)
+                    path_details.failure_reason = reason
+                    failedlist.append(path_details)
+                    continue
                 # Stream the object directly from the tarfile object to s3
                 # create bucket first if it doesn't exist
                 try:
@@ -250,8 +262,8 @@ class S3ToTarfileStream:
                 try:
                     # get or create the bucket
                     try:
-                        self._make_bucket(bucket_name)
-                    except S3StreamError as e:
+                        self._make_bucket(bucket_name=bucket_name)
+                    except RuntimeError as e:
                         raise S3StreamError(
                             f"Cannot make bucket {bucket_name}, reason: str{e}"
                         )

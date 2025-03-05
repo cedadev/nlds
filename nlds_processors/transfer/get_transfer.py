@@ -16,20 +16,17 @@ import subprocess
 import minio
 from minio.error import S3Error
 from retry import retry
-from urllib3.exceptions import HTTPError
 
 from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
-from nlds.errors import CallbackError
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
+from nlds_processors.bucket_mixin import BucketMixin
 
-from urllib3.exceptions import HTTPError, MaxRetryError
 
-
-class GetTransferConsumer(BaseTransferConsumer):
+class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
     DEFAULT_QUEUE_NAME = "transfer_get_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_GET}." f"{RK.WILD}"
     DEFAULT_STATE = State.TRANSFER_GETTING
@@ -38,7 +35,9 @@ class GetTransferConsumer(BaseTransferConsumer):
     _CHOWN_FL = "chown_fl"
     _CHOWN_USER = "nlds"
     TRANSFER_GET_CONSUMER_CONFIG = {
-        _CHOWN_COMMAND: "chown", _CHOWN_FL: False, _CHOWN_USER: "nlds"
+        _CHOWN_COMMAND: "chown",
+        _CHOWN_FL: False,
+        _CHOWN_USER: "nlds",
     }
     DEFAULT_CONSUMER_CONFIG = (
         TRANSFER_GET_CONSUMER_CONFIG | BaseTransferConsumer.DEFAULT_CONSUMER_CONFIG
@@ -50,7 +49,7 @@ class GetTransferConsumer(BaseTransferConsumer):
         self.chown_cmd = self.load_config_value(self._CHOWN_COMMAND)
         self.chown_fl = self.load_config_value(self._CHOWN_FL)
         self.chown_user = self.load_config_value(self._CHOWN_USER)
-        self.client = None
+        self.s3_client = None
 
     def _get_target_path(self, body_json: Dict):
         # Get target and verify it can be written to
@@ -64,38 +63,6 @@ class GetTransferConsumer(BaseTransferConsumer):
         else:
             target_path = None
         return target_path
-
-    def _get_and_check_bucket_name_object_name(self, path_details):
-        """Get the bucket and object name and perform an existence check on the
-        bucket"""
-        if self.client is None:
-            raise RuntimeError("self.client is None")
-
-        if path_details.bucket_name is not None:
-            bucket_name = path_details.bucket_name
-            object_name = path_details.object_name
-        # Otherwise, log error and queue for retry
-        else:
-            reason = "Unable to get bucket_name from message info"
-            self.log(
-                f"{reason}, adding " f"{path_details.object_name} to failed list.",
-                RK.LOG_INFO,
-            )
-            raise TransferError(message=reason)
-
-        try:
-            if bucket_name and not self.client.bucket_exists(bucket_name):
-                # If bucket doesn't exist then pass for failure
-                reason = f"Bucket {bucket_name} does not exist"
-                self.log(
-                    f"{reason}. Adding {path_details.object_name} to failed list.",
-                    RK.LOG_ERROR,
-                )
-                raise TransferError(message=reason)
-        except (HTTPError, MaxRetryError) as e:
-            raise TransferError(message=str(e))
-
-        return bucket_name, object_name
 
     def _get_download_path(self, path_details, target_path):
         # Decide whether to prepend target path or download directly to it.
@@ -127,12 +94,12 @@ class GetTransferConsumer(BaseTransferConsumer):
         return download_path
 
     def _transfer(self, bucket_name, object_name, download_path):
-        if self.client is None:
-            raise RuntimeError("self.client is None")
+        if self.s3_client is None:
+            raise RuntimeError("self.s3_client is None")
         download_path_str = str(download_path)
         # Attempt the download!
         try:
-            resp = self.client.fget_object(
+            resp = self.s3_client.fget_object(
                 bucket_name,
                 object_name,
                 download_path_str,
@@ -211,7 +178,7 @@ class GetTransferConsumer(BaseTransferConsumer):
             except KeyError as e:
                 self.log("Problem running set_ids in _transfer_files", RK.LOG_ERROR)
         # Create client
-        self.client = minio.Minio(
+        self.s3_client = minio.Minio(
             tenancy,
             access_key=access_key,
             secret_key=secret_key,
@@ -221,19 +188,22 @@ class GetTransferConsumer(BaseTransferConsumer):
         # the download path to have the same ownership
         created_paths = []
         for path_details in filelist:
-            # If bucketname inserted into object path (i.e. from catalogue) then
-            # extract both
             try:
-                bucket_name, object_name = self._get_and_check_bucket_name_object_name(
+                # get the bycket and object name and check the bucket exists
+                bucket_name, object_name = self._get_bucket_name_object_name(
                     path_details
                 )
+                if not self._bucket_exists(bucket_name):
+                    raise TransferError(
+                        f"Bucket does not exist in get_transfer._transfer_files"
+                    )
                 self.log(
                     f"Attempting to get file {object_name} from {bucket_name}",
                     RK.LOG_DEBUG,
                 )
                 download_path = self._get_download_path(path_details, target_path)
                 self._transfer(bucket_name, object_name, download_path)
-            except TransferError as e:
+            except (RuntimeError, TransferError) as e:
                 path_details.failure_reason = e.message
                 self.log(e.message, RK.LOG_DEBUG)
                 self.append_and_send(

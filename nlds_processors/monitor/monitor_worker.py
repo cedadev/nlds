@@ -90,9 +90,7 @@ class MonitorConsumer(RMQC):
         # get the user id from the details section of the message
         try:
             user = body[MSG.DETAILS][MSG.USER]
-            if user is None:
-                raise ValueError
-        except (KeyError, ValueError):
+        except KeyError:
             msg = "User not in message, exiting callback."
             self.log(msg, RK.LOG_ERROR)
             raise MonitorError(message=msg)
