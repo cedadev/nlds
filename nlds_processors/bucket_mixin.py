@@ -12,6 +12,7 @@ import nlds.rabbit.routing_keys as RK
 from minio.error import S3Error
 from urllib3.exceptions import HTTPError, MaxRetryError
 import json
+from nlds.errors import MessageError
 
 
 class BucketMixin:
@@ -29,17 +30,17 @@ class BucketMixin:
     @staticmethod
     def _get_bucket_name(transaction_id: str | None):
         if transaction_id is None:
-            raise RuntimeError("Transaction id is None")
+            raise MessageError(message="Transaction id is None")
         bucket_name = f"nlds.{transaction_id}"
         return bucket_name
 
     def _make_bucket(self, bucket_name: str | None):
         """Check bucket exists and create it if it doesn't"""
         if self.s3_client is None:
-            raise RuntimeError("self.s3_client is None")
+            raise MessageError(message="self.s3_client is None")
 
         if bucket_name is None:
-            raise RuntimeError("Transaction id is None")
+            raise MessageError(message="Transaction id is None")
 
         # Check that bucket exists, and create if not
         try:
@@ -55,7 +56,7 @@ class BucketMixin:
                     RK.LOG_INFO,
                 )
         except (S3Error, MaxRetryError) as e:
-            raise RuntimeError(str(e))
+            raise MessageError(message=str(e))
 
     def _bucket_exists(self, bucket_name: str):
         """Check that the bucket name actually exists."""
@@ -77,7 +78,7 @@ class BucketMixin:
                 f"{reason}, adding {path_details.object_name} to failed list.",
                 RK.LOG_INFO,
             )
-            raise RuntimeError(reason)
+            raise MessageError(message=reason)
         else:
             bucket_name = path_details.bucket_name
             object_name = path_details.object_name
@@ -93,9 +94,9 @@ class BucketMixin:
             if e.code == "NoSuchBucketPolicy":
                 bucket_policy = {}
             else:
-                raise RuntimeError(
-                    f"Error getting access policy for bucket {bucket_name} in tenancy "
-                    f"{self.tenancy}. Original error {e}"
+                raise MessageError(
+                    message=f"Error getting access policy for bucket {bucket_name} in "
+                    f"tenancy {self.tenancy}. Original error {e}"
                 )
         return bucket_policy
 
@@ -124,9 +125,10 @@ class BucketMixin:
         try:
             nlds_statement = self.access_policies[self.NLDS_USER_ACCESS_POLICY_CONFIG]
         except KeyError:
-            raise RuntimeError(
-                f"Could not find the {self.NLDS_USER_ACCESS_POLICY_CONFIG} key in the "
-                f"{self.OBJECT_STORE_ACCESS_POLICY_CONFIG} section of the config file"
+            raise MessageError(
+                message=f"Could not find the {self.NLDS_USER_ACCESS_POLICY_CONFIG} key "
+                f"in the {self.OBJECT_STORE_ACCESS_POLICY_CONFIG} section of the "
+                f"config file"
             )
         statements.append(nlds_statement)
 
@@ -147,9 +149,10 @@ class BucketMixin:
             try:
                 group_statement = self.access_policies[self.GROUP_ACCESS_POLICY_CONFIG]
             except KeyError:
-                raise RuntimeError(
-                    f"Could not find the {self.GROUP_ACCESS_POLICY_CONFIG} key in the "
-                    f"{self.OBJECT_STORE_ACCESS_POLICY_CONFIG} section of the config file"
+                raise MessageError(
+                    message=f"Could not find the {self.GROUP_ACCESS_POLICY_CONFIG} key "
+                    f"in the {self.OBJECT_STORE_ACCESS_POLICY_CONFIG} section of the "
+                    f"config file"
                 )
             statements.append(group_statement)
 
@@ -169,9 +172,9 @@ class BucketMixin:
                 self.OBJECT_STORE_ACCESS_POLICY_CONFIG
             ]
         except KeyError:
-            raise RuntimeError(
-                f"Could not find the {self.OBJECT_STORE_ACCESS_POLICY_CONFIG} section "
-                "in the config file"
+            raise MessageError(
+                message=f"Could not find the {self.OBJECT_STORE_ACCESS_POLICY_CONFIG} "
+                "section in the config file"
             )
 
         # get the current bucket policy
@@ -191,19 +194,20 @@ class BucketMixin:
             )
         except S3Error as e:
             if e.code == "MalformedPolicy":
-                raise RuntimeError(f"Malformed policy: {self.bucket_policy}")
+                raise MessageError(message=f"Malformed policy: {self.bucket_policy}")
             elif e.code == "AccessDenied":
-                raise RuntimeError(
-                    f"You do not have permission to change the policy for bucket "
-                    f"{bucket_name} in tenancy {self.tenancy}"
+                raise MessageError(
+                    message=f"You do not have permission to change the policy for "
+                    f"bucket {bucket_name} in tenancy {self.tenancy}"
                 )
             else:
-                raise RuntimeError(
-                    f"Encountered error when changing access policy for bucket "
+                raise MessageError(
+                    message=f"Encountered error when changing access policy for bucket "
                     f"{bucket_name} in tenancy {self.tenancy}.  Original error: {e}"
                 )
 
         self.log(
             f"Set access for bucket {bucket_name} in tenancy {self.tenancy} to "
-            f"{self.bucket_policy}", RK.LOG_INFO
+            f"{self.bucket_policy}",
+            RK.LOG_INFO,
         )
