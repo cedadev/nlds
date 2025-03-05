@@ -19,44 +19,19 @@ from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
+import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
+from nlds_processors.bucket_mixin import BucketMixin
 
 
-class PutTransferConsumer(BaseTransferConsumer):
+class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
     DEFAULT_QUEUE_NAME = "transfer_put_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_PUT}." f"{RK.WILD}"
     DEFAULT_STATE = State.TRANSFER_PUTTING
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
-        self.client = None
-
-    @staticmethod
-    def _get_bucket_name(transaction_id: str):
-        bucket_name = f"nlds.{transaction_id}"
-        return bucket_name
-
-    def _make_bucket(self, transaction_id: str):
-        """Check bucket exists and create it if it doesn't"""
-        if self.client is None:
-            raise RuntimeError("self.client is None")
-
-        bucket_name = self._get_bucket_name(transaction_id)
-        # Check that bucket exists, and create if not
-        try:
-            if not self.client.bucket_exists(bucket_name):
-                self.client.make_bucket(bucket_name)
-                self.log(
-                    f"Creating bucket ({bucket_name}) for this transaction",
-                    RK.LOG_INFO,
-                )
-            else:
-                self.log(
-                    f"Bucket ({bucket_name}) already exists",
-                    RK.LOG_INFO,
-                )
-        except (minio.error.S3Error, MaxRetryError) as e:
-            raise TransferError(message=str(e))
+        self.s3_client = None
 
     def _transfer_files(
         self,
@@ -71,8 +46,8 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
         bucket_name = self._get_bucket_name(transaction_id)
 
-        if self.client is None:
-            raise RuntimeError("self.client is None")
+        if self.s3_client is None:
+            raise RuntimeError("self.s3_client is None")
 
         for path_details in filelist:
             item_path = path_details.path
@@ -99,13 +74,15 @@ class PutTransferConsumer(BaseTransferConsumer):
             # Add this to the PathDetails as the StorageLocation
             pl = path_details.set_object_store(tenancy=tenancy, bucket=transaction_id)
             try:
-                result = self.client.fput_object(
-                    bucket_name, pl.path, path_details.original_path,
+                result = self.s3_client.fput_object(
+                    bucket_name,
+                    pl.path,
+                    path_details.original_path,
                 )
                 self.log(
                     f"Successfully uploaded {path_details.original_path} to "
-                    f"bucket {bucket_name} with object_name {pl.path}", 
-                    RK.LOG_DEBUG
+                    f"bucket {bucket_name} with object_name {pl.path}",
+                    RK.LOG_DEBUG,
                 )
                 self.append_and_send(
                     self.completelist,
@@ -129,6 +106,18 @@ class PutTransferConsumer(BaseTransferConsumer):
                 )
                 continue
 
+    def _parse_group(self, body_json: Dict[str, Any]):
+        # get the group from the details section of the message
+        try:
+            group = body_json[MSG.DETAILS][MSG.GROUP]
+            if group is None:
+                raise ValueError
+        except (KeyError, ValueError):
+            msg = "Group not in message, exiting callback."
+            self.log(msg, RK.LOG_ERROR)
+            raise TransferError(message=msg)
+        return group
+
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(
         self,
@@ -140,7 +129,7 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_origin: str,
         body_json: Dict[str, Any],
     ):
-        self.client = minio.Minio(
+        self.s3_client = minio.Minio(
             tenancy,
             access_key=access_key,
             secret_key=secret_key,
@@ -150,9 +139,13 @@ class PutTransferConsumer(BaseTransferConsumer):
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
 
+        group = self._parse_group(body_json=body_json)
+
         try:
-            self._make_bucket(transaction_id)
-        except TransferError as e:
+            bucket_name = self._get_bucket_name(transaction_id=transaction_id)
+            self._make_bucket(bucket_name)
+            self._set_access_policies(bucket_name=bucket_name, group=group)
+        except RuntimeError as e:
             # If the bucket cannot be created, due to a S3 error, then fail all the
             # files in the transaction
             for f in filelist:
