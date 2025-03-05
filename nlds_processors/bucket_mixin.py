@@ -55,7 +55,7 @@ class BucketMixin:
                     RK.LOG_INFO,
                 )
         except (S3Error, MaxRetryError) as e:
-            raise RuntimeError(message=str(e))
+            raise RuntimeError(str(e))
 
     def _bucket_exists(self, bucket_name: str):
         """Check that the bucket name actually exists."""
@@ -77,7 +77,7 @@ class BucketMixin:
                 f"{reason}, adding {path_details.object_name} to failed list.",
                 RK.LOG_INFO,
             )
-            raise RuntimeError(message=reason)
+            raise RuntimeError(reason)
         else:
             bucket_name = path_details.bucket_name
             object_name = path_details.object_name
