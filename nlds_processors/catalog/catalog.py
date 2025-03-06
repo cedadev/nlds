@@ -79,7 +79,7 @@ class Catalog(DBMixin):
                     Holding.user == user,
                 )
 
-            # Note - the order of these if.elif.elif statements is very important - do 
+            # Note - the order of these if.elif.elif statements is very important - do
             # not change the order!
             # holding id filtering - for when the user supplies a holding id
             if holding_id:
@@ -320,7 +320,7 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         original_path: str = None,
         tag: dict = None,
-        newest_only: bool = False
+        newest_only: bool = False,
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -347,10 +347,14 @@ class Catalog(DBMixin):
         try:
             for h in holding:
                 # build the file query bit by bit
-                file_q = self.session.query(File, Transaction).filter(
-                    File.transaction_id == Transaction.id,
-                    Transaction.holding_id == h.id,
-                ).order_by(Transaction.ingest_time)
+                file_q = (
+                    self.session.query(File, Transaction)
+                    .filter(
+                        File.transaction_id == Transaction.id,
+                        Transaction.holding_id == h.id,
+                    )
+                    .order_by(Transaction.ingest_time)
+                )
                 if is_regex(search_path):
                     file_q = file_q.filter(File.original_path.regexp_match(search_path))
                 else:
@@ -675,7 +679,7 @@ class Catalog(DBMixin):
         archive aggregate.
         A tenancy is passed in so that the only holdings attempted to be backed up are
         those that can be accessed via the object store keys also passed in the body.
-        Otherwise, when the archive_put process tries to stream the files from the 
+        Otherwise, when the archive_put process tries to stream the files from the
         object store to the tape, the keys don't match the tenancy and an access denied
         error is produced.
         """
@@ -704,10 +708,10 @@ class Catalog(DBMixin):
                     File.transaction_id == Transaction.id,
                     ~File.locations.any(Location.storage_type == Storage.TAPE),
                     File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                    # tenancy is stored in url_netloc part of Location
+                    File.locations.any(Location.url_netloc == tenancy),
                 )
                 .order_by(Holding.id)
-                # tenancy is stored in url_netloc part of Location
-                .filter(Location.url_netloc == tenancy) 
                 .first()
             )
 
