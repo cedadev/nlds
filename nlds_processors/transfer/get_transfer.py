@@ -23,7 +23,7 @@ from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
-from nlds_processors.bucket_mixin import BucketMixin
+from nlds_processors.bucket_mixin import BucketMixin, BucketError
 
 
 class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
@@ -189,7 +189,7 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         created_paths = []
         for path_details in filelist:
             try:
-                # get the bycket and object name and check the bucket exists
+                # get the bucket and object name and check the bucket exists
                 bucket_name, object_name = self._get_bucket_name_object_name(
                     path_details
                 )
@@ -203,7 +203,7 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 )
                 download_path = self._get_download_path(path_details, target_path)
                 self._transfer(bucket_name, object_name, download_path)
-            except (RuntimeError, TransferError) as e:
+            except (BucketError, TransferError) as e:
                 path_details.failure_reason = e.message
                 self.log(e.message, RK.LOG_DEBUG)
                 self.append_and_send(

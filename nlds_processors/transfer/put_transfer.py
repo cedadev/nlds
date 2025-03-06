@@ -21,7 +21,7 @@ from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
-from nlds_processors.bucket_mixin import BucketMixin
+from nlds_processors.bucket_mixin import BucketMixin, BucketError
 
 
 class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
@@ -44,7 +44,10 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
         """Transfer the files to the Object Storage"""
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
-        bucket_name = self._get_bucket_name(transaction_id)
+        try:
+            bucket_name = self._get_bucket_name(transaction_id)
+        except BucketError as e:
+            raise RuntimeError(e.message)
 
         if self.s3_client is None:
             raise RuntimeError("self.s3_client is None")
@@ -145,7 +148,7 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
             bucket_name = self._get_bucket_name(transaction_id=transaction_id)
             self._make_bucket(bucket_name)
             self._set_access_policies(bucket_name=bucket_name, group=group)
-        except RuntimeError as e:
+        except BucketError as e:
             # If the bucket cannot be created, due to a S3 error, then fail all the
             # files in the transaction
             for f in filelist:

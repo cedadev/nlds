@@ -14,6 +14,8 @@ from urllib3.exceptions import HTTPError, MaxRetryError
 import json
 from nlds.errors import MessageError
 
+class BucketError(MessageError):
+    pass
 
 class BucketMixin:
     """
@@ -30,17 +32,17 @@ class BucketMixin:
     @staticmethod
     def _get_bucket_name(transaction_id: str | None):
         if transaction_id is None:
-            raise MessageError(message="Transaction id is None")
+            raise BucketError(message="Transaction id is None")
         bucket_name = f"nlds.{transaction_id}"
         return bucket_name
 
     def _make_bucket(self, bucket_name: str | None):
         """Check bucket exists and create it if it doesn't"""
         if self.s3_client is None:
-            raise MessageError(message="self.s3_client is None")
+            raise BucketError(message="self.s3_client is None")
 
         if bucket_name is None:
-            raise MessageError(message="Transaction id is None")
+            raise BucketError(message="Transaction id is None")
 
         # Check that bucket exists, and create if not
         try:
@@ -56,7 +58,7 @@ class BucketMixin:
                     RK.LOG_INFO,
                 )
         except (S3Error, MaxRetryError) as e:
-            raise MessageError(message=str(e))
+            raise BucketError(message=str(e))
 
     def _bucket_exists(self, bucket_name: str):
         """Check that the bucket name actually exists."""
@@ -78,7 +80,7 @@ class BucketMixin:
                 f"{reason}, adding {path_details.object_name} to failed list.",
                 RK.LOG_INFO,
             )
-            raise MessageError(message=reason)
+            raise BucketError(message=reason)
         else:
             bucket_name = path_details.bucket_name
             object_name = path_details.object_name
@@ -94,7 +96,7 @@ class BucketMixin:
             if e.code == "NoSuchBucketPolicy":
                 bucket_policy = {}
             else:
-                raise MessageError(
+                raise BucketError(
                     message=f"Error getting access policy for bucket {bucket_name} in "
                     f"tenancy {self.tenancy}. Original error {e}"
                 )
@@ -125,7 +127,7 @@ class BucketMixin:
         try:
             nlds_statement = self.access_policies[self.NLDS_USER_ACCESS_POLICY_CONFIG]
         except KeyError:
-            raise MessageError(
+            raise BucketError(
                 message=f"Could not find the {self.NLDS_USER_ACCESS_POLICY_CONFIG} key "
                 f"in the {self.OBJECT_STORE_ACCESS_POLICY_CONFIG} section of the "
                 f"config file"
@@ -149,7 +151,7 @@ class BucketMixin:
             try:
                 group_statement = self.access_policies[self.GROUP_ACCESS_POLICY_CONFIG]
             except KeyError:
-                raise MessageError(
+                raise BucketError(
                     message=f"Could not find the {self.GROUP_ACCESS_POLICY_CONFIG} key "
                     f"in the {self.OBJECT_STORE_ACCESS_POLICY_CONFIG} section of the "
                     f"config file"
@@ -172,7 +174,7 @@ class BucketMixin:
                 self.OBJECT_STORE_ACCESS_POLICY_CONFIG
             ]
         except KeyError:
-            raise MessageError(
+            raise BucketError(
                 message=f"Could not find the {self.OBJECT_STORE_ACCESS_POLICY_CONFIG} "
                 "section in the config file"
             )
@@ -194,14 +196,14 @@ class BucketMixin:
             )
         except S3Error as e:
             if e.code == "MalformedPolicy":
-                raise MessageError(message=f"Malformed policy: {self.bucket_policy}")
+                raise BucketError(message=f"Malformed policy: {self.bucket_policy}")
             elif e.code == "AccessDenied":
-                raise MessageError(
+                raise BucketError(
                     message=f"You do not have permission to change the policy for "
                     f"bucket {bucket_name} in tenancy {self.tenancy}"
                 )
             else:
-                raise MessageError(
+                raise BucketError(
                     message=f"Encountered error when changing access policy for bucket "
                     f"{bucket_name} in tenancy {self.tenancy}.  Original error: {e}"
                 )

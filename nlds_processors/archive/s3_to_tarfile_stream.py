@@ -21,7 +21,7 @@ from minio.error import S3Error
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 from nlds.errors import MessageError
-from nlds_processors.bucket_mixin import BucketMixin
+from nlds_processors.bucket_mixin import BucketMixin, BucketError
 import nlds.server_config as CFG
 
 
@@ -87,7 +87,7 @@ class S3ToTarfileStream(BucketMixin):
                 check_bucket, check_object = self._get_bucket_name_object_name(
                     path_details
                 )
-            except ValueError as e:
+            except BucketError as e:
                 path_details.failure_reason = (
                     "Could not unpack bucket and object info from path_details"
                 )
@@ -175,7 +175,7 @@ class S3ToTarfileStream(BucketMixin):
                     bucket_name, object_name = self._get_bucket_name_object_name(
                         path_details
                     )
-                except RuntimeError as e:
+                except BucketError as e:
                     reason = str(e)
                     self.log(f"{reason}", RK.LOG_ERROR)
                     path_details.failure_reason = reason
@@ -239,7 +239,7 @@ class S3ToTarfileStream(BucketMixin):
                     bucket_name, object_name = self._get_bucket_name_object_name(
                         path_details
                     )
-                except RuntimeError as e:
+                except BucketError as e:
                     reason = f"Cannot get bucket_name, object_name from PathDetails"
                     self.log(f"{reason}", RK.LOG_ERROR)
                     path_details.failure_reason = reason
@@ -263,7 +263,10 @@ class S3ToTarfileStream(BucketMixin):
                     # get or create the bucket
                     try:
                         self._make_bucket(bucket_name=bucket_name)
-                    except RuntimeError as e:
+                        self._set_access_policies(
+                            bucket_name=bucket_name, group=path_details.group
+                        )
+                    except BucketError as e:
                         raise S3StreamError(
                             f"Cannot make bucket {bucket_name}, reason: str{e}"
                         )
