@@ -98,12 +98,12 @@ class S3ToTarfileStream(BucketMixin):
                 # Check the bucket exists
                 if not self._bucket_exists(check_bucket):
                     path_details.failure_reason = (
-                        f"Could not verify that bucket {check_bucket} exists before "
-                        f"writing to tape."
+                        f"Bucket {check_bucket} does not exist when attempting to "
+                        f"write to tape."
                     )
                     failed_list.append(path_details)
                     continue
-            except (S3Error, HTTPError, MaxRetryError) as e:
+            except (BucketError, MaxRetryError) as e:
                 path_details.failure_reason = (
                     f"Could not verify that bucket {check_bucket} exists before "
                     f"writing to tape. Original exception: {e}"

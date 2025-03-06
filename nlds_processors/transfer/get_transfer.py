@@ -195,7 +195,8 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 )
                 if not self._bucket_exists(bucket_name):
                     raise TransferError(
-                        f"Bucket does not exist in get_transfer._transfer_files"
+                        f"Bucket {bucket_name} does not exist in get_transfer."
+                        f"_transfer_files"
                     )
                 self.log(
                     f"Attempting to get file {object_name} from {bucket_name}",

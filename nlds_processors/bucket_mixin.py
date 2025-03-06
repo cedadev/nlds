@@ -68,7 +68,7 @@ class BucketMixin:
         try:
             bucket_exists = self.s3_client.bucket_exists(bucket_name)
         except (S3Error, HTTPError) as e:
-            bucket_exists = False
+            raise BucketError(message=str(e))
         return bucket_exists
 
     def _get_bucket_name_object_name(self, path_details: str):
