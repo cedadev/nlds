@@ -99,7 +99,7 @@ class Catalog(DBMixin):
             elif label:
                 if is_regex(label):
                     if not valid_regex(label):
-                        raise OperationalError(f"Not valid regular expression {label}")
+                        raise CatalogError(f"Regular expression is not valid: {label}")
                     holding_q = holding_q.filter(Holding.label.regexp_match(label))
                 else:
                     holding_q = holding_q.filter(Holding.label == label)
@@ -359,8 +359,8 @@ class Catalog(DBMixin):
                 )
                 if is_regex(search_path):
                     if not valid_regex(search_path):
-                        raise OperationalError(
-                            f"Not valid regular expression {search_path}"
+                        raise CatalogError(
+                            f"Regular expression is not valid: {search_path}"
                         )
                     file_q = file_q.filter(File.original_path.regexp_match(search_path))
                 else:
