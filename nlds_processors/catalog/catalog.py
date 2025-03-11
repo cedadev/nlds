@@ -365,7 +365,10 @@ class Catalog(DBMixin):
                 # when only the path is specified and no holding id or label is given)
                 # the results have been orderd by the Transaction ingest time
                 if newest_only:
-                    result = [result[0]]
+                    if len(result) > 0:
+                        result = [result[0]]
+                    else:
+                        result = []
                 for r in result:
                     if r.File is None:
                         continue
