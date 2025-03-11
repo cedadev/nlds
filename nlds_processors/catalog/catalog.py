@@ -31,7 +31,7 @@ from nlds_processors.catalog.catalog_models import (
 )
 from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
-from nlds_processors.utils.is_regex import is_regex
+from nlds_processors.utils.is_regex import is_regex, valid_regex
 
 
 class Catalog(DBMixin):
@@ -98,6 +98,8 @@ class Catalog(DBMixin):
             # search label filtering - for when the user supplies a holding label
             elif label:
                 if is_regex(label):
+                    if not valid_regex(label):
+                        raise OperationalError(f"Not valid regular expression {label}")
                     holding_q = holding_q.filter(Holding.label.regexp_match(label))
                 else:
                     holding_q = holding_q.filter(Holding.label == label)
@@ -356,6 +358,10 @@ class Catalog(DBMixin):
                     .order_by(Transaction.ingest_time)
                 )
                 if is_regex(search_path):
+                    if not valid_regex(search_path):
+                        raise OperationalError(
+                            f"Not valid regular expression {search_path}"
+                        )
                     file_q = file_q.filter(File.original_path.regexp_match(search_path))
                 else:
                     file_q = file_q.filter(File.original_path == search_path)

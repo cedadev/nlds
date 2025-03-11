@@ -469,7 +469,7 @@ class RabbitMQConsumer(ABC, RMQP):
         try:
             ack_fl = self.callback(ch, method, properties, body, connection)
         except Exception as e:
-            # this is very unsatisfactory!
+            # this is very unsatisfactory - it's basically crash and burn!
             raise Exception(e)
         finally:
             # Only ack message if the message has not been flagged for nacking

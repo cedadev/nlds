@@ -39,7 +39,6 @@ from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
-from nlds_processors.utils.is_regex import is_regex
 from nlds_processors.catalog.catalog import Catalog
 from nlds_processors.catalog.catalog_error import CatalogError
 from nlds_processors.catalog.catalog_models import Storage, File
