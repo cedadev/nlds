@@ -240,6 +240,14 @@ class MonitorConsumer(RMQC):
             idd = None
         return idd
 
+    def _parse_regex(self, body: dict) -> str:
+        # get the REGEX flag from the metadata section of the message
+        try:
+            regex = body[MSG.META][MSG.REGEX]
+        except KeyError:
+            regex = False
+        return regex
+
     def _get_or_create_transaction_record(
         self, user, group, transaction_id, job_label, api_action, warnings
     ):
@@ -418,6 +426,7 @@ class MonitorConsumer(RMQC):
             query_group = self._parse_querygroup(body, group)
             query_user = self._parse_queryuser(body, user)
             idd = self._parse_idd(body)
+            regex = self._parse_regex(body)
         except MonitorError:
             # Functions above handled message logging, here we just return
             return
@@ -433,6 +442,7 @@ class MonitorConsumer(RMQC):
                 idd=idd,
                 transaction_id=transaction_id,
                 job_label=job_label,
+                regex=regex,
             )
         except MonitorError:
             trecs = []

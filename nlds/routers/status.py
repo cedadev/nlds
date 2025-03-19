@@ -61,6 +61,7 @@ async def get(
     api_action: Optional[str] = None,
     query_user: Optional[str] = None,
     query_group: Optional[str] = None,
+    regex: Optional[bool] = None,
 ):
     # create the message dictionary
     api_action = f"{RK.STAT}"
@@ -117,7 +118,6 @@ async def get(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=response_error.json()
             )
-
     # Assemble message ready for RCP call
     msg_dict = {
         MSG.DETAILS: {
@@ -137,6 +137,11 @@ async def get(
         MSG.DATA: {},
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
+    meta_dict = {}
+    if regex:
+        meta_dict[MSG.REGEX] = True
+    if len(meta_dict) > 0:
+        msg_dict[MSG.META] = meta_dict
 
     # call RPC function
     routing_key = "monitor_q"

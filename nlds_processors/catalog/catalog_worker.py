@@ -290,12 +290,20 @@ class CatalogConsumer(RMQC):
         return transaction_records
 
     def _parse_path(self, body: dict) -> str:
-        # get the path from the details section of the message
+        # get the path from the metadata section of the message
         try:
             path = body[MSG.META][MSG.PATH]
         except KeyError:
             path = None
         return path
+
+    def _parse_regex(self, body: dict) -> str:
+        # get the REGEX flag from the metadata section of the message
+        try:
+            regex = body[MSG.META][MSG.REGEX]
+        except KeyError:
+            regex = False
+        return regex
 
     def _parse_new_metadata_variables(self, body: dict) -> tuple:
         # get the new label from the new meta section of the message
@@ -688,6 +696,7 @@ class CatalogConsumer(RMQC):
                 self._parse_metadata_vars(body)
             )
             groupall = self._parse_groupall(body)
+            regex = self._parse_regex(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -711,7 +720,8 @@ class CatalogConsumer(RMQC):
                     transaction_id=transaction_id,
                     original_path=filepath_details.original_path,
                     tag=holding_tag,
-                    newest_only=True
+                    newest_only=True,
+                    regex=regex,
                 )
 
                 if len(files) == 0:

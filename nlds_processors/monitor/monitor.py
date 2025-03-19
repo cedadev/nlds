@@ -8,7 +8,7 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, DataError
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -69,6 +69,7 @@ class Monitor(DBMixin):
         idd: int = None,
         transaction_id: str = None,
         job_label: str = None,
+        regex: bool = False,
     ) -> list:
         """Gets a TransactionRecord from the DB from the given transaction_id,
         or the primary key (id)"""
@@ -76,6 +77,7 @@ class Monitor(DBMixin):
             transaction_search = transaction_id
         else:
             transaction_search = ".*"
+            regex = True
 
         try:
             if idd:
@@ -83,15 +85,30 @@ class Monitor(DBMixin):
                     TransactionRecord.group == group, TransactionRecord.id == idd
                 )
             elif job_label:
-                trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.group == group,
-                    TransactionRecord.job_label.regexp_match(job_label),
-                )
+                if regex:
+                    trec = self.session.query(TransactionRecord).filter(
+                        TransactionRecord.group == group,
+                        TransactionRecord.job_label.regexp_match(job_label),
+                    )
+                else:
+                    trec = self.session.query(TransactionRecord).filter(
+                        TransactionRecord.group == group,
+                        TransactionRecord.job_label == job_label,
+                    )
+
             else:
-                trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.group == group,
-                    TransactionRecord.transaction_id.regexp_match(transaction_search),
-                )
+                if regex:
+                    trec = self.session.query(TransactionRecord).filter(
+                        TransactionRecord.group == group,
+                        TransactionRecord.transaction_id.regexp_match(
+                            transaction_search
+                        ),
+                    )
+                else:
+                    trec = self.session.query(TransactionRecord).filter(
+                        TransactionRecord.group == group,
+                        TransactionRecord.transaction_id == transaction_search,
+                    )
             # user filter
             if not groupall:
                 trec = trec.filter(TransactionRecord.user == user)
@@ -109,6 +126,11 @@ class Monitor(DBMixin):
                     f"TransactionRecord with transaction_id:{transaction_id} "
                     f"not found"
                 )
+        except DataError as e:
+            if regex:
+                raise MonitorError(f"Invalid regular expression: {transaction_search}")
+            else:
+                raise MonitorError(f"Error getting transaction_record: {e}")
         return trecs
 
     def create_sub_record(

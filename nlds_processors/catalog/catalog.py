@@ -17,6 +17,7 @@ from sqlalchemy.exc import (
     OperationalError,
     ArgumentError,
     NoResultFound,
+    DataError
 )
 
 from nlds_processors.catalog.catalog_models import (
@@ -31,7 +32,6 @@ from nlds_processors.catalog.catalog_models import (
 )
 from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
-from nlds_processors.utils.is_regex import is_regex, valid_regex
 
 
 class Catalog(DBMixin):
@@ -66,6 +66,7 @@ class Catalog(DBMixin):
         holding_id: int = None,
         transaction_id: str = None,
         tag: dict = None,
+        regex: bool = False,
     ) -> List[Holding]:
         """Get a holding from the database"""
         if self.session is None:
@@ -97,9 +98,8 @@ class Catalog(DBMixin):
 
             # search label filtering - for when the user supplies a holding label
             elif label:
-                if is_regex(label):
-                    if not valid_regex(label):
-                        raise CatalogError(f"Regular expression is not valid: {label}")
+                # regex will throw exception here if invalid
+                if regex:
                     holding_q = holding_q.filter(Holding.label.regexp_match(label))
                 else:
                     holding_q = holding_q.filter(Holding.label == label)
@@ -155,6 +155,13 @@ class Catalog(DBMixin):
             else:
                 msg += "."
             raise CatalogError(msg)
+        except DataError as e:
+            if regex:
+                msg = f"Invalid regular expression: {label}"
+            else:
+                msg = f"Error getting Holding: {e}"
+            raise CatalogError(msg)
+
         except OperationalError as e:
             raise CatalogError(
                 f"Error when when listing holding for user:{user} and group:{group}. "
@@ -323,6 +330,7 @@ class Catalog(DBMixin):
         original_path: str = None,
         tag: dict = None,
         newest_only: bool = False,
+        regex: bool = False,
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -357,11 +365,8 @@ class Catalog(DBMixin):
                     )
                     .order_by(Transaction.ingest_time)
                 )
-                if is_regex(search_path):
-                    if not valid_regex(search_path):
-                        raise CatalogError(
-                            f"Regular expression is not valid: {search_path}"
-                        )
+                if regex or search_path == ".*":
+                    # will throw an exception here for bad regex
                     file_q = file_q.filter(File.original_path.regexp_match(search_path))
                 else:
                     file_q = file_q.filter(File.original_path == search_path)
