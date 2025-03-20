@@ -64,7 +64,10 @@ async def get(
     regex: Optional[bool] = None,
 ):
     # create the message dictionary
-    api_action = f"{RK.STAT}"
+    search_api_action = api_action
+    api_action = f"{RK.STAT}"   # this is overwriting the api_action we want to
+                                # filter on, so we have saved it above - we will
+                                # put it in the META section of the message
 
     # logic for user/group query verification should go here. Do we want to
     # prevent the querying of users other than themselves?
@@ -85,7 +88,7 @@ async def get(
         else:
             response_error = ResponseError(
                 loc=["status", "get"],
-                msg="Given State not valid.",
+                msg=f"Given State: {state} is not valid.",
                 type="Incomplete request.",
             )
             raise HTTPException(
@@ -99,7 +102,7 @@ async def get(
         except ValueError:
             response_error = ResponseError(
                 loc=["status", "get"],
-                msg="Given transaction_id not a valid uuid-4.",
+                msg=f"Given transaction_id: {transaction_id} is not a valid uuid-4.",
                 type="Incomplete request.",
             )
             raise HTTPException(
@@ -112,7 +115,7 @@ async def get(
         except ValueError:
             response_error = ResponseError(
                 loc=["status", "get"],
-                msg="Given sub_id not a valid uuid-4.",
+                msg=f"Given sub_id: {sub_id} is not a valid uuid-4.",
                 type="Incomplete request.",
             )
             raise HTTPException(
@@ -140,6 +143,8 @@ async def get(
     meta_dict = {}
     if regex:
         meta_dict[MSG.REGEX] = True
+    if search_api_action:
+        meta_dict[MSG.API_ACTION] = search_api_action
     if len(meta_dict) > 0:
         msg_dict[MSG.META] = meta_dict
 
