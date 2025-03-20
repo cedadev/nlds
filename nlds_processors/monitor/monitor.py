@@ -113,6 +113,9 @@ class Monitor(DBMixin):
             if not groupall:
                 trec = trec.filter(TransactionRecord.user == user)
             trecs = trec.all()
+            
+            if len(trecs) == 0:
+                raise KeyError
 
         except (IntegrityError, KeyError, OperationalError):
             if idd:
@@ -223,7 +226,7 @@ class Monitor(DBMixin):
             if state is not None:
                 query = query.filter(SubRecord.state == state)
             if api_action is not None:
-                api_action = query.filter(TransactionRecord.api_action == api_action)
+                query = query.filter(TransactionRecord.api_action == api_action)
             if user is not None:
                 query = query.filter(TransactionRecord.user == user)
             if group is not None:

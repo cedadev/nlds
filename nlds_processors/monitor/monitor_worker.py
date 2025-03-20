@@ -248,6 +248,14 @@ class MonitorConsumer(RMQC):
             regex = False
         return regex
 
+    def _parse_api_action_from_meta(self, body):
+        # get the api-action from the details section of the message
+        try:
+            api_action = body[MSG.META][MSG.API_ACTION]
+        except KeyError:
+            api_action = None
+        return api_action
+
     def _get_or_create_transaction_record(
         self, user, group, transaction_id, job_label, api_action, warnings
     ):
@@ -418,7 +426,7 @@ class MonitorConsumer(RMQC):
             transaction_id = self._parse_transaction_id(body, mandatory=False)
             user = self._parse_user(body)
             group = self._parse_group(body)
-            api_action = self._parse_api_action(body, mandatory=False)
+            api_action = self._parse_api_action_from_meta(body)
             job_label = self._parse_job_label(body)
             state = self._parse_state(body, mandatory=False)
             sub_id = self._parse_subid(body, mandatory=False)
@@ -444,7 +452,9 @@ class MonitorConsumer(RMQC):
                 job_label=job_label,
                 regex=regex,
             )
-        except MonitorError:
+        except MonitorError as e:
+            self.log(e.message, RK.LOG_ERROR)
+            body[MSG.DETAILS][MSG.FAILURE] = e.message
             trecs = []
 
         # Convert list of objects to json-friendly dict
