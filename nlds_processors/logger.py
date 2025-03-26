@@ -92,7 +92,7 @@ class LoggingConsumer(RMQP):
         loggers = {
             name: logging.getLogger(name)
             for name in logging.root.manager.loggerDict
-            if RK.LOGGER_PREFIX == name[:5]
+            if RK.LOGGER_PREFIX == name[:len(RK.LOGGER_PREFIX)]
         }
         try:
             consumer_logger = loggers[consumer]
