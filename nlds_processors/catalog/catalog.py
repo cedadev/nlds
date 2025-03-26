@@ -725,7 +725,9 @@ class Catalog(DBMixin):
                     # tenancy is stored in url_netloc part of Location
                     File.locations.any(Location.url_netloc == tenancy),
                 )
-                .order_by(Holding.id)
+                # Order randomly so that if one archive fails, it won't prevent the
+                # others from archiving
+                .order_by(func.random())
                 .first()
             )
 
