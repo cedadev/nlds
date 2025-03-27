@@ -836,22 +836,24 @@ class Catalog(DBMixin):
         try:
             # Get the holdings
             holdings = self.get_holding(user, group, groupall = True)
-            print(holdings)
+        except (CatalogError) as e:
+            total_diskspace = 0.0
+            return total_diskspace
 
+        try:
             # Loop through the holdings
             for holding in holdings:
-                print(holding)
+                # print("HOLDING:", holding)
 
                 # Loop through the transactions:
                 for transaction in holding.transactions:
-                    print(transaction)
+                    # print(transaction)
 
                     # Loop through the files:
                     for file in transaction.files:
                         
                         # Add file size to total diskspace
                         total_diskspace += file.size
-
         except Exception as e:
-            raise RuntimeError(f"An error occured while calculating the disk space: {e}")
+            raise RuntimeError(f"An error occurred while calculating the disk space: {e}")
         return total_diskspace
