@@ -215,7 +215,7 @@ deactivate qw
 
 activate work #Gold 
 
-loop #LightPink for aggregate in //tape_dict//
+loop #LightPink for aggregate in //prepare_complete_dict//
     loop #FFF8F8 for file in aggregate
         archive_gets->obj : Extract file from aggregate
         obj->archive_gets

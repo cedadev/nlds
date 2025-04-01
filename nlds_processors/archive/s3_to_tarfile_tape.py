@@ -105,7 +105,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # Make or find holding folder on the tape server
         status, _ = self.tape_client.mkdir(self.holding_tapepath, MkDirFlags.MAKEPATH)
         if status.status != 0:
-            # If bucket directory couldn't be created then fail for retrying
+            # If holding directory (same as bucket) couldn't be created then fail
             raise S3StreamError(
                 f"Couldn't create or find holding directory ({self.holding_tapepath})."
             )
