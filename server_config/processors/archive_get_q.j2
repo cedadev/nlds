@@ -1,0 +1,41 @@
+{
+    "archive_get_q" : {
+        "tenancy" : "{{ tenancy }}",
+        "tape_url" : "{{ tape_url }}",
+        "tape_pool" : {{ tape_pool|default(null) }},
+        "chunk_size" : {{ chunk_size|default(262144) }},
+        "filelist_max_size" : {{ filelist_max_size|default(16000000000) }},
+        "filelist_max_length" : {{ filelist_max_length|default(1000) }},
+        "print_tracebacks_fl" : {{ print_tracebacks|default(false) }},
+        "require_secure_fl" : {{ require_secure|default(false) }},
+        "logging" : {
+            "enable" : True,
+            "log_level" : "{{ log_level }}"
+        }
+    }, 
+    "rabbitMQ" : {
+        "queues" : [
+            {
+                "name": "archive_get_q",
+                "bindings" : [
+                    {
+                        "exchange" : "{{ rabbit_exchange_name }}",
+                        "routing_key" : "*.archive-get.start"
+                    },
+                    {
+                        "exchange" : "{{ rabbit_exchange_name }}",
+                        "routing_key" : "*.archive-get.init"
+                    },
+                    {
+                        "exchange" : "{{ rabbit_exchange_name }}",
+                        "routing_key" : "*.archive-get.prepare"
+                    },
+                    {
+                        "exchange" : "{{ rabbit_exchange_name }}",
+                        "routing_key" : "*.archive-get.prepare-check"
+                    }
+                ]
+            }
+        ]
+    }
+}

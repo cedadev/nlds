@@ -8,8 +8,8 @@ __copyright__ = 'Copyright 2024 United Kingdom Research and Innovation'
 __license__ = 'BSD - see LICENSE file in top-level package directory'
 __contact__ = 'neil.massey@stfc.ac.uk'
 
-from ..rabbit.publisher import RabbitMQPublisher
-from ..rabbit.rpc_publisher import RabbitMQRPCPublisher
+from nlds.rabbit.publisher import RabbitMQPublisher
+from nlds.rabbit.rpc_publisher import RabbitMQRPCPublisher
 
 # Create a publisher and start its connection
 rabbit_publisher = RabbitMQPublisher()

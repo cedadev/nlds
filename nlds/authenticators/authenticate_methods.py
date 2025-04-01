@@ -1,6 +1,6 @@
 # encoding: utf-8
 """
-
+authenticate_methods.py
 """
 __author__ = 'Neil Massey and Jack Leland'
 __date__ = '30 Nov 2021'
@@ -49,24 +49,30 @@ async def authenticate_token(token: str = Depends(oauth2_scheme)):
 async def authenticate_user(user: str, token: str = Depends(oauth2_scheme)):
     """Check the user by calling the authenticator's authenticate_user
     method."""
-    if token is None:
-        response_error = ResponseError(
-            loc = ["authenticate_methods", "authenticate_user"],
-            msg = f"OAuth token not supplied.",
-            type = "Forbidden."
-        )
+    try:
+        if token is None:
+            response_error = ResponseError(
+                loc = ["authenticate_methods", "authenticate_user"],
+                msg = f"OAuth token not supplied.",
+                type = "Forbidden."
+            )
+            raise HTTPException(
+                status_code = status.HTTP_403_FORBIDDEN,
+                detail = response_error.json()
+            )
+        elif not authenticator.authenticate_user(token, user):
+            response_error = ResponseError(
+                loc = ["authenticate_methods", "authenticate_user"],
+                msg = f"User {user} could not be found.",
+                type = "Forbidden."
+            )
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = response_error.json()
+            )
+    except RuntimeError as e:
         raise HTTPException(
             status_code = status.HTTP_403_FORBIDDEN,
-            detail = response_error.json()
-        )
-    elif not authenticator.authenticate_user(token, user):
-        response_error = ResponseError(
-            loc = ["authenticate_methods", "authenticate_user"],
-            msg = f"User {user} could not be found.",
-            type = "Forbidden."
-        )
-        raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
             detail = response_error.json()
         )
     return user
@@ -75,26 +81,38 @@ async def authenticate_user(user: str, token: str = Depends(oauth2_scheme)):
 async def authenticate_group(group: str, token: str = Depends(oauth2_scheme)):
     """Check the group by calling the authenticator's authenticate_user
     method."""
-    if token is None:
-        response_error = ResponseError(
-            loc = ["authenticate_methods", "authenticate_group"],
-            msg = "OAuth token not supplied.",
-            type = "Forbidden."
-        )
-        raise HTTPException(
-            status_code = status.HTTP_403_FORBIDDEN,
-            detail = response_error.json()
-        )
-    elif not authenticator.authenticate_group(token, group):
+    try:
+        if token is None:
+            response_error = ResponseError(
+                loc = ["authenticate_methods", "authenticate_group"],
+                msg = "OAuth token not supplied.",
+                type = "Forbidden."
+            )
+            raise HTTPException(
+                status_code = status.HTTP_403_FORBIDDEN,
+                detail = response_error.json()
+            )
+        elif not authenticator.authenticate_group(token, group):
+            response_error = ResponseError(
+                loc = ["authenticate_methods", "authenticate_group"],
+                msg = f"User is not a member of the group {group}.",
+                type = "Resource not found."
+            )
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = response_error.json()
+            )
+    except RuntimeError as e:
         response_error = ResponseError(
             loc = ["authenticate_methods", "authenticate_group"],
             msg = f"User is not a member of the group {group}.",
             type = "Resource not found."
         )
         raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
+            status_code = status.HTTP_403_FORBIDDEN,
             detail = response_error.json()
         )
+
     return group
 
 

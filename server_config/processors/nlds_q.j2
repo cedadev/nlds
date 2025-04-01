@@ -1,0 +1,29 @@
+{
+    "nlds_q":{
+        "logging":{
+            "enable": True,
+            "log_level": "{{ log_level }}"
+        }
+    }, 
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "nlds_q",
+                "bindings": [
+                    {
+                        "exchange": "test_exchange",
+                        "routing_key": "nlds-api.route.*"
+                    },
+                    {
+                        "exchange": "test_exchange",
+                        "routing_key": "nlds-api.*.complete"
+                    },
+                    {
+                        "exchange": "test_exchange",
+                        "routing_key": "nlds-api.*.failed"
+                    }
+                ]
+            }
+        ]
+    }
+}

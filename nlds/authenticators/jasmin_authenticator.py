@@ -1,7 +1,8 @@
 # encoding: utf-8
 """
-
+jasmin_authenticator.py
 """
+<<<<<<< HEAD
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
 __copyright__ = "Copyright 2021 United Kingdom Research and Innovation"
@@ -13,6 +14,16 @@ from nlds.server_config import load_config
 from nlds.utils.format_url import format_url
 from nlds_processors.catalog.catalog_models import File, Holding, Transaction
 from retry import retry
+=======
+__author__ = 'Neil Massey and Jack Leland'
+__date__ = '30 Nov 2021'
+__copyright__ = 'Copyright 2024 United Kingdom Research and Innovation'
+__license__ = 'BSD - see LICENSE file in top-level package directory'
+__contact__ = 'neil.massey@stfc.ac.uk'
+
+from .base_authenticator import BaseAuthenticator
+from ..server_config import load_config
+>>>>>>> main
 import requests
 import json
 import urllib.parse

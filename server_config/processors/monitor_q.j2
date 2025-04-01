@@ -1,0 +1,32 @@
+{
+    "monitor_q":{
+        "db_engine": "{{ monitor_q_db_engine }}",
+        "db_options": {
+            "db_name": "{{ monitor_q_db_name }}",
+            "db_user": "{{ monitor_q_db_user }}",
+            "db_passwd": "{{ monitor_q_db_passwd }}",
+            "echo": {{ db_echo|default(False) }}
+        },
+        "logging":{
+            "enable": True,
+            "log_level": "{{ log_level }}"
+        }
+    },
+    "rabbitMQ": {
+        "queues": [
+            {
+                "name": "monitor_q",
+                "bindings": [
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.monitor-get.*"
+                    },
+                    {
+                        "exchange": "{{ rabbit_exchange_name }}",
+                        "routing_key": "*.monitor-put.*"
+                    }
+                ]
+            }
+        ]
+    }
+}

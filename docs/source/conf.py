@@ -14,15 +14,20 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../../'))
 
+from nlds import __version__
+
 
 # -- Project information -----------------------------------------------------
 
-project = 'Near-line Data Store'
-copyright = '2022, Neil Massey & Jack Leland'
+project = 'Near-line Data Store Server'
+copyright = ('2022-2024, Centre of Environmental Data Analysis Developers,'
+             'Scientific and Technical Facilities Council (STFC),'
+             'UK Research and Innovation (UKRI). '
+             'BSD 2-Clause License. All rights reserved.')
 author = 'Neil Massey & Jack Leland'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1'
+release = __version__
 
 
 # -- General configuration ---------------------------------------------------
@@ -37,6 +42,7 @@ extensions = [
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+html_favicon = '_images/icon-black.png'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -56,8 +62,8 @@ html_theme = 'sphinx_rtd_theme'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-html_logo = "ceda.png"
+html_logo = "_images/nlds.png"
 html_theme_options = {
-    'logo_only': True,
-    'display_version': False,
+    'logo_only': False,
+    'display_version': True,
 }

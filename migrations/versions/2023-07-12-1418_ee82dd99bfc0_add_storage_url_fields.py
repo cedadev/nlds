@@ -16,20 +16,19 @@ from sqlalchemy.sql.expression import text
 
 from nlds_processors.catalog.catalog_models import Storage
 from nlds_processors.catalog.catalog_worker import CatalogConsumer
-from nlds_processors.transferers.put_transfer import PutTransferConsumer
-from nlds_processors.transferers.get_transfer import GetTransferConsumer
-# Import archiver consumers, some of which import xrootd and may break on 
+from nlds_processors.transfer.put_transfer import PutTransferConsumer
+from nlds_processors.transfer.get_transfer import GetTransferConsumer
+# Import archive consumers, some of which import xrootd and may break on 
 # unprepared environments
-from nlds_processors.archiver.archive_base import BaseArchiveConsumer as BAC
-from nlds_processors.archiver.archive_base import ArchiveError
 try:
-    from nlds_processors.archiver.archive_get import GetArchiveConsumer
-    from nlds_processors.archiver.archive_put import PutArchiveConsumer
+    from nlds_processors.archive.archive_get import GetArchiveConsumer
+    from nlds_processors.archive.archive_put import PutArchiveConsumer
 except ModuleNotFoundError:
     PutArchiveConsumer = None
     GetArchiveConsumer = None
 from nlds.details import PathType
-
+from nlds.errors import MessageError
+from typing import Tuple
 
 # revision identifiers, used by Alembic.
 revision = 'ee82dd99bfc0'
@@ -230,6 +229,29 @@ def find_default_url(consumer_priority_list: List,
     # Return the default otherwise.
     return default_url
 
+# pasted this in to avoid importing XRootD via S3ToTarfileTape
+class ArchiveError(Exception):
+    pass
+
+class S3StreamError(MessageError):
+    pass
+
+def _split_tape_url(tape_url: str) -> Tuple[str]:
+    """Split the tape URL into the server and base directory"""
+    # Verify tape url is valid
+    tape_url_parts = tape_url.split("//")
+    if not (len(tape_url_parts) == 3 and tape_url_parts[0] == "root:"):
+        raise S3StreamError(
+            "Tape URL given was invalid. Must be of the "
+            "form: root://{server}//{archive/path}, was "
+            f"given as {tape_url}."
+        )
+    _, server, base_dir = tape_url_parts
+    # prepend a slash onto the base_dir so it can directly be used to make
+    # directories with the pyxrootd client
+
+    return server, f"/{base_dir}"
+
 def find_default_tape_url():
     """Wrapper around find_default_url with predefined consumer_priority_list 
     for tenancy finding."""
@@ -241,7 +263,7 @@ def find_default_tape_url():
     ]
     tape_url = find_default_url(consumer_priority_list)
     try: 
-        netloc = "/".join(BAC.split_tape_url(tape_url))
+        netloc = "/".join(S3ToTarfileTape._split_tape_url(tape_url))
     except ArchiveError:
         netloc = tape_url
     return "root", netloc

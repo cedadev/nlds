@@ -1,0 +1,58 @@
+#! /usr/bin/env bash
+
+if [[ -z $1 ]]; then
+    echo "nlds-up requires a microservice to run"
+    echo "nlds-up <microservice>"
+    echo "    nlds_q"
+    echo "    catalog_q"
+    echo "    index_q"
+    echo "    monitor_q"
+    echo "    transfer_put_q"
+    echo "    transfer_get_q"
+    echo "    logging_q"
+    echo "    archive_put_q"
+    echo "    archive_get_q"
+    echo "    archive_next"
+    echo "    nlds-api"
+    exit 1
+fi
+
+# Change to user supplied in 2nd argument (if supplied)
+if [ -n "$2" ]; then
+    USER_CMD="sudo -u $2 "
+else
+    USER_CMD=""
+fi
+
+if [[ -z $NLDS_VENV ]]; then
+    echo "NLDS_VENV environment variable not set"
+    exit 1
+else
+    source $NLDS_VENV/bin/activate
+fi
+
+if [ $1 = 'nlds_q' ]; then
+    $USER_CMD nlds_q
+elif [ $1 = 'catalog_q' ]; then
+    $USER_CMD catalog_q
+elif [ $1 = 'index_q' ]; then
+    $USER_CMD index_q
+elif [ $1 = 'monitor_q' ]; then
+    $USER_CMD monitor_q
+elif [ $1 = 'transfer_put_q' ]; then
+    $USER_CMD transfer_put_q
+elif [ $1 = 'transfer_get_q' ]; then
+    $USER_CMD transfer_get_q
+elif [ $1 = 'logging_q' ]; then
+    $USER_CMD logging_q
+elif [ $1 = 'archive_put_q' ]; then
+    $USER_CMD archive_put_q
+elif [ $1 = 'archive_get_q' ]; then
+    $USER_CMD archive_get_q
+elif [ $1 = 'archive_next' ]; then
+    $USER_CMD send_archive_next
+elif [ $1 = 'nlds-api' ]; then
+    $USER_CMD uvicorn nlds.main:nlds --reload --log-level=trace --port=8000
+fi
+
+deactivate
