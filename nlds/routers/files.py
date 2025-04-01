@@ -269,13 +269,8 @@ async def put(
         meta_dict[MSG.TAG] = tag_dict
         response.tag = tag_dict
 
-<<<<<<< HEAD
-    if (len(meta_dict) > 0):
-        msg_dict[RMQP.MSG_META] = meta_dict
-=======
     if len(meta_dict) > 0:
         msg_dict[MSG.META] = meta_dict
->>>>>>> main
     rabbit_publisher.publish_message(routing_key, msg_dict)
 
     return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=response.json())
@@ -488,112 +483,111 @@ async def put(
 
 
 
-@router.delete("/",
-               status_code = status.HTTP_202_ACCEPTED,
-               responses = {
-               status.HTTP_202_ACCEPTED: {"model" : FileResponse},
-               status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
-               status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
-               status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
-               status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
-            }
-        )
+# @router.delete("/",
+#                status_code = status.HTTP_202_ACCEPTED,
+#                responses = {
+#                status.HTTP_202_ACCEPTED: {"model" : FileResponse},
+#                status.HTTP_400_BAD_REQUEST: {"model" : ResponseError},
+#                status.HTTP_401_UNAUTHORIZED: {"model" : ResponseError},
+#                status.HTTP_403_FORBIDDEN: {"model" : ResponseError},
+#                status.HTTP_404_NOT_FOUND: {"model" : ResponseError}
+#             }
+#         )
 
-async def delete(transaction_id: UUID,
-                 token: str = Depends(authenticate_token),
-                 user: str = Depends(authenticate_user),
-                 group: str = Depends(authenticate_group),
-                 groupall: bool = False,
-                 filemodel: Optional[FileModel] = None,
-                 job_label: Optional[str] = None,
-                 tenancy: Optional[str] = None,
-                 access_key: str = "",
-                 secret_key: str = ""
-                ):
-    # validate filepath and filelist - one or the other has to exist
-    if not filemodel:
-        response_error = ResponseError(
-                loc = ["files", "delete"],
-                msg = "filelist not supplied.",
-                type = "Incomplete request."
-            )
-        raise HTTPException(
-            status_code = status.HTTP_400_BAD_REQUEST,
-            detail = response_error.json()
-        )
-    # validate holding id or label - one or the other has to exist
-    if not (filemodel.label or filemodel.holding_id):
-        response_error = ResponseError(
-                loc = ["files", "delete"],
-                msg = ("Cannot complete delete request: "
-                       "label or holding_id not supplied."),
-                type = "Incomplete request."
-            )
-        raise HTTPException(
-            status_code = status.HTTP_400_BAD_REQUEST,
-            detail = response_error.json()
-        )
+# async def delete(transaction_id: UUID,
+#                  token: str = Depends(authenticate_token),
+#                  user: str = Depends(authenticate_user),
+#                  group: str = Depends(authenticate_group),
+#                  groupall: bool = False,
+#                  filemodel: Optional[FileModel] = None,
+#                  job_label: Optional[str] = None,
+#                  tenancy: Optional[str] = None,
+#                  access_key: str = "",
+#                  secret_key: str = ""
+#                 ):
+#     # validate filepath and filelist - one or the other has to exist
+#     if not filemodel:
+#         response_error = ResponseError(
+#                 loc = ["files", "delete"],
+#                 msg = "filelist not supplied.",
+#                 type = "Incomplete request."
+#             )
+#         raise HTTPException(
+#             status_code = status.HTTP_400_BAD_REQUEST,
+#             detail = response_error.json()
+#         )
+#     # validate holding id or label - one or the other has to exist
+#     if not (filemodel.label or filemodel.holding_id):
+#         response_error = ResponseError(
+#                 loc = ["files", "delete"],
+#                 msg = ("Cannot complete delete request: "
+#                        "label or holding_id not supplied."),
+#                 type = "Incomplete request."
+#             )
+#         raise HTTPException(
+#             status_code = status.HTTP_400_BAD_REQUEST,
+#             detail = response_error.json()
+#         )
 
-    if job_label is None:
-        job_label = str(transaction_id)[0:8]
-    # return response, transaction id accepted for processing
-    response = FileResponse(
-        transaction_id = transaction_id,
-        msg = (f"DELETE transaction accepted for processing.")
-    )
+#     if job_label is None:
+#         job_label = str(transaction_id)[0:8]
+#     # return response, transaction id accepted for processing
+#     response = FileResponse(
+#         transaction_id = transaction_id,
+#         msg = (f"DELETE transaction accepted for processing.")
+#     )
 
-    # # Convert filepath or filelist to lists
-    contents = filemodel.get_cleaned_list()
+#     # # Convert filepath or filelist to lists
+#     contents = filemodel.get_cleaned_list()
 
-    # # create the message dictionary - do this here now as it's more transparent
-    routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_DELLIST}"
-    api_method = f"{RMQP.RK_DELLIST}"
-    msg_dict = {
-        RMQP.MSG_DETAILS: {
-            RMQP.MSG_TRANSACT_ID: str(transaction_id),
-            RMQP.MSG_SUB_ID: str(uuid4()),
-            RMQP.MSG_USER: user,
-            RMQP.MSG_GROUP: group,
-            RMQP.MSG_GROUPALL: groupall,
-            RMQP.MSG_TENANCY: tenancy,
-            RMQP.MSG_JOB_LABEL: job_label,
-            RMQP.MSG_ACCESS_KEY: access_key,
-            RMQP.MSG_SECRET_KEY: secret_key,
-            RMQP.MSG_API_ACTION: api_method
-        }, 
-        RMQP.MSG_DATA: {
-            # Convert to PathDetails for JSON serialisation
-            RMQP.MSG_FILELIST: [PathDetails(original_path=item) for item in contents],
-        },
-        **Retries().to_dict(),
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
-    }
-    response.user = user
-    response.group = group
-    response.api_action = api_method
-    if job_label:
-        response.job_label = job_label
-    if tenancy:
-        response.tenancy = tenancy
-    # add the metadata
-    meta_dict = {}
-    if (filemodel.label):
-        meta_dict[RMQP.MSG_LABEL] = filemodel.label
-        response.label = filemodel.label
-    if (filemodel.holding_id):
-        meta_dict[RMQP.MSG_HOLDING_ID] = filemodel.holding_id
-        response.holding_id = filemodel.holding_id
-    if (filemodel.tag):
-        tag_dict = filemodel.tag
-        meta_dict[RMQP.MSG_TAG] = tag_dict
-        response.tag = tag_dict
+#     # # create the message dictionary - do this here now as it's more transparent
+#     routing_key = f"{RK.ROOT}.{RK.ROUTE}.{RK.DELLIST}"
+#     api_method = f"{RK.DELLIST}"
+#     msg_dict = {
+#             MSG.DETAILS: {
+#             MSG.TRANSACT_ID: str(transaction_id),
+#             MSG.SUB_ID: str(uuid4()),
+#             MSG.USER: user,
+#             MSG.GROUP: group,
+#             MSG.GROUPALL: groupall,
+#             MSG.TENANCY: tenancy,
+#             MSG.JOB_LABEL: job_label,
+#             MSG.ACCESS_KEY: access_key,
+#             MSG.SECRET_KEY: secret_key,
+#             MSG.API_ACTION: api_method
+#         }, 
+#         MSG.DATA: {
+#             # Convert to PathDetails for JSON serialisation
+#             MSG.FILELIST: [PathDetails(original_path=item) for item in contents],
+#         },
+#         MSG.TYPE: MSG.TYPE_STANDARD,
+#     }
+#     response.user = user
+#     response.group = group
+#     response.api_action = api_method
+#     if job_label:
+#         response.job_label = job_label
+#     if tenancy:
+#         response.tenancy = tenancy
+#     # add the metadata
+#     meta_dict = {}
+#     if (filemodel.label):
+#         meta_dict[MSG.LABEL] = filemodel.label
+#         response.label = filemodel.label
+#     if (filemodel.holding_id):
+#         meta_dict[MSG.HOLDING_ID] = filemodel.holding_id
+#         response.holding_id = filemodel.holding_id
+#     if (filemodel.tag):
+#         tag_dict = filemodel.tag
+#         meta_dict[MSG.TAG] = tag_dict
+#         response.tag = tag_dict
 
-    if (len(meta_dict) > 0):
-        msg_dict[RMQP.MSG_META] = meta_dict
-    rabbit_publisher.publish_message(routing_key, msg_dict)
+#     if (len(meta_dict) > 0):
+#         msg_dict[MSG.META] = meta_dict
+#     rabbit_publisher.publish_message(routing_key, msg_dict)
 
-    return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
-                        content = response.json())
+#     return JSONResponse(status_code = status.HTTP_202_ACCEPTED,
+#                         content = response.json())
 
 # @router.post("/")
 # async def post():

@@ -42,18 +42,6 @@ class PathType(Enum):
     # maintaining Enum numbering for database compatibility
     NOT_RECOGNISED = 5
     UNINDEXED = 6
-<<<<<<< HEAD
-    MISSING = 7
-    def __str__(self):
-        return ["FILE",
-                "DIRECTORY",
-                "LINK_UNCLASSIFIED",
-                "LINK_COMMON_PATH",
-                "LINK_ABSOLUTE_PATH",
-                "NOT_RECOGNISED",
-                "UNINDEXED",
-                "MISSING"][self.value]
-=======
 
     def __str__(self):
         return [
@@ -66,7 +54,6 @@ class PathType(Enum):
             "NOT_RECOGNISED",
             "UNINDEXED",
         ][self.value]
->>>>>>> main
 
 
 class PathLocation(BaseModel):

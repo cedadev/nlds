@@ -375,21 +375,9 @@ class TestCatalog:
         # with pytest.raises(CatalogError):
         transaction_3 = mock_catalog.create_transaction(holding, test_uuid)
 
-<<<<<<< HEAD:tests/nlds_processors/catalog/test_catalog.py
 
     def test_get_files(self, mock_catalog, mock_holding, mock_transaction, 
                        mock_file):
-=======
-    def test_user_has_get_holding_permission(self):
-        # Leaving this for now until it's a bit more fleshed out
-        pass
-
-    def test_user_has_get_file_permission(self):
-        # Leaving this for now until it's a bit more fleshed out
-        pass
-
-    def test_get_files(self, mock_catalog, mock_holding, mock_transaction, mock_file):
->>>>>>> main:tests/nlds_processors_test/catalog/test_catalog.py
         test_uuid = str(uuid.uuid4())
         catalog = mock_catalog
 
@@ -508,10 +496,5 @@ class TestCatalog:
     def test_modify_tag(self):
         pass
 
-<<<<<<< HEAD:tests/nlds_processors/catalog/test_catalog.py
-    def test_del_tag(self):
-        pass
-=======
     def test_delete_tag(self):
         pass
->>>>>>> main:tests/nlds_processors_test/catalog/test_catalog.py

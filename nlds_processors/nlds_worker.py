@@ -106,30 +106,27 @@ class NLDSWorkerConsumer(RMQC):
         body_json[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
         self.publish_and_log_message(new_routing_key, body_json)
 
-<<<<<<< HEAD
 
-    def _process_rk_del(self, body_json: Dict[str, str]) -> None:
-        # forward to catalog_del
-        queue = f"{self.RK_CATALOG_DEL}"
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    queue, 
-                                    self.RK_START])
-        self.log(f"Sending  message to {queue} queue with routing "
-                 f"key {new_routing_key}", self.RK_LOG_INFO)
-        self.publish_and_log_message(new_routing_key, body_json)
+    # def _process_rk_del(self, body_json: Dict[str, str]) -> None:
+    #     # forward to catalog_del
+    #     queue = f"{RK.CATALOG_DEL}"
+    #     new_routing_key = ".".join([RK.ROOT, 
+    #                                 queue, 
+    #                                 RK.START])
+    #     self.log(f"Sending  message to {queue} queue with routing "
+    #              f"key {new_routing_key}", RK.LOG_INFO)
+    #     self.publish_and_log_message(new_routing_key, body_json)
 
-        # Do initial monitoring update to ensure that a subrecord at ROUTING is 
-        # created before the first job 
-        self.log(f"Updating monitor", self.RK_LOG_INFO)
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    self.RK_MONITOR_PUT, 
-                                    self.RK_START])
-        body_json[self.MSG_DETAILS][self.MSG_STATE] = State.ROUTING.value
-        self.publish_and_log_message(new_routing_key, body_json)
+    #     # Do initial monitoring update to ensure that a subrecord at ROUTING is 
+    #     # created before the first job 
+    #     self.log(f"Updating monitor", RK.LOG_INFO)
+    #     new_routing_key = ".".join([RK.ROOT, 
+    #                                 RK.MONITOR_PUT, 
+    #                                 RK.START])
+    #     body_json[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
+    #     self.publish_and_log_message(new_routing_key, body_json)
 
 
-=======
->>>>>>> main
     def _process_rk_list(self, body_json: Dict) -> None:
         # forward to catalog_get
         queue = f"{RK.CATALOG_GET}"
@@ -359,7 +356,6 @@ class NLDSWorkerConsumer(RMQC):
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
-<<<<<<< HEAD
 
 
     def _process_rk_catalog_del_complete(self, rk_parts: List, 
@@ -428,19 +424,6 @@ class NLDSWorkerConsumer(RMQC):
                  body: bytes, connection: Connection) -> None:
         
         # Convert body from bytes to string for ease of nipulation
-=======
-
-    def callback(
-        self,
-        ch: Channel,
-        method: Method,
-        properties: Header,
-        body: bytes,
-        connection: Connection,
-    ) -> None:
-
-        # Convert body from bytes to string for ease of manipulation
->>>>>>> main
         body_json = json.loads(body)
 
         self.log(
@@ -450,30 +433,10 @@ class NLDSWorkerConsumer(RMQC):
         )
 
         # If received system test message, reply to it (this is for system status check)
-<<<<<<< HEAD
-        if api_method == "system_stat":
-            if (properties.correlation_id is not None and 
-                properties.correlation_id != self.channel.consumer_tags[0]):
-                return False
-            if (body_json["details"]["ignore_message"]) == True:
-                return
-            else:
-                self.publish_message(
-                    properties.reply_to,
-                    msg_dict=body_json,
-                    exchange={'name': ''},
-                    correlation_id=properties.correlation_id
-                )
-=======
         if self._is_system_status_check(body_json=body_json, properties=properties):
->>>>>>> main
             return
 
         rk_parts, body_json = self._process_message(method, body, properties)
-<<<<<<< HEAD
-=======
-
->>>>>>> main
         # If putting then first scan file/filelist
         if rk_parts[2] in (RK.PUT, RK.PUTLIST):
             self._process_rk_put(body_json)
@@ -481,8 +444,8 @@ class NLDSWorkerConsumer(RMQC):
         elif rk_parts[2] in (RK.GET, RK.GETLIST):
             self._process_rk_get(body_json)
 
-        elif rk_parts[2] in (self.RK_DEL, self.RK_DELLIST):
-            self._process_rk_del(body_json)
+        # elif rk_parts[2] in (self.RK_DEL, self.RK_DELLIST):
+        #     self._process_rk_del(body_json)
 
         # If a task has completed, initiate new tasks
         elif rk_parts[2] == f"{RK.COMPLETE}":
@@ -515,44 +478,13 @@ class NLDSWorkerConsumer(RMQC):
 
             # If finished with aggregation of unarchived holding, then send for
             # archive write
-<<<<<<< HEAD
-            elif (rk_parts[1] == f"{self.RK_CATALOG_ARCHIVE_NEXT}"):
-                self._process_rk_catalog_archive_next_complete(rk_parts, 
-                                                               body_json)
-=======
             elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_NEXT}":
                 self._process_rk_catalog_archive_next_complete(rk_parts, body_json)
 
->>>>>>> main
             # If finished with archive write, then pass checksum info to catalog
             elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
                 self._process_rk_archive_put_complete(rk_parts, body_json)
 
-<<<<<<< HEAD
-            # If finished with catalog deleting
-            elif (rk_parts[1] == f"{self.RK_CATALOG_DEL}"):
-                self._process_rk_catalog_del_complete(rk_parts, body_json)
-
-            # if finished with archive deleting
-            elif (rk_parts[1] == f"{self.RK_ARCHIVE_DEL}"):
-                self._process_rk_archive_del_complete(rk_parts, body_json)
-
-            # if finished with object store deleting
-            elif (rk_parts[1] == f"{self.RK_TRANSFER_DEL}"):
-                self._process_rk_transfer_del_complete(rk_parts, body_json)
-
-
-        # If a reroute has happened from the catalog then we need to get from 
-        # archive before we can do the transfer from object store.
-        elif rk_parts[2] == f"{self.RK_REROUTE}":
-            self._process_rk_catalog_get_reroute(rk_parts, body_json)
-
-
-        # If a transfer/archive task has failed, remove something from the 
-        # catalog 
-        elif rk_parts[2] == f"{self.RK_FAILED}":
-            # If transfer_put failed then we need to remove the failed files 
-=======
             # If finished with catalog update then pass for transfer get
             elif rk_parts[1] == f"{RK.CATALOG_UPDATE}":
                 self._process_rk_catalog_update_complete(rk_parts, body_json)
@@ -571,7 +503,6 @@ class NLDSWorkerConsumer(RMQC):
         # catalog
         elif rk_parts[2] == f"{RK.FAILED}":
             # If transfer_put failed then we need to remove the failed files
->>>>>>> main
             # from the catalog
             if rk_parts[1] == f"{RK.TRANSFER_PUT}":
                 self._process_rk_transfer_put_failed(body_json)
@@ -585,21 +516,6 @@ class NLDSWorkerConsumer(RMQC):
             # locations from the catalog
             elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
                 self._process_rk_archive_get_failed(body_json)
-<<<<<<< HEAD
-
-            # if archive_del failed then we need to restore the files into the
-            # catalog
-            if rk_parts[1] == f"{self.RK_ARCHIVE_DEL}":
-                self._process_rk_archive_del_failed(body_json)
-
-            # identically, if transfer_del failed then we need to restore the 
-            # files into the catalog
-            if rk_parts[1] == f"{self.RK_TRANSFER_DEL}":
-                self._process_rk_transfer_del_failed(body_json)
-            
-        self.log(f"Worker callback complete!", self.RK_LOG_INFO)
-=======
->>>>>>> main
 
         self.log(f"Worker callback complete!", RK.LOG_INFO)
 

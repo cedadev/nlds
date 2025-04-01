@@ -12,24 +12,12 @@ from typing import List
 
 # SQLalchemy imports
 from sqlalchemy import func, Enum
-<<<<<<< HEAD
-from sqlalchemy.exc import IntegrityError, OperationalError, ArgumentError, \
-    NoResultFound
-from nlds_processors.catalog.catalog_models import CatalogBase, File, Holding,\
-     Location, Transaction, Aggregation, Storage, Tag
-from nlds_processors.db_mixin import DBMixin
-from nlds.authenticators.jasmin_authenticator import JasminAuthenticator as Authenticator
-class CatalogError(Exception):
-    def __init__(self, message, *args):
-        super().__init__(args)
-        self.message = message
-=======
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
     ArgumentError,
     NoResultFound,
-    DataError
+    DataError,
 )
 
 from nlds_processors.catalog.catalog_models import (
@@ -44,7 +32,9 @@ from nlds_processors.catalog.catalog_models import (
 )
 from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
->>>>>>> main
+from nlds.authenticators.jasmin_authenticator import (
+    JasminAuthenticator as Authenticator,
+)
 
 
 class Catalog(DBMixin):
@@ -58,29 +48,6 @@ class Catalog(DBMixin):
         self.base = CatalogBase
         self.session = None
 
-<<<<<<< HEAD
-
-    def get_holding(self, 
-                    user: str, 
-                    group: str, 
-                    groupall: bool=False,
-                    label: str=None, 
-                    holding_id: int=None,
-                    transaction_id: str=None,
-                    tag: dict=None) -> List[Holding]:
-=======
-    @staticmethod
-    def _user_has_get_holding_permission(
-        user: str, group: str, holding: Holding
-    ) -> bool:
-        """Check whether a user has permission to view this holding.
-        When we implement ROLES this will be more complicated."""
-        permitted = True
-        # Users can view / get all holdings in their group
-        # permitted &= holding.user == user
-        permitted &= holding.group == group
-        return permitted
-
     def get_holding(
         self,
         user: str,
@@ -92,7 +59,6 @@ class Catalog(DBMixin):
         tag: dict = None,
         regex: bool = False,
     ) -> List[Holding]:
->>>>>>> main
         """Get a holding from the database"""
         if self.session is None:
             raise RuntimeError("self.session is None")
@@ -322,11 +288,9 @@ class Catalog(DBMixin):
             )
         return transaction
 
-<<<<<<< HEAD
-    def delete_transaction(self, 
-                           transaction_id: str) -> None:
+    def delete_transaction(self, transaction_id: str) -> None:
         """Delete a transaction"""
-        assert(self.session != None)
+        assert self.session != None
         try:
             transaction = self.get_transaction(transaction_id=transaction_id)
             self.session.delete(transaction)
@@ -336,38 +300,17 @@ class Catalog(DBMixin):
                 f"Transaction with transaction_id:{transaction_id} could not "
                 "be added to the database"
             )
-=======
-    def _user_has_get_file_permission(self, user: str, group: str, file: File) -> bool:
-        """Check whether a user has permission to access a file.
-        Later, when we implement the ROLES this function will be a lot more
-        complicated!"""
-        if self.session is None:
-            raise RuntimeError("self.session is None")
-        holding = (
-            self.session.query(Holding)
-            .filter(
-                Transaction.id == file.transaction_id,
-                Holding.id == Transaction.holding_id,
-            )
-            .all()
-        )
-        permitted = True
-        for h in holding:
-            # users have get file permission if in group
-            # permitted &= h.user == user
-            permitted &= h.group == group
->>>>>>> main
 
-
-    def get_file(self,
-                 user: str, 
-                 group: str, 
-                 groupall: bool=False,
-                 holding_label: str=None, 
-                 holding_id: int=None,
-                 path: str=None, 
-                 ) -> list:
-        """Get a single file when we have already got all the other file 
+    def get_file(
+        self,
+        user: str,
+        group: str,
+        groupall: bool = False,
+        holding_label: str = None,
+        holding_id: int = None,
+        path: str = None,
+    ) -> list:
+        """Get a single file when we have already got all the other file
         information (such as holding id or name, etc.), and we have the exact
         file path (rather than a regex).
         This should be quicker than the "get_files" method below.
@@ -375,12 +318,10 @@ class Catalog(DBMixin):
 
         if holding_label is None and holding_id is None:
             raise CatalogError("No method for identifying a holding provided")
-        
+
         try:
             # build holding query bit by bit
-            holding_q = self.session.query(Holding).filter(
-                Holding.group == group
-            )
+            holding_q = self.session.query(Holding).filter(Holding.group == group)
             # if the groupall flag is set then don't filter on user
             if not groupall:
                 holding_q = holding_q.filter(
@@ -393,29 +334,31 @@ class Catalog(DBMixin):
                 )
             # search label filtering
             if holding_label:
-                holding_q = holding_q.filter(
-                    Holding.label.regexp_match(holding_label)
-                )
+                holding_q = holding_q.filter(Holding.label.regexp_match(holding_label))
             # perform the query - get one holding
             h = holding_q.one()
-        except(IntegrityError, KeyError, ArgumentError, NoResultFound):
+        except (IntegrityError, KeyError, ArgumentError, NoResultFound):
             msg = ""
             if holding_id:
-                msg = (f"Holding with holding_id:{holding_id} not found for "
-                       f"user:{user} and group:{group}")
+                msg = (
+                    f"Holding with holding_id:{holding_id} not found for "
+                    f"user:{user} and group:{group}"
+                )
             elif holding_label:
-                msg = (f"Holding with label:{holding_label} not found for "
-                       f"user:{user} and group:{group}")
-            raise CatalogError(msg)        
+                msg = (
+                    f"Holding with label:{holding_label} not found for "
+                    f"user:{user} and group:{group}"
+                )
+            raise CatalogError(msg)
 
         try:
             file_q = self.session.query(File).filter(
                 File.transaction_id == Transaction.id,
                 Transaction.holding_id == h.id,
-                File.original_path == path
+                File.original_path == path,
             )
             file = file_q.one()
-        except(IntegrityError, KeyError, ArgumentError, NoResultFound):
+        except (IntegrityError, KeyError, ArgumentError, NoResultFound):
             raise CatalogError(
                 f"File with holding_id:{holding_id} and label:{holding_label} "
                 f"not found for user:{user} and group:{group}"
@@ -487,16 +430,9 @@ class Catalog(DBMixin):
                     if r.File is None:
                         continue
                     # check user has permission to access this file
-<<<<<<< HEAD
-                    # NRM - 12/10/2023, is this necessary?
-                    if (f and 
-                        not Authenticator.user_has_get_file_permission(self.session, user, group, f)
-                        ):
-=======
-                    if r.File and not self._user_has_get_file_permission(
-                        user, group, r.File
+                    if r.File and not Authenticator.user_has_get_file_permission(
+                        self.session, user, group, r.File
                     ):
->>>>>>> main
                         raise CatalogError(
                             f"User:{user} in group:{group} does not have permission to "
                             f"access the file with original path:{r.File.original_path}."
@@ -560,19 +496,6 @@ class Catalog(DBMixin):
                 " the database"
             )
         return new_file
-<<<<<<< HEAD
-    
-
-    def delete_files(self, 
-                     user: str, 
-                     group: str, 
-                     holding_label: str=None,  
-                     holding_id: int=None,
-                     path: str=None, 
-                     tag: dict=None) -> list:
-        """Delete a given path from the catalog. If a holding is specified only 
-        the matching file from that holding will be deleted, otherwise all 
-=======
 
     def delete_files(
         self,
@@ -585,26 +508,10 @@ class Catalog(DBMixin):
     ) -> list:
         """Delete a given path from the catalog. If a holding is specified only
         the matching file from that holding will be deleted, otherwise all
->>>>>>> main
         matching files will. Utilises get_files().
 
-<<<<<<< HEAD
-        files = self.get_files(user, group, holding_label=holding_label, 
-                               holding_id=holding_id, original_path=path, 
-                               tag=tag)
-        holding = self.get_holding(user, group, holding_id=holding_id)[0]
-        if not Authenticator.user_has_delete_from_holding_permission(
-            user, group, holding):
-            # No admins at the moment!
-            raise CatalogError(
-                f"User:{user} in group:{group} does not have permission "
-                f"to delete files from the holding with label:"
-                f"{holding.label}."
-            )
-=======
         """
-        if self.session is None:
-            raise RuntimeError("self.session is None")
+        assert self.session != None
 
         files = self.get_files(
             user,
@@ -614,19 +521,26 @@ class Catalog(DBMixin):
             original_path=path,
             tag=tag,
         )
->>>>>>> main
+        holding = self.get_holding(user, group, holding_id=holding_id)[0]
         checkpoint = self.session.begin_nested()
         try:
             # first delete the files
             for f in files:
-<<<<<<< HEAD
-=======
                 # First get parent transaction and holding
                 transaction = self.get_transaction(f.transaction_id)
                 holding = self.get_holding(
                     user, group, holding_id=transaction.holding_id
                 )[0]
->>>>>>> main
+                if not Authenticator.user_has_delete_from_holding_permission(
+                    user, group, holding
+                ):
+                    # No admins at the moment!
+                    raise CatalogError(
+                        f"User:{user} in group:{group} does not have permission "
+                        f"to delete files from the holding with label:"
+                        f"{holding.label}."
+                    )
+
                 self.session.delete(f)
             self.session.flush()
             # now clean up all the transactions
@@ -907,19 +821,17 @@ class Catalog(DBMixin):
                 f"Couldn't find unarchived files for holding with id:{holding.id}"
             )
         return unarchived_files
-<<<<<<< HEAD
-    
 
     def get_used_diskspace(self, user: str, group: str) -> float:
         """Return the total amount of diskspace used by the group."""
         if group is None:
             raise ValueError("Group cannot be none.")
-        
+
         total_diskspace = 0.0
 
         try:
             # Get the holdings
-            holdings = self.get_holding(user, group, groupall = True)
+            holdings = self.get_holding(user, group, groupall=True)
             print(holdings)
 
             # Loop through the holdings
@@ -932,12 +844,12 @@ class Catalog(DBMixin):
 
                     # Loop through the files:
                     for file in transaction.files:
-                        
+
                         # Add file size to total diskspace
                         total_diskspace += file.size
 
         except Exception as e:
-            raise RuntimeError(f"An error occured while calculating the disk space: {e}")
+            raise RuntimeError(
+                f"An error occured while calculating the disk space: {e}"
+            )
         return total_diskspace
-=======
->>>>>>> main

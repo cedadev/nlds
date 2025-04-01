@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-
-from sqlalchemy.exc import IntegrityError, OperationalError
-=======
 # encoding: utf-8
 """
 monitor.py
@@ -13,7 +9,6 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError
->>>>>>> main
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -255,13 +250,8 @@ class Monitor(DBMixin):
             and new_state.value < State.COMPLETE.value
         ):
             raise MonitorError(
-<<<<<<< HEAD
-                f"Monitoring state cannot go backwards or skip steps. Attempted"
-                f" {sub_record.state}->{new_state}."
-=======
                 f"Monitoring state cannot go backwards from {sub_record.state}. "
                 f"Attempted {sub_record.state}->{new_state}"
->>>>>>> main
             )
         sub_record.state = new_state
         self.session.flush()

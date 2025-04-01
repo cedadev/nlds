@@ -76,22 +76,6 @@ setup(
         "Topic :: Internet :: WWW/HTTP",
         "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
     ],
-<<<<<<< HEAD
-    entry_points = {
-        'console_scripts': [
-            'nlds_q=nlds_processors.nlds_worker:main',
-            'catalog_q=nlds_processors.catalog.catalog_worker:main',
-            'index_q=nlds_processors.index:main',
-            'monitor_q=nlds_processors.monitor.monitor_worker:main',
-            'transfer_put_q=nlds_processors.transferers.put_transfer:main',
-            'transfer_get_q=nlds_processors.transferers.get_transfer:main',
-            'transfer_del_q=nlds_processors.transferers.del_transfer:main',
-            'logging_q=nlds_processors.logger:main',
-            'archive_put_q=nlds_processors.archiver.archive_put:main',
-            'archive_get_q=nlds_processors.archiver.archive_get:main',
-            'archive_del_q=nlds_processors.archiver.archive_del:main',
-            'send_archive_next=nlds_processors.archiver.send_archive_next:send_archive_next',
-=======
     entry_points={
         "console_scripts": [
             "nlds_q=nlds_processors.nlds_worker:main",
@@ -104,7 +88,6 @@ setup(
             "archive_put_q=nlds_processors.archive.archive_put:main",
             "archive_get_q=nlds_processors.archive.archive_get:main",
             "send_archive_next=nlds_processors.archive.send_archive_next:send_archive_next",
->>>>>>> main
         ],
     },
 )

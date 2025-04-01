@@ -560,31 +560,6 @@ class MonitorConsumer(RMQC):
         if api_method == RK.STAT:
             self.log("Starting stat from monitoring db.", RK.LOG_INFO)
             self._monitor_get(body, properties)
-<<<<<<< HEAD
-            
-        
-            
-        # If received system test message, reply to it (this is for system status check)
-        elif api_method == "system_stat":
-            if properties.correlation_id is not None and properties.correlation_id != self.channel.consumer_tags[0]:
-                return False
-            if (body["details"]["ignore_message"]) == True:
-                return
-            else:
-                self.publish_message(
-                    properties.reply_to,
-                    msg_dict=body,
-                    exchange={'name': ''},
-                    correlation_id=properties.correlation_id
-                )
-            return
-            
-            
-        elif api_method in (self.RK_PUT, self.RK_PUTLIST, 
-                            self.RK_GET, self.RK_GETLIST, 
-                            self.RK_DEL, self.RK_DELLIST,
-                            self.RK_ARCHIVE_PUT, self.RK_ARCHIVE_GET):
-=======
 
         elif api_method in (
             RK.PUT,
@@ -594,7 +569,6 @@ class MonitorConsumer(RMQC):
             RK.ARCHIVE_PUT,
             RK.ARCHIVE_GET,
         ):
->>>>>>> main
             # Verify routing key is appropriate
             try:
                 rk_parts = self.split_routing_key(method.routing_key)

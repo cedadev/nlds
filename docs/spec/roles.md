@@ -1,10 +1,5 @@
-<<<<<<< HEAD
-ROLES and QUOTAS in NLDS
-========================
-=======
 ROLES, TAPEPOOLS and QUOTAS in NLDS
 ===================================
->>>>>>> main
 
 ROLES
 -----
@@ -39,7 +34,6 @@ For the `_user_has_delete_from_holding_permission` we need to determine the user
 
 An added subtlety is that NLDS is designed to be **portable**, so that it can be installed on other systems, rather than just JASMIN.  This was a condition of the EU Horizon ESiWACE funding.  To do this for the other authentication, I implemented a Base Class (`BaseAuthenticator` in `nlds/authenticators/base_authenticator.py`) which is then sub-classed to `JasminAuthenticator` in `nlds/authenticators/jasmin_authenticator.py`.  There are a number of functions that return a `True` or `False` value.  I suggest we add a function to the `BaseAuthenticator`, then overload it in `JasminAuthenticator` to provide a `True` or `False` value, depending on whether the user is a MANAGER or DEPUTY of the group.
 
-<<<<<<< HEAD
 Then in the call to `_user_has_delete_from_holding_permission` the `is_admin` parameter can be set from the return value of this function.
 
 NLDS will need a `oauth_client_id` and `oauth_client_secret` to access the JASMIN accounts authenticator.  This should be different to the client id and secret handed out to the users, and will need to be stored in a config file on the NLDS FastAPI server.
@@ -62,6 +56,3 @@ The easiest way to test this will be to write a unit / integration test.  Test c
 2. User belongs to GWS and does not have DEPUTY or MANAGER ROLE == False
 3. User does not belong to GWS == False
 4. User does not belong to GWS but does have DEPUTY or MANAGER ROLE for a different GWS == False
-=======
-Then in the call to `_user_has_delete_from_holding_permission` the `is_admin` parameter can be set from the return value of this function.
->>>>>>> main
