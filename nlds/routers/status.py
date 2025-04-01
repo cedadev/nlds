@@ -65,9 +65,9 @@ async def get(
 ):
     # create the message dictionary
     search_api_action = api_action
-    api_action = f"{RK.STAT}"   # this is overwriting the api_action we want to
-                                # filter on, so we have saved it above - we will
-                                # put it in the META section of the message
+    api_action = f"{RK.STAT}"  # this is overwriting the api_action we want to
+    # filter on, so we have saved it above - we will
+    # put it in the META section of the message
 
     # logic for user/group query verification should go here. Do we want to
     # prevent the querying of users other than themselves?

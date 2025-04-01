@@ -11,9 +11,10 @@ from nlds_processors.catalog.catalog_worker import CatalogConsumer
 from nlds_processors.monitor.monitor_worker import MonitorConsumer
 
 db_name_mappings = {
-    "catalog": CatalogConsumer, 
+    "catalog": CatalogConsumer,
     "monitor": MonitorConsumer,
 }
+
 
 def get_db_engine(consumer_name: str):
     # Make an instantiation of the consumer, create the engine and return it
@@ -21,11 +22,13 @@ def get_db_engine(consumer_name: str):
     consumer.attach_database(create_db_fl=False)
     return consumer.get_engine()
 
+
 def get_db_url(consumer_name: str):
-    # Make an instantiation of the consumer and extract the url from the 
+    # Make an instantiation of the consumer and extract the url from the
     # consumer-specific config
     consumer = db_name_mappings[consumer_name]()
     return consumer.get_url()
+
 
 USE_TWOPHASE = False
 
@@ -52,9 +55,10 @@ db_names = config.get_main_option("databases", "")
 # a MetaData is needed.
 from nlds_processors.catalog.catalog_models import CatalogBase
 from nlds_processors.monitor.monitor_models import MonitorBase
+
 target_metadata = {
-      'catalog': CatalogBase.metadata,
-      'monitor': MonitorBase.metadata,
+    "catalog": CatalogBase.metadata,
+    "monitor": MonitorBase.metadata,
 }
 # target_metadata = {}
 
@@ -117,7 +121,7 @@ def run_migrations_online() -> None:
 
         # Original from template:
         section = context.config.get_section(name, {})
-        section['sqlalchemy.url'] = get_db_url(name)
+        section["sqlalchemy.url"] = get_db_url(name)
         rec["engine"] = engine_from_config(
             section,
             prefix="sqlalchemy.",

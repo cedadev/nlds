@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 # encoding: utf-8
-"""Generate a server config from the Jinja2 (.j2) config files in the 
+"""Generate a server config from the Jinja2 (.j2) config files in the
 server_config/ directory"""
 
 __author__ = "Neil Massey"
@@ -16,8 +16,12 @@ import os.path
 import json
 
 from local_server_config import (
-    get_config_dictionary, get_database_dictionary, get_rabbit_dictionary,
-    get_authentication_dictionary, get_rpc_dictionary, get_cronjob_dictionary
+    get_config_dictionary,
+    get_database_dictionary,
+    get_rabbit_dictionary,
+    get_authentication_dictionary,
+    get_rpc_dictionary,
+    get_cronjob_dictionary,
 )
 
 all_processors = [
@@ -33,6 +37,7 @@ all_processors = [
     "transfer_put_q",
 ]
 
+
 @click.command()
 @click.option(
     "-p",
@@ -40,15 +45,15 @@ all_processors = [
     default="all",
     type=str,
     help="The nlds process to generate the config file for.",
-    required = False
+    required=False,
 )
 @click.option(
     "-o",
     "--output",
     type=str,
     help="Output path to write the config file to.",
-    required = False,
-    default=None
+    required=False,
+    default=None,
 )
 def generate_server_config(process: str, output: str) -> None:
     # get which processes to render configs for
@@ -104,6 +109,7 @@ def generate_server_config(process: str, output: str) -> None:
         print(f"{output} file written")
     else:
         print(json.dumps(server_config, indent=4))
+
 
 if __name__ == "__main__":
     generate_server_config()

@@ -12,7 +12,7 @@ from typing import List, Union
 from ..catalog.catalog_models import File
 from nlds.details import PathDetails
 
-DEFAULT_BIN_SIZE = 5 * (1024**3)        # 5 GBs
+DEFAULT_BIN_SIZE = 5 * (1024**3)  # 5 GBs
 
 
 def bin_files(

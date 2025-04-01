@@ -95,7 +95,7 @@ class StattingConsumer(RMQC):
 
         NOTE: This was refactored here from the index/transfer processors.
         Might make more sense to put it somewhere else given there are specific
-        config variables required (filelist_max_length, filelist_max_size) which could 
+        config variables required (filelist_max_length, filelist_max_size) which could
         fail with an AttributeError?
         NOTE 2: NRM refactored this to remove the FilelistType, and just pass the
         completed or failed list in by reference.  If we bring retries back then we
@@ -161,12 +161,12 @@ class StattingConsumer(RMQC):
     ) -> bool:
         """Checks that the given path is accessible, either by checking for its
         existence and by doing a permissions check on the file's bitmask. This requires
-        a stat of the file, so one must be provided via stat_result else one is 
-        performed. The uid and gid of the user must be set in the object as well, 
+        a stat of the file, so one must be provided via stat_result else one is
+        performed. The uid and gid of the user must be set in the object as well,
         usually by having performed RabbitMQConsumer.set_ids() beforehand.
 
         """
-        if (self.uid is None or self.gids is None or not isinstance(self.gids, list)):
+        if self.uid is None or self.gids is None or not isinstance(self.gids, list):
             raise ValueError("uid and gid not set properly.")
 
         if not isinstance(path, pth.Path):

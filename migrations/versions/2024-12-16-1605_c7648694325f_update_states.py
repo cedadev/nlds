@@ -132,7 +132,7 @@ reverse_map = {
     NewState.COMPLETE_WITH_ERRORS: OldState.COMPLETE,
     NewState.COMPLETE_WITH_WARNINGS: OldState.COMPLETE,
     # Initial state for searching for sub-states
-    NewState.SEARCHING: OldState.INITIALISING
+    NewState.SEARCHING: OldState.INITIALISING,
 }
 
 # clash CATALOG_ARCHIVE_AGGREGATING = 21 (old),

@@ -10,5 +10,6 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from nlds.errors import MessageError
 
+
 class TransferError(MessageError):
     pass

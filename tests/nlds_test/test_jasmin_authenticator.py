@@ -254,10 +254,10 @@ class TestUserPermissions:
 
     @pytest.fixture()
     def mock_holding(self):
-        return Holding(    
-            label='test-label',
-            user='test-user',
-            group='test-group',
+        return Holding(
+            label="test-label",
+            user="test-user",
+            group="test-group",
         )
 
     def test_user_has_get_holding_permission(self):
@@ -268,27 +268,41 @@ class TestUserPermissions:
         # Leaving this for now until it's a bit more fleshed out
         pass
 
-    @pytest.mark.parametrize("user, group, mock_is_admin, expected", [
-        ("test-user", "test-group", False, True), # User owns the holding
-        ("user2", "test-group", False, False), # User does not own holding and is not admin
-        ("user2", "test-group", True, True), # User is admin of the group
-        ("test-user", "group2", False, False), # User is owner of different holding
-    ])
-    def test_user_has_delete_from_holiding_permission(self, monkeypatch, user, group, mock_is_admin, expected, mock_holding):
+    @pytest.mark.parametrize(
+        "user, group, mock_is_admin, expected",
+        [
+            ("test-user", "test-group", False, True),  # User owns the holding
+            (
+                "user2",
+                "test-group",
+                False,
+                False,
+            ),  # User does not own holding and is not admin
+            ("user2", "test-group", True, True),  # User is admin of the group
+            ("test-user", "group2", False, False),  # User is owner of different holding
+        ],
+    )
+    def test_user_has_delete_from_holiding_permission(
+        self, monkeypatch, user, group, mock_is_admin, expected, mock_holding
+    ):
         # Mock the authenticate_user_group_role method
         def mock_authenticate_user_group_role(user, group):
             return mock_is_admin
-        
-        auth = JasminAuthenticator()
-        
-        monkeypatch.setattr(auth, "authenticate_user_group_role", mock_authenticate_user_group_role)
-        result = auth.user_has_delete_from_holding_permission(user=user, group=group, holding=mock_holding)
-        assert result == expected
 
+        auth = JasminAuthenticator()
+
+        monkeypatch.setattr(
+            auth, "authenticate_user_group_role", mock_authenticate_user_group_role
+        )
+        result = auth.user_has_delete_from_holding_permission(
+            user=user, group=group, holding=mock_holding
+        )
+        assert result == expected
 
 
 class TestGetProjectsServices:
     """Get the projects for a service from the JASMIN Projects Portal."""
+
     user_services_url = "https://mock.url/api/services/"
     url = f"{user_services_url}?name=test_service"
     auth = JasminAuthenticator()
@@ -296,22 +310,20 @@ class TestGetProjectsServices:
         "authentication": {
             "jasmin_authenticator": {
                 "project_services_url": "https://mock.url/api/services/",
-                "client_token": "test_token"
+                "client_token": "test_token",
             }
         }
     }
-
 
     @pytest.fixture()
     def mock_format_url(self, *args, **kwargs):
         """Mock the format_url function to make it return the test url."""
         return self.url
-    
 
     def test_get_service_information_success(self, monkeypatch):
         """Test a successful instance of get_projects_services."""
-        
-        monkeypatch.setattr(self.auth, "config",  self.config)
+
+        monkeypatch.setattr(self.auth, "config", self.config)
         monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         class MockResponse:
@@ -322,51 +334,57 @@ class TestGetProjectsServices:
 
             def json(self):
                 return {"key": "value"}
-            
+
         def mock_get(*args, **kwargs):
             """Mock the get function to give MockResponse."""
             return MockResponse()
-        
+
         monkeypatch.setattr(requests, "get", mock_get)
 
         # Call the get_projects_services function with the mocked functions
         result = self.auth.get_service_information("test_service")
 
         # It should succeed and give the {"key":"value"} dict.
-        assert result == {"key":"value"}
+        assert result == {"key": "value"}
 
-
-    def test_get_projects_services_connection_error(self,monkeypatch):
+    def test_get_projects_services_connection_error(self, monkeypatch):
         """Test an unsuccessful instance of get_projects_services due to connection error."""
 
-        monkeypatch.setattr(self.auth, "config",  self.config)
+        monkeypatch.setattr(self.auth, "config", self.config)
         monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         def mock_get(*args, **kwargs):
             """Mock the get function to give a ConnectionError."""
             raise requests.exceptions.ConnectionError
-        
+
         monkeypatch.setattr(requests, "get", mock_get)
 
         # Check that the ConnectionError in the 'get' triggers a RuntimeError with the right text.
         with pytest.raises(
-            RuntimeError, match=re.escape(f"User services url {self.url} could not be reached.")
+            RuntimeError,
+            match=re.escape(f"User services url {self.url} could not be reached."),
         ):
             self.auth.get_service_information("test_service")
 
-
-    def test_get_projects_services_key_error(self,monkeypatch):
+    def test_get_projects_services_key_error(self, monkeypatch):
         """Test an unsuccessful instance of get_projects_services due to a key error."""
 
-        config = {"authentication": {"jasmin_authenticator": {"other_url": "test.com", "client_token":"test_token"}}}
-        
+        config = {
+            "authentication": {
+                "jasmin_authenticator": {
+                    "other_url": "test.com",
+                    "client_token": "test_token",
+                }
+            }
+        }
+
         monkeypatch.setattr(self.auth, "config", config)
         monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         def mock_get(*args, **kwargs):
             """Mock the get function to give the KeyError."""
             raise KeyError
-        
+
         monkeypatch.setattr(requests, "get", mock_get)
 
         # Check that the KeyError in the 'get' triggers a RuntimeError with the right text.
@@ -379,49 +397,52 @@ class TestGetProjectsServices:
     def test_get_projects_services_json_error(self, monkeypatch):
         """Test an unsuccessful instance of get_projects_services due to a JSON error."""
 
-        monkeypatch.setattr(self.auth, "config",  self.config)
+        monkeypatch.setattr(self.auth, "config", self.config)
         monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         class MockInvalidJSONResponse:
             """Mock the response to return a 200 status code and the JSON decode error."""
+
             status_code = 200
             text = "invalid json"
 
             def json(self):
                 raise json.JSONDecodeError("Expecting value", "invalid json", 0)
-            
+
         def mock_get(*args, **kwargs):
             """Mock the 'get' function to give the JSON error."""
             return MockInvalidJSONResponse()
-        
+
         monkeypatch.setattr(requests, "get", mock_get)
 
         # Check that the JSONDecodeError triggers a RuntimeError with the right text.
         with pytest.raises(
             RuntimeError,
-            match=re.escape(f"Invalid JSON returned from the user services url: {self.url}"),
+            match=re.escape(
+                f"Invalid JSON returned from the user services url: {self.url}"
+            ),
         ):
             self.auth.get_service_information("test_service")
 
-
-    def test_get_projects_services_404_error(self,monkeypatch):
+    def test_get_projects_services_404_error(self, monkeypatch):
         """Test an unsuccessful instance of get_projects_services due to a 404 error."""
-        
-        monkeypatch.setattr(self.auth, "config",  self.config)
+
+        monkeypatch.setattr(self.auth, "config", self.config)
         monkeypatch.setattr("nlds.utils.format_url", self.mock_format_url)
 
         class MockResponse:
             """Mock the response to return a 401 status code and the relevant text."""
+
             status_code = 401
             text = "Unauthorized"
 
             def json(self):
                 return "Unauthorized"
-            
+
         def mock_get(*args, **kwargs):
             """Mock the get function to give the 401 error."""
             return MockResponse()
-        
+
         monkeypatch.setattr(requests, "get", mock_get)
 
         # Check that the 401 error triggers a RuntimeError with the right text.
@@ -431,6 +452,7 @@ class TestGetProjectsServices:
 
 class TestGetTapeQuota:
     """Get the tape quota from the list of projects services."""
+
     auth = JasminAuthenticator()
 
     def test_get_tape_quota_success(self, monkeypatch):
@@ -443,17 +465,22 @@ class TestGetTapeQuota:
                 {
                     "category": 1,
                     "requirements": [
-                        {"status": 50, "resource": {"short_name": "tape"}, "amount": 100}
+                        {
+                            "status": 50,
+                            "resource": {"short_name": "tape"},
+                            "amount": 100,
+                        }
                     ],
                 }
             ]
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         # get_tape_quota should return the quota value of 100
         result = self.auth.get_tape_quota("test_service")
         assert result == 100
-
 
     def test_get_tape_quota_no_requirements(self, monkeypatch):
         """Test an unsuccessful instance of get_tape_quota due to no requirements."""
@@ -462,13 +489,16 @@ class TestGetTapeQuota:
             """Mock the response from get_projects_services to give the response for
             a GWS with no requirements."""
             return [{"category": 1, "requirements": []}]
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         # A ValueError should be raised saying there's no requirements found.
-        with pytest.raises(ValueError, match="Cannot find any requirements for test_service"):
+        with pytest.raises(
+            ValueError, match="Cannot find any requirements for test_service"
+        ):
             self.auth.get_tape_quota("test_service")
-
 
     def test_get_tape_quota_no_tape_resource(self, monkeypatch):
         """Test an instance of no tape resources."""
@@ -480,17 +510,22 @@ class TestGetTapeQuota:
                 {
                     "category": 1,
                     "requirements": [
-                        {"status": 50, "resource": {"short_name": "other"}, "amount": 100}
+                        {
+                            "status": 50,
+                            "resource": {"short_name": "other"},
+                            "amount": 100,
+                        }
                     ],
                 }
             ]
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         # A ValueError should be raised saying there's no tape resources.
         result = self.auth.get_tape_quota("test_service")
         assert result == 0
-
 
     def test_get_tape_quota_services_runtime_error(self, monkeypatch):
         """Test an unsuccessful instance of get_tape_quota due to a runtime error when
@@ -499,8 +534,10 @@ class TestGetTapeQuota:
         def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give a RuntimeError."""
             raise RuntimeError("Runtime error occurred.")
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         # A RuntimeError should be raised saying a runtime error occurred.
         with pytest.raises(
@@ -509,7 +546,6 @@ class TestGetTapeQuota:
         ):
             self.auth.get_tape_quota("test_service")
 
-
     def test_get_tape_quota_services_value_error(self, monkeypatch):
         """Test an unsuccessful instance of get_tape_quota due to a value error
         getting services from the projects portal."""
@@ -517,8 +553,10 @@ class TestGetTapeQuota:
         def mock_get_service_information(*args, **kwargs):
             """Mock the response from get_projects_services to give a ValueError."""
             raise ValueError("Value error occurred")
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         # A ValueError should be raised saying a value error occurred.
         with pytest.raises(
@@ -526,7 +564,6 @@ class TestGetTapeQuota:
             match="Error getting information for test_service: Value error occurred",
         ):
             self.auth.get_tape_quota("test_service")
-
 
     def test_get_tape_quota_no_gws(self, monkeypatch):
         """Test an unsuccessful instance of get_tape_quota due to the given service
@@ -538,8 +575,10 @@ class TestGetTapeQuota:
                 {"category": 2, "requirements": []},
                 {"category": 3, "requirements": []},
             ]
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         # A ValueError should be raised saying it cannot find a GWS and to check the category.
         with pytest.raises(
@@ -547,7 +586,6 @@ class TestGetTapeQuota:
             match="Cannot find a Group workspace with the name test_service. Check the category.",
         ):
             self.auth.get_tape_quota("test_service")
-
 
     def test_get_quota_zero_quota(self, monkeypatch):
         """Test an instance of the quota being zero."""
@@ -566,12 +604,13 @@ class TestGetTapeQuota:
                     ],
                 }
             ]
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         result = self.auth.get_tape_quota("test_service")
         assert result == 0
-
 
     def test_get_tape_quota_no_quota(self, monkeypatch):
         """Test an instance of zero quota due to there being no quota field."""
@@ -589,12 +628,13 @@ class TestGetTapeQuota:
                     ],
                 }
             ]
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         result = self.auth.get_tape_quota("test_service")
         assert result == 0
-
 
     def test_get_tape_quota_no_provisioned_resources(self, monkeypatch):
         """Test an instance of zero quota due to there being no provisioned resources."""
@@ -612,8 +652,10 @@ class TestGetTapeQuota:
                     ],
                 }
             ]
-        
-        monkeypatch.setattr(self.auth, "get_service_information", mock_get_service_information)
+
+        monkeypatch.setattr(
+            self.auth, "get_service_information", mock_get_service_information
+        )
 
         result = self.auth.get_tape_quota("test_service")
         assert result == 0

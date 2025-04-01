@@ -14,8 +14,10 @@ from urllib3.exceptions import HTTPError, MaxRetryError
 import json
 from nlds.errors import MessageError
 
+
 class BucketError(MessageError):
     pass
+
 
 class BucketMixin:
     """

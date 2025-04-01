@@ -108,8 +108,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 [self.rk_parts[0], self.rk_parts[1], RK.FAILED]
             )
             for file in self.filelist:
-                file.failure_reason = 'Failed in archive transfer init'
-                
+                file.failure_reason = "Failed in archive transfer init"
+
             self.send_pathlist(
                 self.filelist, rk_transfer_failed, self.body_json, state=State.FAILED
             )

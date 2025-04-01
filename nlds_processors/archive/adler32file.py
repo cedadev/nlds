@@ -1,6 +1,7 @@
 """
 adler32file.py
 """
+
 __author__ = "Neil Massey"
 __date__ = "18 Sep 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -9,10 +10,12 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from zlib import adler32
 
+
 class Adler32File:
-    """Wrapper class around a File object that auto-calculates the adler32 checksum for 
+    """Wrapper class around a File object that auto-calculates the adler32 checksum for
     all written/read bytes from the file.
     """
+
     def __init__(self, f, checksum=1, debug_fl=False):
         self.f = f
         self.checksum = checksum
@@ -45,7 +48,7 @@ class Adler32File:
 
     def tell(self) -> int:
         return self.f.tell()
-    
+
 
 class Adler32XRDFile:
     """Wrapper class around a XRDFile object to make it act more like a

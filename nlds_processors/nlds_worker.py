@@ -106,26 +106,24 @@ class NLDSWorkerConsumer(RMQC):
         body_json[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
         self.publish_and_log_message(new_routing_key, body_json)
 
-
     # def _process_rk_del(self, body_json: Dict[str, str]) -> None:
     #     # forward to catalog_del
     #     queue = f"{RK.CATALOG_DEL}"
-    #     new_routing_key = ".".join([RK.ROOT, 
-    #                                 queue, 
+    #     new_routing_key = ".".join([RK.ROOT,
+    #                                 queue,
     #                                 RK.START])
     #     self.log(f"Sending  message to {queue} queue with routing "
     #              f"key {new_routing_key}", RK.LOG_INFO)
     #     self.publish_and_log_message(new_routing_key, body_json)
 
-    #     # Do initial monitoring update to ensure that a subrecord at ROUTING is 
-    #     # created before the first job 
+    #     # Do initial monitoring update to ensure that a subrecord at ROUTING is
+    #     # created before the first job
     #     self.log(f"Updating monitor", RK.LOG_INFO)
-    #     new_routing_key = ".".join([RK.ROOT, 
-    #                                 RK.MONITOR_PUT, 
+    #     new_routing_key = ".".join([RK.ROOT,
+    #                                 RK.MONITOR_PUT,
     #                                 RK.START])
     #     body_json[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
     #     self.publish_and_log_message(new_routing_key, body_json)
-
 
     def _process_rk_list(self, body_json: Dict) -> None:
         # forward to catalog_get
@@ -357,72 +355,74 @@ class NLDSWorkerConsumer(RMQC):
         )
         self.publish_and_log_message(new_routing_key, body_json)
 
-
-    def _process_rk_catalog_del_complete(self, rk_parts: List, 
-                                         body_json: Dict) -> None:
+    def _process_rk_catalog_del_complete(self, rk_parts: List, body_json: Dict) -> None:
         # This function will be triggered from two routes:
         # 1. When trying to transfer to storage, and the transfer fails
         #    i.e. triggered by an error
         # 2. When deleting from the storage by the user
         # differentiate by the api method
         api_method = body_json[self.MSG_DETAILS][self.MSG_API_ACTION]
-        if (api_method == self.RK_DELLIST):
+        if api_method == self.RK_DELLIST:
             queue = f"{self.RK_ARCHIVE_DEL}"
-            new_routing_key = ".".join([self.RK_ROOT, 
-                                        queue, 
-                                        self.RK_START])
-            self.log(f"Sending  message to {queue} queue with routing "
-                     f"key {new_routing_key}", self.RK_LOG_INFO)
+            new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_START])
+            self.log(
+                f"Sending  message to {queue} queue with routing "
+                f"key {new_routing_key}",
+                self.RK_LOG_INFO,
+            )
             self.publish_and_log_message(new_routing_key, body_json)
-        
 
-    def _process_rk_archive_del_complete(self, rk_parts: List,
-                                         body_json: Dict) -> None:
+    def _process_rk_archive_del_complete(self, rk_parts: List, body_json: Dict) -> None:
         # this function will be triggered when the files have been deleted
         # from tape
         queue = f"{self.RK_TRANSFER_DEL}"
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    queue, 
-                                    self.RK_START])
-        self.log(f"Sending  message to {queue} queue with routing "
-                    f"key {new_routing_key}", self.RK_LOG_INFO)
+        new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_START])
+        self.log(
+            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            self.RK_LOG_INFO,
+        )
         self.publish_and_log_message(new_routing_key, body_json)
-
 
     def _process_rk_archive_del_failed(self, body_json: Dict) -> None:
         return
-        self.log(f"Delete unsuccessful, sending failed files back to catalog "
-                  "for restoration", 
-                 self.RK_LOG_INFO)
+        self.log(
+            f"Delete unsuccessful, sending failed files back to catalog "
+            "for restoration",
+            self.RK_LOG_INFO,
+        )
 
         queue = f"{self.RK_CATALOG_RESTORE}"
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    queue, 
-                                    self.RK_START])
-        self.log(f"Sending  message to {queue} queue with routing "
-                    f"key {new_routing_key}", self.RK_LOG_INFO)
+        new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_START])
+        self.log(
+            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            self.RK_LOG_INFO,
+        )
         self.publish_and_log_message(new_routing_key, body_json)
 
-
     def _process_rk_transfer_del_complete(self, body_json: Dict) -> None:
-        # Nothing happens after a successful delete, so we leave this 
-        # empty in case any future messages are required (queueing archive for 
+        # Nothing happens after a successful delete, so we leave this
+        # empty in case any future messages are required (queueing archive for
         # example)
         pass
 
-
     def _process_rk_transfer_del_failed(self, body_json: Dict) -> None:
         queue = f"{self.RK_CATALOG_RESTORE}"
-        new_routing_key = ".".join([self.RK_ROOT, 
-                                    queue, 
-                                    self.RK_START])
-        self.log(f"Sending  message to {queue} queue with routing "
-                    f"key {new_routing_key}", self.RK_LOG_INFO)
+        new_routing_key = ".".join([self.RK_ROOT, queue, self.RK_START])
+        self.log(
+            f"Sending  message to {queue} queue with routing " f"key {new_routing_key}",
+            self.RK_LOG_INFO,
+        )
         self.publish_and_log_message(new_routing_key, body_json)
 
-    def callback(self, ch: Channel, method: Method, properties: Header, 
-                 body: bytes, connection: Connection) -> None:
-        
+    def callback(
+        self,
+        ch: Channel,
+        method: Method,
+        properties: Header,
+        body: bytes,
+        connection: Connection,
+    ) -> None:
+
         # Convert body from bytes to string for ease of nipulation
         body_json = json.loads(body)
 

@@ -23,7 +23,7 @@ from sqlalchemy import (
     Enum,
     BigInteger,
     UniqueConstraint,
-    Boolean
+    Boolean,
 )
 
 from sqlalchemy import ForeignKey
@@ -157,9 +157,9 @@ class Storage(enum.Enum):
             return cls(cls.TAPE)
         else:
             raise CatalogError(f"{storage_type}: unknown Storage_Type in Storage")
-        
+
     def __str__(self):
-        return [MSG.OBJECT_STORAGE, MSG.TAPE][self.value-1]
+        return [MSG.OBJECT_STORAGE, MSG.TAPE][self.value - 1]
 
 
 class Location(CatalogBase):

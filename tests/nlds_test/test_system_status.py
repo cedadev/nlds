@@ -29,9 +29,9 @@ def mock_load_config(template_config):
 @pytest.fixture()
 def load_config(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
-    #monkeypatch.setattr(
+    # monkeypatch.setattr(
     #    publ, "load_config", functools.partial(mock_load_config, template_config)
-    #)
+    # )
     pass
 
 

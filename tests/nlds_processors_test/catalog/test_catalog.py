@@ -375,9 +375,7 @@ class TestCatalog:
         # with pytest.raises(CatalogError):
         transaction_3 = mock_catalog.create_transaction(holding, test_uuid)
 
-
-    def test_get_files(self, mock_catalog, mock_holding, mock_transaction, 
-                       mock_file):
+    def test_get_files(self, mock_catalog, mock_holding, mock_transaction, mock_file):
         test_uuid = str(uuid.uuid4())
         catalog = mock_catalog
 

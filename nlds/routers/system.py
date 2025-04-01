@@ -37,16 +37,19 @@ templates = Jinja2Templates(directory=template_dir)
 
 class RabbitError(Exception):
     "Rabbits may not be working"
+
     pass
 
 
 class RequestError(Exception):
     "Requests may not be working"
+
     pass
 
 
 class LoginError(Exception):
     "Your login information is incorrect or you are not authorised"
+
     pass
 
 
@@ -117,7 +120,9 @@ async def get_consumer_status(key, target, msg_dict, time_limit, skip_num=0):
         return {"val": ("Rabbit error"), "colour": "PURPLE"}, 0, 0
     except LoginError as e:
         logger.error("Your RabbitMQ login information is incorrect or not authorised ")
-        logger.error("Please enter valid login information in the JASMIN .server_config file ")
+        logger.error(
+            "Please enter valid login information in the JASMIN .server_config file "
+        )
         return {"val": ("Login error"), "colour": "PURPLE"}, 0, 0
     except Error as e:
         logger.error("an unexpected error occurred: ")

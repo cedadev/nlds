@@ -8,6 +8,7 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
+
 def process_tag(tag):
     """Process a tag in string format into dictionary format"""
     # try:

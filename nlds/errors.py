@@ -32,6 +32,7 @@ class CallbackError(BaseException):
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
 
+
 class MessageError(Exception):
     def __init__(self, message, *args):
         super().__init__(args)

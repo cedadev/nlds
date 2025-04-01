@@ -1,8 +1,8 @@
 # encoding: utf-8
 """
 archive_get.py
-NOTE: This module is imported into a revision, and so should be very defensive 
-with how it imports external modules (like xrootd). 
+NOTE: This module is imported into a revision, and so should be very defensive
+with how it imports external modules (like xrootd).
 """
 __author__ = "Jack Leland and Neil Massey"
 __date__ = "30 Nov 2021"
@@ -30,7 +30,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_QUEUE_NAME = "archive_get_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.ARCHIVE_GET}." f"{RK.WILD}"
     DEFAULT_STATE = State.ARCHIVE_GETTING
-    PREPARE_DELAY = 60 * 1000 # 60 seconds delay between PREPARE_check requests
+    PREPARE_DELAY = 60 * 1000  # 60 seconds delay between PREPARE_check requests
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         self.preparelist = []
@@ -260,7 +260,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     routing_key=rk_check,
                     body_json=body_json_check,
                     state=State.ARCHIVE_PREPARING,
-                    delay=GetArchiveConsumer.PREPARE_DELAY
+                    delay=GetArchiveConsumer.PREPARE_DELAY,
                 )
 
         if len(self.failedlist) > 0:
@@ -374,7 +374,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                     routing_key=rk_check,
                     body_json=body_json,
                     state=State.ARCHIVE_PREPARING,
-                    delay=GetArchiveConsumer.PREPARE_DELAY
+                    delay=GetArchiveConsumer.PREPARE_DELAY,
                 )
 
 

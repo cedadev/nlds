@@ -113,7 +113,7 @@ class Monitor(DBMixin):
             if not groupall:
                 trec = trec.filter(TransactionRecord.user == user)
             trecs = trec.all()
-            
+
             if len(trecs) == 0:
                 raise KeyError
 

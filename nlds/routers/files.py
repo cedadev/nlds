@@ -168,8 +168,8 @@ async def get(
         meta_dict[MSG.HOLDING_ID] = holding_id
         response.holding_id = holding_id
     if tag:
-        tag_dict = tag.strip('').split(':')
-        meta_dict[MSG.TAG] = {tag_dict[0]:tag_dict[1]}
+        tag_dict = tag.strip("").split(":")
+        meta_dict[MSG.TAG] = {tag_dict[0]: tag_dict[1]}
         response.tag = tag_dict
 
     if len(meta_dict) > 0:
@@ -322,13 +322,13 @@ async def put(
     if len(contents) == 1:
         api_method = f"{RK.PUT}"
     else:
-        api_method = f"{RK.PUTLIST}" 
+        api_method = f"{RK.PUTLIST}"
     routing_key = f"{RK.ROOT}.{RK.ROUTE}.{api_method}"
 
     # return response, transaction id accepted for processing
     response = FileResponse(
-        transaction_id=transaction_id, 
-        msg=(f"{api_method} transaction accepted for processing.")
+        transaction_id=transaction_id,
+        msg=(f"{api_method} transaction accepted for processing."),
     )
 
     # create the message dictionary
@@ -482,7 +482,6 @@ async def put(
     return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=response.json())
 
 
-
 # @router.delete("/",
 #                status_code = status.HTTP_202_ACCEPTED,
 #                responses = {
@@ -555,7 +554,7 @@ async def put(
 #             MSG.ACCESS_KEY: access_key,
 #             MSG.SECRET_KEY: secret_key,
 #             MSG.API_ACTION: api_method
-#         }, 
+#         },
 #         MSG.DATA: {
 #             # Convert to PathDetails for JSON serialisation
 #             MSG.FILELIST: [PathDetails(original_path=item) for item in contents],
@@ -592,6 +591,3 @@ async def put(
 # @router.post("/")
 # async def post():
 #     return {}
-
-
-

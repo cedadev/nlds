@@ -145,7 +145,8 @@ def test_object_name():
     )
     pd.locations.add(location)
     os_loc = pd.object_name
-    assert(os_loc == "nlds.neils-bucket:file")
+    assert os_loc == "nlds.neils-bucket:file"
+
 
 if __name__ == "__main__":
     test_path_details()

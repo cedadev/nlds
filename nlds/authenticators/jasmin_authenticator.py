@@ -221,7 +221,7 @@ class JasminAuthenticator(BaseAuthenticator):
                 response_json = json.loads(response.text)
                 # is_manager is False by default and only changes if user has a manager or deputy role.
                 is_manager = False
-                for role in response_json['group_workspaces']:
+                for role in response_json["group_workspaces"]:
                     if role in ["MANAGER", "DEPUTY"]:
                         is_manager = True
                 return is_manager
@@ -237,33 +237,34 @@ class JasminAuthenticator(BaseAuthenticator):
                 )
         else:
             return False
-        
 
     @staticmethod
-    def user_has_get_holding_permission(user: str, 
-                                         group: str,
-                                         holding: Holding) -> bool:
+    def user_has_get_holding_permission(
+        user: str, group: str, holding: Holding
+    ) -> bool:
         """Check whether a user has permission to view this holding.
         When we implement ROLES this will be more complicated."""
         permitted = True
-        #Users can view / get all holdings in their group
-        #permitted &= holding.user == user
+        # Users can view / get all holdings in their group
+        # permitted &= holding.user == user
         permitted &= holding.group == group
         return permitted
-    
 
-    def user_has_get_file_permission(session, 
-                                      user: str, 
-                                      group: str,
-                                      file: File) -> bool:
+    def user_has_get_file_permission(
+        session, user: str, group: str, file: File
+    ) -> bool:
         """Check whether a user has permission to access a file.
         Later, when we implement the ROLES this function will be a lot more
         complicated!"""
-        assert(session != None)
-        holding = session.query(Holding).filter(
-            Transaction.id == file.transaction_id,
-            Holding.id == Transaction.holding_id
-        ).all()
+        assert session != None
+        holding = (
+            session.query(Holding)
+            .filter(
+                Transaction.id == file.transaction_id,
+                Holding.id == Transaction.holding_id,
+            )
+            .all()
+        )
         permitted = True
         for h in holding:
             # users have get file permission if in group
@@ -271,11 +272,10 @@ class JasminAuthenticator(BaseAuthenticator):
             permitted &= h.group == group
 
         return permitted
-    
 
-    def user_has_delete_from_holding_permission(self, user: str, 
-                                                 group: str,
-                                                 holding: Holding) -> bool:
+    def user_has_delete_from_holding_permission(
+        self, user: str, group: str, holding: Holding
+    ) -> bool:
         """Check whether a user has permission to delete files from this holding.
         When we implement ROLES this will be more complicated."""
         # is_admin == whether the user is an administrator of the group
@@ -284,10 +284,9 @@ class JasminAuthenticator(BaseAuthenticator):
         is_admin = self.authenticate_user_group_role(user, group)
         permitted = True
         # Currently, only users can delete files from their owned holdings
-        permitted &= (holding.user == user or is_admin)
+        permitted &= holding.user == user or is_admin
         permitted &= holding.group == group
         return permitted
-
 
     @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
     def get_service_information(self, service_name: str):
@@ -297,7 +296,7 @@ class JasminAuthenticator(BaseAuthenticator):
             "Content-Type": "application/x-ww-form-urlencoded",
             "cache-control": "no-cache",
             # WORK THIS OUT
-            "Authorization": f"Bearer {config["client_token"]}",
+            "Authorization": f"Bearer {config['client_token']}",
         }
         # Contact the user_services_url to get the information about the services
         url = format_url([config["project_services_url"]], {"name": service_name})
@@ -311,41 +310,47 @@ class JasminAuthenticator(BaseAuthenticator):
         except requests.exceptions.ConnectionError:
             raise RuntimeError(f"User services url {url} could not be reached.")
         except KeyError:
-            raise RuntimeError(f"Could not find 'user_services_url' key in the {self.name} section of the .server_config file.")
-        if response.status_code == requests.codes.ok: # status code 200
+            raise RuntimeError(
+                f"Could not find 'user_services_url' key in the {self.name} section of the .server_config file."
+            )
+        if response.status_code == requests.codes.ok:  # status code 200
             try:
                 response_json = json.loads(response.text)
                 return response_json
             except json.JSONDecodeError:
-                raise RuntimeError(f"Invalid JSON returned from the user services url: {url}")
+                raise RuntimeError(
+                    f"Invalid JSON returned from the user services url: {url}"
+                )
         else:
             raise RuntimeError(f"Error getting data for {service_name}")
-        
-        
+
     def get_tape_quota(self, service_name: str):
         """Get the service information then process it to extract the quota for the service."""
         try:
             result = self.get_service_information(service_name)
         except (RuntimeError, ValueError) as e:
             raise type(e)(f"Error getting information for {service_name}: {e}")
-        
+
         try:
             # Filter for Group Workspace category
             group_workspace = next(
                 service for service in result if service.get("category") == 1
             )
         except StopIteration:
-            raise ValueError(f"Cannot find a Group workspace with the name {service_name}. Check the category.")
-        
+            raise ValueError(
+                f"Cannot find a Group workspace with the name {service_name}. Check the category."
+            )
+
         requirements = group_workspace.get("requirements")
         if not requirements:
             raise ValueError(f"Cannot find any requirements for {service_name}.")
-        
+
         tape_quota = next(
             (
                 req.get("amount")
                 for req in requirements
-                if req.get("status") == 50 and req.get("resource", {}).get("short_name") == "tape"
+                if req.get("status") == 50
+                and req.get("resource", {}).get("short_name") == "tape"
             ),
             None,
         )

@@ -169,7 +169,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
                 f"Exception occurred during read of tarfile {self.tarfile_diskpath}. "
                 f"Original Exception: {e}"
             )
-                   
+
             self.log(msg, RK.LOG_ERROR)
             raise S3StreamError(msg)
 
@@ -178,7 +178,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     def prepare_required(self, tarfile: str) -> bool:
         """Query the storage system as to whether a file needs to be prepared."""
         # return True for the disktape / faketape™ for every other request
-        return (S3ToTarfileDisk.prepare_id % 2 == 0)
+        return S3ToTarfileDisk.prepare_id % 2 == 0
 
     def prepare_request(self, tarfilelist: List[str]) -> str:
         """Request the storage system for a file to be prepared"""
