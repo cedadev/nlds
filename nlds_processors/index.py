@@ -194,7 +194,7 @@ class IndexerConsumer(StattingConsumer):
                 # necessary
                 self.append_and_send(
                     self.completelist,  # the list to add to
-                    item_path,
+                    item_path.path,
                     routing_key=rk_complete,
                     body_json=body_json,
                     state=State.INDEXING,
@@ -208,7 +208,7 @@ class IndexerConsumer(StattingConsumer):
             item_path.failure_reason = ie.message
             self.append_and_send(
                 self.failedlist,
-                item_path,
+                item_path.path,
                 routing_key=rk_failed,
                 body_json=body_json,
                 state=State.FAILED,
