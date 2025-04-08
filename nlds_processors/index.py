@@ -169,16 +169,18 @@ class IndexerConsumer(StattingConsumer):
                 # process and send via recursion
                 for sf in sub_file_list:
                     root_path = pathlib.Path(item_path.path)
-                    new_item_path = PathDetails(original_path=str(root_path / sf))
+                    new_item_path = PathDetails(
+                        original_path=(root_path / sf).as_posix()
+                    )
                     self._index_r(
-                        new_item_path,
+                        item_path=new_item_path,
                         rk_complete=rk_complete,
                         rk_failed=rk_failed,
                         body_json=body_json,
                     )
 
             elif item_path.path.is_file():
-                # item is a file - stat it
+                # item is a file - stat it - calls the PathDetails member function
                 item_path.stat()
                 # check the filesize
                 if self.check_filesize_fl and item_path.size > self.max_filesize:
@@ -189,12 +191,13 @@ class IndexerConsumer(StattingConsumer):
                         f" The max allowed file size is "
                         f"{self.max_filesize / (1000*1000)}MB."
                     )
+
                     raise IndexError(message=error_reason)
                 # add to the complete list - use append_and_send to subdivide if
                 # necessary
                 self.append_and_send(
                     self.completelist,  # the list to add to
-                    item_path.path,
+                    item_path,
                     routing_key=rk_complete,
                     body_json=body_json,
                     state=State.INDEXING,
@@ -208,7 +211,7 @@ class IndexerConsumer(StattingConsumer):
             item_path.failure_reason = ie.message
             self.append_and_send(
                 self.failedlist,
-                item_path.path,
+                item_path,
                 routing_key=rk_failed,
                 body_json=body_json,
                 state=State.FAILED,
@@ -250,7 +253,6 @@ class IndexerConsumer(StattingConsumer):
                 body_json=body_json,
                 state=State.INDEXING,
             )
-
         if len(self.failedlist) > 0:
             self.send_pathlist(
                 self.failedlist,
