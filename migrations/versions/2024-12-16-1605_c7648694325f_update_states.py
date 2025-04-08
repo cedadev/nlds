@@ -238,7 +238,7 @@ def downgrade_monitor() -> None:
 
     # Loop through each of the states in the map from new states to old states.
     for ns in NewState:
-        # cannot use ORM here as it will use the model definition of SubRecord.State,
+        # cannot use ORM here as it will use the model definition of File.PathType,
         # which does not include all of the old enum values - revert to SQL
         # reverse dictionary lookup
         os = reverse_map[ns]
@@ -247,7 +247,7 @@ def downgrade_monitor() -> None:
                 f"UPDATE sub_record SET old_state='{os.name}' WHERE state='{ns.name}'"
             )
         )
-    # new_state now exists in each row with the correct enum value. we now have to
+    # old_state now exists in each row with the correct enum value. we now have to
     # 1. Delete the state field
     # 2. Delete the enum
     # 3. Rename the old enum
