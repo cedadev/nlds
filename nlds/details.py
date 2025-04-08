@@ -243,7 +243,7 @@ class PathDetails(BaseModel):
         self.link_path = None
         if stat.S_ISLNK(self.mode):
             self.path_type = PathType.LINK
-            self.link_path = self.path.resolve()
+            self.link_path = self.path.resolve().as_posix() # convert this to a string
         elif stat.S_ISDIR(self.mode):
             self.path_type = PathType.DIRECTORY
         elif stat.S_ISREG(self.mode):
