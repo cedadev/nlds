@@ -1,0 +1,24 @@
+{
+    "logging_q" : {
+        "enable" : {{ logging_enable|default(True) }},
+        "log_level" : "{{ log_level }}",
+        "add_stdout_fl" : {{ logging_add_stdout|default(False) }},
+        "stdout_log_level" : "{{ logging_stdout_log_level }}",
+        "log_files" : {{ log_files }},
+        "max_bytes" : {{ logging_max_bytes }},
+        "backup_count" : {{ logging_backup_count }}
+    }, 
+    "rabbitMQ" : {
+        "queues" : [
+            {
+                "name" : "logging_q",
+                "bindings" : [
+                    {
+                        "exchange" : "{{ rabbit_exchange_name }}",
+                        "routing_key" : "*.log.*"
+                    }
+                ]
+            }
+        ]
+    }
+}

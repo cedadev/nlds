@@ -35,6 +35,8 @@ note over qs
 end note
 collections index as "Indexers" #lightblue
 
+participant disk as "POSIX\nDisk" #GhostWhite
+
 queue qc as "Catalog Q" #springgreen
 collections catalog as "Catalog" #springgreen
 database catalog_db as "Catalog DB" #springgreen
@@ -48,7 +50,6 @@ note over qt
 end note
 collections transfer_puts as "Transfer Put" #gold
 
-participant disk as "POSIX\nDisk" #GhostWhite
 participant obj as "Object\nStore" #GhostWhite
 
 user -> client : PUT(filelist,target,\n\tuser,group)
@@ -83,12 +84,13 @@ activate qs
 qs -> index : key=""nlds-api.index.init""
 deactivate qs
 activate index
-loop #lightblue for subfile in filelist[::1000]
-    index -> wex : key=""nlds-api.index.start""
-    activate wex
+loop #lightblue for subfile in //filelist//[::1000]
+    index -> index : add file to //subfilelist//
 end
+index -> wex : key=""nlds-api.index.start""
 deactivate index
 
+activate wex
 wex -> qs : key=""nlds-api.index.start""
 deactivate wex
 
@@ -154,8 +156,23 @@ qw -> work: key=""nlds-api.catalog-put.complete""
 deactivate qw
 
 activate work
-work -> wex  : key=""nlds-api.transfer-put.start""
+work -> wex  : key=""nlds-api.transfer-put.init""
 deactivate work
+
+activate wex
+wex -> qt : key=""nlds-api.transfer-put.init""
+deactivate wex
+
+activate qt
+qt -> transfer_puts : key=""nlds-api.transfer-put.init""
+deactivate qt
+
+activate transfer_puts
+loop #Gold for subfile in //catalogued_list//[::1000]
+    transfer_puts -> transfer_puts : add file to //subfilelist//
+end
+transfer_puts -> wex : key=""nlds-api.transfer-put.start""
+deactivate transfer_puts
 
 activate wex
 wex -> qt : key=""nlds-api.transfer-put.start""
@@ -186,6 +203,31 @@ deactivate wex
 activate qw
 qw -> work : key=""nlds-api.transfer-put.complete""
 deactivate qw
+
+activate work
+work -> wex : key=""nlds-api.catalog-update.start""
+deactivate work
+
+activate wex
+wex -> qc : key=""nlds-api.catalog-update.start""
+deactivate wex
+
+activate qc
+qc -> catalog : key=""nlds-api.catalog-update.start""
+deactivate qc
+
+activate catalog
+loop #LightGreen for file in //transferred_list//
+    catalog -> catalog_db : create OBJECT STORAGE location
+    catalog -> catalog_db : add details to OBJECT STORAGE 
+    catalog -> catalog_db : attach OBJECT STORAGE location to file record
+end
+catalog -> wex : key=""nlds-api.catalog-update.complete""
+deactivate catalog
+
+activate wex
+wex -> work : key=""nlds-api.catalog-update.complete""
+deactivate wex
 
 transfer_puts -> wex : key=""nlds-api.transfer-put.failed""
 deactivate transfer_puts

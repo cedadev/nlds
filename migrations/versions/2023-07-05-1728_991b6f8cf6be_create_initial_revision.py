@@ -1,15 +1,24 @@
 """create initial revision
 
 Revision ID: 991b6f8cf6be
-Revises: 
+Revises:
 Create Date: 2023-07-05 17:28:44.244493
 
 """
+
 from enum import Enum as PyEnum
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy import Integer, String, Column, DateTime, Enum, BigInteger, UniqueConstraint
+from sqlalchemy import (
+    Integer,
+    String,
+    Column,
+    DateTime,
+    Enum,
+    BigInteger,
+    UniqueConstraint,
+)
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import declarative_base, Session, relationship
 from sqlalchemy.sql import func
@@ -19,7 +28,7 @@ from nlds.details import PathType
 
 
 # revision identifiers, used by Alembic.
-revision = '991b6f8cf6be'
+revision = "991b6f8cf6be"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -27,8 +36,10 @@ depends_on = None
 
 CatalogBase = declarative_base()
 
+
 class Holding(CatalogBase):
     """Class containing the details of a Holding - i.e. a batch"""
+
     __tablename__ = "holding"
     # primary key / integer id / batch id
     id = Column(Integer, primary_key=True)
@@ -43,13 +54,15 @@ class Holding(CatalogBase):
     # relationship for transactions (One to many)
     transactions = relationship("Transaction", cascade="delete, delete-orphan")
     # label must be unique per user
-    __table_args__ = (UniqueConstraint('label', 'user'),)
+    __table_args__ = (UniqueConstraint("label", "user"),)
+
     # return the tags as a dictionary
     def get_tags(self):
         tags = {}
         for t in self.tags:
             tags[t.key] = t.value
         return tags
+
     # return the transaction ids as a list
     def get_transaction_ids(self):
         t_ids = []
@@ -59,8 +72,9 @@ class Holding(CatalogBase):
 
 
 class Transaction(CatalogBase):
-    """Class containing details of a transaction.  Note that a holding can 
+    """Class containing details of a transaction.  Note that a holding can
     consist of many transactions."""
+
     __tablename__ = "transaction"
     # primay key / integer id
     id = Column(Integer, primary_key=True)
@@ -71,12 +85,12 @@ class Transaction(CatalogBase):
     # relationship for files (One to many)
     files = relationship("File", cascade="delete, delete-orphan")
     # holding id as ForeignKey "Parent"
-    holding_id = Column(Integer, ForeignKey("holding.id"), 
-                        index=True, nullable=False)
+    holding_id = Column(Integer, ForeignKey("holding.id"), index=True, nullable=False)
 
 
 class Tag(CatalogBase):
     """Class containing the details of a Tag that can be assigned to a Holding"""
+
     __tablename__ = "tag"
     # primary key
     id = Column(Integer, primary_key=True)
@@ -84,20 +98,21 @@ class Tag(CatalogBase):
     key = Column(String)
     value = Column(String)
     # holding id as ForeignKey "Parent"
-    holding_id = Column(Integer, ForeignKey("holding.id"), 
-                        index=True, nullable=False)
+    holding_id = Column(Integer, ForeignKey("holding.id"), index=True, nullable=False)
 
-    __table_args__ = (UniqueConstraint('key', 'holding_id'),)
+    __table_args__ = (UniqueConstraint("key", "holding_id"),)
 
 
 class File(CatalogBase):
     """Class containing the details of a single File"""
+
     __tablename__ = "file"
     # primary key / integer id
     id = Column(Integer, primary_key=True)
     # transaction id as ForeignKey "Parent"
-    transaction_id = Column(Integer, ForeignKey("transaction.id"), 
-                            index=True, nullable=False)
+    transaction_id = Column(
+        Integer, ForeignKey("transaction.id"), index=True, nullable=False
+    )
     # original path on POSIX disk - this should be unique per holding
     original_path = Column(String)
     # PathType, same as the nlds.details.PathType enum
@@ -121,6 +136,7 @@ class File(CatalogBase):
 
 class Location(CatalogBase):
     """Class containing the location on NLDS of a single File"""
+
     __tablename__ = "location"
     # primary key / integer id
     id = Column(Integer, primary_key=True)
@@ -133,12 +149,12 @@ class Location(CatalogBase):
     # last time the file was accessed
     access_time = Column(DateTime)
     # file id as ForeignKey "Parent"
-    file_id = Column(Integer, ForeignKey("file.id"), 
-                     index=True, nullable=False)
+    file_id = Column(Integer, ForeignKey("file.id"), index=True, nullable=False)
 
 
 class Checksum(CatalogBase):
     """Class containing checksum and algorithm used to calculate checksum"""
+
     __tablename__ = "checksum"
     # primary key / integer id
     id = Column(Integer, primary_key=True)
@@ -147,13 +163,13 @@ class Checksum(CatalogBase):
     # checksum method / algorithm
     algorithm = Column(String, nullable=False)
     # file id as ForeignKey "Parent" (one to many)
-    file_id = Column(Integer, ForeignKey("file.id"), 
-                     index=True, nullable=False)
+    file_id = Column(Integer, ForeignKey("file.id"), index=True, nullable=False)
     # checksum must be unique per algorithm
-    __table_args__ = (UniqueConstraint('checksum', 'algorithm'),)
+    __table_args__ = (UniqueConstraint("checksum", "algorithm"),)
 
 
 MonitorBase = declarative_base()
+
 
 class State(PyEnum):
     INITIALISING = -1
@@ -167,14 +183,16 @@ class State(PyEnum):
     TRANSFER_GETTING = 7
     COMPLETE = 8
     FAILED = 9
-    CATALOG_BACKUP = 10     # This is essenitally the policy control step
+    CATALOG_BACKUP = 10  # This is essenitally the policy control step
     ARCHIVE_PUTTING = 11
     CATALOG_RESTORING = 12
     ARCHIVE_GETTING = 13
     CATALOG_UPDATING = 14
 
+
 class TransactionRecord(MonitorBase):
     """Class containing the details of the state of a transaction"""
+
     __tablename__ = "transaction_record"
     # primary key / integer id / batch id
     id = Column(Integer, primary_key=True)
@@ -195,6 +213,7 @@ class TransactionRecord(MonitorBase):
     # relationship for Warnings (One to many)
     warnings = relationship("Warning", cascade="delete, delete-orphan")
 
+
 class SubRecord(MonitorBase):
     __tablename__ = "sub_record"
     # primary key / integer id / batch id
@@ -206,14 +225,17 @@ class SubRecord(MonitorBase):
     # count of how many times the subrecord has been retried
     retry_count = Column(Integer, nullable=False)
     # timestamp of last update
-    last_updated = Column(DateTime, nullable=False, default=func.now(), 
-                          onupdate=func.now())
+    last_updated = Column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
     # relationship for failed files (zero to many)
     failed_files = relationship("FailedFile")
 
     # transaction_record_id as ForeignKey
-    transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
-                                   index=True, nullable=False)
+    transaction_record_id = Column(
+        Integer, ForeignKey("transaction_record.id"), index=True, nullable=False
+    )
+
 
 class FailedFile(MonitorBase):
     __tablename__ = "failed_file"
@@ -225,8 +247,10 @@ class FailedFile(MonitorBase):
     # final reason for failure
     reason = Column(String)
     # sub_record_id as ForeignKey
-    sub_record_id = Column(Integer, ForeignKey("sub_record.id"), 
-                           index=True, nullable=False)
+    sub_record_id = Column(
+        Integer, ForeignKey("sub_record.id"), index=True, nullable=False
+    )
+
 
 class Warning(MonitorBase):
     __tablename__ = "warning"
@@ -235,9 +259,9 @@ class Warning(MonitorBase):
     id = Column(Integer, primary_key=True)
     warning = Column(String)
     # link to transaction record warning about
-    transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
-                                   index=True, nullable=False)
-
+    transaction_record_id = Column(
+        Integer, ForeignKey("transaction_record.id"), index=True, nullable=False
+    )
 
 
 def upgrade(engine_name: str) -> None:
@@ -248,14 +272,11 @@ def downgrade(engine_name: str) -> None:
     globals()["downgrade_%s" % engine_name]()
 
 
-
-
-
 def upgrade_catalog() -> None:
     # Attempt to create all tables for the catalog
     session = Session(bind=op.get_bind())
     try:
-        CatalogBase.metadata.create_all(session.get_bind()) 
+        CatalogBase.metadata.create_all(session.get_bind())
     except Exception as e:
         session.rollback()
     else:
@@ -263,7 +284,7 @@ def upgrade_catalog() -> None:
 
 
 def downgrade_catalog() -> None:
-    # No need to delete anything 
+    # No need to delete anything
     pass
 
 
@@ -279,6 +300,5 @@ def upgrade_monitor() -> None:
 
 
 def downgrade_monitor() -> None:
-    # No need to delete anything 
+    # No need to delete anything
     pass
-

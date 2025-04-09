@@ -15,20 +15,29 @@ from nlds.errors import CallbackError
 
 class DelTransferConsumer(BaseTransferConsumer):
     DEFAULT_QUEUE_NAME = "transfer_del_q"
-    DEFAULT_ROUTING_KEY = (f"{BaseTransferConsumer.RK_ROOT}."
-                           f"{BaseTransferConsumer.RK_TRANSFER_DEL}."
-                           f"{BaseTransferConsumer.RK_WILD}")
+    DEFAULT_ROUTING_KEY = (
+        f"{BaseTransferConsumer.RK_ROOT}."
+        f"{BaseTransferConsumer.RK_TRANSFER_DEL}."
+        f"{BaseTransferConsumer.RK_WILD}"
+    )
     DEFAULT_STATE = State.TRANSFER_DELETING
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
     @retry(S3Error, tries=5, delay=1, logger=None)
-    def transfer(self, transaction_id: str, tenancy: str, access_key: str, 
-                 secret_key: str, filelist: List[PathDetails], rk_origin: str,
-                 body_json: Dict[str, str]) -> None:
+    def transfer(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ) -> None:
         # Grab message details for ease of access. This shouldn't fail becuase
-        # of checking done in the worker, might make sense to do it here/in the 
+        # of checking done in the worker, might make sense to do it here/in the
         # basetransfer too though
         msg_details = body_json[self.MSG_DETAILS]
         # Create client!
@@ -47,19 +56,23 @@ class DelTransferConsumer(BaseTransferConsumer):
             # check if this has failed too often
             if path_details.retries.count > self.max_retries:
                 self.append_and_send(
-                    path_details, rk_failed, body_json, list_type="failed",
+                    path_details,
+                    rk_failed,
+                    body_json,
+                    list_type="failed",
                 )
                 continue
-            # If bucketname inserted into object path (i.e. from catalogue) then 
+            # If bucketname inserted into object path (i.e. from catalogue) then
             # extract both
-            elif len(path_details.object_name.split(':')) == 2:
-                bucket_name, object_name = path_details.object_name.split(':')
+            elif len(path_details.object_name.split(":")) == 2:
+                bucket_name, object_name = path_details.object_name.split(":")
             # Otherwise, log error and queue for retry
             else:
                 reason = "Unable to get bucket_name from message info"
-                self.log(f"{reason}, adding "
-                         f"{path_details.object_name} to retry list.", 
-                         self.RK_LOG_INFO)
+                self.log(
+                    f"{reason}, adding " f"{path_details.object_name} to retry list.",
+                    self.RK_LOG_INFO,
+                )
                 path_details.retries.increment(reason=reason)
                 self.append_and_send(
                     path_details, rk_failed, body_json, list_type="retry"
@@ -68,9 +81,10 @@ class DelTransferConsumer(BaseTransferConsumer):
 
             if bucket_name and not client.bucket_exists(bucket_name):
                 # If bucket doesn't exist then pass for retry
-                reason = (f"Bucket {bucket_name} doesn't seem to exist")
-                self.log(f"{reason}. Adding {object_name} to retry list.", 
-                         self.RK_LOG_ERROR)
+                reason = f"Bucket {bucket_name} doesn't seem to exist"
+                self.log(
+                    f"{reason}. Adding {object_name} to retry list.", self.RK_LOG_ERROR
+                )
                 path_details.retries.increment(reason=reason)
                 if path_details.retries.count > self.max_retries:
                     # set the path type to missing if it is
@@ -90,37 +104,45 @@ class DelTransferConsumer(BaseTransferConsumer):
             except Exception as e:
                 reason = f"Delete-time exception occurred: {e}"
                 self.log(reason, self.RK_LOG_DEBUG)
-                self.log(f"Exception encountered during deletion, adding "
-                         f"{object_name} to retry-list.", self.RK_LOG_INFO)
+                self.log(
+                    f"Exception encountered during deletion, adding "
+                    f"{object_name} to retry-list.",
+                    self.RK_LOG_INFO,
+                )
                 path_details.retries.increment(reason=reason)
-                self.append_and_send(path_details, rk_retry, body_json, 
-                                     list_type="retry")
+                self.append_and_send(
+                    path_details, rk_retry, body_json, list_type="retry"
+                )
                 continue
             else:
-                self.log(f"Successfully deleted {path_details.original_path}", 
-                         self.RK_LOG_DEBUG)
-                self.append_and_send(path_details, rk_complete, body_json, 
-                                     list_type="deleted")
+                self.log(
+                    f"Successfully deleted {path_details.original_path}",
+                    self.RK_LOG_DEBUG,
+                )
+                self.append_and_send(
+                    path_details, rk_complete, body_json, list_type="deleted"
+                )
 
         # Send whatever remains after all items have been (attempted to be) deleted
         if len(self.completelist) > 0:
             self.send_pathlist(
-                self.completelist, rk_complete, body_json, mode="deleted",
+                self.completelist,
+                rk_complete,
+                body_json,
+                mode="deleted",
             )
         if len(self.retrylist) > 0:
-            self.send_pathlist(
-                self.retrylist, rk_retry, body_json, mode="retry"
-            )
+            self.send_pathlist(self.retrylist, rk_retry, body_json, mode="retry")
         if len(self.failedlist) > 0:
             self.send_pathlist(
-                self.failedlist, rk_failed, body_json,
-                state=State.CATALOG_RESTORING
+                self.failedlist, rk_failed, body_json, state=State.CATALOG_RESTORING
             )
 
 
 def main():
     consumer = DelTransferConsumer()
     consumer.run()
+
 
 if __name__ == "__main__":
     main()

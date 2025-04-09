@@ -22,3 +22,4 @@ dist/
 **/.processor_config
 logs/
 *.db
+**/local_server_config.py

@@ -5,6 +5,7 @@ Revises: fa9f4b687d19
 Create Date: 2023-08-28 11:59:54.203864
 
 """
+
 from enum import Enum as PyEnum
 from itertools import chain
 
@@ -18,15 +19,16 @@ from sqlalchemy.sql.expression import text
 
 
 # revision identifiers, used by Alembic.
-revision = 'eaeeec0b5cf2'
-down_revision = 'fa9f4b687d19'
+revision = "eaeeec0b5cf2"
+down_revision = "fa9f4b687d19"
 branch_labels = None
 depends_on = None
 
 """Declarative base class, containing the Metadata object"""
 Base = declarative_base()
 
-# Explicitly declare the old and new State enums here so the migration still 
+
+# Explicitly declare the old and new State enums here so the migration still
 # works at future, possibly different, commits.
 class OldState(PyEnum):
     INITIALISING = -1
@@ -40,11 +42,12 @@ class OldState(PyEnum):
     TRANSFER_GETTING = 7
     COMPLETE = 8
     FAILED = 9
-    CATALOG_BACKUP = 10     # This is essenitally the policy control step
+    CATALOG_BACKUP = 10  # This is essenitally the policy control step
     ARCHIVE_PUTTING = 11
     CATALOG_RESTORING = 12
     ARCHIVE_GETTING = 13
     CATALOG_UPDATING = 14
+
 
 class NewState(PyEnum):
     # Generic states
@@ -70,9 +73,11 @@ class NewState(PyEnum):
     # Shared ARCHIVE states
     CATALOG_ARCHIVE_ROLLBACK = 40
 
+
 class State(PyEnum):
     """Combination of old and new, favouring new numbers"""
-    _ignore_ = 'member cls'
+
+    _ignore_ = "member cls"
     cls = vars()
     for member in chain(list(NewState), list(OldState)):
         if member.name not in cls:
@@ -81,6 +86,7 @@ class State(PyEnum):
 
 class TransactionRecord(Base):
     """Class containing the details of the state of a transaction"""
+
     __tablename__ = "transaction_record"
     # primary key / integer id / batch id
     id = Column(Integer, primary_key=True)
@@ -101,6 +107,7 @@ class TransactionRecord(Base):
     # relationship for Warnings (One to many)
     warnings = relationship("Warning", cascade="delete, delete-orphan")
 
+
 class SubRecord(Base):
     __tablename__ = "sub_record"
     # primary key / integer id / batch id
@@ -112,14 +119,17 @@ class SubRecord(Base):
     # count of how many times the subrecord has been retried
     retry_count = Column(Integer, nullable=False)
     # timestamp of last update
-    last_updated = Column(DateTime, nullable=False, default=func.now(), 
-                          onupdate=func.now())
+    last_updated = Column(
+        DateTime, nullable=False, default=func.now(), onupdate=func.now()
+    )
     # relationship for failed files (zero to many)
     failed_files = relationship("FailedFile")
 
     # transaction_record_id as ForeignKey
-    transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
-                                   index=True, nullable=False)
+    transaction_record_id = Column(
+        Integer, ForeignKey("transaction_record.id"), index=True, nullable=False
+    )
+
 
 class FailedFile(Base):
     __tablename__ = "failed_file"
@@ -131,8 +141,10 @@ class FailedFile(Base):
     # final reason for failure
     reason = Column(String)
     # sub_record_id as ForeignKey
-    sub_record_id = Column(Integer, ForeignKey("sub_record.id"), 
-                           index=True, nullable=False)
+    sub_record_id = Column(
+        Integer, ForeignKey("sub_record.id"), index=True, nullable=False
+    )
+
 
 class Warning(Base):
     __tablename__ = "warning"
@@ -141,12 +153,15 @@ class Warning(Base):
     id = Column(Integer, primary_key=True)
     warning = Column(String)
     # link to transaction record warning about
-    transaction_record_id = Column(Integer, ForeignKey("transaction_record.id"), 
-                                   index=True, nullable=False)
+    transaction_record_id = Column(
+        Integer, ForeignKey("transaction_record.id"), index=True, nullable=False
+    )
+
 
 # Create ENUM types, one for old, one for new, one for temp
-old_enum = sa.Enum(OldState, name='state')
-new_enum = sa.Enum(NewState, name='state')
+old_enum = sa.Enum(OldState, name="state")
+new_enum = sa.Enum(NewState, name="state")
+
 
 def upgrade(engine_name: str) -> None:
     globals()["upgrade_%s" % engine_name]()
@@ -156,9 +171,6 @@ def downgrade(engine_name: str) -> None:
     globals()["downgrade_%s" % engine_name]()
 
 
-
-
-
 def upgrade_catalog() -> None:
     pass
 
@@ -166,7 +178,8 @@ def upgrade_catalog() -> None:
 def downgrade_catalog() -> None:
     pass
 
-# A map from the old values of State to the new ones, including doubling up on 
+
+# A map from the old values of State to the new ones, including doubling up on
 # the catalog_restoring
 state_map = {
     OldState.ROUTING: NewState.ROUTING,
@@ -187,70 +200,91 @@ state_map = {
     OldState.CATALOG_UPDATING: NewState.CATALOG_ARCHIVE_UPDATING,
 }
 
+
 def upgrade_monitor() -> None:
-    # Here, we wrap in a batch context manager so SQLite can be migrated/altered 
+    # Here, we wrap in a batch context manager so SQLite can be migrated/altered
     # too (see https://alembic.sqlalchemy.org/en/latest/batch.html for details)
     with op.batch_alter_table("sub_record") as bop:
-        # Change the column type from enum to string 
-        bop.alter_column("state", existing_server_default=None,
-                         existing_nullable=False, type_=sa.String(length=32))
+        # Change the column type from enum to string
+        bop.alter_column(
+            "state",
+            existing_server_default=None,
+            existing_nullable=False,
+            type_=sa.String(length=32),
+        )
 
-    # Get the session to update the database values with 
+    # Get the session to update the database values with
     session = Session(bind=op.get_bind())
-    # Loop through each of the states in the map from old states to new states. 
+    # Loop through each of the states in the map from old states to new states.
     for old_state, new_state in state_map.items():
-        sub_records = session.query(SubRecord).filter(
-            SubRecord.state.name == old_state.name
-        ).all()
+        sub_records = (
+            session.query(SubRecord)
+            .filter(SubRecord.state.name == old_state.name)
+            .all()
+        )
         # Assing the state to the new value
         for sr in sub_records:
             sr.state = new_state
-    
+
     # Remove the old enum type and create the new one
     old_enum.drop(op.get_bind(), checkfirst=False)
     new_enum.create(op.get_bind(), checkfirst=False)
-            
-    # Change the column type to the new ENUM 
+
+    # Change the column type to the new ENUM
     with op.batch_alter_table("sub_record") as bop:
-        # Change the column type back to enum, but use the new one 
-        bop.alter_column("state", existing_server_default=None,
-                         existing_nullable=False, type_=new_enum,
-                         postgresql_using='state::text::state')
-        
-    # Commit the changes to the db.  
+        # Change the column type back to enum, but use the new one
+        bop.alter_column(
+            "state",
+            existing_server_default=None,
+            existing_nullable=False,
+            type_=new_enum,
+            postgresql_using="state::text::state",
+        )
+
+    # Commit the changes to the db.
     session.commit()
 
+
 def downgrade_monitor() -> None:
-    # Here, we wrap in a batch context manager so SQLite can be migrated/altered 
+    # Here, we wrap in a batch context manager so SQLite can be migrated/altered
     # too (see https://alembic.sqlalchemy.org/en/latest/batch.html for details)
     with op.batch_alter_table("sub_record") as bop:
-        # Change the column type from enum to string 
-        bop.alter_column("state", existing_server_default=None,
-                         existing_nullable=False, type_=sa.String(length=32))
+        # Change the column type from enum to string
+        bop.alter_column(
+            "state",
+            existing_server_default=None,
+            existing_nullable=False,
+            type_=sa.String(length=32),
+        )
     op.alter_column
 
-    # Get the session to update the database values with 
+    # Get the session to update the database values with
     session = Session(bind=op.get_bind())
-    # Loop through each of the states in the map from old states to new states. 
+    # Loop through each of the states in the map from old states to new states.
     for old_state, new_state in state_map.items():
-        sub_records = session.query(SubRecord).filter(
-            SubRecord.state.name == new_state.name
-        ).all()
-        # Assing the state to the old value. 
+        sub_records = (
+            session.query(SubRecord)
+            .filter(SubRecord.state.name == new_state.name)
+            .all()
+        )
+        # Assing the state to the old value.
         for sr in sub_records:
             sr.state = old_state
 
     # Remove the old enum type and create the new one
     new_enum.drop(op.get_bind(), checkfirst=False)
     old_enum.create(op.get_bind(), checkfirst=False)
-            
-    # Change the column type to the new ENUM 
-    with op.batch_alter_table("sub_record") as bop:
-        # Change the column type back to the old enum  
-        bop.alter_column("state", existing_server_default=None,
-                         existing_nullable=False, type_=old_enum, 
-                         postgresql_using='state::text::state')
-        
-    # Commit the changes to the db.  
-    session.commit()
 
+    # Change the column type to the new ENUM
+    with op.batch_alter_table("sub_record") as bop:
+        # Change the column type back to the old enum
+        bop.alter_column(
+            "state",
+            existing_server_default=None,
+            existing_nullable=False,
+            type_=old_enum,
+            postgresql_using="state::text::state",
+        )
+
+    # Commit the changes to the db.
+    session.commit()

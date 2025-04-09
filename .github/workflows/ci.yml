@@ -1,0 +1,145 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: ci
+
+on:
+  push:
+    branches: [ "main", "development" ]
+  pull_request:
+    branches: [ "main", "development" ]
+
+jobs:
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install flake8
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f tests/requirements.txt ]; then pip install -r tests/requirements.txt; fi
+        python -m pip install -e .
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Test with pytest
+      run: |
+        python -m pytest --cov=.
+        cp .coverage .coverage.${{ matrix.python-version }}
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: "coverage-data"
+        path: .coverage.${{ matrix.python-version }}
+        if-no-files-found: ignore
+
+  coverage:
+    name: "coverage"
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check out the repo"
+        uses: "actions/checkout@v3"
+      - name: "Set up Python"
+        uses: "actions/setup-python@v4"
+        with:
+          python-version: "3.11"
+      - name: "Install dependencies"
+        run: |
+          python -m pip install --upgrade coverage[toml] coverage-badge
+      - name: "Download coverage data"
+        uses: actions/download-artifact@v3
+        with:
+          name: "coverage-data"
+      - name: "Combine coverage and fail it it’s under 100 %"
+        run: |
+          python -m coverage combine
+          python -m coverage html --skip-covered --skip-empty
+          # Report and write to summary.
+          python -m coverage report | sed 's/^/    /' >> $GITHUB_STEP_SUMMARY
+          # # Report again and fail if under 100%.
+          # python -Im coverage report --fail-under=100
+          # Generate coverage badge and then combine with coverage report html
+          coverage-badge -o coverage.svg
+          cp coverage.svg htmlcov/coverage.svg
+          mkdir -p docs/build/html/htmlcov/${GITHUB_REF_NAME}
+          cp -r htmlcov/ docs/build/html/htmlcov/${GITHUB_REF_NAME}
+      - name: "Upload HTML report if check failed"
+        uses: actions/upload-artifact@v3
+        with:
+          name: html-report
+          path: htmlcov
+        # Commented out to save future 
+        # if: ${{ failure() }}
+      - name: "Upload badge"
+        uses: actions/upload-artifact@v3
+        with:
+          name: covbadge
+          path: coverage.svg
+      # # Attempt to add the coverage badge to the gh-pages branch 
+      # - name: Deploy
+      #   uses: peaceiris/actions-gh-pages@v3
+      #   with:
+      #     github_token: ${{ secrets.GITHUB_TOKEN }}
+      #     publish_dir: docs/build/html/htmlcov
+      #     desination_dir: htmlcov/
+      #     keep_files: true
+
+  sphinx-build:
+    needs: [tests, coverage]
+    runs-on: ubuntu-latest
+    steps:
+    # Checkout and build the docs with sphinx
+    - uses: actions/checkout@v2
+    - name: Build HTML
+      uses: ammaraskar/sphinx-action@master
+      with: 
+        docs-folder: "docs/"
+        pre-build-command: |
+          "mkdir -p docs/build/html/coverage/htmlcov && chmod -R 777 docs/build/html && chmod -R 777 docs/build/html/cover/htmlcov && chown 1001 docs/build/html/coverage"
+    - name: "Chmod directory structure"
+      run: |
+        sudo chmod -R 777 docs/build/html
+        # sudo chmod -R 777 docs/build/html/coverage
+        # sudo chmod -R 777 docs/build/html/coverage/htmlcov
+        ls -la docs/build/html/coverage/htmlcov
+    - name: "Download coverage report"
+      uses: actions/download-artifact@v3
+      with:
+        name: "html-report"
+        path: "docs/build/html/coverage/htmlcov/"
+    - name: "Download coverage badge"
+      uses: actions/download-artifact@v3
+      with:
+        name: "covbadge"
+        path: "docs/build/html"
+    - name: "List html dir"
+      run: |
+        ls -la docs/build/html/coverage/htmlcov
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: html-docs
+        path: docs/build/html/
+    # Deploys to the gh-pages branch if the commit was made to main, the 
+    # gh-pages then takes over serving the html
+    - name: Deploy
+      uses: peaceiris/actions-gh-pages@v3
+      if: github.ref == 'refs/heads/main'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: docs/build/html

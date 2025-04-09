@@ -155,8 +155,12 @@ on the POSIX filesystem, object storage and tape storage:
 * access_key : the user's access key for the object storage
 * secret_key : the user's secret key for the object storage
 
-** NOTE ** it is unsatisfactory sending the access_key and secret_key in the parameters, even over HTTPS.  We will probably instigate a service that will exchange a user token for the access key at the point of transfer, using OAuth2.
+---
+
+**NOTE** it is unsatisfactory sending the access_key and secret_key in the parameters, even over HTTPS.  We will probably instigate a service that will exchange a user token for the access key at the point of transfer, using OAuth2.
 This will require adding the interface to do so to the object storage.
+
+---
 
 ### PUT command
 
@@ -390,30 +394,19 @@ optional for each processor.  The `json` document looks like this:
     {
         file_details        : {
             original_path       : <str>,
-            object_name         : <str>,
             size                : <int>, (in kilobytes?)
             user                : <str>, (get uid from LDAP?)
             group               : <str>, (get gid from LDAP?)
             file_permissions    : <int>, (unix file permissions)
             access_time         : <datetime>, (timestamp of last accessed type)
-            filetype            : <str>, (LINK COMMON PATH, LINK ABSOLUTE PATH, DIRECTORY or FILE)
+            filetype            : <str>, (LINK, DIRECTORY or FILE)
             link_path           : <str>, (link position,path of link, related to either root or common path)
         }
-        retries             : <int>,
-        retry_reasons       : <list<str>>
     }
 
 which mostly consists of the result of a stat call on the path/file in question, 
 as well as some useful metadata. The file type is included, which can be one of 
-a few options: FILE, DIRECTORY, LINK_COMMON_PATH, LINK_ABSOLUTE_PATH. The 
-distinction between these latter 2 options is whether the path of a given 
-symlink lies within the 'common path' of the files given in the transaction and 
-can therefore be stored as a relative link_path, or whether it lies outside of 
-the 'common path' and therefore must be stored as an absolute link_path. Note 
-that a symlink given as an absolute path to somewhere within the common path 
-should be stored as a LINK_COMMON_PATH - and therefore as a relative link_path - 
-and conversely a symlink given as a relative path to somewhere outside the 
-'common path' should be stored as an absolute LINK_ABSOLUTE_PATH.
+three options: FILE, DIRECTORY, LINK.
 
 `object_name` in the above json document refers to the name of the object once 
 written to the object store. 
@@ -856,6 +849,15 @@ be used scenario.
 The boring / safe option
 
 ## Retry mechanism
+
+---
+
+**NOTE**
+
+The retry mechanism went through a massive overhaul in May 2024, to simplify and remove a lot of it.
+
+---
+
 At any stage in the transaction, one component of the storage hierarchy may not 
 be available.  This could be during a PUT, where the disk that the user's files
 reside on is not available, or the object storage target may not be available.
@@ -915,6 +917,14 @@ configuration of:
 
 Subsequent retries will continue to wait 5 days, until the maximum retry limit 
 is reached (default = 5).
+
+---
+
+**NOTE**
+
+Retries should only occur for timeouts - i.e. we should fail immediately if something goes wrong that is not a timeout.
+
+---
 
 ## Monitoring
 Important!
