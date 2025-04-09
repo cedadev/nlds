@@ -75,7 +75,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.log(
                 "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
-            return
+            return False
 
         ###
         # Verify and load message contents
