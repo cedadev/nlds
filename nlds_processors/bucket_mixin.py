@@ -128,6 +128,8 @@ class BucketMixin:
         # create the NLDS user statement
         try:
             nlds_statement = self.access_policies[self.NLDS_USER_ACCESS_POLICY_CONFIG]
+            # edit the user to nlds
+            nlds_statement["Principal"]["user"] = ["nlds"]
         except KeyError:
             raise BucketError(
                 message=f"Could not find the {self.NLDS_USER_ACCESS_POLICY_CONFIG} key "
@@ -136,7 +138,7 @@ class BucketMixin:
             )
         statements.append(nlds_statement)
 
-    def _edit_group_policy(self, group):
+    def _edit_group_policy(self, group: str):
         statements = self.bucket_policy["Statement"]
         create = True
         for s in statements:
@@ -152,6 +154,8 @@ class BucketMixin:
         if create:
             try:
                 group_statement = self.access_policies[self.GROUP_ACCESS_POLICY_CONFIG]
+                # edit the user to nlds
+                group_statement["Principal"]["group"] = [group]
             except KeyError:
                 raise BucketError(
                     message=f"Could not find the {self.GROUP_ACCESS_POLICY_CONFIG} key "

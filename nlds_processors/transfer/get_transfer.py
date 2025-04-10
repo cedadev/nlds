@@ -19,7 +19,7 @@ from retry import retry
 
 from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
-from nlds.details import PathDetails
+from nlds.details import PathDetails, PathType
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
@@ -92,6 +92,30 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             self.log(f"{reason}", RK.LOG_WARNING)
             raise TransferError(message=reason)
         return download_path
+    
+    def _get_linked_path(self, path_details, target_path):
+        # If there is no target_path then the it is just the link path converted to 
+        # a path object
+        if not target_path:
+            linked_path = Path(path_details.link_path)
+            if not self.check_path_access(path_details.path.parent, access=os.W_OK):
+                reason = (
+                    f"Unable to access {linked_path}. Linked path is inaccesible."
+                )
+                raise TransferError(message=reason)
+        elif target_path.is_dir():
+            # In the case of a given target, we remove the leading slash on
+            # the original path and prepend the target_path
+            if path_details.link_path[0] == "/":
+                download_path = target_path / path_details.link_path[1:]
+            else:
+                download_path = target_path / path_details.link_path
+        else:
+            reason = "Linked path is not valid."
+            self.log(f"{reason}", RK.LOG_WARNING)
+            raise TransferError(message=reason)
+        return download_path
+
 
     def _transfer(self, bucket_name, object_name, download_path):
         if self.s3_client is None:
@@ -187,7 +211,13 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         # keep a list of created paths so that we can change all the directories below
         # the download path to have the same ownership
         created_paths = []
+        # keep a list of all the links so that they can be recreated later
+        link_paths = []
         for path_details in filelist:
+            # Don't transfer symbolic links
+            if path_details.path_type == PathType.LINK:
+                link_paths.append(path_details)
+                continue
             try:
                 # get the bucket and object name and check the bucket exists
                 bucket_name, object_name = self._get_bucket_name_object_name(
@@ -234,12 +264,25 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 for p in par_dirs:
                     if p not in created_paths:
                         created_paths.append(p)
+
         # change the permissions on the created paths
         for cp in created_paths:
             try:
                 self._change_owner(cp)
             except TransferError as e:
                 self.log(f"Error changing directory owner: {e}", RK.LOG_ERROR)
+
+        # add the links for the linked paths
+        for lp in link_paths:
+            try:
+                # original_path is the symlink, link_path is the actual path
+                symlink = self._get_download_path(lp, target_path)
+                actual_path = self._get_linked_path(lp, target_path)
+                symlink.symlink_to(actual_path)
+                
+            except (TransferError, FileExistsError) as e:
+                self.log(f"Error creating symlink: {e}", RK.LOG_WARNING)
+                
 
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(

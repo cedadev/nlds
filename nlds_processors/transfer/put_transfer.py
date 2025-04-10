@@ -17,7 +17,7 @@ from urllib3.exceptions import HTTPError, MaxRetryError
 
 from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds.rabbit.consumer import State
-from nlds.details import PathDetails
+from nlds.details import PathDetails, PathType
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
@@ -53,6 +53,11 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
             raise RuntimeError("self.s3_client is None")
 
         for path_details in filelist:
+            # Don't transfer symbolic links
+            if path_details.path_type == PathType.LINK:
+                continue
+
+            # Get the path
             item_path = path_details.path
 
             # If check_permissions active then check again that file exists and
