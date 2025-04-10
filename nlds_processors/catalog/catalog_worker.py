@@ -26,7 +26,6 @@ Requires these settings in the /etc/nlds/server_config file:
 
 import json
 from typing import Dict, Tuple, List
-from hashlib import shake_256
 from datetime import datetime
 
 # Typing imports
@@ -42,7 +41,7 @@ from nlds.errors import CallbackError
 from nlds_processors.catalog.catalog import Catalog
 from nlds_processors.catalog.catalog_error import CatalogError
 from nlds_processors.catalog.catalog_models import Storage, File
-from nlds.details import PathDetails
+from nlds.details import PathDetails, PathType
 from nlds_processors.db_mixin import DBError
 
 import nlds.rabbit.routing_keys as RK
@@ -733,7 +732,11 @@ class CatalogConsumer(RMQC):
                 for file in files:
                     # determine the storage location - None, OBJECT_STORAGE and/or TAPE
                     pd = self._filemodel_to_path_details(file)
-                    if pd.locations.count == 0:
+                    # downloading links is handled in the get_transfer microservice.
+                    # we have to pass through the links, but without the checks
+                    if pd.path_type == PathType.LINK:
+                        self.completelist.append(pd)
+                    elif pd.locations.count == 0:
                         # empty storage location denotes that it is still in its initial
                         # transfer to OBJECT STORAGE
                         reason = (

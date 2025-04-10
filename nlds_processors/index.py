@@ -15,7 +15,7 @@ from typing import List, NamedTuple, Dict, Any
 
 from nlds.rabbit.statting_consumer import StattingConsumer
 from nlds.rabbit.consumer import State
-from nlds.details import PathDetails
+from nlds.details import PathDetails, PathType
 import nlds.rabbit.routing_keys as RK
 from nlds.errors import MessageError
 
@@ -164,20 +164,33 @@ class IndexerConsumer(StattingConsumer):
                 error_reason = f"Path:{item_path.path} is inaccessible."
                 raise IndexError(message=error_reason)
             if item_path.path.is_dir():
-                # item is a directory - list what is in the directory
-                sub_file_list = os.listdir(item_path.path)
-                # process and send via recursion
-                for sf in sub_file_list:
-                    root_path = pathlib.Path(item_path.path)
-                    new_item_path = PathDetails(
-                        original_path=(root_path / sf).as_posix()
-                    )
-                    self._index_r(
-                        item_path=new_item_path,
-                        rk_complete=rk_complete,
-                        rk_failed=rk_failed,
+                # check if item is a link and just add as a link entry if it is
+                # do not recurse into linked directories!
+                item_path.stat()
+                if item_path.path_type == PathType.LINK:
+                    self.append_and_send(
+                        self.completelist,  # the list to add to
+                        item_path,
+                        routing_key=rk_complete,
                         body_json=body_json,
+                        state=State.INDEXING,
                     )
+                else:
+
+                    # item is a directory - list what is in the directory
+                    sub_file_list = os.listdir(item_path.path)
+                    # process and send via recursion
+                    for sf in sub_file_list:
+                        root_path = pathlib.Path(item_path.path)
+                        new_item_path = PathDetails(
+                            original_path=(root_path / sf).as_posix()
+                        )
+                        self._index_r(
+                            item_path=new_item_path,
+                            rk_complete=rk_complete,
+                            rk_failed=rk_failed,
+                            body_json=body_json,
+                        )
 
             elif item_path.path.is_file():
                 # item is a file - stat it - calls the PathDetails member function
