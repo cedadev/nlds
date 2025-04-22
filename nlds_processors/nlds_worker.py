@@ -388,6 +388,7 @@ class NLDSWorkerConsumer(RMQC):
             # part of a regular get or an archive_put workflow
             elif rk_parts[1] == f"{RK.CATALOG_GET}":
                 self._process_rk_catalog_get_complete(rk_parts, body_json)
+
             elif rk_parts[1] == f"{RK.CATALOG_PUT}":
                 self._process_rk_catalog_put_complete(rk_parts, body_json)
 
