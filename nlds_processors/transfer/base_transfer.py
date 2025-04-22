@@ -148,12 +148,20 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             # Aggregate files into bins of approximately equal size and split
             # the transaction into subtransactions to allow parallel transfers
             sub_lists = bin_files(self.filelist)
+            # assign the state to TRANSFER_PUTTING or TRANSFER_GETTING to make it more
+            # clear to the user what is happening
+            if self.rk_parts[1] in [RK.PUT, RK.PUTLIST]:
+                new_state = State.TRANSFER_PUTTING
+            elif self.rk_parts[1] in [RK.GET, RK.GETLIST]:
+                new_state = State.TRANSFER_GETTING
+            else:
+                new_state = State.TRANSFER_INIT
             for sub_list in sub_lists:
                 self.send_pathlist(
                     sub_list,
                     rk_transfer_start,
                     self.body_json,
-                    state=State.TRANSFER_INIT,
+                    state=new_state,
                 )
         elif self.rk_parts[2] == RK.START:
             # Start transfer - this is implementation specific and handled by
