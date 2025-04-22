@@ -613,12 +613,24 @@ class CatalogConsumer(RMQC):
                 # get the location
                 location = self.catalog.get_location(file, st)
                 if location:
-                    # check empty
+                    # check empty or equivalent storage location - warn for equivalent
                     if location.url_scheme != "" or location.url_netloc != "":
-                        raise CatalogError(
-                            f"{pl.storage_type} for file {pd.original_path} will be"
-                            f" overwritten, the Storage Location should be empty."
-                        )
+                        if (
+                            location.url_scheme == pl.url_scheme
+                            and location.url_netloc == pl.url_netloc
+                        ):
+                            self.log(
+                                f"Reassigning {pl.storage_type} for file "
+                                f"{pd.original_path} to matching url_scheme: "
+                                f"{pl.url_scheme} and "
+                                f"url_netloc: {pl.url_netloc}",
+                                RK.LOG_WARNING,
+                            )
+                        else:
+                            raise CatalogError(
+                                f"{pl.storage_type} for file {pd.original_path} will be"
+                                f" overwritten, the Storage Location should be empty."
+                            )
                     # otherwise update if exists and not empty
                     location.url_scheme = pl.url_scheme
                     location.url_netloc = pl.url_netloc
