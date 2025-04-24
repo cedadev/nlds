@@ -15,16 +15,18 @@ import click
 
 NLDS_UID = 7054096
 
+
 @click.command()
 @click.argument("new_uid", type=int)
 @click.argument("filepath", type=str)
 def chown_nlds(new_uid, filepath):
     # Parse cli arguments
     new_uid = int(new_uid)
-    filepath = pth.Path(filepath).resolve()
-    # Check path exists and is a file 
-    if (filepath.exists() and not filepath.is_symlink() 
-            and (filepath.is_dir() or filepath.is_file())):
+    filepath = pth.Path(filepath)
+    # Check path exists and is a file
+    if filepath.exists() and (
+        filepath.is_dir() or filepath.is_file() or filepath.is_symlink()
+    ):
         stat_result = filepath.stat()
         if stat_result.st_uid != NLDS_UID:
             raise PermissionError(
@@ -38,5 +40,5 @@ def chown_nlds(new_uid, filepath):
         raise FileNotFoundError(f"Couldn't find file or directory at {filepath}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     chown_nlds()

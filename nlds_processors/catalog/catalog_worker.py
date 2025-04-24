@@ -586,6 +586,10 @@ class CatalogConsumer(RMQC):
         for f in filelist:
             # convert to PathDetails class
             pd = PathDetails.from_dict(f)
+            # if path is a link then continue - no updating needed
+            if pd.path_type == PathType.LINK:
+                self.completelist.append(pd)
+                continue
             # need to
             #   1. find the file,
             #   2. find or create the object storage location (if create==True),
