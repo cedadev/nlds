@@ -34,7 +34,7 @@ from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
 from nlds.authenticators.jasmin_authenticator import (
     JasminAuthenticator as Authenticator,
-)
+) 
 
 
 class Catalog(DBMixin):
