@@ -70,6 +70,8 @@ class Monitor(DBMixin):
         transaction_id: str = None,
         job_label: str = None,
         regex: bool = False,
+        limit: int = None,
+        descending: bool = False,
     ) -> list:
         """Gets a TransactionRecord from the DB from the given transaction_id,
         or the primary key (id)"""
@@ -77,43 +79,51 @@ class Monitor(DBMixin):
             transaction_search = transaction_id
         else:
             transaction_search = ".*"
-            regex = True
+            transaction_regex = True
 
         try:
             if idd:
                 trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.group == group, TransactionRecord.id == idd
+                    TransactionRecord.id == idd
                 )
             elif job_label:
-                if regex:
+                if transaction_regex:
                     trec = self.session.query(TransactionRecord).filter(
-                        TransactionRecord.group == group,
                         TransactionRecord.job_label.regexp_match(job_label),
                     )
                 else:
                     trec = self.session.query(TransactionRecord).filter(
-                        TransactionRecord.group == group,
                         TransactionRecord.job_label == job_label,
                     )
 
             else:
-                if regex:
+                if transaction_regex:
                     trec = self.session.query(TransactionRecord).filter(
-                        TransactionRecord.group == group,
                         TransactionRecord.transaction_id.regexp_match(
                             transaction_search
                         ),
                     )
                 else:
                     trec = self.session.query(TransactionRecord).filter(
-                        TransactionRecord.group == group,
                         TransactionRecord.transaction_id == transaction_search,
                     )
+            # group filter
+            if group != "**all**":
+                trec = trec.filter(TransactionRecord.group == group)
             # user filter
-            if not groupall:
+            if not groupall and user != "**all**":
                 trec = trec.filter(TransactionRecord.user == user)
-            trecs = trec.all()
-            
+            # Order up or down
+            if descending:
+                trec = trec.order_by(TransactionRecord.creation_time.desc())
+            else:
+                trec = trec.order_by(TransactionRecord.creation_time)
+            # limit for speed
+            if limit:
+                trecs = trec[0:limit]
+            else:
+                trecs = trec.all()
+
             if len(trecs) == 0:
                 raise KeyError
 
@@ -227,9 +237,9 @@ class Monitor(DBMixin):
                 query = query.filter(SubRecord.state == state)
             if api_action is not None:
                 query = query.filter(TransactionRecord.api_action == api_action)
-            if user is not None:
+            if user is not None and user != "**all**":
                 query = query.filter(TransactionRecord.user == user)
-            if group is not None:
+            if group is not None and group != "**all**":
                 query = query.filter(TransactionRecord.group == group)
             srecs = query.join(TransactionRecord).all()
         except (IntegrityError, KeyError):

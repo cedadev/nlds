@@ -62,6 +62,8 @@ async def get(
     query_user: Optional[str] = None,
     query_group: Optional[str] = None,
     regex: Optional[bool] = None,
+    limit: Optional[int] = None,
+    descending: Optional[bool] = None,
 ):
     # create the message dictionary
     search_api_action = api_action
@@ -145,6 +147,11 @@ async def get(
         meta_dict[MSG.REGEX] = True
     if search_api_action:
         meta_dict[MSG.API_ACTION] = search_api_action
+    if limit:
+        meta_dict[MSG.LIMIT] = limit
+    if descending:
+        meta_dict[MSG.DESCENDING] = descending
+    # this should appear last
     if len(meta_dict) > 0:
         msg_dict[MSG.META] = meta_dict
 
