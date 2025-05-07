@@ -56,6 +56,8 @@ async def get(
     transaction_id: Optional[str] = None,
     path: Optional[str] = None,
     tag: Optional[str] = None,
+    limit: Optional[int] = None,
+    descending: Optional[bool] = None,
     regex: Optional[bool] = False,
 ):
     # create the message dictionary
@@ -78,6 +80,11 @@ async def get(
         meta_dict[MSG.HOLDING_ID] = holding_id
     if transaction_id:
         meta_dict[MSG.TRANSACT_ID] = transaction_id
+    if limit:
+        meta_dict[MSG.LIMIT] = limit
+    if descending:
+        meta_dict[MSG.DESCENDING] = descending
+
     if tag:
         # convert the string into a dictionary
         try:

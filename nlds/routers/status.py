@@ -59,8 +59,6 @@ async def get(
     state: Optional[Union[int, str]] = None,
     sub_id: Optional[str] = None,
     api_action: Optional[str] = None,
-    query_user: Optional[str] = None,
-    query_group: Optional[str] = None,
     regex: Optional[bool] = None,
     limit: Optional[int] = None,
     descending: Optional[bool] = None,
@@ -70,9 +68,6 @@ async def get(
     api_action = f"{RK.STAT}"   # this is overwriting the api_action we want to
                                 # filter on, so we have saved it above - we will
                                 # put it in the META section of the message
-
-    # logic for user/group query verification should go here. Do we want to
-    # prevent the querying of users other than themselves?
 
     # Validate state at this point.
     if state is not None:
@@ -135,8 +130,6 @@ async def get(
             MSG.JOB_LABEL: job_label,
             MSG.STATE: state,
             MSG.SUB_ID: sub_id,
-            MSG.USER_QUERY: user,
-            MSG.GROUP_QUERY: group,
             MSG.API_ACTION: api_action,
         },
         MSG.DATA: {},

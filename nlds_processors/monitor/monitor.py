@@ -77,6 +77,7 @@ class Monitor(DBMixin):
         or the primary key (id)"""
         if transaction_id:
             transaction_search = transaction_id
+            transaction_regex = False
         else:
             transaction_search = ".*"
             transaction_regex = True
@@ -87,7 +88,7 @@ class Monitor(DBMixin):
                     TransactionRecord.id == idd
                 )
             elif job_label:
-                if transaction_regex:
+                if regex:
                     trec = self.session.query(TransactionRecord).filter(
                         TransactionRecord.job_label.regexp_match(job_label),
                     )
@@ -120,7 +121,7 @@ class Monitor(DBMixin):
                 trec = trec.order_by(TransactionRecord.creation_time)
             # limit for speed
             if limit:
-                trecs = trec[0:limit]
+                trecs = trec.limit(limit).all()
             else:
                 trecs = trec.all()
 

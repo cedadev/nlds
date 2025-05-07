@@ -462,11 +462,16 @@ class MonitorConsumer(RMQC):
         # start a SQL alchemy session
         self.monitor.start_session()
 
-        # form the request with the query user
-        if query_user is None:
-            query_user = "**all**"
-        if query_group is None:
-            query_group = "**all**"
+        # form the request with the query user, special case for 'nlds' user
+        if user == 'nlds':
+            if query_user is None:
+                query_user = "**all**"
+            if query_group is None:
+                query_group = "**all**"
+        else:
+            query_user = user
+            query_group = group
+            
         try:
             trecs = self.monitor.get_transaction_record(
                 query_user,
