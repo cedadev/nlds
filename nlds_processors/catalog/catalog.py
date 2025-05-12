@@ -524,10 +524,10 @@ class Catalog(DBMixin):
                     user, group, holding_id=transaction.holding_id
                 )[0]
                 self.session.delete(f)
-                if len(transaction.files) == 0:
-                    self.session.delete(transaction)
-                if len(holding.transactions) == 0:
-                    self.session.delete(holding)
+                # if len(transaction.files) == 0:
+                #     self.session.delete(transaction)
+                # if len(holding.transactions) == 0:
+                #     self.session.delete(holding)
         except (IntegrityError, KeyError, OperationalError):
             # This rollsback only to the checkpoint, so any successful deletes
             # done already will stay in the transaction.
