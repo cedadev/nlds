@@ -1286,6 +1286,13 @@ class CatalogConsumer(RMQC):
                     path=file_details.original_path,
                     tag=holding_tag,
                 )
+                try:
+                    self.catalog.save()
+                except RecursionError:
+                    self.log(
+                        "Recursion exception in _catalog_del->catalog.save()",
+                        RK.LOG_ERROR
+                    )
             except CatalogError as e:
                 file_details.failure_reason = e.message
                 self.failedlist.append(file_details)
