@@ -500,6 +500,7 @@ class CatalogConsumer(RMQC):
             transaction_id = self._parse_transaction_id(body, mandatory=True)
             tenancy = self._parse_tenancy(body)
             label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
+
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1255,6 +1256,7 @@ class CatalogConsumer(RMQC):
             filelist = self._parse_filelist(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
+            transaction_id = self._parse_transaction_id(body)
             holding_label, holding_id, holding_tag, _, _, _ = self._parse_metadata_vars(
                 body
             )
@@ -1283,16 +1285,16 @@ class CatalogConsumer(RMQC):
                     group,
                     holding_label=holding_label,
                     holding_id=holding_id,
+                    transaction_id=transaction_id,
                     path=file_details.original_path,
                     tag=holding_tag,
                 )
-                try:
-                    self.catalog.save()
-                except RecursionError:
-                    self.log(
-                        "Recursion exception in _catalog_del->catalog.save()",
-                        RK.LOG_ERROR
-                    )
+                # try:
+                self.catalog.save()
+                # except RecursionError:
+                #     msg = "Recursion exception in _catalog_del->catalog.save()"
+                #     self.log(msg, RK.LOG_ERROR)
+                #     raise CatalogError(msg)
             except CatalogError as e:
                 file_details.failure_reason = e.message
                 self.failedlist.append(file_details)
