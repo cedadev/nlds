@@ -171,6 +171,8 @@ class PathDetails(BaseModel):
                 "permissions": self.permissions,
                 "mode": self.mode,
                 "access_time": self.access_time,
+            },
+            "meta": {
                 "failure_reason": self.failure_reason,
                 "holding_id": self.holding_id,
             },
@@ -183,7 +185,18 @@ class PathDetails(BaseModel):
             locations = PathLocations.from_dict(json_contents)
         else:
             locations = PathLocations()
-        return cls(**json_contents["file_details"], locations=locations)
+        return cls(original_path = json_contents["file_details"]["original_path"],
+                   path_type = json_contents["file_details"]["path_type"],
+                   link_path = json_contents["file_details"]["link_path"],
+                   size = json_contents["file_details"]["size"],
+                   user = json_contents["file_details"]["user"],
+                   group = json_contents["file_details"]["group"],
+                   permissions = json_contents["file_details"]["permissions"],
+                   mode = json_contents["file_details"]["mode"],
+                   access_time = json_contents["file_details"]["access_time"],
+                   failure_reason = json_contents["meta"]["failure_reason"],
+                   holding_id = json_contents["meta"]["holding_id"],
+                   locations=locations)
 
     @classmethod
     def from_path(cls, path: str):
