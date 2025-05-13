@@ -171,8 +171,6 @@ class PathDetails(BaseModel):
                 "permissions": self.permissions,
                 "mode": self.mode,
                 "access_time": self.access_time,
-            },
-            "meta": {
                 "failure_reason": self.failure_reason,
                 "holding_id": self.holding_id,
             },
@@ -194,8 +192,8 @@ class PathDetails(BaseModel):
                    permissions = json_contents["file_details"]["permissions"],
                    mode = json_contents["file_details"]["mode"],
                    access_time = json_contents["file_details"]["access_time"],
-                   failure_reason = json_contents["meta"]["failure_reason"],
-                   holding_id = json_contents["meta"]["holding_id"],
+                   failure_reason = json_contents["file_details"]["failure_reason"],
+                   holding_id = json_contents["file_details"]["holding_id"],
                    locations=locations)
 
     @classmethod
