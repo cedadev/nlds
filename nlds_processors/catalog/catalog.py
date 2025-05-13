@@ -496,6 +496,7 @@ class Catalog(DBMixin):
         group: str,
         holding_label: str = None,
         holding_id: int = None,
+        transaction_id: str = None,
         path: str = None,
         tag: dict = None,
     ) -> list:
@@ -512,6 +513,7 @@ class Catalog(DBMixin):
             group,
             holding_label=holding_label,
             holding_id=holding_id,
+            transaction_id=transaction_id,
             original_path=path,
             tag=tag,
         )
@@ -523,11 +525,11 @@ class Catalog(DBMixin):
                 holding = self.get_holding(
                     user, group, holding_id=transaction.holding_id
                 )[0]
+                self.session.delete(f)
                 if len(transaction.files) == 0:
                     self.session.delete(transaction)
                 if len(holding.transactions) == 0:
                     self.session.delete(holding)
-                self.session.delete(f)
         except (IntegrityError, KeyError, OperationalError):
             # This rollsback only to the checkpoint, so any successful deletes
             # done already will stay in the transaction.
