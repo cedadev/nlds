@@ -75,7 +75,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.log(
                 "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
-            return
+            return False
 
         ###
         # Verify and load message contents
@@ -103,8 +103,10 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.log("Setting uid and gids now.", RK.LOG_INFO)
         try:
             self.set_ids(self.body_json)
-        except KeyError as e:
-            self.log("Problem running set_ids, exiting callback", RK.LOG_ERROR)
+        except (KeyError, ValueError):
+            # reset uid and gid for deletion process
+            msg = "Problem running set_ids in _callback_common, exiting"
+            self.log(msg, RK.LOG_ERROR)
             return False
 
         # Append route info to message to track the route of the message
