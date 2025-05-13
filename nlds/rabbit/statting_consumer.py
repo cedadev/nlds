@@ -8,7 +8,7 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from typing import Dict, Union, List, NamedTuple
+from typing import Dict, Union, List, NamedTuple, Any
 import grp
 import pwd
 import pathlib as pth
@@ -95,7 +95,7 @@ class StattingConsumer(RMQC):
 
         NOTE: This was refactored here from the index/transfer processors.
         Might make more sense to put it somewhere else given there are specific
-        config variables required (filelist_max_length, filelist_max_size) which could 
+        config variables required (filelist_max_length, filelist_max_size) which could
         fail with an AttributeError?
         NOTE 2: NRM refactored this to remove the FilelistType, and just pass the
         completed or failed list in by reference.  If we bring retries back then we
@@ -120,6 +120,20 @@ class StattingConsumer(RMQC):
             # Send directly to exchange and reset filelist
             self.send_pathlist(pathlist, routing_key, body_json, state=state)
             pathlist.clear()
+
+    def _fail_all(
+        self,
+        filelist: List[PathDetails],
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+        msg: str,
+    ):
+        # fail all the files in the filelist
+        rk_transfer_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
+        for file in filelist:
+            file.failure_reason = msg
+
+        self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
 
     def set_ids(
         self,
@@ -161,12 +175,12 @@ class StattingConsumer(RMQC):
     ) -> bool:
         """Checks that the given path is accessible, either by checking for its
         existence and by doing a permissions check on the file's bitmask. This requires
-        a stat of the file, so one must be provided via stat_result else one is 
-        performed. The uid and gid of the user must be set in the object as well, 
+        a stat of the file, so one must be provided via stat_result else one is
+        performed. The uid and gid of the user must be set in the object as well,
         usually by having performed RabbitMQConsumer.set_ids() beforehand.
 
         """
-        if (self.uid is None or self.gids is None or not isinstance(self.gids, list)):
+        if self.uid is None or self.gids is None or not isinstance(self.gids, list):
             raise ValueError("uid and gid not set properly.")
 
         if not isinstance(path, pth.Path):
