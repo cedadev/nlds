@@ -200,7 +200,11 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             try:
                 self.set_ids(body_json)
             except KeyError as e:
-                self.log("Problem running set_ids in _transfer_files", RK.LOG_ERROR)
+                msg = "Problem running set_ids in _transfer_files"
+                self.log(msg, RK.LOG_ERROR)
+                self._fail_all(self.filelist, self.rk_parts, self.body_json, msg)
+                return
+
         # Create client
         self.s3_client = minio.Minio(
             tenancy,
