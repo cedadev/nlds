@@ -139,6 +139,11 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         # should be prepared (staged) all at once. Once they are staged, the files are
         # split by aggregate into separate messages.
 
+        try:
+            api_method = self.body_json[MSG.DETAILS][MSG.API_ACTION]
+        except KeyError:
+            api_method = None
+
         if self.rk_parts[2] == RK.INITIATE:
             self.log(
                 "Aggregating list into more appropriately sized sub-lists for "
@@ -152,9 +157,9 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             sub_lists = bin_files(self.filelist)
             # assign the state to TRANSFER_PUTTING or TRANSFER_GETTING to make it more
             # clear to the user what is happening
-            if self.rk_parts[1] in [RK.PUT, RK.PUTLIST]:
+            if api_method in [RK.PUT, RK.PUTLIST]:
                 new_state = State.TRANSFER_PUTTING
-            elif self.rk_parts[1] in [RK.GET, RK.GETLIST]:
+            elif api_method in [RK.GET, RK.GETLIST]:
                 new_state = State.TRANSFER_GETTING
             else:
                 new_state = State.TRANSFER_INIT
