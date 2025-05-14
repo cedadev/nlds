@@ -1209,6 +1209,7 @@ class CatalogConsumer(RMQC):
                         ):
                             self.catalog.delete_location(file, storage_type)
                             self.completelist.append(f)
+                            self.catalog.save()
                         else:
                             f.failure_reason = (
                                 f"{str(storage_type.name)} location not empty details"

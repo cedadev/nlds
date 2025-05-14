@@ -203,20 +203,20 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     def holding_diskpath(self):
         """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
         if not self.disk_loc:
-            raise ValueError("self.disk_lock is None")
+            raise S3StreamError("self.disk_lock is None")
         if not self.holding_prefix:
-            raise ValueError("self.holding_prefix is None")
+            raise S3StreamError("self.holding_prefix is None")
         return f"{self.disk_loc}/{self.holding_prefix}"
 
     @property
     def tarfile_diskpath(self):
         """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
         if not self.disk_loc:
-            raise ValueError("self.disk_lock is None")
+            raise S3StreamError("self.disk_lock is None")
         if not self.holding_prefix:
-            raise ValueError("self.holding_prefix is None")
+            raise S3StreamError("self.holding_prefix is None")
         if not self.filelist_hash:
-            raise ValueError("self.filelist_hash is None")
+            raise S3StreamError("self.filelist_hash is None")
         return f"{self.disk_loc}/{self.holding_prefix}/{self.filelist_hash}.tar"
 
     def _validate_tarfile_checksum(self, tarfile_checksum: str):
