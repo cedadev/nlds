@@ -850,8 +850,8 @@ class Catalog(DBMixin):
 
                         # Add file size to total diskspace
                         total_diskspace += file.size
-        except Exception as e:
-            raise RuntimeError(
-                f"An error occured while calculating the disk space: {e}"
-            )
+
+        except (NoResultFound, KeyError):
+            raise CatalogError(f"Couldn't calculate diskspace for the group {group}.")
+        
         return total_diskspace
