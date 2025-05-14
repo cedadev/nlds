@@ -34,7 +34,8 @@ from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
 from nlds.authenticators.jasmin_authenticator import (
     JasminAuthenticator as Authenticator,
-) 
+)
+from nlds.details import PathType
 
 
 class Catalog(DBMixin):
@@ -782,6 +783,7 @@ class Catalog(DBMixin):
                 .filter(
                     Transaction.holding_id == Holding.id,
                     File.transaction_id == Transaction.id,
+                    File.path_type == PathType.FILE,
                     ~File.locations.any(Location.storage_type == Storage.TAPE),
                     File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
                     # tenancy is stored in url_netloc part of Location
@@ -811,6 +813,7 @@ class Catalog(DBMixin):
                 .filter(
                     Transaction.holding_id == holding.id,
                     File.transaction_id == Transaction.id,
+                    File.path_type == PathType.FILE,
                     ~File.locations.any(Location.storage_type == Storage.TAPE),
                     File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
                 )
