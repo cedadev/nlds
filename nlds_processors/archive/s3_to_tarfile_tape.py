@@ -67,12 +67,12 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # check that the environment variables are set:
         # XrdSecPROTOCOL & XrdSecSSSKT are needed for the XrootD authentication
         if S3ToTarfileTape.XRD_SECRET_KEYTAB not in os.environ:
-            raise RuntimeError(
+            raise S3StreamError(
                 f"{S3ToTarfileTape.XRD_SECRET_KEYTAB} environment variable not set."
             )
 
         if S3ToTarfileTape.XRD_SECRET_PROTOCOL not in os.environ:
-            raise RuntimeError(
+            raise S3StreamError(
                 f"{S3ToTarfileTape.XRD_SECRET_PROTOCOL} environment variable not set."
             )
 
@@ -91,7 +91,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         archive_get worker process.
         """
         if self.filelist != []:
-            raise ValueError("self.filelist is not empty")
+            raise S3StreamError("self.filelist is not empty")
         self.filelist = filelist
         self.holding_prefix = holding_prefix
 
@@ -168,7 +168,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on tape to Object Store"""
         if self.filelist != []:
-            raise ValueError(f"self.filelist is not Empty: {self.filelist[0]}")
+            raise S3StreamError(f"self.filelist is not Empty: {self.filelist[0]}")
         
         self.filelist = filelist
         self.holding_prefix = holding_prefix
@@ -318,20 +318,20 @@ class S3ToTarfileTape(S3ToTarfileStream):
         """Get the holding tapepath (i.e. the enclosing directory), to be used with
         XRDClient functions on that directory."""
         if not self.tape_base_dir:
-            raise ValueError("self.tape_base_dir is None")
+            raise S3StreamError("self.tape_base_dir is None")
         if not self.holding_prefix:
-            raise ValueError("self.holding_prefix is None")
+            raise S3StreamError("self.holding_prefix is None")
         return f"{self.tape_base_dir}/{self.holding_prefix}"
 
     @property
     def tarfile_tapepath(self):
         """Get the tapepath of the tar file, to be used with the XRDClient functions."""
         if not self.tape_base_dir:
-            raise ValueError("self.tape_base_dir is None")
+            raise S3StreamError("self.tape_base_dir is None")
         if not self.holding_prefix:
-            raise ValueError("self.holding_prefix is None")
+            raise S3StreamError("self.holding_prefix is None")
         if not self.filelist_hash:
-            raise ValueError("self.filelist_hash is None")
+            raise S3StreamError("self.filelist_hash is None")
         return f"{self.tape_base_dir}/{self.holding_prefix}/{self.filelist_hash}.tar"
 
     @property
@@ -339,13 +339,13 @@ class S3ToTarfileTape(S3ToTarfileStream):
         """Get the absolute tapepath of the tar file, to be used with the XRDClient.
         File functions / constructor, i.e. for the object that is to be streamed to."""
         if not self.tape_base_dir:
-            raise ValueError("self.tape_base_dir is None")
+            raise S3StreamError("self.tape_base_dir is None")
         if not self.holding_prefix:
-            raise ValueError("self.holding_prefix is None")
+            raise S3StreamError("self.holding_prefix is None")
         if not self.filelist_hash:
-            raise ValueError("self.filelist_hash is None")
+            raise S3StreamError("self.filelist_hash is None")
         if not self.tape_server_url:
-            raise ValueError("self.tape_server_url is None")
+            raise S3StreamError("self.tape_server_url is None")
         return (
             f"root://{self.tape_server_url}/{self.tape_base_dir}/"
             f"{self.holding_prefix}/{self.filelist_hash}.tar"
@@ -440,7 +440,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
             try:
                 method, value = result.decode().split()
                 if method != "adler32":
-                    raise ValueError("method is not adler32")
+                    raise S3StreamError("method is not adler32")
                 # Convert checksum from hex to int for comparison
                 checksum = int(value[:8], 16)
                 if checksum != tarfile_checksum:
@@ -455,7 +455,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
                     raise S3StreamError(
                         f"Failure occurred during tape-write " f"({reason})."
                     )
-            except ValueError as e:
+            except S3StreamError as e:
                 self.log(
                     f"Exception {e} when attempting to parse tarfile checksum from "
                     f"xrootd",

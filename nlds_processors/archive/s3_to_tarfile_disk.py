@@ -63,7 +63,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """Stream from Object Store to a tarfile on disk"""
         if self.filelist != []:
-            raise ValueError(f"self.filelist is not None: {self.filelist[0]}")
+            raise S3StreamError(f"self.filelist is not None: {self.filelist[0]}")
         self.filelist = filelist
         self.holding_prefix = holding_prefix
         # self._generate_filelist_hash and self._check_files_exist use the member
@@ -150,7 +150,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on disk to Object Store"""
         if self.filelist != []:
-            raise ValueError(f"self.filelist is not Empty: {self.filelist[0]}")
+            raise S3StreamError(f"self.filelist is not Empty: {self.filelist[0]}")
         self.filelist = filelist
         self.holding_prefix = holding_prefix
         try:

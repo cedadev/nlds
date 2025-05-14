@@ -55,7 +55,7 @@ class S3ToTarfileStream(BucketMixin):
                 self._REQUIRE_SECURE
             ]
         except KeyError:
-            raise RuntimeError(f"Could not read config value: {self._REQUIRE_SECURE}")
+            raise S3StreamError(f"Could not read config value: {self._REQUIRE_SECURE}")
 
         self.s3_client = minio.Minio(
             s3_tenancy,
@@ -71,7 +71,7 @@ class S3ToTarfileStream(BucketMixin):
         # Length of the hash will be 16.
         # NOTE: this breaks if a problem file is removed from an aggregation
         if self.filelist == []:
-            raise ValueError("self.filelist is empty")
+            raise S3StreamError("self.filelist is empty")
         filenames = [f.original_path for f in self.filelist]
         filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8)
         return filelist_hash
@@ -154,7 +154,7 @@ class S3ToTarfileStream(BucketMixin):
         self, file_object, filelist: List[PathDetails], chunk_size: int
     ):
         if self.s3_client is None:
-            raise RuntimeError("self.s3_client is None")
+            raise S3StreamError("self.s3_client is None")
 
         # Stream from the S3 Object Store to a tar file that is created using the
         # file_object - this is usually an Adler32File
@@ -218,7 +218,7 @@ class S3ToTarfileStream(BucketMixin):
         self, file_object, filelist: List[PathDetails], chunk_size: int
     ):
         if self.s3_client is None:
-            raise RuntimeError("self.s3_client is None")
+            raise S3StreamError("self.s3_client is None")
 
         # Ensure minimum part_size is met for put_object to function
         chunk_size = max(5 * 1024 * 1024, chunk_size)
