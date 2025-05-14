@@ -491,7 +491,6 @@ class CatalogConsumer(RMQC):
             # loop over the filelist
             for f in filelist:
                 # convert to PathDetails class
-                print("F HERE:",f)
                 pd = PathDetails.from_dict(f)
                 # add the holding id to the PathDetails
                 pd.holding_id = holding.id
