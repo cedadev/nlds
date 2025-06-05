@@ -114,7 +114,9 @@ async def get(
     else:
         response_error = ResponseError(
             loc=["status", "get"],
-            msg="Catalog service could not be reached in time.",
+            msg="Catalog service could not complete the request in time. "
+            "This could be due to high database load. Consider restricting your "
+            "request by using the <holding_id>, <label> or <limit> options.",
             type="Incomplete request.",
         )
         raise HTTPException(

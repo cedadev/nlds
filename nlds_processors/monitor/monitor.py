@@ -68,6 +68,8 @@ class Monitor(DBMixin):
         groupall: bool = False,
         idd: int = None,
         transaction_id: str = None,
+        api_action: list[str] = None,
+        exclude_api_action: list[str] = None,
         job_label: str = None,
         regex: bool = False,
         limit: int = None,
@@ -108,6 +110,12 @@ class Monitor(DBMixin):
                     trec = self.session.query(TransactionRecord).filter(
                         TransactionRecord.transaction_id == transaction_search,
                     )
+            if api_action:
+                trec = trec.filter(TransactionRecord.api_action.in_(api_action))
+            if exclude_api_action:
+                trec = trec.filter(
+                    TransactionRecord.api_action.not_in(exclude_api_action)
+                )
             # group filter
             if group != "**all**":
                 trec = trec.filter(TransactionRecord.group == group)
@@ -119,7 +127,7 @@ class Monitor(DBMixin):
                 trec = trec.order_by(TransactionRecord.creation_time.desc())
             else:
                 trec = trec.order_by(TransactionRecord.creation_time)
-            # limit for speed
+            # limit for speed - but how many sub-records (where the api-action is stored)
             if limit:
                 trecs = trec.limit(limit).all()
             else:
@@ -217,8 +225,9 @@ class Monitor(DBMixin):
         sub_id: str = None,
         user: str = None,
         group: str = None,
-        state: State = None,
+        state: list[State] = None,
         api_action: str = None,
+        exclude_api_action: str = None,
     ) -> list:
         """Return many sub records, identified by one of the (many) function
         parameters"""
@@ -235,9 +244,13 @@ class Monitor(DBMixin):
                 # sub_record = self._get_sub_record(session, sub_id)
                 query = query.filter(SubRecord.sub_id == sub_id)
             if state is not None:
-                query = query.filter(SubRecord.state == state)
+                query = query.filter(SubRecord.state.in_(state))
             if api_action is not None:
-                query = query.filter(TransactionRecord.api_action == api_action)
+                query = query.filter(TransactionRecord.api_action.in_(api_action))
+            if exclude_api_action is not None:
+                query = query.filter(
+                    TransactionRecord.api_action.not_in(exclude_api_action)
+                )
             if user is not None and user != "**all**":
                 query = query.filter(TransactionRecord.user == user)
             if group is not None and group != "**all**":

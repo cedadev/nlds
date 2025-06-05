@@ -114,13 +114,14 @@ async def get(
     if response is not None:
         # convert byte response to str
         response = response.decode()
-
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=response)
     else:
         response_error = ResponseError(
             loc=["status", "get"],
-            msg="Catalog service could not be reached in time.",
-            type="Incomplete request.",
+            msg="Catalog service could not complete the request in time. "
+            "This could be due to high database load. Consider restricting your "
+            "request by using the <holding_id>, <label>, <path> or <limit> options.",
+            type="Request timed out.",
         )
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=response_error.json()
