@@ -138,7 +138,7 @@ class MonitorConsumer(RMQC):
     def _parse_state(self, body):
         # get the state from the details section of the message
         try:
-            state = body[MSG.META][MSG.STATE]
+            state = body[MSG.DETAILS][MSG.STATE]
             # Convert state to an actual ENUM value for ease of comparison, can
             # either be passed as the enum.value (default) or as the state
             # string
@@ -167,7 +167,7 @@ class MonitorConsumer(RMQC):
                 elif State.has_name(s):
                     states.append(State[s])
                 else:
-                    msg = f"State found in message invalid: {state}."
+                    msg = f"State found in message invalid: {s}."
                     self.log(msg, RK.LOG_ERROR)
                     raise MonitorError(message=msg)
         except KeyError:
