@@ -284,7 +284,7 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 actual_path = self._get_linked_path(lp, target_path)
                 symlink.symlink_to(actual_path)
                 
-            except (TransferError, FileExistsError) as e:
+            except (TransferError, FileExistsError, PermissionError) as e:
                 self.log(f"Error creating symlink: {e}", RK.LOG_WARNING)
                 
 
