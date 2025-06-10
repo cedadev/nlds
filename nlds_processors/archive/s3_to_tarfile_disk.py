@@ -37,6 +37,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         s3_access_key: str,
         s3_secret_key: str,
         disk_location: str,
+        secure_fl: bool,
         logger,
     ) -> None:
         # Initialise the S3 client first
@@ -44,6 +45,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             s3_tenancy=s3_tenancy,
             s3_access_key=s3_access_key,
             s3_secret_key=s3_secret_key,
+            require_secure_fl=secure_fl,
             logger=logger,
         )
         # record and make the disk location directory if it doesn't exist

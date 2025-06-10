@@ -22,7 +22,6 @@ from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 from nlds.errors import MessageError
 from nlds_processors.bucket_mixin import BucketMixin, BucketError
-import nlds.server_config as CFG
 
 
 class S3StreamError(MessageError):
@@ -40,28 +39,20 @@ class S3ToTarfileStream(BucketMixin):
     This class is abstract and should be overloaded.
     """
 
-    _REQUIRE_SECURE = "require_secure_fl"
-    _ARCHIVE_PUT = "archive_put_q"
-
     def __init__(
-        self, s3_tenancy: str, s3_access_key: str, s3_secret_key: str, logger
+        self,
+        s3_tenancy: str,
+        s3_access_key: str,
+        s3_secret_key: str,
+        require_secure_fl: bool,
+        logger,
     ) -> None:
         """Initialise the Minio / S3 client"""
-        # load the config - needed for the bucket mixin
-        # get the REQUIRE SECURE from the TRANSFER_PUT_Q part of the config
-        self.whole_config = CFG.load_config()
-        try:
-            self.require_secure_fl = self.whole_config[self._ARCHIVE_PUT][
-                self._REQUIRE_SECURE
-            ]
-        except KeyError:
-            raise S3StreamError(f"Could not read config value: {self._REQUIRE_SECURE}")
-
         self.s3_client = minio.Minio(
             s3_tenancy,
             access_key=s3_access_key,
             secret_key=s3_secret_key,
-            secure=self.require_secure_fl,
+            secure=require_secure_fl,
         )
         self.filelist = []
         self.log = logger

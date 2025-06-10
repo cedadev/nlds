@@ -79,6 +79,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 s3_access_key=access_key,
                 s3_secret_key=secret_key,
                 disk_location=disk_loc,
+                secure_fl=self.require_secure_fl,
                 logger=self.log,
             )
         else:
@@ -92,6 +93,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 s3_access_key=access_key,
                 s3_secret_key=secret_key,
                 tape_url=tape_url,
+                secure_fl=self.require_secure_fl,
                 logger=self.log,
             )
         return streamer

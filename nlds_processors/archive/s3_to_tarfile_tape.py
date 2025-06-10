@@ -47,6 +47,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         s3_access_key: str,
         s3_secret_key: str,
         tape_url: str,
+        secure_fl: bool,
         logger,
     ) -> None:
         # Initialise the S3 client first
@@ -54,6 +55,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
             s3_tenancy=s3_tenancy,
             s3_access_key=s3_access_key,
             s3_secret_key=s3_secret_key,
+            require_secure_fl=secure_fl,
             logger=logger,
         )
         # get the location of the tape server and the base directory from the tape_url
