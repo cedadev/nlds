@@ -92,16 +92,14 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             self.log(f"{reason}", RK.LOG_WARNING)
             raise TransferError(message=reason)
         return download_path
-    
+
     def _get_linked_path(self, path_details, target_path):
-        # If there is no target_path then the it is just the link path converted to 
+        # If there is no target_path then the it is just the link path converted to
         # a path object
         if not target_path:
             linked_path = Path(path_details.link_path)
             if not self.check_path_access(path_details.path.parent, access=os.W_OK):
-                reason = (
-                    f"Unable to access {linked_path}. Linked path is inaccesible."
-                )
+                reason = f"Unable to access {linked_path}. Linked path is inaccesible."
                 raise TransferError(message=reason)
         elif target_path.is_dir():
             # In the case of a given target, we remove the leading slash on
@@ -115,7 +113,6 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             self.log(f"{reason}", RK.LOG_WARNING)
             raise TransferError(message=reason)
         return download_path
-
 
     def _transfer(self, bucket_name, object_name, download_path):
         if self.s3_client is None:
@@ -283,10 +280,14 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 symlink = self._get_download_path(lp, target_path)
                 actual_path = self._get_linked_path(lp, target_path)
                 symlink.symlink_to(actual_path)
-                
-            except (TransferError, FileExistsError, PermissionError) as e:
+
+            except (
+                TransferError,
+                FileExistsError,
+                PermissionError,
+                FileNotFoundError,
+            ) as e:
                 self.log(f"Error creating symlink: {e}", RK.LOG_WARNING)
-                
 
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(
