@@ -22,7 +22,7 @@ from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 from nlds.errors import MessageError
 from nlds_processors.bucket_mixin import BucketMixin, BucketError
-
+import nlds.server_config as CFG
 
 class S3StreamError(MessageError):
     pass
@@ -56,6 +56,8 @@ class S3ToTarfileStream(BucketMixin):
         )
         self.filelist = []
         self.log = logger
+        # load the whole config as it is needed for the object store access policies
+        self.whole_config = CFG.load_config()
 
     def _generate_filelist_hash(self):
         # Generate a name for the tarfile by hashing the combined filelist.
@@ -294,6 +296,7 @@ class S3ToTarfileStream(BucketMixin):
                         f"Unexpected exception occurred during stream {e}",
                         RK.LOG_ERROR,
                     )
+                    raise Exception(e)
                     self.log(reason, RK.LOG_DEBUG)
                     failedlist.append(path_details)
                 else:
