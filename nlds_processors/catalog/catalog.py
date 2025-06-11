@@ -102,7 +102,7 @@ class Catalog(DBMixin):
 
             # search label filtering - for when the user supplies a holding label
             elif label:
-                # regex will throw exception here if invalid
+                # regex will throw exception below if invalid
                 if regex:
                     holding_q = holding_q.filter(Holding.label.regexp_match(label))
                 else:
@@ -131,7 +131,7 @@ class Catalog(DBMixin):
 
             if holding_q.count() == 0:
                 holding = []
-            elif limit:     # might have to change this back to .limit if DB gets big
+            elif limit:  # might have to change this back to .limit if DB gets big
                 holding = holding_q.all()[0:limit]
             else:
                 holding = holding_q.all()
@@ -348,7 +348,7 @@ class Catalog(DBMixin):
         newest_only: bool = False,
         regex: bool = False,
         limit: int = None,
-        descending: bool = False
+        descending: bool = False,
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
@@ -380,12 +380,9 @@ class Catalog(DBMixin):
         try:
             for h in holding:
                 # build the file query bit by bit
-                file_q = (
-                    self.session.query(File, Transaction)
-                    .filter(
-                        File.transaction_id == Transaction.id,
-                        Transaction.holding_id == h.id,
-                    )
+                file_q = self.session.query(File, Transaction).filter(
+                    File.transaction_id == Transaction.id,
+                    Transaction.holding_id == h.id,
                 )
                 if descending:
                     file_q = file_q.order_by(Transaction.ingest_time.desc())
@@ -431,7 +428,6 @@ class Catalog(DBMixin):
                 if limit and len(file_list) >= limit:
                     break
 
-
             # no files found
             if len(file_list) == 0:
                 raise KeyError
@@ -452,6 +448,13 @@ class Catalog(DBMixin):
             else:
                 err_msg = f"File with original_path:{original_path} not found "
             raise CatalogError(err_msg)
+
+        except DataError as e:
+            if regex:
+                msg = f"Invalid regular expression: {search_path}"
+            else:
+                msg = f"Error getting Holding: {e}"
+            raise CatalogError(msg)
 
         return file_list
 
