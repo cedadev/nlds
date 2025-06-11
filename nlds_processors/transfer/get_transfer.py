@@ -274,20 +274,34 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 self.log(f"Error changing directory owner: {e}", RK.LOG_ERROR)
 
         # add the links for the linked paths
+        link_warnings = []
+        link_paths = []
         for lp in link_paths:
             try:
                 # original_path is the symlink, link_path is the actual path
                 symlink = self._get_download_path(lp, target_path)
                 actual_path = self._get_linked_path(lp, target_path)
                 symlink.symlink_to(actual_path)
-
+                link_paths.append(lp)
             except (
                 TransferError,
                 FileExistsError,
                 PermissionError,
                 FileNotFoundError,
             ) as e:
-                self.log(f"Error creating symlink: {e}", RK.LOG_WARNING)
+                warning = f"Error creating symlink: {e}"
+                link_warnings.append(warning)
+                self.log(warning, RK.LOG_WARNING)
+        # we need to acknowledge that the links have been created as well,
+        # otherwise the job won't complete
+        self.send_pathlist(
+            link_paths,
+            routing_key=rk_complete,
+            body_json=body_json,
+            state=State.TRANSFER_GETTING,
+            warning=link_warnings,
+        )
+
 
     @retry(S3Error, tries=5, delay=1, logger=None)
     def transfer(
