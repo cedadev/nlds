@@ -126,7 +126,12 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 download_path_str,
             )
         except Exception as e:
-            reason = f"Download-time exception occurred: {e}"
+            reason = (
+                f"Download-time exception occurred: {e}. "
+                f"Bucket name: {bucket_name}. "
+                f"Object name: {object_name}. "
+                f"Download path: {download_path}. "
+            )
             raise TransferError(message=reason)
 
     def _change_permissions(self, download_path, path_details):
@@ -302,8 +307,7 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             warning=link_warnings,
         )
 
-
-    @retry(S3Error, tries=5, delay=1, logger=None)
+    @retry(S3Error, tries=5, delay=10, backoff=10, logger=None)
     def transfer(
         self,
         transaction_id: str,

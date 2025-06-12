@@ -33,7 +33,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
+    @retry((S3Error, S3StreamError), tries=5, delay=10, backoff=10, logger=None)
     def transfer(
         self,
         transaction_id: str,
