@@ -184,7 +184,7 @@ async def get(
 
 ############################ GET LIST METHOD ########################
 @router.put(
-    "/getlist",
+    "/getlist/",
     status_code=status.HTTP_202_ACCEPTED,
     responses={
         status.HTTP_202_ACCEPTED: {"model": FileResponse},
@@ -382,7 +382,7 @@ async def put(
 
 
 @router.put(
-    "/archive",
+    "/archive/",
     status_code=status.HTTP_202_ACCEPTED,
     responses={
         status.HTTP_202_ACCEPTED: {"model": FileResponse},
