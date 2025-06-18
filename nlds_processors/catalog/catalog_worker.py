@@ -193,7 +193,7 @@ class CatalogConsumer(RMQC):
         # check filelist is indexable
         try:
             _ = filelist[0]
-        except TypeError as e:
+        except IndexError as e:
             msg = f"filelist field must contain a list"
             self.log(msg, RK.LOG_ERROR)
             raise CatalogError(message=msg)
