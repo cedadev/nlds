@@ -23,7 +23,6 @@ from nlds.rabbit.state import State
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 
-
 class NLDSWorkerConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "nlds_q"
     DEFAULT_ROUTING_KEY = (

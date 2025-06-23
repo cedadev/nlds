@@ -769,7 +769,7 @@ class CatalogConsumer(RMQC):
         found on tape then it will be first restored by the archive processor
         for retrieval to object store cache."""
         # Parse the message body for required variables
-        filelist = [] # empty filelist incase _parse_filelist fails
+        filelist = []  # empty filelist incase _parse_filelist fails
         try:
             filelist = self._parse_filelist(body)
             user = self._parse_user(body)
@@ -801,7 +801,7 @@ class CatalogConsumer(RMQC):
                 filepath_details = PathDetails.from_dict(filepath)
                 filepath_details.failure_reason = e.message
                 self.failedlist.append(filepath_details)
-            # 
+            #
             rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
             self.send_pathlist(
                 self.failedlist,
