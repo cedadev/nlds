@@ -212,8 +212,7 @@ class Monitor(DBMixin):
             # Get subrecord by sub_id
             srec = (
                 self.session.query(SubRecord)
-                .filter(SubRecord.sub_id == sub_id)
-                .one_or_none()
+                .filter(SubRecord.sub_id == sub_id)[0]
             )
         except (IntegrityError, KeyError):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
