@@ -28,11 +28,18 @@ def downgrade(engine_name: str) -> None:
 
 
 def upgrade_catalog() -> None:
-    pass
+    op.create_table(
+        'quota',
+        sa.Column('id', sa.Integer(), primary_key=True),
+        sa.Column('group', sa.String(), nullable=True),
+        sa.Column('size', sa.Integer(), nullable=True),
+        sa.Column('used', sa.Integer(), nullable=True)
+
+    )
 
 
 def downgrade_catalog() -> None:
-    pass
+    op.drop_table('quota')
 
 
 def upgrade_monitor() -> None:
