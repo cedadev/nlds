@@ -244,3 +244,16 @@ class Aggregation(CatalogBase):
 
     # relationship for location (one to many)
     locations = relationship("Location", cascade="delete, delete-orphan")
+
+class Quota(CatalogBase):
+    """Class containing the details of quota values for a Group."""
+
+    __tablename__ = "quota"
+    # primary key / integer id
+    id = Column(Integer, primary_key=True)
+    # user group quota belongs to 
+    group = Column(String)
+    # size of the quota for the group
+    size = Column(Integer)
+    # amount of quota used 
+    used = Column(Integer)
