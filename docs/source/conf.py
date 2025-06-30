@@ -20,7 +20,7 @@ from nlds import __version__
 # -- Project information -----------------------------------------------------
 
 project = 'Near-line Data Store Server'
-copyright = ('2022-2024, Centre of Environmental Data Analysis Developers,'
+copyright = ('2022-2025, Centre of Environmental Data Analysis Developers,'
              'Scientific and Technical Facilities Council (STFC),'
              'UK Research and Innovation (UKRI). '
              'BSD 2-Clause License. All rights reserved.')
