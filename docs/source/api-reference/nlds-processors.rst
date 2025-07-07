@@ -20,13 +20,13 @@ Also referred to as 'microservices', 'consumers', or 'workers':
 .. automodule:: nlds_processors.index
     :members:
     
-.. automodule:: nlds_processors.transferers.base_transfer
+.. automodule:: nlds_processors.transfer.base_transfer
     :members:
 
-.. automodule:: nlds_processors.transferers.put_transfer
+.. automodule:: nlds_processors.transfer.put_transfer
     :members:
 
-.. automodule:: nlds_processors.transferers.get_transfer
+.. automodule:: nlds_processors.transfer.get_transfer
     :members:
 
 .. automodule:: nlds_processors.db_mixin

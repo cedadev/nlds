@@ -177,8 +177,8 @@ class IndexerConsumer(StattingConsumer):
                         body_json=body_json,
                         state=State.INDEXING,
                     )
-                else:
 
+                else:
                     # item is a directory - list what is in the directory
                     sub_file_list = os.listdir(item_path.path)
                     # process and send via recursion
@@ -217,6 +217,7 @@ class IndexerConsumer(StattingConsumer):
                     body_json=body_json,
                     state=State.INDEXING,
                 )
+
             else:
                 # item is unknown
                 error_reason = f"Path:{item_path.path} is of unknown type."
