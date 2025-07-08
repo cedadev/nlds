@@ -55,6 +55,8 @@ async def get(
     holding_id: Optional[int] = None,
     transaction_id: Optional[str] = None,
     tag: Optional[str] = None,
+    limit: Optional[int] = None,
+    descending: Optional[bool] = None,
 ):
     # create the message dictionary
     api_action = f"{RK.LIST}"
@@ -76,6 +78,10 @@ async def get(
         meta_dict[MSG.HOLDING_ID] = holding_id
     if transaction_id:
         meta_dict[MSG.TRANSACT_ID] = transaction_id
+    if limit:
+        meta_dict[MSG.LIMIT] = limit
+    if descending:
+        meta_dict[MSG.DESCENDING] = descending
 
     if tag:
         tag_dict = {}
@@ -108,7 +114,9 @@ async def get(
     else:
         response_error = ResponseError(
             loc=["status", "get"],
-            msg="Catalog service could not be reached in time.",
+            msg="Catalog service could not complete the request in time. "
+            "This could be due to high database load. Consider restricting your "
+            "request by using the <holding_id>, <label> or <limit> options.",
             type="Incomplete request.",
         )
         raise HTTPException(

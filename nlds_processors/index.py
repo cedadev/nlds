@@ -97,8 +97,10 @@ class IndexerConsumer(StattingConsumer):
         # First change user and group so file permissions can be checked
         try:
             self.set_ids(body_json)
-        except KeyError:
-            self.log("Problem running set_ids, exiting _scan.", RK.LOG_ERROR)
+        except (KeyError, ValueError):
+            msg = "Problem running set_ids, exiting _scan."
+            self.log(msg, RK.LOG_ERROR)
+            self._fail_all(filelist, rk_parts, body_json, msg)
             return
 
         # Append routing info and then run the index
@@ -175,8 +177,8 @@ class IndexerConsumer(StattingConsumer):
                         body_json=body_json,
                         state=State.INDEXING,
                     )
-                else:
 
+                else:
                     # item is a directory - list what is in the directory
                     sub_file_list = os.listdir(item_path.path)
                     # process and send via recursion
@@ -215,6 +217,7 @@ class IndexerConsumer(StattingConsumer):
                     body_json=body_json,
                     state=State.INDEXING,
                 )
+
             else:
                 # item is unknown
                 error_reason = f"Path:{item_path.path} is of unknown type."

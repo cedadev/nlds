@@ -13,6 +13,7 @@ from minio.error import S3Error
 from urllib3.exceptions import HTTPError, MaxRetryError
 import json
 from nlds.errors import MessageError
+import grp
 
 
 class BucketError(MessageError):
@@ -164,8 +165,13 @@ class BucketMixin:
                 )
             statements.append(group_statement)
 
+    def _get_group_name_from_group_id(self, gid: int):
+        """Get a group name from the group id using the linux database."""
+        grp_details = grp.getgrgid(gid)
+        return grp_details.gr_name
+
     # write the policy setting functions below
-    def _set_access_policies(self, bucket_name: str, group: str):
+    def _set_access_policies(self, bucket_name: str, group: str|int):
         """Set the access policies for a bucket.
         These are stored in the /etc/nlds-config file, in the
         `object_store_access_policy` section, under the `nlds_user` and `group` keys.
@@ -173,6 +179,15 @@ class BucketMixin:
         This part of the mixin relies on the parent class having a self.whole_config
         member variable containing the config, which is loaded by the parent class.
         """
+
+        if type(group) is int:
+            # convert the integer group to a group name
+            try:
+                group = self._get_group_name_from_group_id(group)
+            except KeyError:
+                raise BucketError(
+                    message=f"Could not find the group name for group id {group}"
+                )
 
         # get the section from the config
         try:
@@ -206,16 +221,15 @@ class BucketMixin:
             elif e.code == "AccessDenied":
                 raise BucketError(
                     message=f"You do not have permission to change the policy for "
-                    f"bucket {bucket_name} in tenancy {self.tenancy}"
+                    f"bucket {bucket_name}"
                 )
             else:
                 raise BucketError(
                     message=f"Encountered error when changing access policy for bucket "
-                    f"{bucket_name} in tenancy {self.tenancy}.  Original error: {e}"
+                    f"{bucket_name}. Original error: {e}"
                 )
 
         self.log(
-            f"Set access for bucket {bucket_name} in tenancy {self.tenancy} to "
-            f"{self.bucket_policy}",
+            f"Set access for bucket {bucket_name} to {self.bucket_policy}",
             RK.LOG_INFO,
         )

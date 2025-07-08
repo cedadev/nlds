@@ -56,6 +56,8 @@ async def get(
     transaction_id: Optional[str] = None,
     path: Optional[str] = None,
     tag: Optional[str] = None,
+    limit: Optional[int] = None,
+    descending: Optional[bool] = None,
     regex: Optional[bool] = False,
 ):
     # create the message dictionary
@@ -78,6 +80,11 @@ async def get(
         meta_dict[MSG.HOLDING_ID] = holding_id
     if transaction_id:
         meta_dict[MSG.TRANSACT_ID] = transaction_id
+    if limit:
+        meta_dict[MSG.LIMIT] = limit
+    if descending:
+        meta_dict[MSG.DESCENDING] = descending
+
     if tag:
         # convert the string into a dictionary
         try:
@@ -107,13 +114,14 @@ async def get(
     if response is not None:
         # convert byte response to str
         response = response.decode()
-
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=response)
     else:
         response_error = ResponseError(
             loc=["status", "get"],
-            msg="Catalog service could not be reached in time.",
-            type="Incomplete request.",
+            msg="Catalog service could not complete the request in time. "
+            "This could be due to high database load. Consider restricting your "
+            "request by using the <holding_id>, <label>, <path> or <limit> options.",
+            type="Request timed out.",
         )
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=response_error.json()

@@ -8,7 +8,7 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict
 import uuid
 import json
 
@@ -34,6 +34,10 @@ router = APIRouter()
 class StatusResponse(BaseModel):
     holdings: List[Dict]
 
+class StatBody(BaseModel):
+    api_action: Optional[List[str]] = None
+    exclude_api_action: Optional[List[str]] = None
+    state: Optional[List[str]] = None
 
 ############################ GET METHOD ############################
 @router.get(
@@ -56,44 +60,43 @@ async def get(
     id: Optional[int] = None,
     transaction_id: Optional[str] = None,
     job_label: Optional[str] = None,
-    state: Optional[Union[int, str]] = None,
     sub_id: Optional[str] = None,
-    api_action: Optional[str] = None,
-    query_user: Optional[str] = None,
-    query_group: Optional[str] = None,
     regex: Optional[bool] = None,
+    limit: Optional[int] = None,
+    descending: Optional[bool] = None,
+    stat_options: Optional[StatBody] = None,
 ):
     # create the message dictionary
-    search_api_action = api_action
-    api_action = f"{RK.STAT}"  # this is overwriting the api_action we want to
-    # filter on, so we have saved it above - we will
-    # put it in the META section of the message
-
-    # logic for user/group query verification should go here. Do we want to
-    # prevent the querying of users other than themselves?
+    search_api_action = stat_options.api_action
+    api_action = f"{RK.STAT}"   # this is overwriting the api_action we want to
+                                # filter on, so we have saved it above - we will
+                                # put it in the META section of the message
 
     # Validate state at this point.
-    if state is not None:
-        # Attempt to convert to int, if can't then put in upper case for name
-        # comparison
-        try:
-            state = int(state)
-        except (ValueError, TypeError):
-            state = state.upper()
+    states = []
+    if stat_options.state is not None:
+        for s in stat_options.state:
+            # Attempt to convert to int, if can't then put in upper case for name
+            # comparison
+            try:
+                state = int(s)
+            except (ValueError, TypeError):
+                state = s.upper()
 
-        if State.has_name(state):
-            state = State[state].value
-        elif State.has_value(state):
-            state = State(state).value
-        else:
-            response_error = ResponseError(
-                loc=["status", "get"],
-                msg=f"Given State: {state} is not valid.",
-                type="Incomplete request.",
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=response_error.json()
-            )
+            if State.has_name(s):
+                state = State[s].value
+            elif State.has_value(s):
+                state = State(s).value
+            else:
+                response_error = ResponseError(
+                    loc=["status", "get"],
+                    msg=f"Given State: {s} is not valid.",
+                    type="Incomplete request.",
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=response_error.json()
+                )
+            states.append(state)
 
     # Validate transaction_id is a valid uuid
     if transaction_id is not None:
@@ -131,10 +134,7 @@ async def get(
             MSG.API_ACTION: api_action,
             MSG.TRANSACT_ID: transaction_id,
             MSG.JOB_LABEL: job_label,
-            MSG.STATE: state,
             MSG.SUB_ID: sub_id,
-            MSG.USER_QUERY: user,
-            MSG.GROUP_QUERY: group,
             MSG.API_ACTION: api_action,
         },
         MSG.DATA: {},
@@ -145,6 +145,15 @@ async def get(
         meta_dict[MSG.REGEX] = True
     if search_api_action:
         meta_dict[MSG.API_ACTION] = search_api_action
+    if stat_options.exclude_api_action:
+        meta_dict[MSG.EXCLUDE_API_ACTION] = stat_options.exclude_api_action
+    if len(states) > 0:
+        meta_dict[MSG.STATE] = states
+    if limit:
+        meta_dict[MSG.LIMIT] = limit
+    if descending:
+        meta_dict[MSG.DESCENDING] = descending
+    # this should appear last
     if len(meta_dict) > 0:
         msg_dict[MSG.META] = meta_dict
 
@@ -182,7 +191,10 @@ async def get(
     else:
         response_error = ResponseError(
             loc=["status", "get"],
-            msg="Monitoring service could not be reached in time.",
+            msg="Monitoring service could not complete the request in time. "
+            "This could be due to high database load. Consider restricting your "
+            "request by using the <id>, <limit>, <api_method>, <exclude_api_method>, "
+            "or <state> options.",
             type="Request timed out.",
         )
         raise HTTPException(

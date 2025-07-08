@@ -36,7 +36,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         self.preparelist = []
         super().__init__(queue=queue)
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
+    @retry((S3Error, S3StreamError), tries=5, delay=10, backoff=10, logger=None)
     def transfer(
         self,
         transaction_id: str,
@@ -152,7 +152,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 state=State.FAILED,
             )
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
+    @retry((S3Error, S3StreamError), tries=5, delay=10, backoff=10, logger=None)
     def prepare(
         self,
         transaction_id: str,
@@ -271,7 +271,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 state=State.FAILED,
             )
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
+    @retry((S3Error, S3StreamError), tries=5, delay=10, backoff=10, logger=None)
     def prepare_check(
         self,
         transaction_id: str,

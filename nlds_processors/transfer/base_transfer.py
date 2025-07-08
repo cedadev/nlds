@@ -103,8 +103,10 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.log("Setting uid and gids now.", RK.LOG_INFO)
         try:
             self.set_ids(self.body_json)
-        except KeyError as e:
-            self.log("Problem running set_ids, exiting callback", RK.LOG_ERROR)
+        except (KeyError, ValueError):
+            # reset uid and gid for deletion process
+            msg = "Problem running set_ids in _callback_common, exiting"
+            self.log(msg, RK.LOG_ERROR)
             return False
 
         # Append route info to message to track the route of the message
@@ -137,6 +139,11 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         # should be prepared (staged) all at once. Once they are staged, the files are
         # split by aggregate into separate messages.
 
+        try:
+            api_method = self.body_json[MSG.DETAILS][MSG.API_ACTION]
+        except KeyError:
+            api_method = None
+
         if self.rk_parts[2] == RK.INITIATE:
             self.log(
                 "Aggregating list into more appropriately sized sub-lists for "
@@ -148,12 +155,20 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             # Aggregate files into bins of approximately equal size and split
             # the transaction into subtransactions to allow parallel transfers
             sub_lists = bin_files(self.filelist)
+            # assign the state to TRANSFER_PUTTING or TRANSFER_GETTING to make it more
+            # clear to the user what is happening
+            if api_method in [RK.PUT, RK.PUTLIST]:
+                new_state = State.TRANSFER_PUTTING
+            elif api_method in [RK.GET, RK.GETLIST]:
+                new_state = State.TRANSFER_GETTING
+            else:
+                new_state = State.TRANSFER_INIT
             for sub_list in sub_lists:
                 self.send_pathlist(
                     sub_list,
                     rk_transfer_start,
                     self.body_json,
-                    state=State.TRANSFER_INIT,
+                    state=new_state,
                 )
         elif self.rk_parts[2] == RK.START:
             # Start transfer - this is implementation specific and handled by

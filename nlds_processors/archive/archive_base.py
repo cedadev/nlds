@@ -79,6 +79,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 s3_access_key=access_key,
                 s3_secret_key=secret_key,
                 disk_location=disk_loc,
+                secure_fl=self.require_secure_fl,
                 logger=self.log,
             )
         else:
@@ -92,6 +93,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 s3_access_key=access_key,
                 s3_secret_key=secret_key,
                 tape_url=tape_url,
+                secure_fl=self.require_secure_fl,
                 logger=self.log,
             )
         return streamer
@@ -138,12 +140,21 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             # Aggregate files into bins of approximately equal size and split
             # the transaction into subtransactions to allow parallel transfers
             sub_lists = bin_files(self.filelist)
+            # assign ARCHIVE_GETTING or ARCHIVE_PUTTING to make it more obvious to the
+            # user what is actually happening
+            if self.rk_parts[1] == RK.ARCHIVE_GET:
+                new_state = State.ARCHIVE_GETTING
+            elif self.rk_parts[1] == RK.ARCHIVE_PUT:
+                new_state = State.ARCHIVE_PUTTING
+            else:
+                new_state = State.ARCHIVE_INIT
+
             for sub_list in sub_lists:
                 self.send_pathlist(
                     sub_list,
                     rk_transfer_start,
                     self.body_json,
-                    state=State.ARCHIVE_INIT,
+                    state=new_state,
                 )
         elif self.rk_parts[2] == RK.START:
             self.transfer(

@@ -53,8 +53,9 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
             raise RuntimeError("self.s3_client is None")
 
         for path_details in filelist:
-            # Don't transfer symbolic links
+            # Don't transfer symbolic links, but do acknowledge them
             if path_details.path_type == PathType.LINK:
+                self.completelist.append(path_details)
                 continue
 
             # Get the path
@@ -126,7 +127,7 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
             raise TransferError(message=msg)
         return group
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
+    @retry(S3Error, tries=5, delay=10, backoff=10, logger=None)
     def transfer(
         self,
         transaction_id: str,

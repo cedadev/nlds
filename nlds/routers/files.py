@@ -107,6 +107,7 @@ async def get(
     tag: Optional[str] = None,
     access_key: str = "",
     secret_key: str = "",
+    regex: Optional[bool] = False,
 ):
 
     # validate filepath and filelist - one or the other has to exist
@@ -171,6 +172,8 @@ async def get(
         tag_dict = tag.strip("").split(":")
         meta_dict[MSG.TAG] = {tag_dict[0]: tag_dict[1]}
         response.tag = tag_dict
+    if regex:
+        meta_dict[MSG.REGEX] = True
 
     if len(meta_dict) > 0:
         msg_dict[MSG.META] = meta_dict
@@ -181,7 +184,7 @@ async def get(
 
 ############################ GET LIST METHOD ########################
 @router.put(
-    "/getlist",
+    "/getlist/",
     status_code=status.HTTP_202_ACCEPTED,
     responses={
         status.HTTP_202_ACCEPTED: {"model": FileResponse},
@@ -379,7 +382,7 @@ async def put(
 
 
 @router.put(
-    "/archive",
+    "/archive/",
     status_code=status.HTTP_202_ACCEPTED,
     responses={
         status.HTTP_202_ACCEPTED: {"model": FileResponse},

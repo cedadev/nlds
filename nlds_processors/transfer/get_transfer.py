@@ -92,16 +92,14 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             self.log(f"{reason}", RK.LOG_WARNING)
             raise TransferError(message=reason)
         return download_path
-    
+
     def _get_linked_path(self, path_details, target_path):
-        # If there is no target_path then the it is just the link path converted to 
+        # If there is no target_path then the it is just the link path converted to
         # a path object
         if not target_path:
             linked_path = Path(path_details.link_path)
             if not self.check_path_access(path_details.path.parent, access=os.W_OK):
-                reason = (
-                    f"Unable to access {linked_path}. Linked path is inaccesible."
-                )
+                reason = f"Unable to access {linked_path}. Linked path is inaccesible."
                 raise TransferError(message=reason)
         elif target_path.is_dir():
             # In the case of a given target, we remove the leading slash on
@@ -116,7 +114,6 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             raise TransferError(message=reason)
         return download_path
 
-
     def _transfer(self, bucket_name, object_name, download_path):
         if self.s3_client is None:
             raise RuntimeError("self.s3_client is None")
@@ -129,7 +126,12 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 download_path_str,
             )
         except Exception as e:
-            reason = f"Download-time exception occurred: {e}"
+            reason = (
+                f"Download-time exception occurred: {e}. "
+                f"Bucket name: {bucket_name}. "
+                f"Object name: {object_name}. "
+                f"Download path: {download_path}. "
+            )
             raise TransferError(message=reason)
 
     def _change_permissions(self, download_path, path_details):
@@ -200,7 +202,11 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             try:
                 self.set_ids(body_json)
             except KeyError as e:
-                self.log("Problem running set_ids in _transfer_files", RK.LOG_ERROR)
+                msg = "Problem running set_ids in _transfer_files"
+                self.log(msg, RK.LOG_ERROR)
+                self._fail_all(self.filelist, self.rk_parts, self.body_json, msg)
+                return
+
         # Create client
         self.s3_client = minio.Minio(
             tenancy,
@@ -273,18 +279,35 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 self.log(f"Error changing directory owner: {e}", RK.LOG_ERROR)
 
         # add the links for the linked paths
+        link_warnings = []
+        link_paths = []
         for lp in link_paths:
             try:
                 # original_path is the symlink, link_path is the actual path
                 symlink = self._get_download_path(lp, target_path)
                 actual_path = self._get_linked_path(lp, target_path)
                 symlink.symlink_to(actual_path)
-                
-            except (TransferError, FileExistsError) as e:
-                self.log(f"Error creating symlink: {e}", RK.LOG_WARNING)
-                
+                link_paths.append(lp)
+            except (
+                TransferError,
+                FileExistsError,
+                PermissionError,
+                FileNotFoundError,
+            ) as e:
+                warning = f"Error creating symlink: {e}"
+                link_warnings.append(warning)
+                self.log(warning, RK.LOG_WARNING)
+        # we need to acknowledge that the links have been created as well,
+        # otherwise the job won't complete
+        self.send_pathlist(
+            link_paths,
+            routing_key=rk_complete,
+            body_json=body_json,
+            state=State.TRANSFER_GETTING,
+            warning=link_warnings,
+        )
 
-    @retry(S3Error, tries=5, delay=1, logger=None)
+    @retry(S3Error, tries=5, delay=10, backoff=10, logger=None)
     def transfer(
         self,
         transaction_id: str,

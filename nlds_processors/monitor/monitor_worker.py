@@ -135,7 +135,7 @@ class MonitorConsumer(RMQC):
                 job_label = ""
         return job_label
 
-    def _parse_state(self, body, mandatory=True):
+    def _parse_state(self, body):
         # get the state from the details section of the message
         try:
             state = body[MSG.DETAILS][MSG.STATE]
@@ -147,20 +147,33 @@ class MonitorConsumer(RMQC):
             elif State.has_name(state):
                 state = State[state]
             else:
-                if mandatory:
-                    msg = f"State found in message invalid: {state}, exiting callback."
-                    self.log(msg, RK.LOG_ERROR)
-                    raise MonitorError(message=msg)
-                else:
-                    state = None
-        except KeyError:
-            if mandatory:
-                msg = "Required state not in message, exiting callback."
+                msg = f"State found in message invalid: {state}, exiting callback."
                 self.log(msg, RK.LOG_ERROR)
                 raise MonitorError(message=msg)
-            else:
-                state = None
+        except KeyError:
+            msg = "Required state not in message, exiting callback."
+            self.log(msg, RK.LOG_ERROR)
+            raise MonitorError(message=msg)
         return state
+    
+    def _parse_search_state(self, body):
+        # get the state when searching / listing from _monitor_get
+        try:
+            state_list = body[MSG.META][MSG.STATE]
+            states = []
+            for s in state_list:
+                if State.has_value(s):
+                    states.append(State(s))
+                elif State.has_name(s):
+                    states.append(State[s])
+                else:
+                    msg = f"State found in message invalid: {s}."
+                    self.log(msg, RK.LOG_ERROR)
+                    raise MonitorError(message=msg)
+        except KeyError:
+            states = None
+        return states
+
 
     def _parse_subid(self, body, mandatory=True):
         # get the sub_record id from the details section of the message
@@ -192,7 +205,7 @@ class MonitorConsumer(RMQC):
             groupall = False
         return groupall
 
-    def _parse_querygroup(self, body, group):
+    def _parse_querygroup(self, body, user, group):
         # get the desired group from the details section of the message
         try:
             query_group = body[MSG.DETAILS][MSG.GROUP_QUERY]
@@ -204,7 +217,8 @@ class MonitorConsumer(RMQC):
         # future with the inclusion of ROLES. Leave this here for completeness
         # and ease of insertion of the appropriate logic in the future.
         # groupall allows users to query other groups
-        if query_group is not None and query_group != group:
+        # nlds user is allowed to query everything
+        if query_group is not None and (query_group != group and user != 'nlds'):
             msg = (
                 "Attempting to query a group that does not match current group, "
                 "exiting callback"
@@ -222,7 +236,8 @@ class MonitorConsumer(RMQC):
             self.log("Query user not in message, continuing without.", RK.LOG_INFO)
             query_user = None
 
-        if query_user is not None and user != query_user:
+        # Allow the nlds user to query everything
+        if query_user is not None and (user != query_user and user !='nlds'):
             msg = (
                 "Attempting to query a user that does not match current "
                 "user, exiting callback"
@@ -247,14 +262,37 @@ class MonitorConsumer(RMQC):
         except KeyError:
             regex = False
         return regex
+    
+    def _parse_limit(self, body:dict) -> str:
+        # get an integer limit from the metadata section of the message
+        try:
+            limit = body[MSG.META][MSG.LIMIT]
+        except KeyError:
+            limit = None
+        return limit
+
+    def _parse_descending(self, body:dict) -> str:
+        # get whether to sort ascending or descending
+        try:
+            descending = body[MSG.META][MSG.DESCENDING]
+        except KeyError:
+            descending = False
+        return descending
 
     def _parse_api_action_from_meta(self, body):
-        # get the api-action from the details section of the message
+        # get the api-action from the metadata section of the message
         try:
             api_action = body[MSG.META][MSG.API_ACTION]
         except KeyError:
             api_action = None
         return api_action
+    
+    def _parse_exclude_api_action_from_meta(self, body):
+        try:
+            exclude_action = body[MSG.META][MSG.EXCLUDE_API_ACTION]
+        except KeyError:
+            exclude_action = None
+        return exclude_action
 
     def _get_or_create_transaction_record(
         self, user, group, transaction_id, job_label, api_action, warnings
@@ -418,7 +456,7 @@ class MonitorConsumer(RMQC):
         transactions, filtered by flags passed by the user.
         NOTE: This might be sensible to move into a separate consumer so we can
         scale out database reads separately from database writes - which at the
-        moment need to be done one at a time to avoid
+        moment need to be done one at a time to avoid clashes.
         """
 
         # get the required details from the message
@@ -427,14 +465,17 @@ class MonitorConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             api_action = self._parse_api_action_from_meta(body)
+            exclude_api_action = self._parse_exclude_api_action_from_meta(body)
             job_label = self._parse_job_label(body)
-            state = self._parse_state(body, mandatory=False)
+            state = self._parse_search_state(body)
             sub_id = self._parse_subid(body, mandatory=False)
             groupall = self._parse_groupall(body)
-            query_group = self._parse_querygroup(body, group)
             query_user = self._parse_queryuser(body, user)
+            query_group = self._parse_querygroup(body, user, group)
             idd = self._parse_idd(body)
             regex = self._parse_regex(body)
+            limit = self._parse_limit(body)
+            descending = self._parse_descending(body)
         except MonitorError:
             # Functions above handled message logging, here we just return
             return
@@ -442,15 +483,29 @@ class MonitorConsumer(RMQC):
         # start a SQL alchemy session
         self.monitor.start_session()
 
+        # form the request with the query user, special case for 'nlds' user
+        if user == 'nlds':
+            if query_user is None:
+                query_user = "**all**"
+            if query_group is None:
+                query_group = "**all**"
+        else:
+            query_user = user
+            query_group = group
+            
         try:
             trecs = self.monitor.get_transaction_record(
-                user,
-                group,
+                query_user,
+                query_group,
                 groupall=groupall,
                 idd=idd,
                 transaction_id=transaction_id,
+                api_action=api_action,
+                exclude_api_action=exclude_api_action,
                 job_label=job_label,
                 regex=regex,
+                limit=limit,
+                descending=descending,
             )
         except MonitorError as e:
             self.log(e.message, RK.LOG_ERROR)
@@ -467,7 +522,7 @@ class MonitorConsumer(RMQC):
         for tr in trecs:
             # filter on the state
             if state is not None:
-                if tr.get_state() != state:
+                if tr.get_state() not in state:
                     continue
 
             # Note that state is used to filter on the final state, not the state of

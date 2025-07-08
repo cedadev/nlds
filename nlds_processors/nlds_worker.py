@@ -24,7 +24,6 @@ from nlds.rabbit.state import State
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 
-
 class NLDSWorkerConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "nlds_q"
     DEFAULT_ROUTING_KEY = (
@@ -469,6 +468,7 @@ class NLDSWorkerConsumer(RMQC):
             # part of a regular get or an archive_put workflow
             elif rk_parts[1] == f"{RK.CATALOG_GET}":
                 self._process_rk_catalog_get_complete(rk_parts, body_json)
+
             elif rk_parts[1] == f"{RK.CATALOG_PUT}":
                 self._process_rk_catalog_put_complete(rk_parts, body_json)
 

@@ -59,18 +59,20 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         tag: dict = None,
         regex: bool = False,
+        limit: int = None,
+        descending: bool = False,
     ) -> List[Holding]:
         """Get a holding from the database"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
             # build holding query bit by bit
-            holding_q = self.session.query(Holding).filter(Holding.group == group)
+            holding_q = self.session.query(Holding)
+            if group != "**all**":
+                holding_q = holding_q.filter(Holding.group == group)
             # if the groupall flag is set then don't filter on user
-            if not groupall:
-                holding_q = holding_q.filter(
-                    Holding.user == user,
-                )
+            if not groupall and user != "**all**":
+                holding_q = holding_q.filter(Holding.user == user)
 
             # Note - the order of these if.elif.elif statements is very important - do
             # not change the order!
@@ -90,7 +92,7 @@ class Catalog(DBMixin):
 
             # search label filtering - for when the user supplies a holding label
             elif label:
-                # regex will throw exception here if invalid
+                # regex will throw exception below if invalid
                 if regex:
                     holding_q = holding_q.filter(Holding.label.regexp_match(label))
                 else:
@@ -102,17 +104,28 @@ class Catalog(DBMixin):
                 # the keys in the tag dictionary passed as a parameter
                 holding_q = holding_q.join(Tag).filter(Tag.key.in_(tag.keys()))
                 # check for zero
-                if holding_q.count() == 0:
-                    holding = []
-                else:
+                if holding_q.count() != 0:
                     # we have now got a subset of holdings with a tag that has
                     # a key that matches the keys in the input dictionary
                     # now find the holdings where the key and value match
                     for key, item in tag.items():
                         holding_q = holding_q.filter(Tag.key == key, Tag.value == item)
-                    holding = holding_q.all()
+
+            # Get the holdings, up to the limit if set
+            holding_q = holding_q.join(Transaction)
+            # sort the holdings if set
+            if descending:
+                holding_q = holding_q.order_by(Transaction.ingest_time.desc())
+            else:
+                holding_q = holding_q.order_by(Transaction.ingest_time)
+
+            if holding_q.count() == 0:
+                holding = []
+            elif limit:  # might have to change this back to .limit if DB gets big
+                holding = holding_q.all()[0:limit]
             else:
                 holding = holding_q.all()
+
             # check if at least one holding found
             if len(holding) == 0:
                 raise KeyError
@@ -141,7 +154,7 @@ class Catalog(DBMixin):
                     f"user:{user} and group:{group}"
                 )
             else:
-                msg = f"No holdings found for users:{user} and group:{group}"
+                msg = f"No holdings found for user:{user} and group:{group}"
             if tag:
                 msg += f" with tags:{tag}."
             else:
@@ -378,11 +391,16 @@ class Catalog(DBMixin):
         tag: dict = None,
         newest_only: bool = False,
         regex: bool = False,
+        limit: int = None,
+        descending: bool = False,
     ) -> list:
         """Get a multitude of file details from the database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
         if self.session is None:
             raise RuntimeError("self.session is None")
+        # newest only we always want to sort descending
+        if newest_only:
+            descending = True
         # Nones are set to .* in the regexp matching
         # get the matching holdings first, these match all but the path
         holding = self.get_holding(
@@ -393,6 +411,7 @@ class Catalog(DBMixin):
             holding_id=holding_id,
             transaction_id=transaction_id,
             tag=tag,
+            descending=descending,
         )
         if original_path:
             search_path = original_path
@@ -401,32 +420,35 @@ class Catalog(DBMixin):
 
         # (permissions have been checked by get_holding)
         file_list = []
+        path_list = []
         try:
             for h in holding:
                 # build the file query bit by bit
-                file_q = (
-                    self.session.query(File, Transaction)
-                    .filter(
-                        File.transaction_id == Transaction.id,
-                        Transaction.holding_id == h.id,
-                    )
-                    .order_by(Transaction.ingest_time)
+                file_q = self.session.query(File, Transaction).filter(
+                    File.transaction_id == Transaction.id,
+                    Transaction.holding_id == h.id,
                 )
+                if descending:
+                    file_q = file_q.order_by(Transaction.ingest_time.desc())
+                else:
+                    file_q = file_q.order_by(Transaction.ingest_time)
                 if regex or search_path == ".*":
                     # will throw an exception here for bad regex
                     file_q = file_q.filter(File.original_path.regexp_match(search_path))
                 else:
                     file_q = file_q.filter(File.original_path == search_path)
 
-                result = file_q.all()
+                if file_q.count() == 0:
+                    result = []
+                elif limit:
+                    result = file_q.limit(limit).all()
+                else:
+                    result = file_q.all()
+
                 # only want one file if newest_only is set: (this is for downloading
                 # when only the path is specified and no holding id or label is given)
-                # the results have been orderd by the Transaction ingest time
-                if newest_only:
-                    if len(result) > 0:
-                        result = [result[0]]
-                    else:
-                        result = []
+                # the results have been ordered by the Transaction ingest time, if the
+                # file already exists in the file_list then it is newer
                 for r in result:
                     if r.File is None:
                         continue
@@ -438,7 +460,17 @@ class Catalog(DBMixin):
                             f"User:{user} in group:{group} does not have permission to "
                             f"access the file with original path:{r.File.original_path}."
                         )
-                    file_list.append(r.File)
+                    if newest_only:
+                        if not r.File.original_path in path_list:
+                            file_list.append(r.File)
+                            path_list.append(r.File.original_path)
+                    else:
+                        file_list.append(r.File)
+                        path_list.append(r.File.original_path)
+                    if limit and len(file_list) >= limit:
+                        break
+                if limit and len(file_list) >= limit:
+                    break
 
             # no files found
             if len(file_list) == 0:
@@ -460,6 +492,13 @@ class Catalog(DBMixin):
             else:
                 err_msg = f"File with original_path:{original_path} not found "
             raise CatalogError(err_msg)
+
+        except DataError as e:
+            if regex:
+                msg = f"Invalid regular expression: {search_path}"
+            else:
+                msg = f"Error getting Holding: {e}"
+            raise CatalogError(msg)
 
         return file_list
 
@@ -504,6 +543,7 @@ class Catalog(DBMixin):
         group: str,
         holding_label: str = None,
         holding_id: int = None,
+        transaction_id: str = None,
         path: str = None,
         tag: dict = None,
     ) -> list:
@@ -519,6 +559,7 @@ class Catalog(DBMixin):
             group,
             holding_label=holding_label,
             holding_id=holding_id,
+            transaction_id=transaction_id,
             original_path=path,
             tag=tag,
         )

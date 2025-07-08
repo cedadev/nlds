@@ -68,51 +68,70 @@ class Monitor(DBMixin):
         groupall: bool = False,
         idd: int = None,
         transaction_id: str = None,
+        api_action: list[str] = None,
+        exclude_api_action: list[str] = None,
         job_label: str = None,
         regex: bool = False,
+        limit: int = None,
+        descending: bool = False,
     ) -> list:
         """Gets a TransactionRecord from the DB from the given transaction_id,
         or the primary key (id)"""
         if transaction_id:
             transaction_search = transaction_id
+            transaction_regex = False
         else:
             transaction_search = ".*"
-            regex = True
+            transaction_regex = True
 
         try:
             if idd:
                 trec = self.session.query(TransactionRecord).filter(
-                    TransactionRecord.group == group, TransactionRecord.id == idd
+                    TransactionRecord.id == idd
                 )
             elif job_label:
                 if regex:
                     trec = self.session.query(TransactionRecord).filter(
-                        TransactionRecord.group == group,
                         TransactionRecord.job_label.regexp_match(job_label),
                     )
                 else:
                     trec = self.session.query(TransactionRecord).filter(
-                        TransactionRecord.group == group,
                         TransactionRecord.job_label == job_label,
                     )
 
             else:
-                if regex:
+                if transaction_regex:
                     trec = self.session.query(TransactionRecord).filter(
-                        TransactionRecord.group == group,
                         TransactionRecord.transaction_id.regexp_match(
                             transaction_search
                         ),
                     )
                 else:
                     trec = self.session.query(TransactionRecord).filter(
-                        TransactionRecord.group == group,
                         TransactionRecord.transaction_id == transaction_search,
                     )
+            if api_action:
+                trec = trec.filter(TransactionRecord.api_action.in_(api_action))
+            if exclude_api_action:
+                trec = trec.filter(
+                    TransactionRecord.api_action.not_in(exclude_api_action)
+                )
+            # group filter
+            if group != "**all**":
+                trec = trec.filter(TransactionRecord.group == group)
             # user filter
-            if not groupall:
+            if not groupall and user != "**all**":
                 trec = trec.filter(TransactionRecord.user == user)
-            trecs = trec.all()
+            # Order up or down
+            if descending:
+                trec = trec.order_by(TransactionRecord.creation_time.desc())
+            else:
+                trec = trec.order_by(TransactionRecord.creation_time)
+            # limit for speed - but how many sub-records (where the api-action is stored)
+            if limit:
+                trecs = trec.limit(limit).all()
+            else:
+                trecs = trec.all()
 
             if len(trecs) == 0:
                 raise KeyError
@@ -193,10 +212,9 @@ class Monitor(DBMixin):
             # Get subrecord by sub_id
             srec = (
                 self.session.query(SubRecord)
-                .filter(SubRecord.sub_id == sub_id)
-                .one_or_none()
+                .filter(SubRecord.sub_id == sub_id)[0]
             )
-        except (IntegrityError, KeyError):
+        except (IntegrityError, KeyError, IndexError):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
         return srec
 
@@ -206,8 +224,9 @@ class Monitor(DBMixin):
         sub_id: str = None,
         user: str = None,
         group: str = None,
-        state: State = None,
+        state: list[State] = None,
         api_action: str = None,
+        exclude_api_action: str = None,
     ) -> list:
         """Return many sub records, identified by one of the (many) function
         parameters"""
@@ -224,12 +243,16 @@ class Monitor(DBMixin):
                 # sub_record = self._get_sub_record(session, sub_id)
                 query = query.filter(SubRecord.sub_id == sub_id)
             if state is not None:
-                query = query.filter(SubRecord.state == state)
+                query = query.filter(SubRecord.state.in_(state))
             if api_action is not None:
-                query = query.filter(TransactionRecord.api_action == api_action)
-            if user is not None:
+                query = query.filter(TransactionRecord.api_action.in_(api_action))
+            if exclude_api_action is not None:
+                query = query.filter(
+                    TransactionRecord.api_action.not_in(exclude_api_action)
+                )
+            if user is not None and user != "**all**":
                 query = query.filter(TransactionRecord.user == user)
-            if group is not None:
+            if group is not None and group != "**all**":
                 query = query.filter(TransactionRecord.group == group)
             srecs = query.join(TransactionRecord).all()
         except (IntegrityError, KeyError):

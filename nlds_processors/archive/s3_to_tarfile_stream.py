@@ -24,7 +24,6 @@ from nlds.errors import MessageError
 from nlds_processors.bucket_mixin import BucketMixin, BucketError
 import nlds.server_config as CFG
 
-
 class S3StreamError(MessageError):
     pass
 
@@ -40,38 +39,32 @@ class S3ToTarfileStream(BucketMixin):
     This class is abstract and should be overloaded.
     """
 
-    _REQUIRE_SECURE = "require_secure_fl"
-    _ARCHIVE_PUT = "archive_put_q"
-
     def __init__(
-        self, s3_tenancy: str, s3_access_key: str, s3_secret_key: str, logger
+        self,
+        s3_tenancy: str,
+        s3_access_key: str,
+        s3_secret_key: str,
+        require_secure_fl: bool,
+        logger,
     ) -> None:
         """Initialise the Minio / S3 client"""
-        # load the config - needed for the bucket mixin
-        # get the REQUIRE SECURE from the TRANSFER_PUT_Q part of the config
-        self.whole_config = CFG.load_config()
-        try:
-            self.require_secure_fl = self.whole_config[self._ARCHIVE_PUT][
-                self._REQUIRE_SECURE
-            ]
-        except KeyError:
-            raise RuntimeError(f"Could not read config value: {self._REQUIRE_SECURE}")
-
         self.s3_client = minio.Minio(
             s3_tenancy,
             access_key=s3_access_key,
             secret_key=s3_secret_key,
-            secure=self.require_secure_fl,
+            secure=require_secure_fl,
         )
         self.filelist = []
         self.log = logger
+        # load the whole config as it is needed for the object store access policies
+        self.whole_config = CFG.load_config()
 
     def _generate_filelist_hash(self):
         # Generate a name for the tarfile by hashing the combined filelist.
         # Length of the hash will be 16.
         # NOTE: this breaks if a problem file is removed from an aggregation
         if self.filelist == []:
-            raise ValueError("self.filelist is empty")
+            raise S3StreamError("self.filelist is empty")
         filenames = [f.original_path for f in self.filelist]
         filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8)
         return filelist_hash
@@ -154,7 +147,7 @@ class S3ToTarfileStream(BucketMixin):
         self, file_object, filelist: List[PathDetails], chunk_size: int
     ):
         if self.s3_client is None:
-            raise RuntimeError("self.s3_client is None")
+            raise S3StreamError("self.s3_client is None")
 
         # Stream from the S3 Object Store to a tar file that is created using the
         # file_object - this is usually an Adler32File
@@ -218,7 +211,7 @@ class S3ToTarfileStream(BucketMixin):
         self, file_object, filelist: List[PathDetails], chunk_size: int
     ):
         if self.s3_client is None:
-            raise RuntimeError("self.s3_client is None")
+            raise S3StreamError("self.s3_client is None")
 
         # Ensure minimum part_size is met for put_object to function
         chunk_size = max(5 * 1024 * 1024, chunk_size)
@@ -303,6 +296,7 @@ class S3ToTarfileStream(BucketMixin):
                         f"Unexpected exception occurred during stream {e}",
                         RK.LOG_ERROR,
                     )
+                    raise Exception(e)
                     self.log(reason, RK.LOG_DEBUG)
                     failedlist.append(path_details)
                 else:

@@ -8,7 +8,7 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from typing import Dict, Union, List, NamedTuple
+from typing import Dict, Union, List, NamedTuple, Any
 import grp
 import pwd
 import pathlib as pth
@@ -120,6 +120,20 @@ class StattingConsumer(RMQC):
             # Send directly to exchange and reset filelist
             self.send_pathlist(pathlist, routing_key, body_json, state=state)
             pathlist.clear()
+
+    def _fail_all(
+        self,
+        filelist: List[PathDetails],
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+        msg: str,
+    ):
+        # fail all the files in the filelist
+        rk_transfer_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
+        for file in filelist:
+            file.failure_reason = msg
+
+        self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
 
     def set_ids(
         self,
