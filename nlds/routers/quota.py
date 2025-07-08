@@ -9,6 +9,8 @@ import json
 from typing import Optional, List, Dict
 
 from ..rabbit.publisher import RabbitMQPublisher as RMQP
+import nlds.rabbit.message_keys as MSG
+import nlds.rabbit.routing_keys as RK
 from ..routers import rpc_publisher
 from ..errors import ResponseError
 from ..authenticators.authenticate_methods import (
@@ -51,26 +53,25 @@ async def get(
 ):
     # create the message dictionary
 
-    routing_key = f"{RMQP.RK_ROOT}.{RMQP.RK_ROUTE}.{RMQP.RK_QUOTA}"
-    api_action = f"{RMQP.RK_QUOTA}"
+    api_action = f"{RK.QUOTA}"
     msg_dict = {
-        RMQP.MSG_DETAILS: {
-            RMQP.MSG_USER: user,
-            RMQP.MSG_GROUP: group,
-            RMQP.MSG_TOKEN: token,
-            RMQP.MSG_API_ACTION: api_action,
+        MSG.DETAILS: {
+            MSG.USER: user,
+            MSG.GROUP: group,
+            MSG.TOKEN: token,
+            MSG.API_ACTION: api_action,
         },
-        RMQP.MSG_DATA: {},
-        RMQP.MSG_TYPE: RMQP.MSG_TYPE_STANDARD,
+        MSG.DATA: {},
+        MSG.TYPE: MSG.TYPE_STANDARD,
     }
     # add the metadata
     meta_dict = {}
     if label:
-        meta_dict[RMQP.MSG_LABEL] = label
+        meta_dict[MSG.LABEL] = label
     if holding_id:
-        meta_dict[RMQP.MSG_HOLDING_ID] = holding_id
+        meta_dict[MSG.HOLDING_ID] = holding_id
     if transaction_id:
-        meta_dict[RMQP.MSG_TRANSACT_ID] = transaction_id
+        meta_dict[MSG.TRANSACT_ID] = transaction_id
 
     if tag:
         tag_dict = {}
@@ -87,10 +88,10 @@ async def get(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=response_error.json()
             )
         else:
-            meta_dict[RMQP.MSG_TAG] = tag_dict
+            meta_dict[MSG.TAG] = tag_dict
 
     if len(meta_dict) > 0:
-        msg_dict[RMQP.MSG_META] = meta_dict
+        msg_dict[MSG.META] = meta_dict
 
     # Call RPC function
     routing_key = "catalog_q"

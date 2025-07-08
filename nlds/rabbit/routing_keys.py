@@ -21,6 +21,7 @@ LIST = "list"
 STAT = "stat"
 FIND = "find"
 META = "meta"
+QUOTA = "quota"
 SYSTEM_STAT = "system-stat"
 
 # Exchange routing key parts – root
