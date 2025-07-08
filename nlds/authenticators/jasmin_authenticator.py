@@ -245,9 +245,10 @@ class JasminAuthenticator(BaseAuthenticator):
         """Check whether a user has permission to view this holding.
         When we implement ROLES this will be more complicated."""
         permitted = True
-        # Users can view / get all holdings in their group
-        # permitted &= holding.user == user
-        permitted &= holding.group == group
+        # search of "**all**" can access everything
+        if user != "**all**" and group != "**all**":
+            # Users can view / get all holdings in their group
+            permitted &= holding.group == group
         return permitted
 
     def user_has_get_file_permission(
@@ -269,7 +270,8 @@ class JasminAuthenticator(BaseAuthenticator):
         for h in holding:
             # users have get file permission if in group
             # permitted &= h.user == user
-            permitted &= h.group == group
+            if user != "**all**" and group != "**all**":
+                permitted &= h.group == group
 
         return permitted
 
