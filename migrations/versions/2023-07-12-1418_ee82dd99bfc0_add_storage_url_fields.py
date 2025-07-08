@@ -27,6 +27,7 @@ from nlds_processors.catalog.catalog_models import Storage
 from nlds_processors.catalog.catalog_worker import CatalogConsumer
 from nlds_processors.transfer.put_transfer import PutTransferConsumer
 from nlds_processors.transfer.get_transfer import GetTransferConsumer
+from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape
 
 # Import archive consumers, some of which import xrootd and may break on
 # unprepared environments
