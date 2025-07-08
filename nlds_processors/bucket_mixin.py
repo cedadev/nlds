@@ -31,13 +31,13 @@ class BucketMixin:
     GROUP_ACCESS_POLICY_CONFIG = "group"
 
     @staticmethod
-    def _get_bucket_name(transaction_id: str | None):
+    def _get_bucket_name(transaction_id: str):
         if transaction_id is None:
             raise BucketError(message="Transaction id is None")
         bucket_name = f"nlds.{transaction_id}"
         return bucket_name
 
-    def _make_bucket(self, bucket_name: str | None):
+    def _make_bucket(self, bucket_name: str):
         """Check bucket exists and create it if it doesn't"""
         if self.s3_client is None:
             raise BucketError(message="self.s3_client is None")

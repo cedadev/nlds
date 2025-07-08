@@ -191,7 +191,7 @@ class Location(CatalogBase):
     __table_args__ = (UniqueConstraint("storage_type", "file_id"),)
 
     @property
-    def url(self) -> str | None:
+    def url(self) -> str:
         """Get the 1st object storage location and return the url
         url = f"{}
         """

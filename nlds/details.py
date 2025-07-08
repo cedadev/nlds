@@ -373,7 +373,7 @@ class PathDetails(BaseModel):
         self.locations.add(pl)
         return pl
 
-    def get_tape(self) -> PathLocation | None:
+    def get_tape(self) -> PathLocation:
         """Get the PathLocation for the tape file."""
         # note - this only returns the first object - this is fine for now, but might
         # need amending if users want to use different tenancies
@@ -381,7 +381,7 @@ class PathDetails(BaseModel):
         return self._get_location(MSG.TAPE)
 
     @property
-    def tape_name(self) -> str | None:
+    def tape_name(self) -> str:
         pl = self._get_location(MSG.TAPE)
         if pl is None:
             return None
