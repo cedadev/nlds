@@ -323,12 +323,12 @@ class PathDetails(BaseModel):
         self.locations.add(pl)
         return pl
 
-    def get_object_store(self) -> PathLocation | None:
+    def get_object_store(self) -> PathLocation:
         """Get the PathLocation for the object storage file."""
         return self._get_location(MSG.OBJECT_STORAGE)
 
     @property
-    def bucket_name(self) -> str | None:
+    def bucket_name(self) -> str:
         """Get the 1st object storage location and return the bucket by munging the string:
         bucket_name = f"nlds.{root}"
         """
@@ -340,7 +340,7 @@ class PathDetails(BaseModel):
             return bucket_name
 
     @property
-    def object_name(self) -> str | None:
+    def object_name(self) -> str:
         """Get the 1st object storage location and return the object_name
         object_name = f"{location.path}"
         """
