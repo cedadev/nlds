@@ -16,8 +16,7 @@ The Publisher class
 The routers
 -----------
 The routers control the endpoints of the API, and are the backbone of the 
-nlds-server API. They are documented automatically (thanks to Swagger UI) and 
-instructions on accessing these can be found in :doc:`../home`.
+nlds-server API. They are documented automatically thanks to the OpenAPI UI.
 
 The authenticators
 ------------------

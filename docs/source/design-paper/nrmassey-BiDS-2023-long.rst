@@ -148,8 +148,8 @@ messages, between them.
 
 .. figure:: ./overview.png
 
-      The multilayer NLDS system architecture, and the interactions between
-  the different layers in the system.
+   The multilayer NLDS system architecture, and the interactions between
+   the different layers in the system.
 
 .. _`sec:webserver`:
 

@@ -243,6 +243,7 @@ class IndexerConsumer(StattingConsumer):
             :param str rk_origin:   The first section of the received message's
                 routing key which designates its origin.
             :param dict body_json:  The message body in dict form.
+            
         This function checks if each item exists, fully walking any directories and
         subdirectories in the process, and then checks permissions on each
         available file. All accessible files are added to an 'indexed' list and
@@ -253,6 +254,7 @@ class IndexerConsumer(StattingConsumer):
         If any item cannot be found, indexed or accessed then it is added to a
         'failed' list to inform the user that it failed.
         """
+
         rk_complete = ".".join([rk_origin, RK.INDEX, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 
