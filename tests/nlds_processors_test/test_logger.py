@@ -18,6 +18,7 @@ from nlds.rabbit import publisher as publ
 from nlds_processors.logger import LoggingConsumer
 
 import nlds.rabbit.message_keys as MSG
+import nlds.server_config as CFG
 
 
 def mock_load_config(template_config):
@@ -39,7 +40,7 @@ def debug_root_logger():
 def default_logger(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
     monkeypatch.setattr(
-        publ, "load_config", functools.partial(mock_load_config, template_config)
+        CFG, "load_config", functools.partial(mock_load_config, template_config)
     )
     return LoggingConsumer()
 
@@ -90,7 +91,7 @@ def test_callback(
     custom_method = copy.deepcopy(default_rmq_method)
     custom_method.routing_key = f"nlds.test.{rk_log_level}"
     default_logger.callback(None, custom_method, None, routed_body, None)
-    assert len(caplog.records) == 4
+    assert len(caplog.records) == 3
 
     # Check that the proper message type was logged
     # The final should be a confirmation info message

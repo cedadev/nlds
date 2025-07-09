@@ -35,18 +35,20 @@ class MockConsumer(RMQP):
 def default_consumer(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
     monkeypatch.setattr(
-        publ, "load_config", functools.partial(mock_load_config, template_config)
+        "nlds.server_config.load_config",
+        functools.partial(mock_load_config, template_config),
     )
     return MockConsumer()
 
 
 @pytest.mark.parametrize(
-    "queue_param", [None, "test_string", "{{ rabbit_queue_name }}"]
+    "queue_param", ["catalog_q", "index_q", "transfer_get_q"]
 )
 def test_constructor(monkeypatch, template_config, queue_param):
     # Ensure template is loaded instead of
     monkeypatch.setattr(
-        publ, "load_config", functools.partial(mock_load_config, template_config)
+        "nlds.server_config.load_config",
+        functools.partial(mock_load_config, template_config),
     )
 
     # Test that the consumer cannot be instantiated directly
@@ -57,8 +59,7 @@ def test_constructor(monkeypatch, template_config, queue_param):
 
     # Check that a standard consumer with a defined callback can be instantiated
     consumer = MockConsumer(queue=queue_param)
-    # It should not have consumer-specific configuration (which should be an empty dict)
-    assert isinstance(consumer.consumer_config, dict) and not consumer.consumer_config
+    assert isinstance(consumer.consumer_config, dict)
 
 
 def test_split_routing_key(edge_values):

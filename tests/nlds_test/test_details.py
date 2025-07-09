@@ -10,6 +10,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from pathlib import Path
 import json
+from datetime import datetime
 
 from nlds.details import PathDetails, PathLocations, PathLocation
 from nlds.utils.permissions import check_permissions
@@ -23,7 +24,7 @@ def test_path_location():
         url_netloc="cedadev-o",
         root="neils-bucket",
         path="file",
-        access_time="now",
+        access_time=datetime.now().timestamp()
     )
 
     loc_dict = location.to_dict()
@@ -114,7 +115,7 @@ def test_serialisation():
         url_netloc="cedadev-o",
         root="neils-bucket",
         path="file",
-        access_time="now",
+        access_time=datetime.now().timestamp()
     )
 
     # add the location
@@ -136,15 +137,15 @@ def test_object_name():
 
     # add a location
     location = PathLocation(
-        storage_type="object_storage",
+        storage_type="OBJECT_STORAGE",
         url_scheme="https",
         url_netloc="cedadev-o",
         root="neils-bucket",
         path="file",
-        access_time="now",
+        access_time=datetime.now().timestamp()
     )
     pd.locations.add(location)
-    os_loc = pd.object_name
+    os_loc = pd.bucket_name+":"+pd.object_name
     assert(os_loc == "nlds.neils-bucket:file")
 
 if __name__ == "__main__":

@@ -19,16 +19,16 @@ import pytest
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 import nlds.rabbit.message_keys as MSG
 from nlds.details import PathDetails
-
+from nlds_utils.generate_server_config import generate_server_config
 
 TEMPLATE_CONFIG_PATH = os.path.join(
-    os.path.dirname(__file__), "req-config-template.json"
+    os.path.dirname(__file__), "server_config.j2"
 )
-
 
 @pytest.fixture
 def template_config():
     config_path = TEMPLATE_CONFIG_PATH
+    generate_server_config(process="all", output=config_path)
     with open(config_path) as fh:
         config_dict = json.load(fh)
     return config_dict

@@ -24,6 +24,7 @@ from nlds.server_config import (
     LOGGING_CONFIG_STDOUT_LEVEL,
 )
 import nlds.rabbit.message_keys as MSG
+import nlds.server_config as CFG
 
 def mock_load_config(template_config):
     return template_config
@@ -31,7 +32,7 @@ def mock_load_config(template_config):
 @pytest.fixture()
 def default_publisher(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
-    monkeypatch.setattr(publ, "load_config", functools.partial(mock_load_config, template_config))
+    monkeypatch.setattr(CFG, "load_config", functools.partial(mock_load_config, template_config))
     
     # Check that the publisher with callback can be created
     return RMQP()
@@ -61,7 +62,7 @@ def message_assertions(message):
 
 def test_constructor(default_publisher):
     # Check that the publisher with callback can be created
-    assert default_publisher.whole_config['authentication']['jasmin_authenticator']['user_profile_url'] == "{{ user_profile_url }}"
+    assert default_publisher.whole_config['authentication']['fake_authenticator']['user_profile_url'] == "fake_user_profile_url"
 
 def test_create_message(default_rmq_body):
     # Test with default message from fixtures
