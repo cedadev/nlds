@@ -463,6 +463,7 @@ class RabbitMQPublisher:
             log_message += f"\n{json.dumps(body_json, indent=4)}\n"
         self._log(log_message, log_level, target, **kwargs)
 
+    @classmethod
     def create_log_message(
         cls, message: str, target: str, route: str = None
     ) -> Dict[str, Any]:
