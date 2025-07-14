@@ -9,7 +9,7 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 
-API_VERSION = "0.1"
+API_VERSION = "1.0.9"
 CONFIG_FILE_LOCATION = "/etc/nlds/server_config"
 USE_DISKTAPE = False
 if USE_DISKTAPE:
