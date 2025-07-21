@@ -842,11 +842,9 @@ class Catalog(DBMixin):
         try:
             # Loop through the holdings
             for holding in holdings:
-                # print("HOLDING:", holding)
 
                 # Loop through the transactions:
                 for transaction in holding.transactions:
-                    # print(transaction)
 
                     # Loop through the files:
                     for file in transaction.files:
@@ -858,3 +856,9 @@ class Catalog(DBMixin):
             raise CatalogError(f"Couldn't calculate diskspace for the group {group}.")
         
         return total_diskspace
+    
+    def sync_quota():
+        """Get the quota values and used diskspace to sync the database values."""
+        # Get the Quota value 
+        # Get the used diskspace value
+        # Add them to the database, creating a new row if it doesn't exist yet 
