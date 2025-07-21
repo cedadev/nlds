@@ -28,6 +28,7 @@ def downgrade(engine_name: str) -> None:
 
 
 def upgrade_catalog() -> None:
+    # Add quota table
     op.create_table(
         'quota',
         sa.Column('id', sa.Integer(), primary_key=True),
