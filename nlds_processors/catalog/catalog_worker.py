@@ -1554,8 +1554,11 @@ class CatalogConsumer(RMQC):
             # Unpack if no problems found in parsing
             user, group = message_vars
 
+        self.catalog.start_session()
+
+        # Get the quota value from the database
         try:
-            group_quota = self.authenticator.get_tape_quota(service_name=group)
+            group_quota = ""
         except CatalogError as e:
             # failed to get the tape quota - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
@@ -1566,10 +1569,9 @@ class CatalogConsumer(RMQC):
             body[MSG.DATA][MSG.QUOTA] = group_quota
             self.log(f"Quota from CATALOG_QUOTA {group_quota}", RK.LOG_DEBUG)
 
-        self.catalog.start_session()
-
+        # Get the used diskspace value from the database
         try:
-            used_diskspace = self.catalog.get_used_diskspace(user=user, group=group)
+            used_diskspace = ""
         except CatalogError as e:
             # failed to get the used diskspace - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
@@ -1591,6 +1593,59 @@ class CatalogConsumer(RMQC):
             exchange={"name": ""},
             correlation_id=properties.correlation_id,
         )
+
+    def _sync_catalog_quota(self, body: Dict, properties: Header) -> None:
+        """Sync the quota and used_diskspace values in the database for the given group."""
+        message_vars = self._parse_user_vars(body)
+        if message_vars is None:
+            # Check if any problems have occured in the parsing of the message
+            # body and exit if necessary
+            self.log(
+                "Could not parse one or more mandatory variables, exiting" "callback",
+                RK.LOG_ERROR,
+            )
+            return
+        else:
+            # Unpack if no problems found in parsing
+            user, group = message_vars
+        # Get the Quota value
+        try:
+            new_quota = self.authenticator.get_tape_quota(service_name=group)
+        except CatalogError as e:
+            # failed to get the tape quota - send a return message saying so
+            self.log(e.message, RK.LOG_ERROR)
+            body[MSG.DETAILS][MSG.FAILURE] = e.message
+            body[MSG.DATA][MSG.QUOTA] = None
+        # Get the used diskspace value
+        try:
+            new_diskspace = self.catalog.get_used_diskspace(user=user, group=group)
+        except CatalogError as e:
+            # failed to get the used diskspace - send a return message saying so
+            self.log(e.message, RK.LOG_ERROR)
+            body[MSG.DETAILS][MSG.FAILURE] = e.message
+            body[MSG.DATA][MSG.DISKSPACE] = None
+
+        # Write to the logs saying the sync is beginning
+
+        self.catalog.start_session()
+        # Get the old quota and diskspace values from the database
+        old_quota = ""
+        old_diskspace = ""
+
+        # If new_quota != old_quota:
+            # Add the quota value to the database
+
+        # If new_diskspace != old_diskspace
+        # Add the used quota value to the database
+
+        self.catalog.end_session()
+
+        # Write to the logs saying the sync is done
+
+
+
+
+
 
     def attach_database(self, create_db_fl: bool = True):
         """Attach the Catalog to the consumer"""

@@ -856,9 +856,3 @@ class Catalog(DBMixin):
             raise CatalogError(f"Couldn't calculate diskspace for the group {group}.")
         
         return total_diskspace
-    
-    def sync_quota():
-        """Get the quota values and used diskspace to sync the database values."""
-        # Get the Quota value 
-        # Get the used diskspace value
-        # Add them to the database, creating a new row if it doesn't exist yet 
