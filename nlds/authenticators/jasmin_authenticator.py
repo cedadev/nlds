@@ -25,7 +25,7 @@ class JasminAuthenticator(BaseAuthenticator):
         self.config = load_config()
         self.name = "jasmin_authenticator"
         self.auth_name = "authentication"
-        self.default_quota = 0
+        self.default_quota = None
 
     @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
     def authenticate_token(self, oauth_token: str):
@@ -343,7 +343,7 @@ class JasminAuthenticator(BaseAuthenticator):
 
         requirements = group_workspace.get("requirements")
         if not requirements:
-            raise ValueError(f"Cannot find any requirements for {service_name}.")
+            return None # No requirements means no quota
 
         tape_quota = next(
             (
