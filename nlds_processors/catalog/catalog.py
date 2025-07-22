@@ -29,6 +29,7 @@ from nlds_processors.catalog.catalog_models import (
     Aggregation,
     Storage,
     Tag,
+    Quota,
 )
 from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
@@ -825,19 +826,21 @@ class Catalog(DBMixin):
             )
         return unarchived_files
 
-    def get_used_diskspace(self, user: str, group: str) -> float:
+
+    def calculate_used_diskspace(self, user: str, group: str) -> float:
         """Return the total amount of diskspace used by the group."""
         if group is None:
             raise ValueError("Group cannot be none.")
 
-        total_diskspace = 0.0
-
         try:
             # Get the holdings
             holdings = self.get_holding(user, group, groupall = True)
+            if not holdings:
+                return None # No holdings means no diskspace used
         except (CatalogError) as e:
-            total_diskspace = 0.0
-            return total_diskspace
+            return None # Treat failure to fetch holdings as no data
+        
+        total_diskspace = 0.0
 
         try:
             # Loop through the holdings
@@ -856,3 +859,67 @@ class Catalog(DBMixin):
             raise CatalogError(f"Couldn't calculate diskspace for the group {group}.")
         
         return total_diskspace
+    
+
+    def get_quota(self, user: str, group: str) -> Quota:
+        """Get the quota value from the database."""
+
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+        
+        try:
+            quota_q = self.session.query(Quota)
+            quota_q = quota_q.filter(Quota.group == group)
+            if not quota_q:
+                quota = None
+            else:
+                quota = quota_q.all()
+        except(IntegrityError, KeyError, ArgumentError, DataError, OperationalError) as e:
+            raise CatalogError(f"Error finding quota for {group}: {e}.")
+        
+        return quota
+
+
+    def create_quota(self, user: str, group: str, size: int=None, used: int=None) -> Quota:
+        """Create a row in the quota database table for the given group."""
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+        try:
+            quota = Quota(group=group, size=size, used=used)
+            self.session.add(quota)
+            self.session.flush()
+        except (IntegrityError, KeyError) as e:
+            raise CatalogError(f"Couldn't add the quota for the group {group} to the database.")
+
+
+    def modify_quota(self, user: str, group: str, quota: Quota, new_quota_size: int = None, new_quota_used: int = None):
+        """Modify the row in the quota database table for the given group."""
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+        if not isinstance(quota, Quota):
+            raise CatalogError(f"Cannot modify {group} quota, does not appear to be a valid quota object: {quota}")
+        
+        # Change the quota size if supplied
+        if new_quota_size:
+            try:
+                quota.size = new_quota_size
+                self.session.flush()
+            except IntegrityError:
+                # rollback so we can access the quota
+                self.session.rollback()
+                raise CatalogError(f"Cannot change quota for {group}.")
+            
+        # Change the used quota if supplied
+        if new_quota_used:
+            try:
+                quota.used = new_quota_used
+                self.session.flush()
+            except IntegrityError:
+                # rollback so we can access the quota
+                self.session.rollback()
+                raise CatalogError(f"Cannot change quota for {group}.")
+
+    def delete_quota(self, user: str, group: str):
+        """Modify the row in the quota database table for the given group."""
+
+    

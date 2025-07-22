@@ -1558,7 +1558,7 @@ class CatalogConsumer(RMQC):
 
         # Get the quota value from the database
         try:
-            group_quota = ""
+            group_quota = self.catalog.get_quota(user, group)
         except CatalogError as e:
             # failed to get the tape quota - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
@@ -1569,21 +1569,6 @@ class CatalogConsumer(RMQC):
             body[MSG.DATA][MSG.QUOTA] = group_quota
             self.log(f"Quota from CATALOG_QUOTA {group_quota}", RK.LOG_DEBUG)
 
-        # Get the used diskspace value from the database
-        try:
-            used_diskspace = ""
-        except CatalogError as e:
-            # failed to get the used diskspace - send a return message saying so
-            self.log(e.message, RK.LOG_ERROR)
-            body[MSG.DETAILS][MSG.FAILURE] = e.message
-            body[MSG.DATA][MSG.DISKSPACE] = None
-        else:
-            # fill the return message with the used diskspace
-            body[MSG.DATA][MSG.DISKSPACE] = used_diskspace
-            self.log(
-                f"Used diskspace from CATALOG_QUOTA {used_diskspace}", RK.LOG_DEBUG
-            )
-
         self.catalog.end_session()
 
         # return message to complete RPC
@@ -1593,6 +1578,7 @@ class CatalogConsumer(RMQC):
             exchange={"name": ""},
             correlation_id=properties.correlation_id,
         )
+
 
     def _sync_catalog_quota(self, body: Dict, properties: Header) -> None:
         """Sync the quota and used_diskspace values in the database for the given group."""
@@ -1608,17 +1594,19 @@ class CatalogConsumer(RMQC):
         else:
             # Unpack if no problems found in parsing
             user, group = message_vars
+
         # Get the Quota value
         try:
-            new_quota = self.authenticator.get_tape_quota(service_name=group)
+            new_quota_size = self.authenticator.get_tape_quota(service_name=group)
         except CatalogError as e:
             # failed to get the tape quota - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
             body[MSG.DETAILS][MSG.FAILURE] = e.message
             body[MSG.DATA][MSG.QUOTA] = None
+
         # Get the used diskspace value
         try:
-            new_diskspace = self.catalog.get_used_diskspace(user=user, group=group)
+            new_quota_used = self.catalog.calculate_used_diskspace(user=user, group=group)
         except CatalogError as e:
             # failed to get the used diskspace - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
@@ -1626,25 +1614,33 @@ class CatalogConsumer(RMQC):
             body[MSG.DATA][MSG.DISKSPACE] = None
 
         # Write to the logs saying the sync is beginning
+        self.log(f"Starting quota sync for {group}...")
 
         self.catalog.start_session()
-        # Get the old quota and diskspace values from the database
-        old_quota = ""
-        old_diskspace = ""
 
-        # If new_quota != old_quota:
+        # Get the old quota values from the database
+        quota = self.catalog.get_quota(user, group)
+        quota_size = quota.size
+        quota_used = quota.used
+
+        # If there is no new quota or diskspace used then delete the row
+        if (new_quota_size is None) and (new_quota_used is None):
+            # Delete the quota row from the table if there is one
+            if quota:
+              self.catalog.delete_quota(user, group)
+        # If there is no old quota then add a row to the table
+        elif quota is None:
+            # Add a new row to the quota table
+            self.catalog.create_quota(user, group, new_quota_size, new_quota_used)
+        # Otherwise, if the quota value has changed then modify the table
+        elif (new_quota_size != quota_size) or (new_quota_used != quota_used):
             # Add the quota value to the database
-
-        # If new_diskspace != old_diskspace
-        # Add the used quota value to the database
+            self.catalog.modify_quota(user, group, quota, new_quota_size, new_quota_used)
 
         self.catalog.end_session()
 
         # Write to the logs saying the sync is done
-
-
-
-
+        self.log(f"Finished quota sync for {group}.")
 
 
     def attach_database(self, create_db_fl: bool = True):
