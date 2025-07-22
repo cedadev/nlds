@@ -919,7 +919,19 @@ class Catalog(DBMixin):
                 self.session.rollback()
                 raise CatalogError(f"Cannot change quota for {group}.")
 
-    def delete_quota(self, user: str, group: str):
-        """Modify the row in the quota database table for the given group."""
+    def delete_quota(self, user: str, group: str, quota: Quota):
+        """Delete the row in the quota database table for the given group."""
 
-    
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+        if not isinstance(quota, Quota):
+            raise CatalogError(f"Cannot modify {group} quota, does not appear to be a valid quota object: {quota}")
+        # Make a checkpoint in case there's an issue
+        checkpoint = self.session.begin_nested()
+        try:
+            self.session.delete(quota)
+        except (IntegrityError, KeyError, OperationalError):
+            # This rollsback only to the checkpoint, so any successful deletes
+            # done already will stay in the transaction.
+            checkpoint.rollback()
+            raise CatalogError(f"Row in the quota database for {group} could not be deleted.")
