@@ -271,7 +271,7 @@ class Catalog(DBMixin):
         except (IntegrityError, KeyError):
             if transaction_id:
                 raise CatalogError(
-                    f"Transaction with transaction_id:{transaction_id} not " "found."
+                    f"Transaction with transaction_id:{transaction_id} not found."
                 )
             else:
                 raise CatalogError(f"Transaction with id {id} not found.")
