@@ -39,10 +39,10 @@ class IndexerConsumer(StattingConsumer):
 
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
-        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,  # in kB, default = 16GB
+        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,  # in bytes, default = 16MB
         _PRINT_TRACEBACKS: False,
         _CHECK_FILESIZE: True,
-        _MAX_FILESIZE: (500 * 1000 * 1000),  # in kB, default=500GB
+        _MAX_FILESIZE: (500 * 1000 * 1000),  # in bytes, default=500MB
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
