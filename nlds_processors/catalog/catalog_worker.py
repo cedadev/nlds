@@ -1559,6 +1559,9 @@ class CatalogConsumer(RMQC):
         # Get the quota value from the database
         try:
             group_quota = self.catalog.get_quota(user, group)
+            print("-------->GROUP QUOTA VALUE BEFORE, catalog_worker:", group_quota)
+            group_quota = group_quota.to_dict()
+            print("-------->GROUP QUOTA VALUE AFTER, catalog_worker:", group_quota)
         except CatalogError as e:
             # failed to get the tape quota - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
@@ -1581,7 +1584,7 @@ class CatalogConsumer(RMQC):
 
 
     def _sync_catalog_quota(self, body: Dict, properties: Header) -> None:
-        """Sync the quota and used_diskspace values in the database for the given group."""
+        """Sync the size and used values in the quota database for the given group."""
         message_vars = self._parse_user_vars(body)
         if message_vars is None:
             # Check if any problems have occured in the parsing of the message
@@ -1611,7 +1614,7 @@ class CatalogConsumer(RMQC):
             # failed to get the used diskspace - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
             body[MSG.DETAILS][MSG.FAILURE] = e.message
-            body[MSG.DATA][MSG.DISKSPACE] = None
+            body[MSG.DATA][MSG.QUOTA_SYNC] = None
 
         # Write to the logs saying the sync is beginning
         self.log(f"Starting quota sync for {group}...")
@@ -1623,7 +1626,7 @@ class CatalogConsumer(RMQC):
         quota_size = quota.size
         quota_used = quota.used
 
-        # If there is no new quota or diskspace used then delete the row
+        # If there is no new size or used values then delete the row
         if (new_quota_size is None) and (new_quota_used is None):
             # Delete the quota row from the table if there is one
             if quota:

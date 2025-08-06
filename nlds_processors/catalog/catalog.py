@@ -868,12 +868,15 @@ class Catalog(DBMixin):
             raise RuntimeError("self.session is None")
         
         try:
-            quota_q = self.session.query(Quota)
-            quota_q = quota_q.filter(Quota.group == group)
-            if not quota_q:
+            quota = (
+                self.session.query(Quota)
+                .filter(Quota.group == group)
+                .one_or_none()
+            )
+
+            if not quota:
                 quota = None
-            else:
-                quota = quota_q.all()
+
         except(IntegrityError, KeyError, ArgumentError, DataError, OperationalError) as e:
             raise CatalogError(f"Error finding quota for {group}: {e}.")
         

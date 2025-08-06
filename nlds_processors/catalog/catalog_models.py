@@ -257,3 +257,11 @@ class Quota(CatalogBase):
     size = Column(Integer)
     # amount of quota used 
     used = Column(Integer)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "group": self.group,
+            "size": self.size,
+            "used": self.used,
+        }
