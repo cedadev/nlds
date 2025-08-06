@@ -243,7 +243,7 @@ class IndexerConsumer(StattingConsumer):
             :param str rk_origin:   The first section of the received message's
                 routing key which designates its origin.
             :param dict body_json:  The message body in dict form.
-            
+
         This function checks if each item exists, fully walking any directories and
         subdirectories in the process, and then checks permissions on each
         available file. All accessible files are added to an 'indexed' list and

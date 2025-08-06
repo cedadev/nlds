@@ -154,7 +154,11 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             rk_transfer_start = ".".join([self.rk_parts[0], self.rk_parts[1], RK.START])
             # Aggregate files into bins of approximately equal size and split
             # the transaction into subtransactions to allow parallel transfers
-            sub_lists = bin_files(self.filelist)
+            sub_lists = bin_files(
+                self.filelist,
+                target_bin_count=self.filelist_max_len,
+                target_bin_size=self.filelist_max_size,
+            )
             # assign the state to TRANSFER_PUTTING or TRANSFER_GETTING to make it more
             # clear to the user what is happening
             if api_method in [RK.PUT, RK.PUTLIST]:
