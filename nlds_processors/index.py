@@ -105,7 +105,7 @@ class IndexerConsumer(StattingConsumer):
 
         # Append routing info and then run the index
         body_json = self.append_route_info(body_json)
-        self.log("Starting index scan", RK.LOG_INFO)
+        self.log(f"Starting index scan, {filelist[0].original_path}", RK.LOG_INFO)
 
         # Index the entirety of the passed filelist and check for permissions. The size
         # of the packet will also be evaluated and used to send lists of roughly equal
