@@ -10,8 +10,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from enum import Enum as PyEnum
-from nlds_processors.monitor.monitor_models import SubRecord
-from itertools import chain
 
 # revision identifiers, used by Alembic.
 revision = "c7648694325f"
