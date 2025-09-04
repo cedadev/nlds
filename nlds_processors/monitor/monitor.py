@@ -8,7 +8,7 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from sqlalchemy.exc import IntegrityError, OperationalError, DataError
+from sqlalchemy.exc import IntegrityError, OperationalError, DataError, NoResultFound
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -53,7 +53,9 @@ class Monitor(DBMixin):
             )
 
             self.session.add(transaction_record)
-            self.session.flush()  # flush to update the transaction_record.id
+            self.session.commit()  # commit to update the transaction_record.id and
+            # prevent contention with any other monitor worker
+            # processes
         except (IntegrityError, KeyError) as e:
             raise MonitorError(
                 f"Transaction record with transaction_id {transaction_id} "
@@ -159,7 +161,7 @@ class Monitor(DBMixin):
         self, transaction_record: TransactionRecord, sub_id: str, state: State = None
     ) -> SubRecord:
         """Creates a SubRecord with the minimum required input. Optionally adds
-        to a session and flushes to get the id field populated.
+        to a session and commits to get the id field populated.
         """
         if state is None:
             # Set to initial/default value
@@ -173,8 +175,9 @@ class Monitor(DBMixin):
                 transaction_record_id=transaction_record.id,
             )
             self.session.add(sub_record)
-            # need to flush to update the transaction_record.id
-            self.session.flush()
+            # need to commit to update the transaction_record.id
+            # and prevent contention with any other monitor worker processes
+            self.session.commit()
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"SubRecord for transaction_record_id:{transaction_record.id} "
@@ -198,7 +201,8 @@ class Monitor(DBMixin):
                 sub_record_id=sub_record.id,
             )
             self.session.add(failed_file)
-            self.session.flush()
+            self.session.commit()  # commit to prevent contention with any other
+            # monitor worker processes
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"FailedFile for sub_record_id:{sub_record.id} could not be "
@@ -206,15 +210,18 @@ class Monitor(DBMixin):
             )
         return failed_file
 
-    def get_sub_record(self, sub_id: str) -> SubRecord:
+    def get_sub_record(
+        self, transaction_record: TransactionRecord, sub_id: str
+    ) -> SubRecord:
         """Return a single sub record identified by the sub_id"""
         try:
-            # Get subrecord by sub_id
+            # Get subrecord(s) by sub_id
             srec = (
                 self.session.query(SubRecord)
-                .filter(SubRecord.sub_id == sub_id)[0]
-            )
-        except (IntegrityError, KeyError, IndexError):
+                .filter(SubRecord.transaction_record_id == transaction_record.id)
+                .filter(SubRecord.sub_id == sub_id)
+            ).one()
+        except (IntegrityError, IndexError, NoResultFound):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
         return srec
 
@@ -238,9 +245,7 @@ class Monitor(DBMixin):
 
             # apply filters one at a time if present. Results in a big 'and' query
             # of the passed flags
-            # TODO: (2022-11-13) Will need to adapt this to do mulitple of each
             if sub_id is not None:
-                # sub_record = self._get_sub_record(session, sub_id)
                 query = query.filter(SubRecord.sub_id == sub_id)
             if state is not None:
                 query = query.filter(SubRecord.state.in_(state))
@@ -277,7 +282,8 @@ class Monitor(DBMixin):
                 f"Attempted {sub_record.state}->{new_state}"
             )
         sub_record.state = new_state
-        self.session.flush()
+        self.session.commit()  # commit to prevent contention with any other monitor
+        # worker processes
 
     def check_completion(self, transaction_record: TransactionRecord) -> None:
         """Get the complete list of sub records from a transaction record and
@@ -326,7 +332,8 @@ class Monitor(DBMixin):
                 warning=warning, transaction_record_id=transaction_record.id
             )
             self.session.add(warning)
-            self.session.flush()
+            self.session.commit()  # commit to prevent contention with any other monitor
+            # worker processes
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"Warning for transaction_record:{transaction_record.id} could "
