@@ -396,9 +396,7 @@ class RabbitMQPublisher:
                         fh_logger.setLevel(getattr(logging, log_level.upper()))
 
                         # Write out a startup message
-                        fh_logger.info(
-                            f"{filestem} file logger set up at " f"{log_level}"
-                        )
+                        fh_logger.info(f"{filestem} file logger set up at {log_level}")
 
                     except (FileNotFoundError, OSError) as e:
                         # TODO: Should probably do something more robustly with
