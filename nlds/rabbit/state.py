@@ -42,6 +42,7 @@ class State(Enum):
     FAILED = 101
     COMPLETE_WITH_ERRORS = 102
     COMPLETE_WITH_WARNINGS = 103
+    SPLIT = 110
     # Initial state for searching for sub-states
     SEARCHING = 1000
 
