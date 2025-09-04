@@ -8,16 +8,17 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from enum import Enum
 import functools
 from abc import ABC, abstractmethod
 import logging
 import traceback
 from typing import Dict, List, Any
 import pathlib as pth
-import uuid
+from hashlib import md5
+from uuid import UUID, uuid4
 import signal
 import threading as thr
+from copy import copy
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -110,10 +111,6 @@ class RabbitMQConsumer(ABC, RMQP):
         else:
             self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
 
-        # Member variable to keep track of the number of messages spawned during
-        # a callback, for monitoring sub_record creation
-        self.sent_message_count = 0
-
         # (re)Declare the pathlists here to make them available without having
         # to pass them through every function call.
         self.completelist: List[PathDetails] = []
@@ -162,7 +159,6 @@ class RabbitMQConsumer(ABC, RMQP):
         return False
 
     def reset(self) -> None:
-        self.sent_message_count = 0
         self.completelist.clear()
         self.failedlist.clear()
 
@@ -245,6 +241,16 @@ class RabbitMQConsumer(ABC, RMQP):
 
         return new_filelist
 
+    def create_sub_id(self, filelist: List[PathDetails]) -> List[PathDetails]:
+        """Sub id is now created by hashing the paths from the filelist"""
+        if filelist != []:
+            filenames = [f.original_path for f in filelist]
+            filelist_hash = md5("".join(filenames).encode()).hexdigest()
+            sub_id = UUID(filelist_hash)
+        else:
+            sub_id = uuid4()
+        return str(sub_id)
+
     def send_pathlist(
         self,
         pathlist: List[PathDetails],
@@ -252,7 +258,7 @@ class RabbitMQConsumer(ABC, RMQP):
         body_json: Dict[str, Any],
         state: State = None,
         warning: List[str] = None,
-        delay = 0
+        delay=0,
     ) -> None:
         """Convenience function which sends the given list of PathDetails
         objects to the exchange with the given routing key and message body.
@@ -264,13 +270,31 @@ class RabbitMQConsumer(ABC, RMQP):
         transaction's state more easily.
 
         """
+        # monitoring routing
+        monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
+        # shouldn't send empty pathlist
+        if len(pathlist) == 0:
+            raise MessageError("Pathlist is empty")
         # If necessary values not set at this point then use default values
         if state is None:
             state = self.DEFAULT_STATE
 
-        # Create new sub_id for each extra subrecord created.
-        if self.sent_message_count >= 1:
-            body_json[MSG.DETAILS][MSG.SUB_ID] = str(uuid.uuid4())
+        body_json = copy(body_json)
+
+        # NRM 03/09/2025 - the sub_id is now the hash of the pathlist
+        c_sub_id = body_json[MSG.DETAILS][MSG.SUB_ID]
+        sub_id = self.create_sub_id(pathlist)
+        if sub_id != c_sub_id:
+            self.log(
+                f"Changing sub id from {c_sub_id} to {sub_id} with pathlist {pathlist}",
+                RK.LOG_INFO,
+            )
+            # send a complete message for the old sub id, as it has been split into
+            # sub messagews
+            body_json[MSG.DETAILS][MSG.STATE] = state.SPLIT.value
+            self.publish_message(monitoring_rk, body_json, delay=delay)
+            # reassign the sub_id
+            body_json[MSG.DETAILS][MSG.SUB_ID] = sub_id
 
         # Send message to next part of workflow
         body_json[MSG.DATA][MSG.FILELIST] = pathlist
@@ -283,19 +307,17 @@ class RabbitMQConsumer(ABC, RMQP):
         if warning and len(warning) > 0:
             body_json[MSG.DETAILS][MSG.WARNING] = warning
 
-        monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
         # added the delay back in for the PREPARE method
         self.publish_message(monitoring_rk, body_json, delay=delay)
-        self.sent_message_count += 1
 
-    def send_complete(self,
+    def send_complete(
+        self,
         routing_key: str,
         body_json: Dict[str, Any],
     ):
         body_json[MSG.DETAILS][MSG.STATE] = State.COMPLETE
         monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
         self.publish_message(monitoring_rk, body_json)
-        self.sent_message_count += 1
 
     def setup_logging(
         self,
@@ -311,7 +333,6 @@ class RabbitMQConsumer(ABC, RMQP):
         """
         Override of the publisher method which allows consumer-specific logging
         to take precedence over the general logging configuration.
-
         """
         # TODO: (2022-03-01) This is quite verbose and annoying to extend.
         if CFG.LOGGING_CONFIG_SECTION in self.consumer_config:
