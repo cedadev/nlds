@@ -12,7 +12,7 @@ from typing import List, Union
 from ..catalog.catalog_models import File
 from nlds.details import PathDetails
 
-DEFAULT_BIN_SIZE = 5 * (1024**3)        # 5 GBs
+DEFAULT_BIN_SIZE = 5 * (1024**3)  # 5 GBs
 
 
 def bin_files(
@@ -60,6 +60,10 @@ def bin_files(
 
     if target_bin_count is None:
         raise ValueError("target_bin_count is None")
+
+    # check that the number of bins is not greater than the number of files!
+    if target_bin_count > len(filelist):
+        target_bin_count = len(filelist)
 
     # Make 2 lists, one being a list of lists dictating the bins, the
     # other being their sizes, so we're not continually recalculating it
