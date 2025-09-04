@@ -419,10 +419,10 @@ class TestCatalog:
 
         # Add mock holding and transaction to db so ids are populated.
         catalog.session.add(mock_holding)
-        catalog.session.flush()
+        catalog.session.commit()
         mock_transaction.holding_id = mock_holding.id
         catalog.session.add(mock_transaction)
-        catalog.session.flush()
+        catalog.session.commit()
 
         # Getting still shouldn't work on the now initialised database
         with pytest.raises(CatalogError):
