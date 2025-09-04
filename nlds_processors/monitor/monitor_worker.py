@@ -26,6 +26,7 @@ Requires these settings in the /etc/nlds/server_config file:
 
 import json
 from typing import Any, Dict
+from retry import retry
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -155,7 +156,7 @@ class MonitorConsumer(RMQC):
             self.log(msg, RK.LOG_ERROR)
             raise MonitorError(message=msg)
         return state
-    
+
     def _parse_search_state(self, body):
         # get the state when searching / listing from _monitor_get
         try:
@@ -173,7 +174,6 @@ class MonitorConsumer(RMQC):
         except KeyError:
             states = None
         return states
-
 
     def _parse_subid(self, body, mandatory=True):
         # get the sub_record id from the details section of the message
@@ -218,7 +218,7 @@ class MonitorConsumer(RMQC):
         # and ease of insertion of the appropriate logic in the future.
         # groupall allows users to query other groups
         # nlds user is allowed to query everything
-        if query_group is not None and (query_group != group and user != 'nlds'):
+        if query_group is not None and (query_group != group and user != "nlds"):
             msg = (
                 "Attempting to query a group that does not match current group, "
                 "exiting callback"
@@ -237,7 +237,7 @@ class MonitorConsumer(RMQC):
             query_user = None
 
         # Allow the nlds user to query everything
-        if query_user is not None and (user != query_user and user !='nlds'):
+        if query_user is not None and (user != query_user and user != "nlds"):
             msg = (
                 "Attempting to query a user that does not match current "
                 "user, exiting callback"
@@ -262,8 +262,8 @@ class MonitorConsumer(RMQC):
         except KeyError:
             regex = False
         return regex
-    
-    def _parse_limit(self, body:dict) -> str:
+
+    def _parse_limit(self, body: dict) -> str:
         # get an integer limit from the metadata section of the message
         try:
             limit = body[MSG.META][MSG.LIMIT]
@@ -271,7 +271,7 @@ class MonitorConsumer(RMQC):
             limit = None
         return limit
 
-    def _parse_descending(self, body:dict) -> str:
+    def _parse_descending(self, body: dict) -> str:
         # get whether to sort ascending or descending
         try:
             descending = body[MSG.META][MSG.DESCENDING]
@@ -286,7 +286,7 @@ class MonitorConsumer(RMQC):
         except KeyError:
             api_action = None
         return api_action
-    
+
     def _parse_exclude_api_action_from_meta(self, body):
         try:
             exclude_action = body[MSG.META][MSG.EXCLUDE_API_ACTION]
@@ -294,29 +294,40 @@ class MonitorConsumer(RMQC):
             exclude_action = None
         return exclude_action
 
-    def _get_or_create_transaction_record(
+    def _create_transaction_record(
+        self, user, group, transaction_id, job_label, api_action
+    ):
+        # Create a transaction record with the transaction id.
+        try:
+            trec = self.monitor.create_transaction_record(
+                user, group, transaction_id, job_label, api_action
+            )
+        except MonitorError as e:
+            self.log(e.message, RK.LOG_ERROR)
+        return trec
+
+    @retry(MonitorError, tries=5, delay=1, backoff=0, logger=None)
+    def _get_transaction_record(
         self, user, group, transaction_id, job_label, api_action, warnings
     ):
-        # Find an existing transaction record with the transaction id, or create
-        # a new one.
+        # Find an existing transaction record with the transaction id.
+        # The transaction id should have been created by _create_transaction_record
+        # during the INITIALISE phase.  However, this might have occurred in a
+        # different process and it might take a while to create, and this
+        # get_transaction_record might be occurring in yet another process which has
+        # arrived at this point before the database has completed creating the
+        # transaction_record (!)
+        # So, we need to retry on the monitor error to ensure that the record is not in
+        # the process of actually being created.
         try:
             trec = self.monitor.get_transaction_record(
                 user, group, idd=None, transaction_id=transaction_id
-            )
-        except MonitorError:
+            )[0]
+        except MonitorError as e:
             # fine to pass here as if transaction_record is not returned then it
             # will be created in the next step
-            trec = None
-
-        if trec is None or len(trec) == 0:
-            try:
-                trec = self.monitor.create_transaction_record(
-                    user, group, transaction_id, job_label, api_action
-                )
-            except MonitorError as e:
-                self.log(e.message, RK.LOG_ERROR)
-        else:
-            trec = trec[0]
+            self.log(e.message, RK.LOG_ERROR)
+            raise e
 
         # create any warnings if there are any
         if warnings and len(warnings) > 0:
@@ -327,12 +338,12 @@ class MonitorConsumer(RMQC):
     def _get_or_create_sub_record(self, trec, sub_id, state):
         # get or create a sub record
         try:
-            srec = self.monitor.get_sub_record(sub_id)
+            srec = self.monitor.get_sub_record(trec, sub_id)
         except MonitorError:
             srec = None
 
         # create the sub rec if not found
-        if not srec:
+        if srec is None:
             try:
                 srec = self.monitor.create_sub_record(trec, sub_id, state)
             except MonitorError as e:
@@ -341,17 +352,17 @@ class MonitorConsumer(RMQC):
         # consistency check
         if srec.transaction_record_id != trec.id:
             msg = (
-                "Transaction id does not match sub_record's transaction "
-                "id. Something has gone wrong, rolling back and exiting"
-                "callback."
+                f"Transaction id {trec.id} does not match sub_record's transaction "
+                f"id {srec.transaction_record_id}. Something has gone wrong, rolling "
+                "back and exiting callback."
             )
             self.log(msg, RK.LOG_ERROR)
             raise MonitorError(message=msg)
         return srec
 
-    def _monitor_put(self, body: Dict[str, str]) -> None:
+    def _monitor_init(self, body: Dict[str, str]) -> None:
         """
-        Create or update a monitoring record for an in-progress transaction.
+        Create a monitoring record for an in-progress transaction.
         """
         # get the required details from the message
         try:
@@ -367,6 +378,54 @@ class MonitorConsumer(RMQC):
             # Functions above handled message logging, here we just return
             return
 
+        self.log(
+            f"Received monitoring record creation for transaction {transaction_id}, "
+            f"sub_record {sub_id}, api_action {api_action}, state {state}.",
+            RK.LOG_INFO,
+        )
+
+        # start the database transactions
+        self.monitor.start_session()
+        # create the transaction record
+        trec = self._create_transaction_record(
+            user, group, transaction_id, job_label=job_label, api_action=api_action
+        )
+        # save and end the sessions
+        self.monitor.save()
+        self.monitor.end_session()
+        self.log(
+            f"... Successfully created monitoring record",
+            RK.LOG_INFO,
+        )
+
+    def _monitor_put(self, body: Dict[str, str]) -> None:
+        """
+        Update a monitoring record for an in-progress transaction.
+        """
+        # get the required details from the message
+        try:
+            transaction_id = self._parse_transaction_id(body)
+            user = self._parse_user(body)
+            group = self._parse_group(body)
+            api_action = self._parse_api_action(body)
+            job_label = self._parse_job_label(body)
+            state = self._parse_state(body)
+            sub_id = self._parse_subid(body)
+            warnings = self._parse_warnings(body)
+        except MonitorError:
+            # Functions above handled message logging, here we just return
+            return
+
+        # get last process from route
+        route = body[MSG.DETAILS][MSG.ROUTE]
+        route_parts = route.split("->")
+        self.log(
+            f"Received monitoring update for transaction {transaction_id}, "
+            f"sub_record {sub_id}, api_action {api_action}, state {state}, "
+            f"last process {route_parts[-1]}.",
+            RK.LOG_INFO,
+        )
+
         # get the filelist
         filelist = self.parse_filelist(body)
         # start the database transactions
@@ -381,11 +440,9 @@ class MonitorConsumer(RMQC):
         #           - change state
         #           - add failed files if failed
         #       - create a new one if it doesn't
-        #   - open question whether we delete the older subrecords (i.e. before
-        #     a split)
 
-        # find or create the transaction record
-        trec = self._get_or_create_transaction_record(
+        # find the transaction record
+        trec = self._get_transaction_record(
             user,
             group,
             transaction_id,
@@ -445,8 +502,7 @@ class MonitorConsumer(RMQC):
         self.monitor.save()
         self.monitor.end_session()
         self.log(
-            f"Successfully commited monitoring update for transaction "
-            f"{transaction_id}, sub_record {sub_id}.",
+            f"... Successfully commited monitoring update",
             RK.LOG_INFO,
         )
 
@@ -484,7 +540,7 @@ class MonitorConsumer(RMQC):
         self.monitor.start_session()
 
         # form the request with the query user, special case for 'nlds' user
-        if user == 'nlds':
+        if user == "nlds":
             if query_user is None:
                 query_user = "**all**"
             if query_group is None:
@@ -492,7 +548,7 @@ class MonitorConsumer(RMQC):
         else:
             query_user = user
             query_group = group
-            
+
         try:
             trecs = self.monitor.get_transaction_record(
                 query_user,
@@ -595,7 +651,7 @@ class MonitorConsumer(RMQC):
 
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",
-            RK.LOG_INFO,
+            RK.LOG_DEBUG,
             body_json=body,
         )
 
@@ -632,15 +688,15 @@ class MonitorConsumer(RMQC):
                     "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
                 )
                 return
-            # NOTE: Could check that rk_parts[2] is 'start' here? No particular
-            # need as the exchange does that for us and merely having three
-            # parts is enough to tell that it didn't come from the api-server
-            self.log("Starting put into monitoring db.", RK.LOG_INFO)
-            self._monitor_put(body)
+            # Check whether this is init or put (put is also update)
+            if rk_parts[2] == RK.INITIATE:
+                self._monitor_init(body)
+            elif rk_parts[2] == RK.START:
+                self._monitor_put(body)
         else:
             self.log("API method key did not specify a valid task.", RK.LOG_ERROR)
 
-        self.log("Callback complete!", RK.LOG_INFO)
+        self.log("Callback complete!", RK.LOG_DEBUG)
 
     def attach_database(self, create_db_fl: bool = True):
         """Attach the Monitor to the consumer"""
