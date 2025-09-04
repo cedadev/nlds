@@ -13,7 +13,7 @@ from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from uuid import UUID, uuid4
+from uuid import UUID
 from typing import Optional, List, Dict
 
 from nlds.routers import rabbit_publisher
@@ -135,7 +135,8 @@ async def get(
     msg_dict = {
         MSG.DETAILS: {
             MSG.TRANSACT_ID: str(transaction_id),
-            MSG.SUB_ID: str(uuid4()),
+            # for the root message, the sub_id is the transaction_id
+            MSG.SUB_ID: str(transaction_id),
             MSG.USER: user,
             MSG.GROUP: group,
             MSG.GROUPALL: groupall,
@@ -235,7 +236,8 @@ async def put(
     msg_dict = {
         MSG.DETAILS: {
             MSG.TRANSACT_ID: str(transaction_id),
-            MSG.SUB_ID: str(uuid4()),
+            # for the root message, the sub_id is the transaction_id
+            MSG.SUB_ID: str(transaction_id),
             MSG.USER: user,
             MSG.GROUP: group,
             MSG.GROUPALL: groupall,
@@ -338,7 +340,8 @@ async def put(
     msg_dict = {
         MSG.DETAILS: {
             MSG.TRANSACT_ID: str(transaction_id),
-            MSG.SUB_ID: str(uuid4()),
+            # for the root message, the sub_id is the transaction_id
+            MSG.SUB_ID: str(transaction_id),
             MSG.USER: user,
             MSG.GROUP: group,
             MSG.TENANCY: tenancy,
@@ -443,7 +446,8 @@ async def put(
     msg_dict = {
         MSG.DETAILS: {
             MSG.TRANSACT_ID: str(transaction_id),
-            MSG.SUB_ID: str(uuid4()),
+            # for the root message, the sub_id is the transaction_id
+            MSG.SUB_ID: str(transaction_id),
             MSG.USER: user,
             MSG.GROUP: group,
             MSG.TENANCY: tenancy,
