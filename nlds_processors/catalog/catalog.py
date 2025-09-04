@@ -191,7 +191,8 @@ class Catalog(DBMixin):
         try:
             holding = Holding(label=label, user=user, group=group)
             self.session.add(holding)
-            self.session.flush()  # update holding.id
+            self.session.commit()  # update holding.id and prevent contention with any
+                                   # other catalog worker instances
         except (IntegrityError, KeyError) as e:
             raise CatalogError(
                 f"Holding with label:{label} could not be added to the database."
@@ -217,7 +218,7 @@ class Catalog(DBMixin):
         if new_label:
             try:
                 holding.label = new_label
-                self.session.flush()
+                self.session.commit()
             except IntegrityError:
                 # rollback so we can access the holding
                 self.session.rollback()
@@ -245,7 +246,7 @@ class Catalog(DBMixin):
                 tag = self.get_tag(holding, k)
                 if tag.value == del_tags[k]:
                     self.delete_tag(holding, k)
-        self.session.flush()
+        self.session.commit()
 
         return holding
 
@@ -304,7 +305,8 @@ class Catalog(DBMixin):
                 ingest_time=func.now(),
             )
             self.session.add(transaction)
-            self.session.flush()  # flush to generate transaction.id
+            self.session.commit()  # commit early to generate transaction.id and prevent
+                                   # contention with another catalog worker instance
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Transaction with transaction_id:{transaction_id} could not "
@@ -485,7 +487,8 @@ class Catalog(DBMixin):
                 file_permissions=file_permissions,
             )
             self.session.add(new_file)
-            self.session.flush()  # flush to generate file.id
+            self.session.commit()  # commit early to prevent contention with another
+                                   # instance of the catalog worker
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"File with original path {original_path} could not be added to"
@@ -594,7 +597,8 @@ class Catalog(DBMixin):
                 aggregation_id=aggregation_id,
             )
             self.session.add(location)
-            self.session.flush()  # flush to generate location.id
+            self.session.commit()  # commit to generate location.id and prevent any    
+                                   # contention with other catalog process instances
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location with root {root}, path {file_.original_path} and "
@@ -626,7 +630,8 @@ class Catalog(DBMixin):
         try:
             tag = Tag(key=key, value=value, holding_id=holding.id)
             self.session.add(tag)
-            self.session.flush()  # flush to generate tag.id
+            self.session.commit()  # commit to generate tag.id and prevent contention
+                                   # with any other catalog worker instances
         except (IntegrityError, KeyError):
             raise CatalogError(f"Tag could not be added to holding:{holding.label}")
         return tag
@@ -694,7 +699,8 @@ class Catalog(DBMixin):
                 failed_fl=False,  # Aggregations fail before creation now
             )
             self.session.add(aggregation)
-            self.session.flush()  # flush to generate aggregation.id
+            self.session.commit()  # commit to generate aggregation.id and prevent
+                                   # contention with any other catalog worker processes
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Aggregation with tarname:{tarname} could not be added to the "
