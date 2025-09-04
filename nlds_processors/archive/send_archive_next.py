@@ -36,10 +36,12 @@ def send_archive_next():
     if CRONJOB_CONFIG_SECTION in rabbit_publisher.whole_config:
         cronjob_config |= rabbit_publisher.whole_config[CRONJOB_CONFIG_SECTION]
 
+    uuid = str(uuid4)
     msg_dict = {
         MSG.DETAILS: {
-            MSG.TRANSACT_ID: str(uuid4()),
-            MSG.SUB_ID: str(uuid4()),
+            MSG.TRANSACT_ID: uuid,
+            # for the root message, the sub_id is the transaction_id
+            MSG.SUB_ID: uuid,
             MSG.TARGET: None,
             MSG.API_ACTION: "archive-put",
             MSG.JOB_LABEL: "archive-next",
