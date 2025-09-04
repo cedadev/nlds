@@ -93,6 +93,7 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
                     f"bucket {bucket_name} with object_name {pl.path}",
                     RK.LOG_DEBUG,
                 )
+                self.log(f"Uploaded {path_details.original_path}", RK.LOG_INFO)
                 self.append_and_send(
                     self.completelist,
                     path_details,
