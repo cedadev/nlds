@@ -299,13 +299,14 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 self.log(warning, RK.LOG_WARNING)
         # we need to acknowledge that the links have been created as well,
         # otherwise the job won't complete
-        self.send_pathlist(
-            link_paths,
-            routing_key=rk_complete,
-            body_json=body_json,
-            state=State.TRANSFER_GETTING,
-            warning=link_warnings,
-        )
+        if len(link_paths) > 0:
+            self.send_pathlist(
+                link_paths,
+                routing_key=rk_complete,
+                body_json=body_json,
+                state=State.TRANSFER_GETTING,
+                warning=link_warnings,
+            )
 
     @retry(S3Error, tries=5, delay=10, backoff=10, logger=None)
     def transfer(
