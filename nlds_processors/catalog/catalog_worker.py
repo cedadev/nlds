@@ -34,6 +34,8 @@ from pika.connection import Connection
 from pika.frame import Method
 from pika.frame import Header
 
+from retry.api import retry_call
+
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
@@ -406,14 +408,22 @@ class CatalogConsumer(RMQC):
         """Get a holding via label or holding_id or transaction_id.
         If the holding doesn't already exist then create it."""
         # try to get the holding to see if it already exists and can be added to
+        # retry 5 times using retry_call
+        args = [user, group]
+        kwargs = {
+            "label": search_label,
+            "holding_id": holding_id,
+            "transaction_id": transaction_id,
+        }
         try:
             # don't use tags to search - they are strictly for adding to the holding
-            holding = self.catalog.get_holding(
-                user,
-                group,
-                label=search_label,
-                holding_id=holding_id,
-                transaction_id=transaction_id,
+            holding = retry_call(
+                self.catalog.get_holding,
+                fargs=args,
+                fkwargs=kwargs,
+                tries=5,
+                delay=0,
+                backoff=1,
             )
         except (KeyError, CatalogError):
             holding = None
@@ -456,8 +466,15 @@ class CatalogConsumer(RMQC):
     def _get_or_create_transaction(self, transaction_id, holding):
         # try to get the transaction to see if it already exists and can be
         # added to
+        kwargs = {"transaction_id": transaction_id}
         try:
-            transaction = self.catalog.get_transaction(transaction_id=transaction_id)
+            transaction = retry_call(
+                self.catalog.get_transaction,
+                fkwargs=kwargs,
+                delay=0,
+                tries=5,
+                backoff=1,
+            )
         except (KeyError, CatalogError):
             transaction = None
 
@@ -568,7 +585,7 @@ class CatalogConsumer(RMQC):
                     except CatalogError:
                         pass  # should throw a catalog error if file(s) not found
                     else:
-                        raise CatalogError("File already exists in holding")
+                        raise CatalogError("File(s) already exists in holding")
 
                     # create the file
                     file_ = self.catalog.create_file(
