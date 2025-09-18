@@ -425,7 +425,7 @@ class CatalogConsumer(RMQC):
                 delay=0,
                 backoff=1,
             )
-        except (KeyError, CatalogError):
+        except (CatalogError):
             holding = None
 
         if holding is None:
@@ -446,21 +446,9 @@ class CatalogConsumer(RMQC):
                     holding = self.catalog.get_holding(user, group, label=new_label)
                 except (KeyError, CatalogError):
                     holding = self.catalog.create_holding(user, group, new_label)
-                else:
-                    if len(holding) > 1:
-                        raise CatalogError(
-                            f"More than one holding found for label {new_label}"
-                        )
-                    else:
-                        holding = holding[0]
             except CatalogError as e:
                 self.log(e.message, RK.LOG_ERROR)
                 raise e
-        else:
-            if len(holding) > 1:
-                raise CatalogError(f"More than one holding found for label {new_label}")
-            else:
-                holding = holding[0]
         return holding
 
     def _get_or_create_transaction(self, transaction_id, holding):
@@ -576,7 +564,7 @@ class CatalogConsumer(RMQC):
                 try:
                     # Search first for file existence within holding, fail if present
                     try:
-                        files = self.catalog.get_files(
+                        file = self.catalog.get_file(
                             user,
                             group,
                             holding_id=holding.id,
@@ -685,12 +673,12 @@ class CatalogConsumer(RMQC):
                         f"No object store location in PathDetails for file "
                         f"{pd.original_path}"
                     )
-                file = self.catalog.get_files(
+                file = self.catalog.get_file(
                     user,
                     group,
                     holding_id=pd.holding_id,
                     original_path=pd.original_path,
-                )[0]
+                )
                 # access time is now if None
                 if pl.access_time is None:
                     access_time = datetime.now()
@@ -1043,6 +1031,12 @@ class CatalogConsumer(RMQC):
         body[MSG.DETAILS][MSG.USER] = next_holding.user
         body[MSG.DETAILS][MSG.GROUP] = next_holding.group
         body[MSG.META][MSG.HOLDING_ID] = next_holding.id
+
+        # initialise the monitor first
+        monitor_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.INITIATE])
+        body[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
+        self.publish_message(monitor_routing_key, body)
+
         if len(self.completelist) > 0:
             self.log(
                 f"Sending completed PathList from CATALOG_ARCHIVE_PUT "
@@ -1121,9 +1115,9 @@ class CatalogConsumer(RMQC):
                         f"No tape location in PathDetails for file {pd.original_path}"
                     )
                 # just one file
-                file = self.catalog.get_files(
+                file = self.catalog.get_file(
                     user, group, holding_id=holding_id, original_path=pd.original_path
-                )[0]
+                )
                 # get the already created location and update with info from
                 # PathLocation and assign the aggregation
                 location = self.catalog.get_location(file, storage_type)
@@ -1211,12 +1205,12 @@ class CatalogConsumer(RMQC):
         else:
             for f in filelist:
                 try:
-                    file = self.catalog.get_files(
+                    file = self.catalog.get_file(
                         user,
                         group,
                         holding_id=holding_id,
                         original_path=f.original_path,
-                    )[0]
+                    )
                     loc = self.catalog.get_location(file, storage_type)
                     # delete location if all details are empty
                     if loc is not None and loc.storage_type == storage_type:
@@ -1379,7 +1373,7 @@ class CatalogConsumer(RMQC):
         # holding_label and holding_id is None means that more than one
         # holding wil be returned
         try:
-            holdings = self.catalog.get_holding(
+            holdings = self.catalog.get_holdings(
                 query_user,
                 query_group,
                 groupall=groupall,
@@ -1459,7 +1453,7 @@ class CatalogConsumer(RMQC):
                 else:
                     h = self.catalog.get_holding(
                         user, group, groupall=groupall, holding_id=t.holding_id
-                    )[0]
+                    )
                     label = h.label
                     ret_dict[t.transaction_id] = label
 
@@ -1537,7 +1531,7 @@ class CatalogConsumer(RMQC):
                 t = self.catalog.get_transaction(id=f.transaction_id)
                 h = self.catalog.get_holding(
                     query_user, query_group, groupall=groupall, holding_id=t.holding_id
-                )[0]
+                )
                 # create a holding dictionary if it doesn't exists
                 if h.label in ret_dict:
                     h_rec = ret_dict[h.label]
@@ -1624,7 +1618,7 @@ class CatalogConsumer(RMQC):
                 raise CatalogError(
                     "Holding not found: holding_id or label or tag(s) not specified."
                 )
-            holdings = self.catalog.get_holding(
+            holdings = self.catalog.get_holdings(
                 user, group, label=holding_label, holding_id=holding_id, tag=tag
             )
             old_meta_list = []
@@ -1799,6 +1793,7 @@ class CatalogConsumer(RMQC):
                     "Beginning preparation of next archive aggregation", RK.LOG_DEBUG
                 )
                 self._catalog_archive_put(body, rk_parts[0])
+
             elif rk_parts[1] == RK.CATALOG_ARCHIVE_UPDATE:
                 # NOTE: retries and failures for this method are handled by TLR
                 self._catalog_archive_update(body, rk_parts[0], Storage.TAPE)
