@@ -322,7 +322,7 @@ class MonitorConsumer(RMQC):
         try:
             trec = self.monitor.get_transaction_record(
                 user, group, idd=None, transaction_id=transaction_id
-            )[0]
+            )
         except MonitorError as e:
             # fine to pass here as if transaction_record is not returned then it
             # will be created in the next step
@@ -550,7 +550,7 @@ class MonitorConsumer(RMQC):
             query_group = group
 
         try:
-            trecs = self.monitor.get_transaction_record(
+            trecs = self.monitor.get_transaction_records(
                 query_user,
                 query_group,
                 groupall=groupall,
