@@ -647,7 +647,7 @@ class MonitorConsumer(RMQC):
     ) -> None:
         # Connect to database if not connected yet
         # Convert body from bytes to json for ease of manipulation
-        body = json.loads(body)
+        body = self._deserialize(body)
 
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",

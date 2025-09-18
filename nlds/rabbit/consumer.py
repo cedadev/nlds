@@ -18,7 +18,9 @@ from hashlib import md5
 from uuid import UUID, uuid4
 import signal
 import threading as thr
-from copy import copy
+import json
+import zlib
+import base64
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -58,6 +60,34 @@ class RabbitQueue(BaseModel):
 
 class SigTermError(Exception):
     pass
+
+
+def deserialize(body: str) -> dict:
+    """Deserialize the message body by calling JSON loads and decompressing the
+    message if necessary."""
+    body_dict = json.loads(body)
+    # check whether the DATA section is serialized
+    if MSG.COMPRESS in body_dict[MSG.DETAILS] and body_dict[MSG.DETAILS][MSG.COMPRESS]:
+        # data is in a b64 encoded ascii string - need to convert to bytes (in
+        # ascii format before decompressing and loading into json
+        try:
+            byte_string = body_dict[MSG.DATA].encode("ascii")
+        except AttributeError:
+            logger.error(
+                "DATA part of message was not compressed, despite compressed flag being"
+                " set in message"
+            )
+        else:
+            decompressed_string = zlib.decompress(base64.b64decode(byte_string))
+            body_dict[MSG.DATA] = json.loads(decompressed_string)
+            logger.debug(
+                f"Decompressing message, compressed size {len(byte_string)}, "
+                f" actual size {len(decompressed_string)}"
+            )
+        # specify that the message is now decompressed, in case it gets passed through
+        # deserialize again
+        body_dict[MSG.DETAILS][MSG.COMPRESS] = False
+    return body_dict
 
 
 class RabbitMQConsumer(ABC, RMQP):
@@ -279,8 +309,6 @@ class RabbitMQConsumer(ABC, RMQP):
         if state is None:
             state = self.DEFAULT_STATE
 
-        body_json = copy(body_json)
-
         # NRM 03/09/2025 - the sub_id is now the hash of the pathlist
         c_sub_id = body_json[MSG.DETAILS][MSG.SUB_ID]
         sub_id = self.create_sub_id(pathlist)
@@ -296,7 +324,6 @@ class RabbitMQConsumer(ABC, RMQP):
             # reassign the sub_id
             body_json[MSG.DETAILS][MSG.SUB_ID] = sub_id
 
-        # Send message to next part of workflow
         body_json[MSG.DATA][MSG.FILELIST] = pathlist
         body_json[MSG.DETAILS][MSG.STATE] = state.value
 
@@ -448,6 +475,11 @@ class RabbitMQConsumer(ABC, RMQP):
         """
         cb = functools.partial(self._nacknowledge_message, channel, delivery_tag)
         connection.add_callback_threadsafe(cb)
+
+    def _deserialize(self, body: bytes) -> dict[str, str]:
+        """Deserialize the message body by calling JSON loads and decompressing the
+        message if necessary."""
+        return deserialize(body)
 
     @abstractmethod
     def callback(

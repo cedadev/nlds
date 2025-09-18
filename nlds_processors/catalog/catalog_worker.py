@@ -581,7 +581,7 @@ class CatalogConsumer(RMQC):
                             group,
                             holding_id=holding.id,
                             original_path=pd.original_path,
-                        )
+                        )[0]
                     except CatalogError:
                         pass  # should throw a catalog error if file(s) not found
                     else:
@@ -1712,7 +1712,7 @@ class CatalogConsumer(RMQC):
 
         # Connect to database if not connected yet
         # Convert body from bytes to json for ease of manipulation
-        body = json.loads(body)
+        body = self._deserialize(body)
 
         # Get the API method and decide what to do with it
         try:

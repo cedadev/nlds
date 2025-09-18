@@ -15,7 +15,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Any
 import pathlib
-from collections.abc import Sequence
+import zlib
+import base64
+from copy import copy
 
 import pika
 from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
@@ -41,6 +43,12 @@ class RabbitMQPublisher:
             self.general_config = self.whole_config[CFG.GENERAL_CONFIG_SECTION]
         else:
             self.general_config = dict()
+
+        if (CFG.RABBIT_CONFIG_COMPRESS in self.config and
+            self.config[CFG.RABBIT_CONFIG_COMPRESS]):
+            self.compress = True
+        else:
+            self.compress = False
 
         # Set name for logging purposes
         self.name = name
@@ -153,6 +161,35 @@ class RabbitMQPublisher:
             delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
         )
 
+    def _serialize(self, msg_dict: dict[str, str], indent: int | None = None) -> str:
+        """Serialize the message payload by dumping it to JSON"""
+        # copy the message as we are altering it and want to keep the original unchanged
+        msg_dict_out = copy(msg_dict)
+        # get whether we should compress the message or not
+        if (self.compress):
+            # if we should then we compress the DATA part of the message, but leave the
+            # DETAILS part uncompressed
+            # we also put a flag in the DETAILS part to say the message is compressed
+            # need to copy the msg_dict otherwise the input dictionary will be 
+            # compressed as well
+            msg_dict_out[MSG.DETAILS][MSG.COMPRESS] = True
+            # dump DATA part of dictionary to string, convert to bytes (in ascii
+            # format), then compress the string and reassign to DATA
+            # using level 1 for speed and we see most of the advantage by just using
+            # any compression level
+            byte_string = json.dumps(msg_dict_out[MSG.DATA]).encode("ascii")
+            msg_dict_out[MSG.DATA] = base64.b64encode(
+                zlib.compress(byte_string, level=1)
+            ).decode("ascii")
+            logger.debug(
+                f"Compressing message, original size: {len(byte_string)}, "
+                f" compressed size: {len(msg_dict_out[MSG.DATA])}"
+            )
+        else:
+            logger.debug("Not compressing message!!!")
+
+        return json.dumps(msg_dict_out, indent=indent)
+
     @retry(RabbitRetryError, tries=-1, delay=1, backoff=2, max_delay=60, logger=logger)
     def publish_message(
         self,
@@ -180,7 +217,7 @@ class RabbitMQPublisher:
         # add the time stamp to the message here
         msg_dict[MSG.TIMESTAMP] = datetime.now().isoformat(sep="-")
         # JSON the message
-        msg = json.dumps(msg_dict)
+        msg = self._serialize(msg_dict)
 
         if not exchange:
             exchange = self.default_exchange

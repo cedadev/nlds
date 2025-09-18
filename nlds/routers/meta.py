@@ -14,9 +14,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from typing import Optional, List, Dict
+import json
 
 import nlds.rabbit.message_keys as MSG
 import nlds.rabbit.routing_keys as RK
+from nlds.rabbit.consumer import deserialize
 from nlds.routers import rpc_publisher
 from nlds.errors import ResponseError
 from nlds.authenticators.authenticate_methods import (
@@ -115,8 +117,7 @@ async def post(
     # Check if response is valid or whether the request timed out
     if response is not None:
         # convert byte response to str
-        response = response.decode()
-
+        response = json.dumps(deserialize(response))
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=response)
     else:
         response_error = ResponseError(

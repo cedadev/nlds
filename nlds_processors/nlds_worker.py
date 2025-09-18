@@ -43,7 +43,7 @@ class NLDSWorkerConsumer(RMQC):
         """Process the message to get the routing key parts, message data
         and message details"""
 
-        body_json = json.loads(body)
+        body_json = self._deserialize(body)
 
         self.log(
             f"Appending rerouting information to message: "
@@ -345,7 +345,7 @@ class NLDSWorkerConsumer(RMQC):
     ) -> None:
 
         # Convert body from bytes to string for ease of manipulation
-        body_json = json.loads(body)
+        body_json = self._deserialize(body)
 
         self.log(
             f"Received with routing_key: {method.routing_key}",

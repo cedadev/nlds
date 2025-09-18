@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 import nlds.rabbit.message_keys as MSG
 import nlds.rabbit.routing_keys as RK
-from nlds.rabbit.consumer import State
+from nlds.rabbit.consumer import State, deserialize
 from nlds.routers import rpc_publisher
 from nlds.errors import ResponseError
 from nlds.authenticators.authenticate_methods import (
@@ -163,7 +163,7 @@ async def get(
     # Check if response is valid or whether the request timed out
     if response is not None:
         # convert byte response to dict for label fetching
-        response_dict = json.loads(response)
+        response_dict = deserialize(response)
         # Attempt to get list of transaction records
         transaction_records = None
         try:
@@ -173,7 +173,6 @@ async def get(
                 f"Encountered error when trying to get a record list from the"
                 f" message response ({e})"
             )
-
         transaction_response = None
         # Only continue if the response actually had any transactions in it
         if transaction_records is not None and len(transaction_records) > 0:
@@ -186,7 +185,7 @@ async def get(
             response = transaction_response
 
         # convert byte response to str
-        response = response.decode()
+        response = json.dumps(deserialize(response))
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=response)
     else:
         response_error = ResponseError(

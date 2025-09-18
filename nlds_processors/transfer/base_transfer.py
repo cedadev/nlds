@@ -54,8 +54,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.reset()
 
         # Convert body from bytes to string for ease of manipulation
-        self.body = body.decode("utf-8")
-        self.body_json = json.loads(self.body)
+        self.body_json = self._deserialize(body)
 
         if self._is_system_status_check(
             body_json=self.body_json, properties=properties
