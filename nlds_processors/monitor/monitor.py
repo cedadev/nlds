@@ -67,6 +67,40 @@ class Monitor(DBMixin):
         self,
         user: str,
         group: str,
+        idd: int = None,
+        transaction_id: str = None
+    ) -> TransactionRecord:
+        """Fast version of get_transaction_record for internal messaging"""
+        try:
+            # filter on idd or transaction_id
+            if idd:
+                trec_q = self.session.query(TransactionRecord).filter(
+                    TransactionRecord.id == idd
+                )
+            else:
+                trec_q = self.session.query(TransactionRecord).filter(
+                    TransactionRecord.transaction_id == transaction_id,
+                )
+            # filter on user and group
+            trec_q = trec_q.filter(
+                TransactionRecord.group == group, TransactionRecord.user == user
+            )
+            trec = trec_q.one()
+        except (NoResultFound, KeyError, OperationalError):
+            if idd:
+                raise MonitorError(f"TransactionRecord with id:{idd} not found")
+            else:
+                raise MonitorError(
+                    f"TransactionRecord with transaction_id:{transaction_id} "
+                    f"not found"
+                )
+        return trec
+
+
+    def get_transaction_records(
+        self,
+        user: str,
+        group: str,
         groupall: bool = False,
         idd: int = None,
         transaction_id: str = None,
@@ -77,8 +111,8 @@ class Monitor(DBMixin):
         limit: int = None,
         descending: bool = False,
     ) -> list:
-        """Gets a TransactionRecord from the DB from the given transaction_id,
-        or the primary key (id)"""
+        """Gets a list of TransactionRecords from the DB from the given a whole host of
+        information.  Only used for user queries."""
         if transaction_id:
             transaction_search = transaction_id
             transaction_regex = False

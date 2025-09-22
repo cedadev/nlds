@@ -83,9 +83,9 @@ class TestCatalog:
     def test_get_holding(self, mock_catalog):
         # try on an empty database, should fail
         with pytest.raises(CatalogError):
-            holding = mock_catalog.get_holding(user="", group="")
+            holding = mock_catalog.get_holdings(user="", group="")
         with pytest.raises(CatalogError):
-            holding = mock_catalog.get_holding(user="asgasg", group="assag")
+            holding = mock_catalog.get_holdings(user="asgasg", group="assag")
 
         # First need to add a valid holding to the db
         valid_holding = mock_catalog.create_holding(
@@ -94,43 +94,41 @@ class TestCatalog:
             label="test-label",
         )
         # A holding also needs a Transaction
-        valid_transaction = mock_catalog.create_transaction(
-            valid_holding, "6144210"
-        )
+        valid_transaction = mock_catalog.create_transaction(valid_holding, "6144210")
         mock_catalog.session.commit()
 
         # Attempt to get the valid holding from the test db
         # Should work with just the user and group
-        holding = mock_catalog.get_holding(user="test-user", group="test-group")
+        holding = mock_catalog.get_holdings(user="test-user", group="test-group")
 
         # Should similarly work with correct label or regex search for label
-        holding = mock_catalog.get_holding(
+        holding = mock_catalog.get_holdings(
             user="test-user", group="test-group", label="test-label"
         )
-        holding = mock_catalog.get_holding(
+        holding = mock_catalog.get_holdings(
             user="test-user", group="test-group", label=".*", regex=True
         )
 
         # Try with incorrect information, should fail
         with pytest.raises(CatalogError):
-            holding = mock_catalog.get_holding(
+            holding = mock_catalog.get_holdings(
                 user="incorrect-user", group="test-group"
             )
         with pytest.raises(CatalogError):
-            holding = mock_catalog.get_holding(
+            holding = mock_catalog.get_holdings(
                 user="test-user", group="incorrect-group"
             )
         with pytest.raises(CatalogError):
-            holding = mock_catalog.get_holding(
+            holding = mock_catalog.get_holdings(
                 user="incorrect-user", group="incorrect-group"
             )
         with pytest.raises(CatalogError):
-            holding = mock_catalog.get_holding(
+            holding = mock_catalog.get_holdings(
                 user="test-user", group="test-group", label="incorrect-label"
             )
         # Should also fail with incorrect regex in label
         with pytest.raises(CatalogError):
-            holding = mock_catalog.get_holding(
+            holding = mock_catalog.get_holdings(
                 user="test-user", group="test-group", label="*", regex=True
             )
 
@@ -143,46 +141,46 @@ class TestCatalog:
             label="test-label-2",
         )
         mock_catalog.session.add(valid_holding)
-        valid_transaction = mock_catalog.create_transaction(
-            valid_holding, "01865"
-        )
+        valid_transaction = mock_catalog.create_transaction(valid_holding, "01865")
         mock_catalog.session.commit()
 
         # Should work with correct label
-        holding = mock_catalog.get_holding(
+        holding = mock_catalog.get_holdings(
             user="test-user", group="test-group", label="test-label", regex=True
         )
         # NOTE: returns 2 because test-label appears in both labels and this is
         # automatically getting regexed
         assert len(holding) == 2
         # Have to use proper regex to just get 1
-        holding = mock_catalog.get_holding(
+        holding = mock_catalog.get_holdings(
             user="test-user", group="test-group", label="test-label$", regex=True
         )
         assert len(holding) == 1
 
         # And with no label specified?
-        holding = mock_catalog.get_holding(user="test-user", group="test-group")
+        holding = mock_catalog.get_holdings(user="test-user", group="test-group")
         assert len(holding) == 2
 
         # And with regex
-        holding = mock_catalog.get_holding(
+        holding = mock_catalog.get_holdings(
             user="test-user", group="test-group", label="test-label", regex=True
         )
         assert len(holding) == 2
 
         # Can try getting by other parameters like holding_id and tag
-        holding = mock_catalog.get_holding(
+        holding = mock_catalog.get_holdings(
             user="test-user", group="test-group", holding_id=1
         )
         assert len(holding) == 1
-        holding = mock_catalog.get_holding(
+        holding = mock_catalog.get_holdings(
             user="test-user", group="test-group", holding_id=2
         )
         assert len(holding) == 1
 
         with pytest.raises(CatalogError):
-            mock_catalog.get_holding(user="test-user", group="test-group", holding_id=3)
+            mock_catalog.get_holdings(
+                user="test-user", group="test-group", holding_id=3
+            )
         # TODO: tag logic?
 
     def test_create_holding(self, mock_catalog):
