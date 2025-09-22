@@ -315,9 +315,9 @@ class RabbitMQConsumer(ABC, RMQP):
         if sub_id != c_sub_id:
             self.log(
                 f"Changing sub id from {c_sub_id} to {sub_id} with pathlist {pathlist}",
-                RK.LOG_INFO,
+                RK.LOG_DEBUG,
             )
-            # send a complete message for the old sub id, as it has been split into
+            # send a splitting message for the old sub id, as it has been split into
             # sub messagews
             body_json[MSG.DETAILS][MSG.STATE] = state.SPLIT.value
             self.publish_message(monitoring_rk, body_json, delay=delay)
