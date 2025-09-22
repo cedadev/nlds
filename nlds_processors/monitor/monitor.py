@@ -308,7 +308,8 @@ class Monitor(DBMixin):
         # Upgrade state to new_state, but throw exception if regressing state
         # from COMPLETE or FAILED to a state below that
         if (
-            sub_record.state.value >= State.COMPLETE.value
+            sub_record.state.value != State.SPLITTING.value
+            and sub_record.state.value >= State.COMPLETE.value
             and new_state.value < State.COMPLETE.value
         ):
             raise MonitorError(
