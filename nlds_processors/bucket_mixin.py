@@ -79,7 +79,7 @@ class BucketMixin:
             reason = "Unable to get bucket_name from message info"
             self.log(
                 f"{reason}, adding {path_details.object_name} to failed list.",
-                RK.LOG_INFO,
+                RK.LOG_DEBUG,
             )
             raise BucketError(message=reason)
         else:
