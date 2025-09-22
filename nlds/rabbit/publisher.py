@@ -239,6 +239,7 @@ class RabbitMQPublisher:
                 body=msg,
                 mandatory=mandatory_fl,
             )
+            logger.debug(f"Sending message with key: {routing_key}")
         except (AMQPConnectionError, ChannelWrongStateError) as e:
             # For any connection error then reset the connection and try again
             logger.error(
