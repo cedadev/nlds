@@ -15,7 +15,7 @@ from nlds.details import PathDetails
 DEFAULT_BIN_SIZE = 5 * (1024**3)  # 5 GBs
 
 
-def bin_files(
+def bin_files_1(
     filelist: List[Union[File, PathDetails]],
     target_bin_count: int = None,
     target_bin_size: float = DEFAULT_BIN_SIZE,
@@ -77,3 +77,58 @@ def bin_files(
         sizes[bin_index] += fs.size
 
     return bins
+
+
+def bin_files_2(
+    filelist: List[Union[File, PathDetails]],
+    target_bin_count: int = 1000,
+    target_bin_size: float = DEFAULT_BIN_SIZE,
+) -> List[List[Union[File, PathDetails]]]:
+    """Creates a list of groups of files (a bin) from a given list of files.
+    The bins should not exceed a maximum number of files per bin (target_bin_count),
+      or a total bin size.
+    The files are first sorted so that smaller files are grouped together, followed by
+      the larger files.
+
+    This function is used for producing sets of file lists for:
+        1.  Aggregations when creating the aggregations on tape
+        2.  Getting files to disk from object storage, to allow for parallel transfers
+    """
+    if not target_bin_size:
+        raise ValueError("target_bin_size must have some value, the default is 5GB")
+
+    # sort the filelist into size order
+    filelist_sorted = sorted(filelist, reverse=True, key=lambda f: f.size)
+
+    # Make 2 lists, one being a list of lists dictating the bins, the
+    # other being their sizes, so we're not continually recalculating it
+    # In this algorithm the bins grow dynamically, rather than the number of bins being
+    # fixed at the start of the binning.
+    bins = [[]]
+    sizes = [0]
+    bin_index = 0
+    for fs in filelist_sorted:
+        # check if we need to create a new bin - on either the size or the length
+        next_bin = False
+        if len(bins[bin_index]) == target_bin_count:
+            next_bin = True
+        if sizes[bin_index] + fs.size > target_bin_size and len(bins[bin_index]) > 0:
+            next_bin = True
+        # A special case here - we don't want to mix small and large files, so if the
+        # next file is more than 10% of the bin size, we will advance to the next bin
+        if sizes[bin_index] > 0.1 * target_bin_size and len(bins[bin_index]) > 1:
+            next_bin = True
+
+        if next_bin:
+            bins.append([])
+            sizes.append(0)
+            bin_index += 1
+
+        bins[bin_index].append(fs)
+        sizes[bin_index] += fs.size
+
+    return bins
+
+
+# assign the function to the new bin_files
+bin_files = bin_files_2

@@ -22,7 +22,7 @@ class MockFile:
         self.size = size
 
     def __repr__(self):
-        return str(self.size)
+        return self.name + ":" + str(self.size)
 
 
 def compare_total_length(original, result):
