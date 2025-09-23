@@ -250,7 +250,7 @@ class Monitor(DBMixin):
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
             )
-            if len(srecs) > 1:
+            if srecs.count() > 1:
                 raise MonitorError(
                     f"More than one sub record with sub_id:{sub_id} found"
                 )
