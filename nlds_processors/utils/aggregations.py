@@ -78,6 +78,19 @@ def bin_files_1(
 
     return bins
 
+def bin_type(fs_size):
+    # get the bin type according to how many powers of 1024 the size of the file is
+    # i.e. kilobyte and under = type 1 (1024**1)
+    #      megabyte           = type 2 (1024**2)
+    #      gigabyte and over  = type 3 (1024**3)
+    bin_type = 0
+    if fs_size > 1024**3:
+        bin_type = 3
+    elif fs_size > 1024**2:
+        bin_type = 2
+    else:
+        bin_type = 1
+    return bin_type
 
 def bin_files_2(
     filelist: List[Union[File, PathDetails]],
@@ -107,16 +120,18 @@ def bin_files_2(
     bins = [[]]
     sizes = [0]
     bin_index = 0
+    prev_bt = 0
     for fs in filelist_sorted:
         # check if we need to create a new bin - on either the size or the length
         next_bin = False
         if len(bins[bin_index]) == target_bin_count:
             next_bin = True
-        if sizes[bin_index] + fs.size > target_bin_size and len(bins[bin_index]) > 0:
+        if sizes[bin_index] + fs.size > target_bin_size and sizes[bin_index] > 0:
             next_bin = True
-        # A special case here - we don't want to mix small and large files, so if the
-        # next file is more than 10% of the bin size, we will advance to the next bin
-        if sizes[bin_index] > 0.1 * target_bin_size and len(bins[bin_index]) > 1:
+        # A special case here - we don't want to mix small and large files, so we define
+        # a bin type on the size of the file, kB, MB, GB each have a different bin
+        bt = bin_type(fs.size)
+        if bt != prev_bt:
             next_bin = True
 
         if next_bin:
@@ -126,6 +141,7 @@ def bin_files_2(
 
         bins[bin_index].append(fs)
         sizes[bin_index] += fs.size
+        prev_bt = bt
 
     return bins
 
