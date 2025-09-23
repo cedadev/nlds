@@ -340,7 +340,7 @@ class MonitorConsumer(RMQC):
         args = [trec, sub_id]
         try:
             srec = retry_call(
-                self.monitor.get_sub_record(trec, sub_id),
+                self.monitor.get_sub_record,
                 fargs=args,
                 tries=5,
                 delay=0,
