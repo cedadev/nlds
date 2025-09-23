@@ -167,12 +167,13 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             else:
                 new_state = State.TRANSFER_INIT
             for sub_list in sub_lists:
-                self.send_pathlist(
-                    sub_list,
-                    rk_transfer_start,
-                    self.body_json,
-                    state=new_state,
-                )
+                if len(sub_list) > 0:
+                    self.send_pathlist(
+                        sub_list,
+                        rk_transfer_start,
+                        self.body_json,
+                        state=new_state,
+                    )
         elif self.rk_parts[2] == RK.START:
             # Start transfer - this is implementation specific and handled by
             # child classes
