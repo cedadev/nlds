@@ -24,7 +24,6 @@ Requires these settings in the /etc/nlds/server_config file:
         }
 """
 
-import json
 from typing import Dict, Tuple, List
 from datetime import datetime
 

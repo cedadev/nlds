@@ -24,9 +24,9 @@ Requires these settings in the /etc/nlds/server_config file:
         }
 """
 
-import json
-from typing import Any, Dict
+from typing import Dict
 from retry import retry
+from retry.api import retry_call
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -337,8 +337,15 @@ class MonitorConsumer(RMQC):
 
     def _get_or_create_sub_record(self, trec, sub_id, state):
         # get or create a sub record
+        args = [trec, sub_id]
         try:
-            srec = self.monitor.get_sub_record(trec, sub_id)
+            srec = retry_call(
+                self.monitor.get_sub_record(trec, sub_id),
+                fargs=args,
+                tries=5,
+                delay=0,
+                backoff=1,
+            )
         except MonitorError:
             srec = None
 

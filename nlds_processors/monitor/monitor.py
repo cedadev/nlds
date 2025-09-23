@@ -254,7 +254,7 @@ class Monitor(DBMixin):
                 self.session.query(SubRecord)
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
-            ).one()
+            )[0]
         except (IntegrityError, IndexError, NoResultFound):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
         return srec
