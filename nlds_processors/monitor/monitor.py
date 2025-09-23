@@ -64,11 +64,7 @@ class Monitor(DBMixin):
         return transaction_record
 
     def get_transaction_record(
-        self,
-        user: str,
-        group: str,
-        idd: int = None,
-        transaction_id: str = None
+        self, user: str, group: str, idd: int = None, transaction_id: str = None
     ) -> TransactionRecord:
         """Fast version of get_transaction_record for internal messaging"""
         try:
@@ -95,7 +91,6 @@ class Monitor(DBMixin):
                     f"not found"
                 )
         return trec
-
 
     def get_transaction_records(
         self,
@@ -250,11 +245,16 @@ class Monitor(DBMixin):
         """Return a single sub record identified by the sub_id"""
         try:
             # Get subrecord(s) by sub_id
-            srec = (
+            srecs = (
                 self.session.query(SubRecord)
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
-            )[0]
+            )
+            if len(srecs) > 1:
+                raise MonitorError(
+                    f"More than one sub record with sub_id:{sub_id} found"
+                )
+            srec = srecs[0]
         except (IntegrityError, IndexError, NoResultFound):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
         return srec
@@ -307,8 +307,9 @@ class Monitor(DBMixin):
         """
         # Upgrade state to new_state, but throw exception if regressing state
         # from COMPLETE or FAILED to a state below that
+        # It IS permitted to go from SPLIT to any value
         if (
-            sub_record.state.value != State.SPLITTING.value
+            sub_record.state.value != State.SPLIT.value
             and sub_record.state.value >= State.COMPLETE.value
             and new_state.value < State.COMPLETE.value
         ):
