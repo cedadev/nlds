@@ -78,6 +78,7 @@ def bin_files_1(
 
     return bins
 
+
 def bin_type(fs_size):
     # get the bin type according to how many powers of 1024 the size of the file is
     # i.e. kilobyte and under = type 1 (1024**1)
@@ -91,6 +92,7 @@ def bin_type(fs_size):
     else:
         bin_type = 1
     return bin_type
+
 
 def bin_files_2(
     filelist: List[Union[File, PathDetails]],
@@ -131,7 +133,9 @@ def bin_files_2(
         # A special case here - we don't want to mix small and large files, so we define
         # a bin type on the size of the file, kB, MB, GB each have a different bin
         bt = bin_type(fs.size)
-        if bt != prev_bt:
+        if (
+            bt != prev_bt and bin_index != 0
+        ):  # don't leave an empty bin at the start of the bin list!
             next_bin = True
 
         if next_bin:
