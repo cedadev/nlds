@@ -245,16 +245,11 @@ class Monitor(DBMixin):
         """Return a single sub record identified by the sub_id"""
         try:
             # Get subrecord(s) by sub_id
-            srecs = (
+            srec = (
                 self.session.query(SubRecord)
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
-            )
-            if srecs.count() > 1:
-                raise MonitorError(
-                    f"More than one sub record with sub_id:{sub_id} found"
-                )
-            srec = srecs[0]
+            ).one()
         except (IntegrityError, IndexError, NoResultFound):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
         return srec

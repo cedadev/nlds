@@ -383,7 +383,7 @@ class MonitorConsumer(RMQC):
             warnings = self._parse_warnings(body)
         except MonitorError:
             # Functions above handled message logging, here we just return
-            return
+            return True
 
         self.log(
             f"Received monitoring record creation for transaction {transaction_id}, "
@@ -404,6 +404,7 @@ class MonitorConsumer(RMQC):
             f"... Successfully created monitoring record",
             RK.LOG_INFO,
         )
+        return True
 
     def _monitor_put(self, body: Dict[str, str]) -> None:
         """
@@ -421,7 +422,7 @@ class MonitorConsumer(RMQC):
             warnings = self._parse_warnings(body)
         except MonitorError:
             # Functions above handled message logging, here we just return
-            return
+            return True
 
         # get last process from route
         route = body[MSG.DETAILS][MSG.ROUTE]
@@ -449,21 +450,26 @@ class MonitorConsumer(RMQC):
         #       - create a new one if it doesn't
 
         # find the transaction record
-        trec = self._get_transaction_record(
-            user,
-            group,
-            transaction_id,
-            job_label=job_label,
-            api_action=api_action,
-            warnings=warnings,
-        )
+        try:
+            trec = self._get_transaction_record(
+                user,
+                group,
+                transaction_id,
+                job_label=job_label,
+                api_action=api_action,
+                warnings=warnings,
+            )
+        except MonitorError as e:
+            # don't ack - try again
+            return False
 
         # find or create the sub record
         try:
             srec = self._get_or_create_sub_record(trec, sub_id, state)
         except MonitorError as e:
             # Function above handled message logging, here we just return
-            return
+            # don't ack - try again
+            return False
 
         # Update subrecord to match new monitoring data
         try:
@@ -473,7 +479,8 @@ class MonitorConsumer(RMQC):
             # callback
             self.log(e.message, RK.LOG_ERROR)
             # session.rollback() # rollback needed?
-            return
+            # don't ack - try again
+            return False
 
         # Create failed_files if necessary
         if state in State.get_failed_states():
@@ -503,7 +510,7 @@ class MonitorConsumer(RMQC):
                 self.monitor.check_completion(trec)
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
-                return
+                return False
 
         # Commit all transactions when we're sure everything is as it should be.
         self.monitor.save()
@@ -512,6 +519,7 @@ class MonitorConsumer(RMQC):
             f"... Successfully commited monitoring update",
             RK.LOG_INFO,
         )
+        return True
 
     def _monitor_get(self, body: Dict[str, str], properties: Header) -> None:
         """
