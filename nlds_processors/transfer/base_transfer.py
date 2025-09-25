@@ -59,7 +59,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         if self._is_system_status_check(
             body_json=self.body_json, properties=properties
         ):
-            return False
+            return
 
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",
@@ -74,7 +74,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.log(
                 "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
-            return False
+            return
 
         ###
         # Verify and load message contents
@@ -82,13 +82,13 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.transaction_id = self.body_json[MSG.DETAILS][MSG.TRANSACT_ID]
         except KeyError:
             self.log("Transaction id unobtainable, exiting callback.", RK.LOG_ERROR)
-            return False
+            return
 
         try:
             self.filelist = self.parse_filelist(self.body_json)
         except TypeError as e:
             self.log("Filelist not parseable, exiting callback", RK.LOG_ERROR)
-            return False
+            return
 
         try:
             (self.access_key, self.secret_key, self.tenancy) = (
@@ -96,7 +96,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             )
         except TransferError:
             self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
-            return False
+            return
 
         # Set uid and gid from message contents
         self.log("Setting uid and gids now.", RK.LOG_INFO)
@@ -106,7 +106,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             # reset uid and gid for deletion process
             msg = "Problem running set_ids in _callback_common, exiting"
             self.log(msg, RK.LOG_ERROR)
-            return False
+            return
 
         # Append route info to message to track the route of the message
         self.body_json = self.append_route_info(self.body_json)
@@ -167,13 +167,12 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             else:
                 new_state = State.TRANSFER_INIT
             for sub_list in sub_lists:
-                if len(sub_list) > 0:
-                    self.send_pathlist(
-                        sub_list,
-                        rk_transfer_start,
-                        self.body_json,
-                        state=new_state,
-                    )
+                self.send_pathlist(
+                    sub_list,
+                    rk_transfer_start,
+                    self.body_json,
+                    state=new_state,
+                )
         elif self.rk_parts[2] == RK.START:
             # Start transfer - this is implementation specific and handled by
             # child classes
