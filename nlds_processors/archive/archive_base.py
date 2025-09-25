@@ -154,13 +154,12 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 new_state = State.ARCHIVE_INIT
 
             for sub_list in sub_lists:
-                if len(sub_list) > 0:
-                    self.send_pathlist(
-                        sub_list,
-                        rk_transfer_start,
-                        self.body_json,
-                        state=new_state,
-                    )
+                self.send_pathlist(
+                    sub_list,
+                    rk_transfer_start,
+                    self.body_json,
+                    state=new_state,
+                )
         elif self.rk_parts[2] == RK.START:
             self.transfer(
                 self.transaction_id,
