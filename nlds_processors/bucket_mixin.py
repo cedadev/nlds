@@ -53,11 +53,13 @@ class BucketMixin:
                     f"Creating bucket ({bucket_name}) for this transaction",
                     RK.LOG_INFO,
                 )
+                return True
             else:
                 self.log(
                     f"Bucket ({bucket_name}) already exists",
                     RK.LOG_INFO,
                 )
+                return False
         except (S3Error, MaxRetryError) as e:
             raise BucketError(message=str(e))
 
