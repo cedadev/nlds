@@ -25,8 +25,6 @@ Requires these settings in the /etc/nlds/server_config file:
 """
 
 from typing import Dict
-from retry import retry
-from retry.api import retry_call
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -306,22 +304,24 @@ class MonitorConsumer(RMQC):
             self.log(e.message, RK.LOG_ERROR)
         return trec
 
-    @retry(MonitorError, tries=5, delay=1, backoff=0, logger=None)
     def _get_transaction_record(
-        self, user, group, transaction_id, job_label, api_action, warnings
+        self,
+        user,
+        group,
+        transaction_id,
+        job_label,
+        api_action,
+        warnings,
+        with_for_update=False,
     ):
         # Find an existing transaction record with the transaction id.
-        # The transaction id should have been created by _create_transaction_record
-        # during the INITIALISE phase.  However, this might have occurred in a
-        # different process and it might take a while to create, and this
-        # get_transaction_record might be occurring in yet another process which has
-        # arrived at this point before the database has completed creating the
-        # transaction_record (!)
-        # So, we need to retry on the monitor error to ensure that the record is not in
-        # the process of actually being created.
         try:
             trec = self.monitor.get_transaction_record(
-                user, group, idd=None, transaction_id=transaction_id
+                user,
+                group,
+                idd=None,
+                transaction_id=transaction_id,
+                with_for_update=with_for_update,
             )
         except MonitorError as e:
             # fine to pass here as if transaction_record is not returned then it
@@ -335,16 +335,11 @@ class MonitorConsumer(RMQC):
                 warning = self.monitor.create_warning(trec, w)
         return trec
 
-    def _get_or_create_sub_record(self, trec, sub_id, state):
+    def _get_or_create_sub_record(self, trec, sub_id, state, with_for_update=False):
         # get or create a sub record
-        args = [trec, sub_id]
         try:
-            srec = retry_call(
-                self.monitor.get_sub_record,
-                fargs=args,
-                tries=5,
-                delay=0,
-                backoff=1,
+            srec = self.monitor.get_sub_record(
+                trec, sub_id, with_for_update=with_for_update
             )
         except MonitorError:
             srec = None
@@ -458,6 +453,7 @@ class MonitorConsumer(RMQC):
                 job_label=job_label,
                 api_action=api_action,
                 warnings=warnings,
+                with_for_update=True,
             )
         except MonitorError as e:
             # don't ack - try again
@@ -465,7 +461,9 @@ class MonitorConsumer(RMQC):
 
         # find or create the sub record
         try:
-            srec = self._get_or_create_sub_record(trec, sub_id, state)
+            srec = self._get_or_create_sub_record(
+                trec, sub_id, state, with_for_update=True
+            )
         except MonitorError as e:
             # Function above handled message logging, here we just return
             # don't ack - try again
