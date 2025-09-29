@@ -33,8 +33,6 @@ from pika.connection import Connection
 from pika.frame import Method
 from pika.frame import Header
 
-from retry.api import retry_call
-
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
@@ -406,25 +404,17 @@ class CatalogConsumer(RMQC):
     ):
         """Get a holding via label or holding_id or transaction_id.
         If the holding doesn't already exist then create it."""
-        # try to get the holding to see if it already exists and can be added to
-        # retry 5 times using retry_call
-        args = [user, group]
-        kwargs = {
-            "label": search_label,
-            "holding_id": holding_id,
-            "transaction_id": transaction_id,
-        }
         try:
             # don't use tags to search - they are strictly for adding to the holding
-            holding = retry_call(
-                self.catalog.get_holding,
-                fargs=args,
-                fkwargs=kwargs,
-                tries=5,
-                delay=0,
-                backoff=1,
+            holding = self.catalog.get_holding(
+                user,
+                group,
+                label=search_label,
+                holding_id=holding_id,
+                transaction_id=transaction_id,
+                with_for_update=True,
             )
-        except (CatalogError):
+        except CatalogError:
             holding = None
 
         if holding is None:
@@ -439,8 +429,8 @@ class CatalogConsumer(RMQC):
                 self.log(message, RK.LOG_DEBUG)
                 raise CatalogError(message)
             try:
-                # does the holding exist with the new_label?  This might happen if
-                # the transaction is interrupted
+                # does the holding exist with the new_label?
+                # if it does then raise an error as the label has to be unique
                 try:
                     holding = self.catalog.get_holding(user, group, label=new_label)
                 except (KeyError, CatalogError):
@@ -453,14 +443,9 @@ class CatalogConsumer(RMQC):
     def _get_or_create_transaction(self, transaction_id, holding):
         # try to get the transaction to see if it already exists and can be
         # added to
-        kwargs = {"transaction_id": transaction_id}
         try:
-            transaction = retry_call(
-                self.catalog.get_transaction,
-                fkwargs=kwargs,
-                delay=0,
-                tries=5,
-                backoff=1,
+            transaction = self.catalog.get_transaction(
+                transaction_id=transaction_id, with_for_update=True
             )
         except (KeyError, CatalogError):
             transaction = None
@@ -482,7 +467,7 @@ class CatalogConsumer(RMQC):
         if tags:
             for k in tags:
                 try:
-                    tag = self.catalog.get_tag(holding, k)
+                    tag = self.catalog.get_tag(holding, k, with_for_update=True)
                 except CatalogError:  # tag's key not found so create
                     self.catalog.create_tag(holding, k, tags[k])
                 else:
@@ -568,7 +553,7 @@ class CatalogConsumer(RMQC):
                             group,
                             holding_id=holding.id,
                             original_path=pd.original_path,
-                        )[0]
+                        )
                     except CatalogError:
                         pass  # should throw a catalog error if file(s) not found
                     else:
@@ -677,6 +662,7 @@ class CatalogConsumer(RMQC):
                     group,
                     holding_id=pd.holding_id,
                     original_path=pd.original_path,
+                    with_for_update=True,
                 )
                 # access time is now if None
                 if pl.access_time is None:
@@ -685,7 +671,7 @@ class CatalogConsumer(RMQC):
                     access_time = datetime.fromtimestamp(pl.access_time)
                 st = Storage.from_str(pl.storage_type)
                 # get the location
-                location = self.catalog.get_location(file, st)
+                location = self.catalog.get_location(file, st, with_for_update=True)
                 if location:
                     # check empty or equivalent storage location - warn for equivalent
                     if location.url_scheme != "" or location.url_netloc != "":
@@ -986,7 +972,7 @@ class CatalogConsumer(RMQC):
             return
 
         # get the list of unarchived files from that holding
-        filelist = self.catalog.get_unarchived_files(next_holding)
+        filelist = self.catalog.get_unarchived_files(next_holding, with_for_update=True)
         # loop over the files and modify the database to have a TAPE storage location
         self.reset()
         for f in filelist:
@@ -1115,11 +1101,17 @@ class CatalogConsumer(RMQC):
                     )
                 # just one file
                 file = self.catalog.get_file(
-                    user, group, holding_id=holding_id, original_path=pd.original_path
+                    user,
+                    group,
+                    holding_id=holding_id,
+                    original_path=pd.original_path,
+                    with_for_update=True,
                 )
                 # get the already created location and update with info from
                 # PathLocation and assign the aggregation
-                location = self.catalog.get_location(file, storage_type)
+                location = self.catalog.get_location(
+                    file, storage_type, with_for_update=True
+                )
                 location.url_scheme = pl.url_scheme
                 location.url_netloc = pl.url_netloc
                 location.root = pl.root
@@ -1196,7 +1188,7 @@ class CatalogConsumer(RMQC):
         filelist = [PathDetails.from_dict(f) for f in filelist_]
 
         try:
-            holding = self.catalog.get_holding(user, group, holding_id=holding_id)
+            holding = self.catalog.get_holding(user, group, holding_id=holding_id, with_for_update=True)
         except CatalogError as e:
             for f in filelist:
                 f.failure_reason = e.message
@@ -1209,8 +1201,9 @@ class CatalogConsumer(RMQC):
                         group,
                         holding_id=holding_id,
                         original_path=f.original_path,
+                        with_for_update=True
                     )
-                    loc = self.catalog.get_location(file, storage_type)
+                    loc = self.catalog.get_location(file, storage_type, with_for_update=True)
                     # delete location if all details are empty
                     if loc is not None and loc.storage_type == storage_type:
                         if (
@@ -1794,7 +1787,6 @@ class CatalogConsumer(RMQC):
                 self._catalog_archive_put(body, rk_parts[0])
 
             elif rk_parts[1] == RK.CATALOG_ARCHIVE_UPDATE:
-                # NOTE: retries and failures for this method are handled by TLR
                 self._catalog_archive_update(body, rk_parts[0], Storage.TAPE)
             elif rk_parts[1] == RK.CATALOG_REMOVE:
                 self._catalog_remove(body, rk_parts[0], Storage.TAPE)
