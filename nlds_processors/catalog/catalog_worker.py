@@ -27,11 +27,12 @@ Requires these settings in the /etc/nlds/server_config file:
 from typing import Dict, Tuple, List
 from datetime import datetime
 
-# Typing imports
 from pika.channel import Channel
 from pika.connection import Connection
 from pika.frame import Method
 from pika.frame import Header
+
+from retry.api import retry_call
 
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
@@ -396,55 +397,33 @@ class CatalogConsumer(RMQC):
             search_label = ".*"  # match all labels if holding id given
         else:
             search_label = None  # match nothing if no label or holding id (was $<)
-            # this will produce a new holding
         return search_label
 
-    def _get_or_create_holding(
-        self, user, group, search_label, holding_id, transaction_id, new_label
+    def _get_transaction_with_retry(
+        self, id: int = None, transaction_id: str = None, with_for_update: bool = False
     ):
-        """Get a holding via label or holding_id or transaction_id.
-        If the holding doesn't already exist then create it."""
+        kwargs = {
+            "id": id,
+            "transaction_id": transaction_id,
+            "with_for_update": with_for_update,
+        }
         try:
-            # don't use tags to search - they are strictly for adding to the holding
-            holding = self.catalog.get_holding(
-                user,
-                group,
-                label=search_label,
-                holding_id=holding_id,
-                transaction_id=transaction_id,
-                with_for_update=True,
+            transaction = retry_call(
+                self.catalog.get_transaction,
+                fkwargs=kwargs,
+                delay=0,
+                tries=5,
+                backoff=1,
             )
-        except CatalogError:
-            holding = None
-
-        if holding is None:
-            # if the holding_id is not None then raise an error as the user is
-            # trying to add to a holding that doesn't exist, but creating a new
-            # holding won't have a holding_id that matches the one they passed in
-            if holding_id is not None:
-                message = (
-                    f"Could not add files to holding with holding_id: "
-                    f"{holding_id}.  holding_id does not exist."
-                )
-                self.log(message, RK.LOG_DEBUG)
-                raise CatalogError(message)
-            try:
-                # does the holding exist with the new_label?
-                # if it does then raise an error as the label has to be unique
-                try:
-                    holding = self.catalog.get_holding(user, group, label=new_label)
-                except (KeyError, CatalogError):
-                    holding = self.catalog.create_holding(user, group, new_label)
-            except CatalogError as e:
-                self.log(e.message, RK.LOG_ERROR)
-                raise e
-        return holding
+        except Exception as e:
+            raise e
+        return transaction
 
     def _get_or_create_transaction(self, transaction_id, holding):
         # try to get the transaction to see if it already exists and can be
         # added to
         try:
-            transaction = self.catalog.get_transaction(
+            transaction = self._get_transaction_with_retry(
                 transaction_id=transaction_id, with_for_update=True
             )
         except (KeyError, CatalogError):
@@ -479,6 +458,117 @@ class CatalogConsumer(RMQC):
                     )
         return warnings
 
+    def _get_holding_with_retry(
+        self,
+        user: str,
+        group: str,
+        groupall: bool = False,
+        label: str = None,
+        holding_id: int = None,
+        transaction_id: str = None,
+        with_for_update: bool = False,
+    ):
+        args = [user, group]
+        kwargs = {
+            "groupall": groupall,
+            "label": label,
+            "holding_id": holding_id,
+            "transaction_id": transaction_id,
+            "with_for_update": with_for_update,
+        }
+        try:
+            holding = retry_call(
+                self.catalog.get_holding,
+                fargs=args,
+                fkwargs=kwargs,
+                delay=0,
+                tries=5,
+                backoff=1,
+            )
+        except Exception as e:
+            raise e
+        return holding
+
+    def _catalog_init(self, body: Dict, rk_origin: str) -> None:
+        """
+        Create a holding in the catalog, if necessary.
+        Three cases:
+        1. The user has supplied a label
+        2. The user has supplied a holding_id
+        3. The user has supplied a transaction_id
+
+        Creation occurs in each case if:
+        1. A holding with the label does not already exist
+        2. A holding with the holding_id does not already exist
+        3. A holding with the transaction_id does not already exist
+        """
+        # Parse the message body for required variables
+        try:
+            user = self._parse_user(body)
+            group = self._parse_group(body)
+            transaction_id = self._parse_transaction_id(body, mandatory=True)
+            label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
+        except CatalogError:
+            # functions above handled message logging, here we just return
+            return
+
+        self.log(
+            f"Received catalog holding creation for transaction {transaction_id}, "
+            f"label {label}, user {user}, group {group}",
+            RK.LOG_INFO,
+        )
+
+        self.catalog.start_session()
+
+        if label is not None:
+            # case 1: user has supplied label - if a holding with the label doesn't
+            #         exist then create it
+            try:
+                holding = self._get_holding_with_retry(
+                    user, group, label=label, with_for_update=True
+                )
+            except CatalogError:
+                holding = self.catalog.create_holding(user, group, label)
+        elif holding_id is not None:
+            # case 2: user has supplied holding id - if a holding with the holding id
+            #         doesn't exist then do not create it - it is an error
+            try:
+                holding = self._get_holding_with_retry(
+                    user, group, holding_id=holding_id, with_for_update=True
+                )
+            except CatalogError:
+                holding = None
+        elif transaction_id is not None:
+            # case 3: transaction id is supplied - this should always create a holding
+            #         but we will test for one already existing for robustness
+            try:
+                holding = self._get_holding_with_retry(
+                    user, group, transaction_id=transaction_id, with_for_update=True
+                )
+            except CatalogError:
+                # label did not exist, so label is the first 8 characters of
+                # transaction_id
+                create_label = transaction_id[0:8]
+                holding = self.catalog.create_holding(user, group, create_label)
+
+        # now create the transaction within the holding - these are always unique
+        if holding:
+            try:
+                transaction = self.catalog.create_transaction(holding, transaction_id)
+            except CatalogError as e:
+                self.log(e.message, RK.LOG_ERROR)
+                raise e
+
+            self.log(
+                (f"... Successfully created / found catalog holding: {holding.id} and "
+                f"created transaction: {transaction.transaction_id}"),
+                RK.LOG_INFO,
+            )
+
+        self.catalog.save()
+        self.catalog.end_session()
+        return True
+
     def _catalog_put(self, body: Dict, rk_origin: str) -> None:
         """Put a file record into the catalog - end of a put transaction"""
         # Parse the message body for required variables
@@ -489,18 +579,10 @@ class CatalogConsumer(RMQC):
             transaction_id = self._parse_transaction_id(body, mandatory=True)
             tenancy = self._parse_tenancy(body)
             label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
-
         except CatalogError:
             # functions above handled message logging, here we just return
             return
 
-        if label is None:
-            # No label given so if holding_id not given the subset of
-            # transaction id is used as new label
-            new_label = transaction_id[0:8]
-        else:
-            # If holding id not given then new_label used to create holding
-            new_label = label
         # Start the database transactions
         self.catalog.start_session()
 
@@ -511,13 +593,13 @@ class CatalogConsumer(RMQC):
 
         # get, or create the holding
         try:
-            holding = self._get_or_create_holding(
+            holding = self._get_holding_with_retry(
                 user,
                 group,
-                search_label=search_label,
+                label=search_label,
                 holding_id=holding_id,
                 transaction_id=transaction_id,
-                new_label=new_label,
+                with_for_update=True,
             )
         except CatalogError as e:
             # could not find holding so mark all files as failed and return
@@ -1188,7 +1270,9 @@ class CatalogConsumer(RMQC):
         filelist = [PathDetails.from_dict(f) for f in filelist_]
 
         try:
-            holding = self.catalog.get_holding(user, group, holding_id=holding_id, with_for_update=True)
+            holding = self._get_holding_with_retry(
+                user, group, holding_id=holding_id, with_for_update=True
+            )
         except CatalogError as e:
             for f in filelist:
                 f.failure_reason = e.message
@@ -1201,9 +1285,11 @@ class CatalogConsumer(RMQC):
                         group,
                         holding_id=holding_id,
                         original_path=f.original_path,
-                        with_for_update=True
+                        with_for_update=True,
                     )
-                    loc = self.catalog.get_location(file, storage_type, with_for_update=True)
+                    loc = self.catalog.get_location(
+                        file, storage_type, with_for_update=True
+                    )
                     # delete location if all details are empty
                     if loc is not None and loc.storage_type == storage_type:
                         if (
@@ -1611,7 +1697,11 @@ class CatalogConsumer(RMQC):
                     "Holding not found: holding_id or label or tag(s) not specified."
                 )
             holdings = self.catalog.get_holdings(
-                user, group, label=holding_label, holding_id=holding_id, tag=tag
+                user,
+                group,
+                label=holding_label,
+                holding_id=holding_id,
+                tag=tag,
             )
             old_meta_list = []
             ret_list = []
@@ -1758,7 +1848,9 @@ class CatalogConsumer(RMQC):
                     "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
                 )
                 return
-            if rk_parts[2] == RK.START:
+            if rk_parts[2] == RK.INITIATE:
+                self._catalog_init(body, rk_parts[0])
+            elif rk_parts[2] == RK.START:
                 # Check the routing key worker section to determine which method
                 # to call, as a del could be being called from a failed
                 # transfer_put
