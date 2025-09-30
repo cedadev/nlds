@@ -26,6 +26,8 @@ Requires these settings in the /etc/nlds/server_config file:
 
 from typing import Dict
 
+from retry.api import retry_call
+
 from pika.channel import Channel
 from pika.connection import Connection
 from pika.frame import Method
@@ -292,47 +294,39 @@ class MonitorConsumer(RMQC):
             exclude_action = None
         return exclude_action
 
-    def _create_transaction_record(
-        self, user, group, transaction_id, job_label, api_action
-    ):
-        # Create a transaction record with the transaction id.
-        try:
-            trec = self.monitor.create_transaction_record(
-                user, group, transaction_id, job_label, api_action
-            )
-        except MonitorError as e:
-            self.log(e.message, RK.LOG_ERROR)
-        return trec
-
-    def _get_transaction_record(
+    def _get_transaction_record_with_retry(
         self,
         user,
         group,
-        transaction_id,
-        job_label,
-        api_action,
-        warnings,
-        with_for_update=False,
+        idd: int = None,
+        transaction_id: str = None,
+        with_for_update: bool = False,
     ):
         # Find an existing transaction record with the transaction id.
         try:
-            trec = self.monitor.get_transaction_record(
-                user,
-                group,
-                idd=None,
-                transaction_id=transaction_id,
-                with_for_update=with_for_update,
-            )
+            args = [user, group]
+            kwargs = {
+                "idd": idd,
+                "transaction_id": transaction_id,
+                "with_for_update": with_for_update,
+            }
+            try:
+                trec = retry_call(
+                    self.monitor.get_transaction_record,
+                    fargs=args,
+                    fkwargs=kwargs,
+                    delay=0,
+                    tries=5,
+                    backoff=1,
+                )
+            except Exception as e:
+                raise e
         except MonitorError as e:
             # fine to pass here as if transaction_record is not returned then it
             # will be created in the next step
             self.log(e.message, RK.LOG_ERROR)
             raise e
 
-        # create any warnings if there are any
-        if warnings and len(warnings) > 0:
-            for w in warnings:
-                warning = self.monitor.create_warning(trec, w)
         return trec
 
     def _get_or_create_sub_record(self, trec, sub_id, state, with_for_update=False):
@@ -389,9 +383,12 @@ class MonitorConsumer(RMQC):
         # start the database transactions
         self.monitor.start_session()
         # create the transaction record
-        trec = self._create_transaction_record(
-            user, group, transaction_id, job_label=job_label, api_action=api_action
-        )
+        try:
+            trec = self.monitor.create_transaction_record(
+                user, group, transaction_id, job_label, api_action
+            )
+        except MonitorError as e:
+            self.log(e.message, RK.LOG_ERROR)
         # save and end the sessions
         self.monitor.save()
         self.monitor.end_session()
@@ -445,19 +442,26 @@ class MonitorConsumer(RMQC):
         #       - create a new one if it doesn't
 
         # find the transaction record
+
         try:
-            trec = self._get_transaction_record(
+            trec = self._get_transaction_record_with_retry(
                 user,
                 group,
-                transaction_id,
-                job_label=job_label,
-                api_action=api_action,
-                warnings=warnings,
+                idd=None,
+                transaction_id=transaction_id,
                 with_for_update=True,
             )
         except MonitorError as e:
+            # fine to pass here as if transaction_record is not returned then it
+            # will be created in the next step
+            self.log(e.message, RK.LOG_ERROR)
             # don't ack - try again
             return False
+
+        # create any warnings if there are any
+        if warnings and len(warnings) > 0:
+            for w in warnings:
+                warning = self.monitor.create_warning(trec, w)
 
         # find or create the sub record
         try:
