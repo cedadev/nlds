@@ -78,6 +78,11 @@ class NLDSWorkerConsumer(RMQC):
     def _process_rk_put(self, body_json: Dict) -> None:
         self.log(f"Sending put command to be indexed", RK.LOG_INFO)
 
+        # create the holding
+        new_routing_key = ".".join([RK.ROOT, RK.CATALOG_PUT, RK.INITIATE])
+        self.publish_and_log_message(new_routing_key, body_json)
+
+        # start the indexing
         new_routing_key = ".".join([RK.ROOT, RK.INDEX, RK.INITIATE])
         self.publish_and_log_message(new_routing_key, body_json)
 
