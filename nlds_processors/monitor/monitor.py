@@ -53,9 +53,9 @@ class Monitor(DBMixin):
             )
 
             self.session.add(transaction_record)
-            self.session.flush()
-            # flush to update the transaction_record.id and prevent contention with
-            # any other monitor worker processes
+            self.session.commit()
+            # commit early to update the transaction_record.id and prevent contention
+            # with any other monitor worker processes
         except (IntegrityError, KeyError) as e:
             raise MonitorError(
                 f"Transaction record with transaction_id {transaction_id} "
