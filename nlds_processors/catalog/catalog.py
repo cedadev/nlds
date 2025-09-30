@@ -261,7 +261,8 @@ class Catalog(DBMixin):
         try:
             holding = Holding(label=label, user=user, group=group)
             self.session.add(holding)
-            self.session.flush()
+            # commit early for this as it is at the top of the tree
+            self.session.commit()
             # update holding.id and prevent contention with any other catalog worker instances
         except (IntegrityError, KeyError) as e:
             raise CatalogError(
