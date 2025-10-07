@@ -18,6 +18,7 @@ from sqlalchemy.exc import (
     ArgumentError,
     NoResultFound,
     DataError,
+    MultipleResultsFound,
 )
 
 from nlds_processors.catalog.catalog_models import (
@@ -119,6 +120,7 @@ class Catalog(DBMixin):
                     f"user:{user} and group:{group}"
                 )
             raise CatalogError(msg)
+
         # check user has permission to read this holding
         if not self._user_has_get_holding_permission(user, group, holding):
             raise CatalogError(
@@ -343,7 +345,6 @@ class Catalog(DBMixin):
                 transaction = transaction_q.with_for_update().one_or_none()
             else:
                 transaction = transaction_q.one_or_none()
-
         except (IntegrityError, KeyError):
             if transaction_id:
                 raise CatalogError(
@@ -351,6 +352,15 @@ class Catalog(DBMixin):
                 )
             else:
                 raise CatalogError(f"Transaction with id {id} not found.")
+        except MultipleResultsFound as e:
+            # this should not happen, but if it does then recover and return the first
+            # good transaction
+            transactions = transaction_q.all()
+            msg = (
+                f"Multiple transactions found for {transactions[0].transaction_id}, "
+                f"count: {len(transactions)}"
+            )
+            raise CatalogError(msg)
         return transaction
 
     def get_location_file(
@@ -367,7 +377,6 @@ class Catalog(DBMixin):
                 file_ = file_q.with_for_update().one_or_none()
             else:
                 file_ = file_q.one_or_none()
-
         except (IntegrityError, KeyError):
             raise CatalogError(f"File for location:{location.id} not retrievable.")
         return file_
@@ -383,8 +392,8 @@ class Catalog(DBMixin):
                 ingest_time=func.now(),
             )
             self.session.add(transaction)
-            self.session.flush()
-            # flush to generate transaction.id and prevent
+            self.session.commit()
+            # Commit to generate transaction.id and prevent additional creations
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Transaction with transaction_id:{transaction_id} could not "
