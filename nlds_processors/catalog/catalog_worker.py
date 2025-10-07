@@ -411,10 +411,12 @@ class CatalogConsumer(RMQC):
             transaction = retry_call(
                 self.catalog.get_transaction,
                 fkwargs=kwargs,
-                delay=0,
+                delay=1,
                 tries=5,
-                backoff=1,
+                backoff=2,
             )
+        except CatalogError as c:
+            self.log(e.message, RK.LOG_ERROR)
         except Exception as e:
             raise e
         return transaction
@@ -481,9 +483,9 @@ class CatalogConsumer(RMQC):
                 self.catalog.get_holding,
                 fargs=args,
                 fkwargs=kwargs,
-                delay=0,
+                delay=1,
                 tries=5,
-                backoff=1,
+                backoff=2,
             )
         except Exception as e:
             raise e
