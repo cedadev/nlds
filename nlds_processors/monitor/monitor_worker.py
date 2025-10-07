@@ -315,9 +315,9 @@ class MonitorConsumer(RMQC):
                     self.monitor.get_transaction_record,
                     fargs=args,
                     fkwargs=kwargs,
-                    delay=0,
+                    delay=1,
                     tries=5,
-                    backoff=1,
+                    backoff=2,
                 )
             except Exception as e:
                 raise e
