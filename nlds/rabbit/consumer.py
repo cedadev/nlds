@@ -334,7 +334,7 @@ class RabbitMQConsumer(ABC, RMQP):
         if warning and len(warning) > 0:
             body_json[MSG.DETAILS][MSG.WARNING] = warning
 
-        # added the delay back in for the PREPARE method
+        # added the delay back in for the PREPARE method, but now works differently
         self.publish_message(monitoring_rk, body_json, delay=delay)
 
     def send_complete(
