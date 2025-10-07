@@ -138,7 +138,7 @@ class RabbitMQPublisher:
         """
         if "name" not in exchange or "type" not in exchange:
             raise ValueError(
-                "Exchange in config file incomplete, cannot " "be declared."
+                "Exchange in config file incomplete, cannot be declared."
             )
 
     def _get_default_properties(self) -> pika.BasicProperties:
