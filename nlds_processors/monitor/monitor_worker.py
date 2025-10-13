@@ -24,9 +24,9 @@ Requires these settings in the /etc/nlds/server_config file:
         }
 """
 
-import json
-from typing import Any, Dict
-from retry import retry
+from typing import Dict
+
+from retry.api import retry_call
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -294,51 +294,47 @@ class MonitorConsumer(RMQC):
             exclude_action = None
         return exclude_action
 
-    def _create_transaction_record(
-        self, user, group, transaction_id, job_label, api_action
-    ):
-        # Create a transaction record with the transaction id.
-        try:
-            trec = self.monitor.create_transaction_record(
-                user, group, transaction_id, job_label, api_action
-            )
-        except MonitorError as e:
-            self.log(e.message, RK.LOG_ERROR)
-        return trec
-
-    @retry(MonitorError, tries=5, delay=1, backoff=0, logger=None)
-    def _get_transaction_record(
-        self, user, group, transaction_id, job_label, api_action, warnings
+    def _get_transaction_record_with_retry(
+        self,
+        user,
+        group,
+        idd: int = None,
+        transaction_id: str = None,
+        with_for_update: bool = False,
     ):
         # Find an existing transaction record with the transaction id.
-        # The transaction id should have been created by _create_transaction_record
-        # during the INITIALISE phase.  However, this might have occurred in a
-        # different process and it might take a while to create, and this
-        # get_transaction_record might be occurring in yet another process which has
-        # arrived at this point before the database has completed creating the
-        # transaction_record (!)
-        # So, we need to retry on the monitor error to ensure that the record is not in
-        # the process of actually being created.
         try:
-            trec = self.monitor.get_transaction_record(
-                user, group, idd=None, transaction_id=transaction_id
-            )
+            args = [user, group]
+            kwargs = {
+                "idd": idd,
+                "transaction_id": transaction_id,
+                "with_for_update": with_for_update,
+            }
+            try:
+                trec = retry_call(
+                    self.monitor.get_transaction_record,
+                    fargs=args,
+                    fkwargs=kwargs,
+                    delay=1,
+                    tries=5,
+                    backoff=2,
+                )
+            except Exception as e:
+                raise e
         except MonitorError as e:
             # fine to pass here as if transaction_record is not returned then it
             # will be created in the next step
             self.log(e.message, RK.LOG_ERROR)
             raise e
 
-        # create any warnings if there are any
-        if warnings and len(warnings) > 0:
-            for w in warnings:
-                warning = self.monitor.create_warning(trec, w)
         return trec
 
-    def _get_or_create_sub_record(self, trec, sub_id, state):
+    def _get_or_create_sub_record(self, trec, sub_id, state, with_for_update=False):
         # get or create a sub record
         try:
-            srec = self.monitor.get_sub_record(trec, sub_id)
+            srec = self.monitor.get_sub_record(
+                trec, sub_id, with_for_update=with_for_update
+            )
         except MonitorError:
             srec = None
 
@@ -376,7 +372,7 @@ class MonitorConsumer(RMQC):
             warnings = self._parse_warnings(body)
         except MonitorError:
             # Functions above handled message logging, here we just return
-            return
+            return True
 
         self.log(
             f"Received monitoring record creation for transaction {transaction_id}, "
@@ -387,9 +383,12 @@ class MonitorConsumer(RMQC):
         # start the database transactions
         self.monitor.start_session()
         # create the transaction record
-        trec = self._create_transaction_record(
-            user, group, transaction_id, job_label=job_label, api_action=api_action
-        )
+        try:
+            trec = self.monitor.create_transaction_record(
+                user, group, transaction_id, job_label, api_action
+            )
+        except MonitorError as e:
+            self.log(e.message, RK.LOG_ERROR)
         # save and end the sessions
         self.monitor.save()
         self.monitor.end_session()
@@ -397,6 +396,7 @@ class MonitorConsumer(RMQC):
             f"... Successfully created monitoring record",
             RK.LOG_INFO,
         )
+        return True
 
     def _monitor_put(self, body: Dict[str, str]) -> None:
         """
@@ -414,7 +414,7 @@ class MonitorConsumer(RMQC):
             warnings = self._parse_warnings(body)
         except MonitorError:
             # Functions above handled message logging, here we just return
-            return
+            return True
 
         # get last process from route
         route = body[MSG.DETAILS][MSG.ROUTE]
@@ -442,21 +442,36 @@ class MonitorConsumer(RMQC):
         #       - create a new one if it doesn't
 
         # find the transaction record
-        trec = self._get_transaction_record(
-            user,
-            group,
-            transaction_id,
-            job_label=job_label,
-            api_action=api_action,
-            warnings=warnings,
-        )
+
+        try:
+            trec = self._get_transaction_record_with_retry(
+                user,
+                group,
+                idd=None,
+                transaction_id=transaction_id,
+                with_for_update=True,
+            )
+        except MonitorError as e:
+            # fine to pass here as if transaction_record is not returned then it
+            # will be created in the next step
+            self.log(e.message, RK.LOG_ERROR)
+            # don't ack - try again
+            return False
+
+        # create any warnings if there are any
+        if warnings and len(warnings) > 0:
+            for w in warnings:
+                warning = self.monitor.create_warning(trec, w)
 
         # find or create the sub record
         try:
-            srec = self._get_or_create_sub_record(trec, sub_id, state)
+            srec = self._get_or_create_sub_record(
+                trec, sub_id, state, with_for_update=True
+            )
         except MonitorError as e:
             # Function above handled message logging, here we just return
-            return
+            # don't ack - try again
+            return False
 
         # Update subrecord to match new monitoring data
         try:
@@ -466,7 +481,8 @@ class MonitorConsumer(RMQC):
             # callback
             self.log(e.message, RK.LOG_ERROR)
             # session.rollback() # rollback needed?
-            return
+            # don't ack - try again
+            return False
 
         # Create failed_files if necessary
         if state in State.get_failed_states():
@@ -496,7 +512,7 @@ class MonitorConsumer(RMQC):
                 self.monitor.check_completion(trec)
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
-                return
+                return False
 
         # Commit all transactions when we're sure everything is as it should be.
         self.monitor.save()
@@ -505,6 +521,7 @@ class MonitorConsumer(RMQC):
             f"... Successfully commited monitoring update",
             RK.LOG_INFO,
         )
+        return True
 
     def _monitor_get(self, body: Dict[str, str], properties: Header) -> None:
         """
@@ -647,7 +664,7 @@ class MonitorConsumer(RMQC):
     ) -> None:
         # Connect to database if not connected yet
         # Convert body from bytes to json for ease of manipulation
-        body = json.loads(body)
+        body = self._deserialize(body)
 
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",

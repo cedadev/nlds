@@ -153,8 +153,9 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
 
         try:
             bucket_name = self._get_bucket_name(transaction_id=transaction_id)
-            self._make_bucket(bucket_name)
-            self._set_access_policies(bucket_name=bucket_name, group=group)
+            # set access policies only if bucket is created
+            if (self._make_bucket(bucket_name)):
+                self._set_access_policies(bucket_name=bucket_name, group=group)
         except BucketError as e:
             # If the bucket cannot be created, due to a S3 error, then fail all the
             # files in the transaction

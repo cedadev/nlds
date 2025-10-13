@@ -88,11 +88,14 @@ def run_test_small_and_large_files():
     # model a potential real world scenario:
     # a mix of small files, like manifests and metadata plus
     # a mix of large files, like actual data
-    small_files = generate_random_files(1000, size_min=1 * 1024, size_max=1000 * 1024)
+    small_files = generate_random_files(1000, size_min=1 * 1024, size_max=10 * 1024)
     big_files = generate_random_files(
-        1000, size_min=10 * 1024 * 1024 * 1024, size_max=100 * 1024 * 1024 * 1024
+        1000, size_min=1 * 1024 * 1024 * 1024, size_max=10 * 1024 * 1024 * 1024
     )
-    flist = small_files + big_files
+    med_files = generate_random_files(
+        1000, size_min=1 * 1024 * 1024, size_max=10 * 1024 * 1024
+    )
+    flist = small_files + big_files + med_files
 
     target_bin_size = 5000000000  # (5 GB) - this is from the NLDS config settings
     target_bin_count = 1000
@@ -105,6 +108,7 @@ def run_test_small_and_large_files():
     for c, b in enumerate(bins):
         print(c, ":", len(b), bin_size(b), bin_min(b), bin_max(b))
     print("Time elapsed", et - st)
+
 
 if __name__ == "__main__":
     run_test_small_files()

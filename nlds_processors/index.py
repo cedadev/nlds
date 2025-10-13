@@ -115,8 +115,7 @@ class IndexerConsumer(StattingConsumer):
 
     def callback(self, ch, method, properties, body, connection):
         self.reset()
-        # Convert body from bytes to string for ease of manipulation
-        body_json = json.loads(body)
+        body_json = self._deserialize(body)
 
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",

@@ -43,7 +43,7 @@ class NLDSWorkerConsumer(RMQC):
         """Process the message to get the routing key parts, message data
         and message details"""
 
-        body_json = json.loads(body)
+        body_json = self._deserialize(body)
 
         self.log(
             f"Appending rerouting information to message: "
@@ -78,6 +78,11 @@ class NLDSWorkerConsumer(RMQC):
     def _process_rk_put(self, body_json: Dict) -> None:
         self.log(f"Sending put command to be indexed", RK.LOG_INFO)
 
+        # create the holding
+        new_routing_key = ".".join([RK.ROOT, RK.CATALOG_PUT, RK.INITIATE])
+        self.publish_and_log_message(new_routing_key, body_json)
+
+        # start the indexing
         new_routing_key = ".".join([RK.ROOT, RK.INDEX, RK.INITIATE])
         self.publish_and_log_message(new_routing_key, body_json)
 
@@ -345,7 +350,7 @@ class NLDSWorkerConsumer(RMQC):
     ) -> None:
 
         # Convert body from bytes to string for ease of manipulation
-        body_json = json.loads(body)
+        body_json = self._deserialize(body)
 
         self.log(
             f"Received with routing_key: {method.routing_key}",

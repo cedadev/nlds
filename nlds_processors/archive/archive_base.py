@@ -110,8 +110,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 [self.rk_parts[0], self.rk_parts[1], RK.FAILED]
             )
             for file in self.filelist:
-                file.failure_reason = 'Failed in archive transfer init'
-                
+                file.failure_reason = "Failed in archive transfer init"
+
             self.send_pathlist(
                 self.filelist, rk_transfer_failed, self.body_json, state=State.FAILED
             )
@@ -142,7 +142,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             sub_lists = bin_files(
                 self.filelist,
                 target_bin_count=self.filelist_max_len,
-                target_bin_size=self.filelist_max_size
+                target_bin_size=self.filelist_max_size,
             )
             # assign ARCHIVE_GETTING or ARCHIVE_PUTTING to make it more obvious to the
             # user what is actually happening

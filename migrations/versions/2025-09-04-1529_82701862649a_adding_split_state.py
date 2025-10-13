@@ -8,8 +8,6 @@ Create Date: 2025-09-04 15:29:03.369722
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
-
-from sqlalchemy.dialects import postgresql
 from enum import Enum as PyEnum
 
 # revision identifiers, used by Alembic.

@@ -122,7 +122,6 @@ class JasminAuthenticator(BaseAuthenticator):
                 )
         else:
             return False
-        return user
 
 
     def authenticate_group(self, oauth_token: str, group: str):

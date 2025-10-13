@@ -255,10 +255,11 @@ class S3ToTarfileStream(BucketMixin):
                 try:
                     # get or create the bucket
                     try:
-                        self._make_bucket(bucket_name=bucket_name)
-                        self._set_access_policies(
-                            bucket_name=bucket_name, group=path_details.group
-                        )
+                        # set access policies only if bucket is created
+                        if (self._make_bucket(bucket_name=bucket_name)):
+                            self._set_access_policies(
+                                bucket_name=bucket_name, group=path_details.group
+                            )
                     except BucketError as e:
                         raise S3StreamError(
                             f"Cannot make bucket {bucket_name}, reason: str{e}"
