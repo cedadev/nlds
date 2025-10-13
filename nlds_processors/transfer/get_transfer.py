@@ -178,7 +178,10 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         else:
             term_path = target_path
         pardir = download_path
-        while pardir != term_path and pardir.owner() == self.chown_user:
+        while pardir != term_path:
+            # only change the directories owned by the chown_user, but do traverse all
+            # the way to the top - this is why we build a list of directories to change
+            # but we continue all the way up to term_path
             pardir = pardir.parent.absolute()
             if pardir != target_path and pardir.owner() == self.chown_user:
                 pardirs.append(pardir)
