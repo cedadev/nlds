@@ -101,7 +101,7 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
                     body_json=body_json,
                     state=State.TRANSFER_PUTTING,
                 )
-            except (HTTPError, MaxRetryError) as e:
+            except (HTTPError, MaxRetryError, PermissionError) as e:
                 reason = (
                     f"Error uploading {path_details.path} to object " f"store: {e}."
                 )
