@@ -30,7 +30,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
     DEFAULT_QUEUE_NAME = "archive_get_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.ARCHIVE_GET}." f"{RK.WILD}"
     DEFAULT_STATE = State.ARCHIVE_GETTING
-    PREPARE_DELAY = 60 * 1000  # 60 seconds delay between PREPARE_check requests
+    PREPARE_DELAY = 60  # 60 seconds delay between PREPARE_check requests
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         self.preparelist = []
@@ -336,8 +336,10 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         path_details.failure_reason = e.message
                         self.failedlist.append(path_details)
 
-        # only three outcomes here - 1. either all the tarfiles (and, by extension, all
-        # files) are complete, 2. are not complete, or 3. everything failed
+        # only three outcomes here -
+        # 1. either all the tarfiles (and, by extension, all files) are complete
+        # 2. are not complete, or
+        # 3. everything failed
         if len(self.failedlist) > 0:
             self.send_pathlist(
                 self.failedlist,

@@ -15,11 +15,14 @@ import logging
 from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Any
 import pathlib
-from collections.abc import Sequence
+import zlib
+import base64
+from copy import copy
+from retry import retry
+from threading import Timer
 
 import pika
 from pika.exceptions import AMQPConnectionError, UnroutableError, ChannelWrongStateError
-from retry import retry
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
@@ -41,6 +44,14 @@ class RabbitMQPublisher:
             self.general_config = self.whole_config[CFG.GENERAL_CONFIG_SECTION]
         else:
             self.general_config = dict()
+
+        if (
+            CFG.RABBIT_CONFIG_COMPRESS in self.config
+            and self.config[CFG.RABBIT_CONFIG_COMPRESS]
+        ):
+            self.compress = True
+        else:
+            self.compress = False
 
         # Set name for logging purposes
         self.name = name
@@ -113,23 +124,11 @@ class RabbitMQPublisher:
             raise RabbitRetryError(str(e), ampq_exception=e)
 
     def declare_bindings(self) -> None:
-        """Go through list of exchanges from config file and declare each. Will
-        also declare delayed exchanges for use in scheduled messaging if the
-        delayed flag is present and activated for a given exchange.
-
-        """
+        """Go through list of exchanges from config file and declare each."""
         for exchange in self.exchanges:
-            if exchange["delayed"]:
-                args = {"x-delayed-type": exchange["type"]}
-                self.channel.exchange_declare(
-                    exchange=exchange["name"],
-                    exchange_type="x-delayed-message",
-                    arguments=args,
-                )
-            else:
-                self.channel.exchange_declare(
-                    exchange=exchange["name"], exchange_type=exchange["type"]
-                )
+            self.channel.exchange_declare(
+                exchange=exchange["name"], exchange_type=exchange["type"]
+            )
 
     @staticmethod
     def verify_exchange(exchange):
@@ -137,21 +136,99 @@ class RabbitMQPublisher:
         Throws a ValueError if not.
 
         """
-        if (
-            "name" not in exchange
-            or "type" not in exchange
-            or "delayed" not in exchange
-        ):
+        if "name" not in exchange or "type" not in exchange:
             raise ValueError(
-                "Exchange in config file incomplete, cannot " "be declared."
+                "Exchange in config file incomplete, cannot be declared."
             )
 
-    def _get_default_properties(self, delay: int = 0) -> pika.BasicProperties:
+    def _get_default_properties(self) -> pika.BasicProperties:
         return pika.BasicProperties(
             content_encoding="application/json",
-            headers={"x-delay": delay},
             delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE,
         )
+
+    def _serialize(self, msg_dict: dict[str, str], indent: int | None = None) -> str:
+        """Serialize the message payload by dumping it to JSON"""
+        # copy the message as we are altering it and want to keep the original unchanged
+        msg_dict_out = copy(msg_dict)
+        # get whether we should compress the message or not
+        if self.compress:
+            # if we should then we compress the DATA part of the message, but leave the
+            # DETAILS part uncompressed
+            # we also put a flag in the DETAILS part to say the message is compressed
+            # need to copy the msg_dict otherwise the input dictionary will be
+            # compressed as well
+            msg_dict_out[MSG.DETAILS][MSG.COMPRESS] = True
+            # dump DATA part of dictionary to string, convert to bytes (in ascii
+            # format), then compress the string and reassign to DATA
+            # using level 1 for speed and we see most of the advantage by just using
+            # any compression level
+            byte_string = json.dumps(msg_dict_out[MSG.DATA]).encode("ascii")
+            msg_dict_out[MSG.DATA] = base64.b64encode(
+                zlib.compress(byte_string, level=1)
+            ).decode("ascii")
+            logger.debug(
+                f"Compressing message, original size: {len(byte_string)}, "
+                f" compressed size: {len(msg_dict_out[MSG.DATA])}"
+            )
+        else:
+            logger.debug("Not compressing message!!!")
+
+        return json.dumps(msg_dict_out, indent=indent)
+
+    @retry(RabbitRetryError, tries=-1, delay=1, backoff=2, max_delay=60, logger=logger)
+    def _publish_in_thread(
+        self,
+        routing_key: str,
+        body: str,
+        exchange: str = None,
+        properties: pika.BasicProperties = None,
+        mandatory_fl: bool = True,
+    ):
+        """
+           Publish to the queue in the thread.
+           Opens its own connection and channel.
+           Replicates a very shortened and specialized part of "get_connection"
+        """
+        try:
+            # Start the rabbitMQ connection
+            connection = pika.BlockingConnection(
+                pika.ConnectionParameters(
+                    self.config["server"],
+                    credentials=pika.PlainCredentials(
+                        self.config["user"], self.config["password"]
+                    ),
+                    virtual_host=self.config["vhost"],
+                    heartbeat=self.heartbeat,
+                    blocked_connection_timeout=self.timeout,
+                )
+            )
+
+            # Create a new channel with basic qos
+            channel = connection.channel()
+            channel.basic_qos(prefetch_count=1)
+            channel.confirm_delivery()
+            # add the exchanges from the config
+            for e in self.exchanges:
+                channel.exchange_declare(
+                    exchange=e["name"], exchange_type=e["type"]
+                )
+            channel.basic_publish(
+                exchange=exchange,
+                routing_key=routing_key,
+                properties=properties,
+                body=body,
+                mandatory=mandatory_fl,
+            )
+            channel.close()
+            logger.debug(f"Sending message with key: {routing_key}")
+        except (AMQPConnectionError, ChannelWrongStateError) as e:
+            logger.error(
+                "AMQPConnectionError encountered on attempting to "
+                "establish a connection. Retrying..."
+            )
+            logger.debug(f"{type(e).__name__}: {e}")
+            raise RabbitRetryError(str(e), ampq_exception=e)
 
     @retry(RabbitRetryError, tries=-1, delay=1, backoff=2, max_delay=60, logger=logger)
     def publish_message(
@@ -168,40 +245,43 @@ class RabbitMQPublisher:
         routing. If no exchange is provided it will default to the first
         exchange declared in the server_config.
 
-        An optional delay can be added which will force the message to sit for
-        the specified number of seconds at the exchange before being routed.
-        Note that this only happens if the given (or default if not specified)
-        exchange is declared as a x-delayed-message exchange at start up with
-        the 'delayed' flag.
-
         This is in essence a light wrapper around the basic_publish method in
         pika.
         """
         # add the time stamp to the message here
         msg_dict[MSG.TIMESTAMP] = datetime.now().isoformat(sep="-")
         # JSON the message
-        msg = json.dumps(msg_dict)
+        msg = self._serialize(msg_dict)
 
         if not exchange:
             exchange = self.default_exchange
         if not properties:
-            properties = self._get_default_properties(delay=delay)
-        if delay > 0:
-            # Delayed messages and mandatory acknowledgements are unfortunately
-            # incompatible. For now prioritising delay over the mandatory flag.
-            mandatory_fl = False
+            properties = self._get_default_properties()
 
         if correlation_id:
             properties.correlation_id = correlation_id
 
         try:
-            self.channel.basic_publish(
-                exchange=exchange["name"],
-                routing_key=routing_key,
-                properties=properties,
-                body=msg,
-                mandatory=mandatory_fl,
-            )
+            if delay > 0:
+                kwargs = {
+                    "exchange": exchange["name"],
+                    "routing_key": routing_key,
+                    "properties": properties,
+                    "body": msg,
+                    "mandatory_fl": mandatory_fl,
+                }
+                t = Timer(delay, self._publish_in_thread, args=None, kwargs=kwargs)
+                t.start()
+            else:
+                self.channel.basic_publish(
+                    exchange=exchange["name"],
+                    routing_key=routing_key,
+                    properties=properties,
+                    body=msg,
+                    mandatory=mandatory_fl,
+                )
+                logger.debug(f"Sending message with key: {routing_key}")
+
         except (AMQPConnectionError, ChannelWrongStateError) as e:
             # For any connection error then reset the connection and try again
             logger.error(
@@ -396,9 +476,7 @@ class RabbitMQPublisher:
                         fh_logger.setLevel(getattr(logging, log_level.upper()))
 
                         # Write out a startup message
-                        fh_logger.info(
-                            f"{filestem} file logger set up at " f"{log_level}"
-                        )
+                        fh_logger.info(f"{filestem} file logger set up at {log_level}")
 
                     except (FileNotFoundError, OSError) as e:
                         # TODO: Should probably do something more robustly with
@@ -463,6 +541,7 @@ class RabbitMQPublisher:
             log_message += f"\n{json.dumps(body_json, indent=4)}\n"
         self._log(log_message, log_level, target, **kwargs)
 
+    @classmethod
     def create_log_message(
         cls, message: str, target: str, route: str = None
     ) -> Dict[str, Any]:

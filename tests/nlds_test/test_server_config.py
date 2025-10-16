@@ -12,7 +12,6 @@ import json
 import os
 import copy
 from typing import Iterable
-
 import pytest
 
 # from fixtures import template_config, TEMPLATE_CONFIG_PATH
@@ -24,13 +23,19 @@ from nlds.server_config import (
     CONFIG_SCHEMA,
 )
 
+# define these functions then we can generate the config using the nlds_utils.
+# generate_server_config.  Normally they are defined in local_server_config.py, but
+# that file contains secrets that cannot be checked into a public repo
+
+from nlds_utils.generate_server_config import generate_server_config
 
 TEMPLATE_CONFIG_PATH = os.path.join(
-    os.path.dirname(__file__), "../../nlds/templates/server_config.j2"
+    os.path.dirname(__file__), "server_config.json"
 )
 
 
 def test_load_config():
+    generate_server_config(process="all", output=TEMPLATE_CONFIG_PATH)
     # Check that the template can be effectively loaded, as expected
     assert isinstance(load_config(TEMPLATE_CONFIG_PATH), dict)
 

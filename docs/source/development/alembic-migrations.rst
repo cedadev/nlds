@@ -11,6 +11,7 @@ From an end-user stand point, using alembic is relatively straight forward. If
 you're using your local development environment or deploying to kubernetes (or 
 wherever) the migrations should be designed to be applied in the same manner. 
 Basically, the steps consist of:
+
 1. Make sure alembic is installed (the correct version should be in the 
 ``requirements.txt``)
 2. Change directory to the root of the repo
@@ -28,6 +29,7 @@ automatically. `Mostly`...
 
 So in general we can summarise the steps for a generic upgrade procedure as 
 follows:
+
 1. Do schema migration on database (e.g. add table, add columns, change defaults)
 2. Do data migration (e.g. change values in a column or table)
 3. Do rest of schema migration (e.g. remove columns, add or remove foreign key 

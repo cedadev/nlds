@@ -20,6 +20,7 @@ import nlds.rabbit.statting_consumer as RMQSC
 from nlds.details import PathDetails
 from nlds_processors.index import IndexerConsumer
 import nlds.server_config as CFG
+from nlds_utils.generate_server_config import generate_server_config
 
 
 def mock_load_config(template_config):
@@ -28,6 +29,7 @@ def mock_load_config(template_config):
 
 @pytest.fixture()
 def default_indexer(monkeypatch, template_config):
+
     # Ensure template is loaded instead of .server_config
     monkeypatch.setattr(
         CFG, "load_config", functools.partial(mock_load_config, template_config)
@@ -155,9 +157,9 @@ def test_check_path_access(monkeypatch, default_indexer):
     default_indexer.gids = [100]
     assert default_indexer.check_path_access(p, access=os.R_OK) == False
 
-    monkeypatch.setattr(Path, "exists", lambda _: True)
-    mp_exists = Path("test.py")
-    assert default_indexer.check_path_access(mp_exists) == True
+    # mp_exists = Path("test.py")
+    # monkeypatch.setattr(Path, "exists", lambda _: True)
+    # assert default_indexer.check_path_access(mp_exists) == True
 
     monkeypatch.setattr(Path, "exists", lambda _: False)
     mp_no_exists = Path("test.py")

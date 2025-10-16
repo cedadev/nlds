@@ -39,10 +39,10 @@ class IndexerConsumer(StattingConsumer):
 
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
-        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,  # in kB, default = 16GB
+        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,  # in bytes, default = 16MB
         _PRINT_TRACEBACKS: False,
         _CHECK_FILESIZE: True,
-        _MAX_FILESIZE: (500 * 1000 * 1000),  # in kB, default=500GB
+        _MAX_FILESIZE: (500 * 1000 * 1000),  # in bytes, default=500MB
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -105,7 +105,7 @@ class IndexerConsumer(StattingConsumer):
 
         # Append routing info and then run the index
         body_json = self.append_route_info(body_json)
-        self.log("Starting index scan", RK.LOG_INFO)
+        self.log(f"Starting index scan, {filelist[0].original_path}", RK.LOG_INFO)
 
         # Index the entirety of the passed filelist and check for permissions. The size
         # of the packet will also be evaluated and used to send lists of roughly equal
@@ -115,8 +115,7 @@ class IndexerConsumer(StattingConsumer):
 
     def callback(self, ch, method, properties, body, connection):
         self.reset()
-        # Convert body from bytes to string for ease of manipulation
-        body_json = json.loads(body)
+        body_json = self._deserialize(body)
 
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",
@@ -243,6 +242,7 @@ class IndexerConsumer(StattingConsumer):
             :param str rk_origin:   The first section of the received message's
                 routing key which designates its origin.
             :param dict body_json:  The message body in dict form.
+
         This function checks if each item exists, fully walking any directories and
         subdirectories in the process, and then checks permissions on each
         available file. All accessible files are added to an 'indexed' list and
@@ -253,6 +253,7 @@ class IndexerConsumer(StattingConsumer):
         If any item cannot be found, indexed or accessed then it is added to a
         'failed' list to inform the user that it failed.
         """
+
         rk_complete = ".".join([rk_origin, RK.INDEX, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 

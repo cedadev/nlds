@@ -323,12 +323,12 @@ class PathDetails(BaseModel):
         self.locations.add(pl)
         return pl
 
-    def get_object_store(self) -> PathLocation | None:
+    def get_object_store(self) -> PathLocation:
         """Get the PathLocation for the object storage file."""
         return self._get_location(MSG.OBJECT_STORAGE)
 
     @property
-    def bucket_name(self) -> str | None:
+    def bucket_name(self) -> str:
         """Get the 1st object storage location and return the bucket by munging the string:
         bucket_name = f"nlds.{root}"
         """
@@ -340,7 +340,7 @@ class PathDetails(BaseModel):
             return bucket_name
 
     @property
-    def object_name(self) -> str | None:
+    def object_name(self) -> str:
         """Get the 1st object storage location and return the object_name
         object_name = f"{location.path}"
         """
@@ -373,7 +373,7 @@ class PathDetails(BaseModel):
         self.locations.add(pl)
         return pl
 
-    def get_tape(self) -> PathLocation | None:
+    def get_tape(self) -> PathLocation:
         """Get the PathLocation for the tape file."""
         # note - this only returns the first object - this is fine for now, but might
         # need amending if users want to use different tenancies
@@ -381,7 +381,7 @@ class PathDetails(BaseModel):
         return self._get_location(MSG.TAPE)
 
     @property
-    def tape_name(self) -> str | None:
+    def tape_name(self) -> str:
         pl = self._get_location(MSG.TAPE)
         if pl is None:
             return None

@@ -11,14 +11,14 @@ __contact__ = "neil.massey@stfc.ac.uk"
 import pytest
 
 pyxrootd = pytest.importorskip("pyxrootd")
-from nlds_processors.archive.archive_base import ArchiveError, BaseArchiveConsumer
-
+from nlds_processors.archive.archive_base import ArchiveError
+from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape, S3StreamError
 
 class TestSplitTapeUrl:
 
     def setup_method(self):
         # Assign the static method split_tape_url as a method on the test class
-        self.split_tape_url = BaseArchiveConsumer.split_tape_url
+        self.split_tape_url = S3ToTarfileTape._split_tape_url
 
     def test_valid_tape_url(self):
         # Test a valid tape URL
@@ -30,7 +30,7 @@ class TestSplitTapeUrl:
     def test_invalid_tape_url(self):
         # Test an invalid tape URL without the required '//' separator
         tape_url = "root://server2/path/to/archive"
-        with pytest.raises(ArchiveError) as exc_info:
+        with pytest.raises(S3StreamError) as exc_info:
             self.split_tape_url(tape_url)
         expected_error_msg = (
             f"Tape URL given was invalid. Must be of the form: "
@@ -41,7 +41,7 @@ class TestSplitTapeUrl:
     def test_empty_tape_url(self):
         # Test an empty tape URL
         tape_url = ""
-        with pytest.raises(ArchiveError) as exc_info:
+        with pytest.raises(S3StreamError) as exc_info:
             self.split_tape_url(tape_url)
         expected_error_msg = (
             f"Tape URL given was invalid. Must be of the form: "
@@ -52,7 +52,7 @@ class TestSplitTapeUrl:
     def test_missing_server(self):
         # Test a tape URL missing the server component
         tape_url = "root://path/to/archive"
-        with pytest.raises(ArchiveError) as exc_info:
+        with pytest.raises(S3StreamError) as exc_info:
             self.split_tape_url(tape_url)
         expected_error_msg = (
             f"Tape URL given was invalid. Must be of the form: "
@@ -70,7 +70,7 @@ class TestSplitTapeUrl:
     def test_invalid_prefix(self):
         # Test an invalid tape URL with incorrect prefix
         tape_url = "invalid://server4//path/to/archive"
-        with pytest.raises(ArchiveError) as exc_info:
+        with pytest.raises(S3StreamError) as exc_info:
             self.split_tape_url(tape_url)
         expected_error_msg = (
             f"Tape URL given was invalid. Must be of the form: "
@@ -81,7 +81,7 @@ class TestSplitTapeUrl:
     def test_missing_double_slash(self):
         # Test an invalid tape URL missing the double slash separator
         tape_url = "root:server5//path/to/archive"
-        with pytest.raises(ArchiveError) as exc_info:
+        with pytest.raises(S3StreamError) as exc_info:
             self.split_tape_url(tape_url)
         expected_error_msg = (
             f"Tape URL given was invalid. Must be of the form: "

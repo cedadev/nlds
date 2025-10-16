@@ -8,16 +8,19 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from enum import Enum
 import functools
 from abc import ABC, abstractmethod
 import logging
 import traceback
 from typing import Dict, List, Any
 import pathlib as pth
-import uuid
+from hashlib import md5
+from uuid import UUID, uuid4
 import signal
 import threading as thr
+import json
+import zlib
+import base64
 
 from pika.exceptions import StreamLostError, AMQPConnectionError
 from pika.channel import Channel
@@ -57,6 +60,34 @@ class RabbitQueue(BaseModel):
 
 class SigTermError(Exception):
     pass
+
+
+def deserialize(body: str) -> dict:
+    """Deserialize the message body by calling JSON loads and decompressing the
+    message if necessary."""
+    body_dict = json.loads(body)
+    # check whether the DATA section is serialized
+    if MSG.COMPRESS in body_dict[MSG.DETAILS] and body_dict[MSG.DETAILS][MSG.COMPRESS]:
+        # data is in a b64 encoded ascii string - need to convert to bytes (in
+        # ascii format before decompressing and loading into json
+        try:
+            byte_string = body_dict[MSG.DATA].encode("ascii")
+        except AttributeError:
+            logger.error(
+                "DATA part of message was not compressed, despite compressed flag being"
+                " set in message"
+            )
+        else:
+            decompressed_string = zlib.decompress(base64.b64decode(byte_string))
+            body_dict[MSG.DATA] = json.loads(decompressed_string)
+            logger.debug(
+                f"Decompressing message, compressed size {len(byte_string)}, "
+                f" actual size {len(decompressed_string)}"
+            )
+        # specify that the message is now decompressed, in case it gets passed through
+        # deserialize again
+        body_dict[MSG.DETAILS][MSG.COMPRESS] = False
+    return body_dict
 
 
 class RabbitMQConsumer(ABC, RMQP):
@@ -110,10 +141,6 @@ class RabbitMQConsumer(ABC, RMQP):
         else:
             self.consumer_config = self.DEFAULT_CONSUMER_CONFIG
 
-        # Member variable to keep track of the number of messages spawned during
-        # a callback, for monitoring sub_record creation
-        self.sent_message_count = 0
-
         # (re)Declare the pathlists here to make them available without having
         # to pass them through every function call.
         self.completelist: List[PathDetails] = []
@@ -158,7 +185,6 @@ class RabbitMQConsumer(ABC, RMQP):
         return False
 
     def reset(self) -> None:
-        self.sent_message_count = 0
         self.completelist.clear()
         self.failedlist.clear()
 
@@ -241,6 +267,16 @@ class RabbitMQConsumer(ABC, RMQP):
 
         return new_filelist
 
+    def create_sub_id(self, filelist: List[PathDetails]) -> List[PathDetails]:
+        """Sub id is now created by hashing the paths from the filelist"""
+        if filelist != []:
+            filenames = [f.original_path for f in filelist]
+            filelist_hash = md5("".join(filenames).encode()).hexdigest()
+            sub_id = UUID(filelist_hash)
+        else:
+            sub_id = uuid4()
+        return str(sub_id)
+
     def send_pathlist(
         self,
         pathlist: List[PathDetails],
@@ -260,15 +296,30 @@ class RabbitMQConsumer(ABC, RMQP):
         transaction's state more easily.
 
         """
+        # monitoring routing
+        monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
+        # shouldn't send empty pathlist
+        if len(pathlist) == 0:
+            raise MessageError("Pathlist is empty")
         # If necessary values not set at this point then use default values
         if state is None:
             state = self.DEFAULT_STATE
 
-        # Create new sub_id for each extra subrecord created.
-        if self.sent_message_count >= 1:
-            body_json[MSG.DETAILS][MSG.SUB_ID] = str(uuid.uuid4())
+        # NRM 03/09/2025 - the sub_id is now the hash of the pathlist
+        c_sub_id = body_json[MSG.DETAILS][MSG.SUB_ID]
+        sub_id = self.create_sub_id(pathlist)
+        if sub_id != c_sub_id:
+            self.log(
+                f"Changing sub id from {c_sub_id} to {sub_id} with pathlist {pathlist}",
+                RK.LOG_DEBUG,
+            )
+            # send a splitting message for the old sub id, as it has been split into
+            # sub messagews
+            body_json[MSG.DETAILS][MSG.STATE] = state.SPLIT.value
+            self.publish_message(monitoring_rk, body_json, delay=delay)
+            # reassign the sub_id
+            body_json[MSG.DETAILS][MSG.SUB_ID] = sub_id
 
-        # Send message to next part of workflow
         body_json[MSG.DATA][MSG.FILELIST] = pathlist
         body_json[MSG.DETAILS][MSG.STATE] = state.value
 
@@ -279,10 +330,8 @@ class RabbitMQConsumer(ABC, RMQP):
         if warning and len(warning) > 0:
             body_json[MSG.DETAILS][MSG.WARNING] = warning
 
-        monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
-        # added the delay back in for the PREPARE method
+        # added the delay back in for the PREPARE method, but now works differently
         self.publish_message(monitoring_rk, body_json, delay=delay)
-        self.sent_message_count += 1
 
     def send_complete(
         self,
@@ -292,7 +341,6 @@ class RabbitMQConsumer(ABC, RMQP):
         body_json[MSG.DETAILS][MSG.STATE] = State.COMPLETE
         monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
         self.publish_message(monitoring_rk, body_json)
-        self.sent_message_count += 1
 
     def setup_logging(
         self,
@@ -308,7 +356,6 @@ class RabbitMQConsumer(ABC, RMQP):
         """
         Override of the publisher method which allows consumer-specific logging
         to take precedence over the general logging configuration.
-
         """
         # TODO: (2022-03-01) This is quite verbose and annoying to extend.
         if CFG.LOGGING_CONFIG_SECTION in self.consumer_config:
@@ -424,6 +471,11 @@ class RabbitMQConsumer(ABC, RMQP):
         """
         cb = functools.partial(self._nacknowledge_message, channel, delivery_tag)
         connection.add_callback_threadsafe(cb)
+
+    def _deserialize(self, body: bytes) -> dict[str, str]:
+        """Deserialize the message body by calling JSON loads and decompressing the
+        message if necessary."""
+        return deserialize(body)
 
     @abstractmethod
     def callback(

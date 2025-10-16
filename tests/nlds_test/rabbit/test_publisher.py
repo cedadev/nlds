@@ -24,6 +24,7 @@ from nlds.server_config import (
     LOGGING_CONFIG_STDOUT_LEVEL,
 )
 import nlds.rabbit.message_keys as MSG
+import nlds.server_config as CFG
 
 
 def mock_load_config(template_config):

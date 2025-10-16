@@ -36,12 +36,14 @@ def send_archive_next():
     if CRONJOB_CONFIG_SECTION in rabbit_publisher.whole_config:
         cronjob_config |= rabbit_publisher.whole_config[CRONJOB_CONFIG_SECTION]
 
+    uuid = str(uuid4())
     msg_dict = {
         MSG.DETAILS: {
-            MSG.TRANSACT_ID: str(uuid4()),
-            MSG.SUB_ID: str(uuid4()),
+            MSG.TRANSACT_ID: uuid,
+            # for the root message, the sub_id is the transaction_id
+            MSG.SUB_ID: uuid,
             MSG.TARGET: None,
-            MSG.API_ACTION: "archive-put",
+            MSG.API_ACTION: RK.ARCHIVE_PUT,
             MSG.JOB_LABEL: "archive-next",
             MSG.USER: "admin-placeholder",
             MSG.GROUP: "admin-placeholder",
@@ -62,7 +64,6 @@ def send_archive_next():
     click.echo(f"Sending message to {routing_key}: \n{json.dumps(msg_dict, indent=4)}")
     rabbit_publisher.publish_message(routing_key, msg_dict)
     click.echo("Message sent!")
-
 
 if __name__ == "__main__":
     send_archive_next()

@@ -178,7 +178,10 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         else:
             term_path = target_path
         pardir = download_path
-        while pardir != term_path and pardir.owner() == self.chown_user:
+        while pardir != term_path:
+            # only change the directories owned by the chown_user, but do traverse all
+            # the way to the top - this is why we build a list of directories to change
+            # but we continue all the way up to term_path
             pardir = pardir.parent.absolute()
             if pardir != target_path and pardir.owner() == self.chown_user:
                 pardirs.append(pardir)
@@ -218,11 +221,11 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         # the download path to have the same ownership
         created_paths = []
         # keep a list of all the links so that they can be recreated later
-        link_paths = []
+        file_is_link_paths = []
         for path_details in filelist:
             # Don't transfer symbolic links
             if path_details.path_type == PathType.LINK:
-                link_paths.append(path_details)
+                file_is_link_paths.append(path_details)
                 continue
             try:
                 # get the bucket and object name and check the bucket exists
@@ -280,14 +283,15 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
 
         # add the links for the linked paths
         link_warnings = []
-        link_paths = []
-        for lp in link_paths:
+        complete_link_paths = []
+        failed_link_paths = []
+        for lp in file_is_link_paths:
             try:
                 # original_path is the symlink, link_path is the actual path
                 symlink = self._get_download_path(lp, target_path)
                 actual_path = self._get_linked_path(lp, target_path)
                 symlink.symlink_to(actual_path)
-                link_paths.append(lp)
+                complete_link_paths.append(lp)
             except (
                 TransferError,
                 FileExistsError,
@@ -297,15 +301,26 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 warning = f"Error creating symlink: {e}"
                 link_warnings.append(warning)
                 self.log(warning, RK.LOG_WARNING)
+                failed_link_paths.append(lp)
         # we need to acknowledge that the links have been created as well,
         # otherwise the job won't complete
-        self.send_pathlist(
-            link_paths,
-            routing_key=rk_complete,
-            body_json=body_json,
-            state=State.TRANSFER_GETTING,
-            warning=link_warnings,
-        )
+        if len(complete_link_paths) > 0:
+            self.send_pathlist(
+                complete_link_paths,
+                routing_key=rk_complete,
+                body_json=body_json,
+                state=State.TRANSFER_GETTING,
+                warning=link_warnings,
+            )
+
+        if len(failed_link_paths) > 0:
+            self.send_pathlist(
+                failed_link_paths,
+                routing_key=rk_failed,
+                body_json=body_json,
+                state=State.FAILED,
+                warning=link_warnings
+            )
 
     @retry(S3Error, tries=5, delay=10, backoff=10, logger=None)
     def transfer(

@@ -1,49 +1,23 @@
-"""update_states
+"""Adding SPLIT state
 
-Revision ID: c7648694325f
-Revises: f1f20ae58def
-Create Date: 2024-12-16 16:05:21.356662
+Revision ID: 82701862649a
+Revises: 87bbd9e274a1
+Create Date: 2025-09-04 15:29:03.369722
 
 """
-
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from enum import Enum as PyEnum
 
 # revision identifiers, used by Alembic.
-revision = "c7648694325f"
-down_revision = "f1f20ae58def"
+revision = '82701862649a'
+down_revision = '87bbd9e274a1'
 branch_labels = None
 depends_on = None
 
 
 class OldState(PyEnum):
-    # Generic states
-    INITIALISING = -1
-    ROUTING = 0
-    COMPLETE = 100
-    FAILED = 101
-    # PUT workflow states
-    SPLITTING = 1
-    INDEXING = 2
-    CATALOG_PUTTING = 3
-    TRANSFER_PUTTING = 4
-    CATALOG_ROLLBACK = 5
-    # GET workflow states
-    CATALOG_GETTING = 10
-    ARCHIVE_GETTING = 11
-    TRANSFER_GETTING = 12
-    # ARCHIVE_PUT workflow states
-    ARCHIVE_INIT = 20
-    CATALOG_ARCHIVE_AGGREGATING = 21
-    ARCHIVE_PUTTING = 22
-    CATALOG_ARCHIVE_UPDATING = 23
-    # Shared ARCHIVE states
-    CATALOG_ARCHIVE_ROLLBACK = 40
-
-
-class NewState(PyEnum):
     # Generic states
     INITIALISING = -1
     ROUTING = 0
@@ -74,32 +48,69 @@ class NewState(PyEnum):
     # Initial state for searching for sub-states
     SEARCHING = 1000
 
+class NewState(PyEnum):
+    # Generic states
+    INITIALISING = -1
+    ROUTING = 0
+    # PUT workflow states
+    SPLITTING = 1
+    INDEXING = 2
+    CATALOG_PUTTING = 3
+    TRANSFER_PUTTING = 4
+    # GET workflow states
+    CATALOG_GETTING = 10
+    ARCHIVE_GETTING = 11
+    TRANSFER_GETTING = 12
+    TRANSFER_INIT = 13
+    # ARCHIVE_PUT workflow states
+    ARCHIVE_INIT = 20
+    ARCHIVE_PUTTING = 21
+    ARCHIVE_PREPARING = 22
+    # CATALOG manipulation workflow states
+    CATALOG_DELETING = 30
+    CATALOG_UPDATING = 31
+    CATALOG_ARCHIVE_UPDATING = 32
+    CATALOG_REMOVING = 33
+    # Complete states
+    COMPLETE = 100
+    FAILED = 101
+    COMPLETE_WITH_ERRORS = 102
+    COMPLETE_WITH_WARNINGS = 103
+    SPLIT = 110
+    # Initial state for searching for sub-states
+    SEARCHING = 1000
 
 # A map from the old values of State to the new ones, including doubling up on
 # the catalog_restoring
 state_map = {
     OldState.INITIALISING: NewState.INITIALISING,
     OldState.ROUTING: NewState.ROUTING,
-    OldState.COMPLETE: NewState.COMPLETE,
-    OldState.FAILED: NewState.FAILED,
     # PUT workflow states
     OldState.SPLITTING: NewState.SPLITTING,
     OldState.INDEXING: NewState.INDEXING,
     OldState.CATALOG_PUTTING: NewState.CATALOG_PUTTING,
     OldState.TRANSFER_PUTTING: NewState.TRANSFER_PUTTING,
-    OldState.CATALOG_ROLLBACK: NewState.CATALOG_REMOVING,
     # GET workflow states
     OldState.CATALOG_GETTING: NewState.CATALOG_GETTING,
     OldState.ARCHIVE_GETTING: NewState.ARCHIVE_GETTING,
     OldState.TRANSFER_GETTING: NewState.TRANSFER_GETTING,
-    # DEL workflow states
-    # ARCHIVE_PUT workflow states
+    OldState.TRANSFER_INIT: NewState.TRANSFER_INIT,
     OldState.ARCHIVE_INIT: NewState.ARCHIVE_INIT,
-    OldState.CATALOG_ARCHIVE_AGGREGATING: NewState.TRANSFER_INIT,
     OldState.ARCHIVE_PUTTING: NewState.ARCHIVE_PUTTING,
+    OldState.ARCHIVE_PREPARING: NewState.ARCHIVE_GETTING,
+    # CATALOG manipulation workflow states
+    OldState.CATALOG_DELETING: NewState.CATALOG_DELETING,
+    OldState.CATALOG_UPDATING: NewState.CATALOG_ARCHIVE_UPDATING,
     OldState.CATALOG_ARCHIVE_UPDATING: NewState.CATALOG_ARCHIVE_UPDATING,
-    # Shared ARCHIVE states
-    OldState.CATALOG_ARCHIVE_ROLLBACK: NewState.CATALOG_ARCHIVE_UPDATING,
+    OldState.CATALOG_REMOVING: NewState.CATALOG_REMOVING,
+    # Complete states
+    OldState.COMPLETE: NewState.COMPLETE,
+    OldState.FAILED: NewState.FAILED,
+    OldState.COMPLETE_WITH_ERRORS: NewState.COMPLETE_WITH_ERRORS,
+    OldState.COMPLETE_WITH_WARNINGS: NewState.COMPLETE_WITH_WARNINGS,
+    # Initial state for searching for sub-states
+    OldState.SEARCHING: NewState.SEARCHING
+
 }
 
 # reverse mapping of above for downgrade
@@ -115,33 +126,28 @@ reverse_map = {
     NewState.CATALOG_GETTING: OldState.CATALOG_GETTING,
     NewState.ARCHIVE_GETTING: OldState.ARCHIVE_GETTING,
     NewState.TRANSFER_GETTING: OldState.TRANSFER_GETTING,
-    NewState.TRANSFER_INIT: OldState.INITIALISING,
+    NewState.TRANSFER_INIT: OldState.TRANSFER_INIT,
     NewState.ARCHIVE_INIT: OldState.ARCHIVE_INIT,
     NewState.ARCHIVE_PUTTING: OldState.ARCHIVE_PUTTING,
     NewState.ARCHIVE_PREPARING: OldState.ARCHIVE_GETTING,
     # CATALOG manipulation workflow states
-    NewState.CATALOG_DELETING: OldState.CATALOG_ROLLBACK,
+    NewState.CATALOG_DELETING: OldState.CATALOG_DELETING,
     NewState.CATALOG_UPDATING: OldState.CATALOG_ARCHIVE_UPDATING,
     NewState.CATALOG_ARCHIVE_UPDATING: OldState.CATALOG_ARCHIVE_UPDATING,
-    NewState.CATALOG_REMOVING: OldState.CATALOG_ROLLBACK,
+    NewState.CATALOG_REMOVING: OldState.CATALOG_REMOVING,
     # Complete states
     NewState.COMPLETE: OldState.COMPLETE,
     NewState.FAILED: OldState.FAILED,
-    NewState.COMPLETE_WITH_ERRORS: OldState.COMPLETE,
-    NewState.COMPLETE_WITH_WARNINGS: OldState.COMPLETE,
+    NewState.COMPLETE_WITH_ERRORS: OldState.COMPLETE_WITH_ERRORS,
+    NewState.COMPLETE_WITH_WARNINGS: OldState.COMPLETE_WITH_WARNINGS,
+    NewState.SPLIT: OldState.COMPLETE,
     # Initial state for searching for sub-states
-    NewState.SEARCHING: OldState.INITIALISING,
+    NewState.SEARCHING: OldState.SEARCHING
 }
-
-# clash CATALOG_ARCHIVE_AGGREGATING = 21 (old),
-#       ARCHIVE_PUTTING = 21 (new)
-# clash ARCHIVE_PUTTING = 22 (old),
-#       ARCHIVE_PREPARING = 22 (new),
 
 # Create ENUM types, one for old, one for new
 old_enum = sa.Enum(OldState, name="oldstate")
 new_enum = sa.Enum(NewState, name="newstate")
-
 
 def upgrade(engine_name: str) -> None:
     globals()["upgrade_%s" % engine_name]()
@@ -150,18 +156,11 @@ def upgrade(engine_name: str) -> None:
 def downgrade(engine_name: str) -> None:
     globals()["downgrade_%s" % engine_name]()
 
-
 def upgrade_catalog() -> None:
-    # ### commands auto generated by Alembic - please adjust! ###
     pass
-    # ### end Alembic commands ###
-
 
 def downgrade_catalog() -> None:
-    # ### commands auto generated by Alembic - please adjust! ###
     pass
-    # ### end Alembic commands ###
-
 
 def upgrade_monitor() -> None:
     # create new enum
@@ -269,3 +268,7 @@ def downgrade_monitor() -> None:
 
     # Commit the changes to the db.
     session.commit()
+    # ### commands auto generated by Alembic - please adjust! ###
+    pass
+    # ### end Alembic commands ###
+

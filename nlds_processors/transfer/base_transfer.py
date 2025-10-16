@@ -54,13 +54,12 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.reset()
 
         # Convert body from bytes to string for ease of manipulation
-        self.body = body.decode("utf-8")
-        self.body_json = json.loads(self.body)
+        self.body_json = self._deserialize(body)
 
         if self._is_system_status_check(
             body_json=self.body_json, properties=properties
         ):
-            return False
+            return
 
         self.log(
             f"Received from {self.queues[0].name} ({method.routing_key})",
@@ -75,7 +74,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.log(
                 "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
-            return False
+            return
 
         ###
         # Verify and load message contents
@@ -83,13 +82,13 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.transaction_id = self.body_json[MSG.DETAILS][MSG.TRANSACT_ID]
         except KeyError:
             self.log("Transaction id unobtainable, exiting callback.", RK.LOG_ERROR)
-            return False
+            return
 
         try:
             self.filelist = self.parse_filelist(self.body_json)
         except TypeError as e:
             self.log("Filelist not parseable, exiting callback", RK.LOG_ERROR)
-            return False
+            return
 
         try:
             (self.access_key, self.secret_key, self.tenancy) = (
@@ -97,7 +96,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             )
         except TransferError:
             self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
-            return False
+            return
 
         # Set uid and gid from message contents
         self.log("Setting uid and gids now.", RK.LOG_INFO)
@@ -107,7 +106,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             # reset uid and gid for deletion process
             msg = "Problem running set_ids in _callback_common, exiting"
             self.log(msg, RK.LOG_ERROR)
-            return False
+            return
 
         # Append route info to message to track the route of the message
         self.body_json = self.append_route_info(self.body_json)
@@ -154,7 +153,11 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             rk_transfer_start = ".".join([self.rk_parts[0], self.rk_parts[1], RK.START])
             # Aggregate files into bins of approximately equal size and split
             # the transaction into subtransactions to allow parallel transfers
-            sub_lists = bin_files(self.filelist)
+            sub_lists = bin_files(
+                self.filelist,
+                target_bin_count=self.filelist_max_len,
+                target_bin_size=self.filelist_max_size,
+            )
             # assign the state to TRANSFER_PUTTING or TRANSFER_GETTING to make it more
             # clear to the user what is happening
             if api_method in [RK.PUT, RK.PUTLIST]:

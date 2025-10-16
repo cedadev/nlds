@@ -10,11 +10,13 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from fastapi import FastAPI
 
-from .nlds_setup import API_VERSION
+from .nlds_setup import API_VERSION, API_NAME
 
 from .routers import list, files, probe, status, find, meta, system, init, quota
 
-nlds = FastAPI()
+nlds = FastAPI(
+    title=API_NAME, version=API_VERSION, description="REST API for Near-Line Data Store"
+)
 
 PREFIX = "/api/" + API_VERSION
 nlds.include_router(

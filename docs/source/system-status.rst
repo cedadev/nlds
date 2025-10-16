@@ -157,12 +157,14 @@ When no consumers are running, the info bar is blue, and the status text is red.
   :width: 600
   :alt: All consumers off
 |
+
 When all consumers inside a microservice are offline the info bar is red as well as the status column text for the offline microservice. The working microservices status text is green.
 
 .. image:: _images/status/failed.png
   :width: 600
   :alt: A consumer failed
 |
+
 When some consumers inside a microservice are offline the info bar is red 
 the partially failed microservice's status text is orange.
 
@@ -170,12 +172,12 @@ the partially failed microservice's status text is orange.
   :width: 600
   :alt: some consumers failed
 |
+
 When all consumers online the info bar is green, there is nothing in failed consumer column and all status text is green.
 
 .. image:: _images/status/success.png
   :width: 600
   :alt: All consumers on
-
 |
 
 We get the number of consumers that should be online by an HTTP request to the management API which returns a response containing a dictionary of all consumers in a specific microservice this is counted and used as the total consumers. 

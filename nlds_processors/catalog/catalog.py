@@ -18,6 +18,7 @@ from sqlalchemy.exc import (
     ArgumentError,
     NoResultFound,
     DataError,
+    MultipleResultsFound,
 )
 
 from nlds_processors.catalog.catalog_models import (
@@ -57,12 +58,83 @@ class Catalog(DBMixin):
         label: str = None,
         holding_id: int = None,
         transaction_id: str = None,
+        with_for_update: bool = False,
+    ) -> Holding:
+        """Get a single holding from the database."""
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+        holding_q = self.session.query(Holding)
+        try:
+            # holding id is unique, so we only have to use that in the query
+            if holding_id:
+                holding_q = holding_q.filter(
+                    Holding.id == holding_id,
+                )
+            # transaction id so, we only have to use that in the query
+            elif transaction_id:
+                holding_q = holding_q.filter(
+                    Transaction.holding_id == Holding.id,
+                    Transaction.transaction_id == transaction_id,
+                )
+            # label is unique within the user and group, so we have to filter on those
+            # as well
+            elif label:
+                # "**all**" is the special NLDS admin user (who is authenticated)
+                if group != "**all**":
+                    holding_q = holding_q.filter(Holding.group == group)
+                # if the groupall flag is set then don't filter on user
+                if not groupall and user != "**all**":
+                    holding_q = holding_q.filter(Holding.user == user)
+                holding_q = holding_q.filter(Holding.label == label)
+            # if we are doing an update on the holding then lock the database
+            if with_for_update:
+                holding = holding_q.with_for_update().one()
+            else:
+                # get one holding
+                holding = holding_q.one()
+        except NoResultFound as e:
+            msg = ""
+            if holding_id:
+                msg = (
+                    f"Holding with holding_id:{holding_id} not found for "
+                    f"user:{user} and group:{group}"
+                )
+            elif transaction_id:
+                msg = (
+                    f"Holding containing transaction_id:{transaction_id} not "
+                    f"found for user:{user} and group:{group}"
+                )
+            elif label:
+                msg = (
+                    f"Holding with label:{label} not found for "
+                    f"user:{user} and group:{group}"
+                )
+            raise CatalogError(msg)
+
+        # check user has permission to read this holding
+        if not self._user_has_get_holding_permission(user, group, holding):
+            raise CatalogError(
+                f"User:{user} in group:{group} does not have permission "
+                f"to access the holding with label:{holding.label}."
+            )
+
+        return holding
+
+    def get_holdings(
+        self,
+        user: str,
+        group: str,
+        groupall: bool = False,
+        label: str = None,
+        holding_id: int = None,
+        transaction_id: str = None,
         tag: dict = None,
         regex: bool = False,
         limit: int = None,
         descending: bool = False,
     ) -> List[Holding]:
-        """Get a holding from the database"""
+        """Get a list of matching holdings from the database.  This function can be
+        quite slow!"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
@@ -181,7 +253,9 @@ class Catalog(DBMixin):
         try:
             holding = Holding(label=label, user=user, group=group)
             self.session.add(holding)
-            self.session.flush()  # update holding.id
+            # commit early for this as it is at the top of the tree
+            self.session.commit()
+            # update holding.id and prevent contention with any other catalog worker instances
         except (IntegrityError, KeyError) as e:
             raise CatalogError(
                 f"Holding with label:{label} could not be added to the database."
@@ -240,45 +314,59 @@ class Catalog(DBMixin):
         return holding
 
     def get_transaction(
-        self, id: int = None, transaction_id: str = None
+        self,
+        id: int = None,
+        transaction_id: str = None,
+        with_for_update: bool = False,
     ) -> Transaction:
         """Get a transaction from the database"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
             if transaction_id:
-                transaction = (
-                    self.session.query(Transaction)
-                    .filter(Transaction.transaction_id == transaction_id)
-                    .one_or_none()
+                transaction_q = self.session.query(Transaction).filter(
+                    Transaction.transaction_id == transaction_id
                 )
             else:
-                transaction = (
-                    self.session.query(Transaction)
-                    .filter(Transaction.id == id)
-                    .one_or_none()
+                transaction_q = self.session.query(Transaction).filter(
+                    Transaction.id == id
                 )
+            if with_for_update:
+                transaction = transaction_q.with_for_update().one_or_none()
+            else:
+                transaction = transaction_q.one_or_none()
         except (IntegrityError, KeyError):
             if transaction_id:
                 raise CatalogError(
-                    f"Transaction with transaction_id:{transaction_id} not " "found."
+                    f"Transaction with transaction_id:{transaction_id} not found."
                 )
             else:
                 raise CatalogError(f"Transaction with id {id} not found.")
+        except MultipleResultsFound as e:
+            # this should not happen, but if it does then recover and return the first
+            # good transaction
+            transactions = transaction_q.all()
+            msg = (
+                f"Multiple transactions found for {transactions[0].transaction_id}, "
+                f"count: {len(transactions)}"
+            )
+            raise CatalogError(msg)
         return transaction
 
-    def get_location_file(self, location: Location) -> File:
+    def get_location_file(
+        self, location: Location, with_for_update: bool = False
+    ) -> File:
         """Get a File but from the other end of the database tree, starting from
         a location.
         """
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
-            file_ = (
-                self.session.query(File)
-                .filter(File.id == location.file_id)
-                .one_or_none()
-            )
+            file_q = self.session.query(File).filter(File.id == location.file_id)
+            if with_for_update:
+                file_ = file_q.with_for_update().one_or_none()
+            else:
+                file_ = file_q.one_or_none()
         except (IntegrityError, KeyError):
             raise CatalogError(f"File for location:{location.id} not retrievable.")
         return file_
@@ -294,7 +382,8 @@ class Catalog(DBMixin):
                 ingest_time=func.now(),
             )
             self.session.add(transaction)
-            self.session.flush()  # flush to generate transaction.id
+            self.session.commit()
+            # Commit to generate transaction.id and prevent additional creations
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Transaction with transaction_id:{transaction_id} could not "
@@ -379,6 +468,38 @@ class Catalog(DBMixin):
             )
         return file
 
+    def get_file(
+        self,
+        user: str,
+        group: str,
+        holding_id: int,
+        original_path: str,
+        with_for_update: bool = False,
+    ) -> File:
+        """Quick access to a single file, in a particular holding."""
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+        try:
+            # File belongs to a particular holding, access directly through
+            # Transaction.holding_id
+            file_q = self.session.query(File).filter(
+                File.transaction_id == Transaction.id,
+                Transaction.holding_id == holding_id,
+                File.original_path == original_path,
+            )
+            # if we're going to update the file then use with_for_update
+            if with_for_update:
+                file = file_q.with_for_update().one()
+            else:
+                file = file_q.one()
+        except NoResultFound:
+            msg = (
+                f"File: {original_path} not found in holding with holding_id: "
+                f"{holding_id}"
+            )
+            raise CatalogError(msg)
+        return file
+
     def get_files(
         self,
         user: str,
@@ -403,7 +524,7 @@ class Catalog(DBMixin):
             descending = True
         # Nones are set to .* in the regexp matching
         # get the matching holdings first, these match all but the path
-        holding = self.get_holding(
+        holding = self.get_holdings(
             user,
             group,
             groupall=groupall,
@@ -529,7 +650,7 @@ class Catalog(DBMixin):
                 file_permissions=file_permissions,
             )
             self.session.add(new_file)
-            self.session.flush()  # flush to generate file.id
+            self.session.flush()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"File with original path {original_path} could not be added to"
@@ -569,10 +690,12 @@ class Catalog(DBMixin):
             # first delete the files
             for f in files:
                 # First get parent transaction and holding
-                transaction = self.get_transaction(f.transaction_id)
+                transaction = self.get_transaction(
+                    f.transaction_id, with_for_update=True
+                )
                 holding = self.get_holding(
-                    user, group, holding_id=transaction.holding_id
-                )[0]
+                    user, group, holding_id=transaction.holding_id, with_for_update=True
+                )
                 if not Authenticator.user_has_delete_from_holding_permission(
                     user, group, holding
                 ):
@@ -582,7 +705,6 @@ class Catalog(DBMixin):
                         f"to delete files from the holding with label:"
                         f"{holding.label}."
                     )
-
                 self.session.delete(f)
             self.session.flush()
             # now clean up all the transactions
@@ -600,19 +722,21 @@ class Catalog(DBMixin):
             err_msg = f"File with original_path:{path} could not be deleted"
             raise CatalogError(err_msg)
 
-    def get_location(self, file: File, storage_type: Enum) -> Location:
+    def get_location(
+        self, file: File, storage_type: Enum, with_for_update: bool = False
+    ) -> Location:
         """Get a storage location for a file, given the file and the storage
         type"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
-            location = (
-                self.session.query(Location)
-                .filter(
-                    Location.file_id == file.id, Location.storage_type == storage_type
-                )
-                .one_or_none()
+            location_q = self.session.query(Location).filter(
+                Location.file_id == file.id, Location.storage_type == storage_type
             )
+            if with_for_update:
+                location = location_q.with_for_update().one_or_none()
+            else:
+                location = location_q.one_or_none()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location of storage type {storage_type} not found for file "
@@ -654,7 +778,7 @@ class Catalog(DBMixin):
                 aggregation_id=aggregation_id,
             )
             self.session.add(location)
-            self.session.flush()  # flush to generate location.id
+            self.session.flush()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location with root {root}, path {file_.original_path} and "
@@ -686,21 +810,23 @@ class Catalog(DBMixin):
         try:
             tag = Tag(key=key, value=value, holding_id=holding.id)
             self.session.add(tag)
-            self.session.flush()  # flush to generate tag.id
+            self.session.flush()
         except (IntegrityError, KeyError):
             raise CatalogError(f"Tag could not be added to holding:{holding.label}")
         return tag
 
-    def get_tag(self, holding: Holding, key: str):
+    def get_tag(self, holding: Holding, key: str, with_for_update: bool = False):
         """Get the tag with a specific key"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
-            tag = (
-                self.session.query(Tag)
-                .filter(Tag.key == key, Tag.holding_id == holding.id)
-                .one()
+            tag_q = self.session.query(Tag).filter(
+                Tag.key == key, Tag.holding_id == holding.id
             )  # uniqueness constraint guarantees only one
+            if with_for_update:
+                tag = tag_q.with_for_update().one()
+            else:
+                tag = tag_q.one()
         except (NoResultFound, KeyError):
             raise CatalogError(f"Tag with key:{key} not found")
         return tag
@@ -714,6 +840,7 @@ class Catalog(DBMixin):
             tag = (
                 self.session.query(Tag)
                 .filter(Tag.key == key, Tag.holding_id == holding.id)
+                .with_for_update()
                 .one()
             )  # uniqueness constraint guarantees only one
             tag.value = value
@@ -732,6 +859,7 @@ class Catalog(DBMixin):
             tag = (
                 self.session.query(Tag)
                 .filter(Tag.key == key, Tag.holding_id == holding.id)
+                .with_for_update()
                 .one()
             )  # uniqueness constraint guarantees only one
             self.session.delete(tag)
@@ -754,7 +882,7 @@ class Catalog(DBMixin):
                 failed_fl=False,  # Aggregations fail before creation now
             )
             self.session.add(aggregation)
-            self.session.flush()  # flush to generate aggregation.id
+            self.session.flush()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Aggregation with tarname:{tarname} could not be added to the "
@@ -762,19 +890,22 @@ class Catalog(DBMixin):
             )
         return aggregation
 
-    def get_aggregation(self, aggregation_id: int) -> Aggregation:
+    def get_aggregation(
+        self, aggregation_id: int, with_for_update: bool = False
+    ) -> Aggregation:
         """Simple function for getting of Aggregation from aggregation_id."""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
             # Get the aggregation for a particular file via it's tape location
-            aggregation = (
-                self.session.query(Aggregation)
-                .filter(
-                    Aggregation.id == aggregation_id,
-                )
-                .one_or_none()
+            aggregation_q = self.session.query(Aggregation).filter(
+                Aggregation.id == aggregation_id,
             )
+            if with_for_update:
+                aggregation = aggregation_q.with_for_update().one_or_none()
+            else:
+                aggregation = aggregation_q.one_or_none()
+
             # There should only ever be one aggregation per tape location and
             # only one tape location per file
         except (NoResultFound, KeyError):
@@ -840,7 +971,9 @@ class Catalog(DBMixin):
             raise CatalogError(f"Couldn't get unarchived holdings")
         return next_holding
 
-    def get_unarchived_files(self, holding: Holding) -> List[File]:
+    def get_unarchived_files(
+        self, holding: Holding, with_for_update: bool = False
+    ) -> List[File]:
         """The principal function for getting unarchived files to aggregate and
         send to archive put."""
         if self.session is None:
@@ -849,17 +982,17 @@ class Catalog(DBMixin):
             # Get all files for the given holding. Again we have to ensure that the
             # transfer to object storage has completed and the files are not
             # mid-transfer
-            unarchived_files = (
-                self.session.query(File)
-                .filter(
-                    Transaction.holding_id == holding.id,
-                    File.transaction_id == Transaction.id,
-                    File.path_type == PathType.FILE,
-                    ~File.locations.any(Location.storage_type == Storage.TAPE),
-                    File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
-                )
-                .all()
+            unarchived_files_q = self.session.query(File).filter(
+                Transaction.holding_id == holding.id,
+                File.transaction_id == Transaction.id,
+                File.path_type == PathType.FILE,
+                ~File.locations.any(Location.storage_type == Storage.TAPE),
+                File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
             )
+            if with_for_update:
+                unarchived_files = unarchived_files_q.with_for_update().all()
+            else:
+                unarchived_files = unarchived_files_q.all()
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Couldn't find unarchived files for holding with id:{holding.id}"

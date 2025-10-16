@@ -24,6 +24,7 @@ from nlds.rabbit.state import State
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 
+
 class NLDSWorkerConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "nlds_q"
     DEFAULT_ROUTING_KEY = (
@@ -43,7 +44,7 @@ class NLDSWorkerConsumer(RMQC):
         """Process the message to get the routing key parts, message data
         and message details"""
 
-        body_json = json.loads(body)
+        body_json = self._deserialize(body)
 
         self.log(
             f"Appending rerouting information to message: "
@@ -78,13 +79,18 @@ class NLDSWorkerConsumer(RMQC):
     def _process_rk_put(self, body_json: Dict) -> None:
         self.log(f"Sending put command to be indexed", RK.LOG_INFO)
 
+        # create the holding
+        new_routing_key = ".".join([RK.ROOT, RK.CATALOG_PUT, RK.INITIATE])
+        self.publish_and_log_message(new_routing_key, body_json)
+
+        # start the indexing
         new_routing_key = ".".join([RK.ROOT, RK.INDEX, RK.INITIATE])
         self.publish_and_log_message(new_routing_key, body_json)
 
-        # Do initial monitoring update to ensure that a subrecord at ROUTING is
+        # Initialise the monitoring record to ensure that a subrecord at ROUTING is
         # created before the first job
-        self.log(f"Updating monitor", RK.LOG_INFO)
-        new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
+        self.log(f"Initialising monitor", RK.LOG_INFO)
+        new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.INITIATE])
         body_json[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
         self.publish_and_log_message(new_routing_key, body_json)
 
@@ -93,15 +99,15 @@ class NLDSWorkerConsumer(RMQC):
         queue = f"{RK.CATALOG_GET}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
-            f"Sending  message to {queue} queue with routing key {new_routing_key}",
+            f"Sending message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
 
-        # Do initial monitoring update to ensure that a subrecord at ROUTING is
+        # Initialise the monitoring record to ensure that a subrecord at ROUTING is
         # created before the first job
-        self.log(f"Updating monitor", RK.LOG_INFO)
-        new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
+        self.log(f"Initialising monitor", RK.LOG_INFO)
+        new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.INITIATE])
         body_json[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
         self.publish_and_log_message(new_routing_key, body_json)
 
@@ -422,8 +428,8 @@ class NLDSWorkerConsumer(RMQC):
         connection: Connection,
     ) -> None:
 
-        # Convert body from bytes to string for ease of nipulation
-        body_json = json.loads(body)
+        # Convert body from bytes to string for ease of manipulation
+        body_json = self._deserialize(body)
 
         self.log(
             f"Received with routing_key: {method.routing_key}",
@@ -517,7 +523,7 @@ class NLDSWorkerConsumer(RMQC):
             elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
                 self._process_rk_archive_get_failed(body_json)
 
-        self.log(f"Worker callback complete!", RK.LOG_INFO)
+        self.log(f"Worker callback complete!", RK.LOG_DEBUG)
 
     def publish_and_log_message(self, routing_key: str, msg: dict, log_fl=True) -> None:
         """

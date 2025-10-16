@@ -131,7 +131,6 @@ class JasminAuthenticator(BaseAuthenticator):
                 )
         else:
             return False
-        return user
 
     @retry(requests.ConnectTimeout, tries=5, delay=1, backoff=2)
     def authenticate_group(self, oauth_token: str, group: str):

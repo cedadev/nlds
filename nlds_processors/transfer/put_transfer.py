@@ -93,6 +93,7 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
                     f"bucket {bucket_name} with object_name {pl.path}",
                     RK.LOG_DEBUG,
                 )
+                self.log(f"Uploaded {path_details.original_path}", RK.LOG_INFO)
                 self.append_and_send(
                     self.completelist,
                     path_details,
@@ -100,7 +101,7 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
                     body_json=body_json,
                     state=State.TRANSFER_PUTTING,
                 )
-            except (HTTPError, MaxRetryError) as e:
+            except (HTTPError, MaxRetryError, PermissionError) as e:
                 reason = (
                     f"Error uploading {path_details.path} to object " f"store: {e}."
                 )
@@ -152,8 +153,9 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
 
         try:
             bucket_name = self._get_bucket_name(transaction_id=transaction_id)
-            self._make_bucket(bucket_name)
-            self._set_access_policies(bucket_name=bucket_name, group=group)
+            # set access policies only if bucket is created
+            if (self._make_bucket(bucket_name)):
+                self._set_access_policies(bucket_name=bucket_name, group=group)
         except BucketError as e:
             # If the bucket cannot be created, due to a S3 error, then fail all the
             # files in the transaction

@@ -43,7 +43,7 @@ class LoggingConsumer(RMQP):
 
     def callback(self, ch, method, properties, body, connection):
         # Convert body from bytes to json for ease of manipulation
-        body_json = json.loads(body)
+        body_json = self._deserialize(body)
 
         # Check for system status
         if self._is_system_status_check(body_json=body_json, properties=properties):
@@ -62,9 +62,6 @@ class LoggingConsumer(RMQP):
         logger.info(
             f"Received message with route " f"{body_json[MSG.DETAILS][MSG.ROUTE]}"
         )
-
-        # Print whole json message if in debug
-        logger.debug(json.dumps(body_json, indent=4))
 
         # The log level should be in the routing key, the logger to use should
         # be in the message body under MSG.DETAILS:MSG.LOG_TARGET
@@ -113,8 +110,8 @@ class LoggingConsumer(RMQP):
             log_message = body_json[MSG.DATA][MSG.LOG_MESSAGE]
         except KeyError as e:
             logger.error(
-                f"Invalid message contents, log message should be in "
-                f"the data section of the message body.",
+                f"Invalid message contents, log message should be in the data section "
+                f"of the message body. {body_json[MSG.DATA]}",
                 exc_info=e,
             )
             logger.debug(traceback.format_exc())

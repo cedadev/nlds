@@ -15,14 +15,28 @@ from jinja2 import FileSystemLoader
 import os.path
 import json
 
-from local_server_config import (
-    get_config_dictionary,
-    get_database_dictionary,
-    get_rabbit_dictionary,
-    get_authentication_dictionary,
-    get_rpc_dictionary,
-    get_cronjob_dictionary,
-)
+try:
+    from local_server_config import (
+        get_config_dictionary,
+        get_database_dictionary,
+        get_rabbit_dictionary,
+        get_authentication_dictionary,
+        get_rpc_dictionary,
+        get_cronjob_dictionary,
+    )
+except ImportError:
+    print(
+        "Could not import from local_server_config.py, will import from "
+        "generic_server_config.py"
+    )
+    from nlds_utils.generic_server_config import (
+        get_config_dictionary,
+        get_database_dictionary,
+        get_rabbit_dictionary,
+        get_authentication_dictionary,
+        get_rpc_dictionary,
+        get_cronjob_dictionary,
+    )
 
 all_processors = [
     "archive_get_q",
@@ -38,25 +52,7 @@ all_processors = [
 ]
 
 
-@click.command()
-@click.option(
-    "-p",
-    "--process",
-    default="all",
-    type=str,
-    help="The nlds process to generate the config file for.",
-    required=False,
-)
-@click.option(
-    "-o",
-    "--output",
-    type=str,
-    help="Output path to write the config file to.",
-    required=False,
-    default=None,
-)
 def generate_server_config(process: str, output: str) -> None:
-    # get which processes to render configs for
     if process == "all":
         processors = all_processors
     else:
@@ -81,7 +77,6 @@ def generate_server_config(process: str, output: str) -> None:
 
     # use the config dictionary to get the template file and log file locations
     template_file_location = config["template_file_location"]
-
     # load the server_config.j2 top level config file as JSON dictionary
     filepath = os.path.join(template_file_location)
     loader = FileSystemLoader(searchpath=filepath)
@@ -92,11 +87,13 @@ def generate_server_config(process: str, output: str) -> None:
     ]
 
     # render the server_config
-    server_template = nenv.get_template(name="server_config.j2")
+    template_name = "server_config.j2"
+    server_template = nenv.get_template(name=template_name)
     server_config = server_template.render(config)
     # now render each process' template and add to the server_config
     for process in processors:
-        process_template = nenv.get_template(name=f"processors/{process}.j2")
+        template_name = f"processors/{process}.j2"
+        process_template = nenv.get_template(name=template_name)
         process_config = process_template.render(config)
         process_queue = process_config["rabbitMQ"]["queues"]
         server_config["rabbitMQ"]["queues"].extend(process_queue)
@@ -111,5 +108,27 @@ def generate_server_config(process: str, output: str) -> None:
         print(json.dumps(server_config, indent=4))
 
 
+@click.command()
+@click.option(
+    "-p",
+    "--process",
+    default="all",
+    type=str,
+    help="The nlds process to generate the config file for.",
+    required=False,
+)
+@click.option(
+    "-o",
+    "--output",
+    type=str,
+    help="Output path to write the config file to.",
+    required=False,
+    default=None,
+)
+def generate_server_config_cli(process: str, output: str) -> None:
+    # get which processes to render configs for
+    generate_server_config(process, output)
+
+
 if __name__ == "__main__":
-    generate_server_config()
+    generate_server_config_cli()

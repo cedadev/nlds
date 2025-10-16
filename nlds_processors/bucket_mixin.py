@@ -33,13 +33,13 @@ class BucketMixin:
     GROUP_ACCESS_POLICY_CONFIG = "group"
 
     @staticmethod
-    def _get_bucket_name(transaction_id: str | None):
+    def _get_bucket_name(transaction_id: str):
         if transaction_id is None:
             raise BucketError(message="Transaction id is None")
         bucket_name = f"nlds.{transaction_id}"
         return bucket_name
 
-    def _make_bucket(self, bucket_name: str | None):
+    def _make_bucket(self, bucket_name: str):
         """Check bucket exists and create it if it doesn't"""
         if self.s3_client is None:
             raise BucketError(message="self.s3_client is None")
@@ -55,11 +55,13 @@ class BucketMixin:
                     f"Creating bucket ({bucket_name}) for this transaction",
                     RK.LOG_INFO,
                 )
+                return True
             else:
                 self.log(
                     f"Bucket ({bucket_name}) already exists",
                     RK.LOG_INFO,
                 )
+                return False
         except (S3Error, MaxRetryError) as e:
             raise BucketError(message=str(e))
 
@@ -81,7 +83,7 @@ class BucketMixin:
             reason = "Unable to get bucket_name from message info"
             self.log(
                 f"{reason}, adding {path_details.object_name} to failed list.",
-                RK.LOG_INFO,
+                RK.LOG_DEBUG,
             )
             raise BucketError(message=reason)
         else:

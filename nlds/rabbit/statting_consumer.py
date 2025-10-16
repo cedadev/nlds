@@ -13,6 +13,8 @@ import grp
 import pwd
 import pathlib as pth
 import os
+from uuid import uuid4
+from copy import copy
 
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 import nlds.rabbit.message_keys as MSG
@@ -56,7 +58,7 @@ class StattingConsumer(RMQC):
         self.gids = None
         self.uid = None
 
-        # Memeber variable to keep track of the total filesize of a message's
+        # Member variable to keep track of the total filesize of a message's
         # filelist
         self.completelist_size = 0
         self.filelist_max_size = StattingConsumer.DEFAULT_CONSUMER_CONFIG[
@@ -120,6 +122,7 @@ class StattingConsumer(RMQC):
             # Send directly to exchange and reset filelist
             self.send_pathlist(pathlist, routing_key, body_json, state=state)
             pathlist.clear()
+            self.completelist_size = 0
 
     def _fail_all(
         self,
