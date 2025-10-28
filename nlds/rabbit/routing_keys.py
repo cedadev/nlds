@@ -56,6 +56,7 @@ START = "start"
 COMPLETE = "complete"
 FAILED = "failed"
 NEXT = "next"
+INIT_COMPLETE = "init-complete"
 PREPARE = "prepare"
 PREPARE_CHECK = "prepare-check"
 
