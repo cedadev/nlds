@@ -540,6 +540,7 @@ class CatalogConsumer(RMQC):
                 holding = self._get_holding_with_retry(
                     user, group, label=label, with_for_update=True
                 )
+                create_holding = False
             except CatalogError:
                 create_label = label
                 create_holding = True
@@ -550,6 +551,7 @@ class CatalogConsumer(RMQC):
                 holding = self._get_holding_with_retry(
                     user, group, holding_id=holding_id, with_for_update=True
                 )
+                create_holding = False
             except CatalogError:
                 holding = None
                 create_holding = False
@@ -560,6 +562,7 @@ class CatalogConsumer(RMQC):
                 holding = self._get_holding_with_retry(
                     user, group, transaction_id=transaction_id, with_for_update=True
                 )
+                create_holding = False
             except CatalogError:
                 # label did not exist, so label is the first 8 characters of
                 # transaction_id
