@@ -116,8 +116,8 @@ class Catalog(DBMixin):
                 )
             elif label:
                 msg = (
-                    f"Holding with label:{label} not found for "
-                    f"user:{user} and group:{group}"
+                    f"Holding with label:{label} not found for user:{user} and "
+                    f"group:{group}"
                 )
             raise CatalogError(msg)
 
@@ -251,7 +251,7 @@ class Catalog(DBMixin):
 
         except OperationalError as e:
             raise CatalogError(
-                f"Error when when listing holding for user:{user} and group:{group}. "
+                f"Error when listing holding for user:{user} and group:{group}. "
                 f"Original error {e}"
             )
         return holding
@@ -267,8 +267,10 @@ class Catalog(DBMixin):
             self.session.commit()
             # update holding.id and prevent contention with any other catalog worker instances
         except (IntegrityError, KeyError) as e:
+            self.session.rollback()
             raise CatalogError(
-                f"Holding with label:{label} could not be added to the database."
+                f"Holding with label:{label} could not be added to the database "
+                f"for user:{user} and group:{group}"
             )
         return holding
 
