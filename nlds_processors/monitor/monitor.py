@@ -93,10 +93,14 @@ class Monitor(DBMixin):
         except (NoResultFound, KeyError, OperationalError):
             if idd:
                 raise MonitorError(f"TransactionRecord with id:{idd} not found")
-            else:
+            elif transaction_id:
                 raise MonitorError(
                     f"TransactionRecord with transaction_id:{transaction_id} "
                     f"not found"
+                )
+            else:
+                raise MonitorError(
+                    f"No TransactionRecords found"
                 )
         return trec
 
@@ -182,10 +186,14 @@ class Monitor(DBMixin):
                 raise MonitorError(
                     f"TransactionRecord with job_label:{job_label} " f"not found"
                 )
-            else:
+            elif transaction_id:
                 raise MonitorError(
                     f"TransactionRecord with transaction_id:{transaction_id} "
                     f"not found"
+                )
+            else:
+                raise MonitorError(
+                    f"No TransactionRecords found"
                 )
         except DataError as e:
             if regex:
