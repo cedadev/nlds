@@ -421,7 +421,7 @@ class NLDSWorkerConsumer(RMQC):
 
         elif rk_parts[2] == f"{RK.INIT_COMPLETE}":
             if rk_parts[1] == f"{RK.CATALOG_PUT}":
-                self._process_rk_catalog_init_complete(rk_parts, body_json)
+                self._process_rk_catalog_init_complete(body_json)
         # If a archive-restore has happened from the catalog then we need to get from
         # archive before we can do the transfer from object store.
         elif rk_parts[2] == f"{RK.ARCHIVE_RESTORE}":
