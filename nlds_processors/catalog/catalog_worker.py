@@ -565,6 +565,11 @@ class CatalogConsumer(RMQC):
                 # transaction_id
                 create_label = transaction_id[0:8]
                 create_holding = True
+        else:
+            # no label, holding id or transaction id passed in - create a new holding
+            create_label = transaction_id[0:8]
+            create_holding = True
+
 
         if create_holding:
             # try to create the holding and, if it fails, then fail all the files
