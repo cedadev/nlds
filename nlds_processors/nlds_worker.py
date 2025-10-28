@@ -75,15 +75,11 @@ class NLDSWorkerConsumer(RMQC):
 
         return rk_parts, body_json
 
-    def _process_rk_put(self, body_json: Dict) -> None:
+    def _process_rk_put(self, body_json: Dict[str, str]) -> None:
         self.log(f"Sending put command to be indexed", RK.LOG_INFO)
 
         # create the holding
         new_routing_key = ".".join([RK.ROOT, RK.CATALOG_PUT, RK.INITIATE])
-        self.publish_and_log_message(new_routing_key, body_json)
-
-        # start the indexing
-        new_routing_key = ".".join([RK.ROOT, RK.INDEX, RK.INITIATE])
         self.publish_and_log_message(new_routing_key, body_json)
 
         # Initialise the monitoring record to ensure that a subrecord at ROUTING is
@@ -118,6 +114,11 @@ class NLDSWorkerConsumer(RMQC):
             f"Sending  message to {queue} queue with routing key {new_routing_key}",
             RK.LOG_INFO,
         )
+        self.publish_and_log_message(new_routing_key, body_json)
+
+    def _process_rk_catalog_init_complete(self, body_json: Dict[str, str]) -> None:
+        # start the indexing
+        new_routing_key = ".".join([RK.ROOT, RK.INDEX, RK.INITIATE])
         self.publish_and_log_message(new_routing_key, body_json)
 
     def _process_rk_index_complete(self, body_json: Dict[str, str]) -> None:
@@ -376,7 +377,6 @@ class NLDSWorkerConsumer(RMQC):
             # If index completed then pass file list cataloguing before transfer
             if rk_parts[1] == f"{RK.INDEX}":
                 self._process_rk_index_complete(body_json)
-
             # if catalog_put completed send for transfer
             elif rk_parts[1] == f"{RK.CATALOG_PUT}":
                 self._process_rk_catalog_put_complete(body_json)
@@ -419,6 +419,9 @@ class NLDSWorkerConsumer(RMQC):
             elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_UPDATE}":
                 self._process_rk_catalog_archive_update_complete(rk_parts, body_json)
 
+        elif rk_parts[2] == f"{RK.INIT_COMPLETE}":
+            if rk_parts[1] == f"{RK.CATALOG_PUT}":
+                self._process_rk_catalog_init_complete(rk_parts, body_json)
         # If a archive-restore has happened from the catalog then we need to get from
         # archive before we can do the transfer from object store.
         elif rk_parts[2] == f"{RK.ARCHIVE_RESTORE}":
