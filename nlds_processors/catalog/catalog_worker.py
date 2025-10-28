@@ -503,6 +503,17 @@ class CatalogConsumer(RMQC):
         1. A holding with the label does not already exist
         2. A holding with the holding_id does not already exist
         3. A holding with the transaction_id does not already exist
+
+        Note: there is an additional subtlety here.
+        Users can create a holding with a group id.
+        They can then attempt to put files into the same holding, but with a different
+        group id.
+        The "get_holding" searches below use both the user and group id.  If the user
+        uses a different group id, then the holding will not be found and an attempt to
+        create a new holding will be made.  If this new holding shares a label with an
+        existing holding then a uniqueness constraint on (user, label) will be breached
+        and an exception will occur!  We need to handle this exception, and warn the
+        user appropriately
         """
         # Parse the message body for required variables
         try:
@@ -530,7 +541,8 @@ class CatalogConsumer(RMQC):
                     user, group, label=label, with_for_update=True
                 )
             except CatalogError:
-                holding = self.catalog.create_holding(user, group, label)
+                create_label = label
+                create_holding = True
         elif holding_id is not None:
             # case 2: user has supplied holding id - if a holding with the holding id
             #         doesn't exist then do not create it - it is an error
@@ -540,6 +552,7 @@ class CatalogConsumer(RMQC):
                 )
             except CatalogError:
                 holding = None
+                create_holding = False
         elif transaction_id is not None:
             # case 3: transaction id is supplied - this should always create a holding
             #         but we will test for one already existing for robustness
@@ -551,7 +564,20 @@ class CatalogConsumer(RMQC):
                 # label did not exist, so label is the first 8 characters of
                 # transaction_id
                 create_label = transaction_id[0:8]
+                create_holding = True
+
+        if create_holding:
+            # try to create the holding and, if it fails, then fail all the files
+            try:
                 holding = self.catalog.create_holding(user, group, create_label)
+            except CatalogError as e:
+                # mark all as failed
+                holding = None
+                filelist = self._parse_filelist(body)
+                for f in filelist:
+                    pd = PathDetails.from_dict(f)
+                    pd.failure_reason = e.message
+                    self.failedlist.append(pd)
 
         # now create the transaction within the holding - these are always unique
         if holding:
@@ -560,16 +586,34 @@ class CatalogConsumer(RMQC):
             except CatalogError as e:
                 self.log(e.message, RK.LOG_ERROR)
                 raise e
-
             self.log(
-                (f"... Successfully created / found catalog holding: {holding.id} and "
-                f"created transaction: {transaction.transaction_id}"),
+                (
+                    f"... Successfully created / found catalog holding: {holding.id} and "
+                    f"created transaction: {transaction.transaction_id}"
+                ),
                 RK.LOG_INFO,
             )
-
+        # save the catalog transactions
         self.catalog.save()
         self.catalog.end_session()
-        return True
+        # send the failed or complete messages
+        if len(self.failedlist) > 0:
+            # failed
+            rk_failed = ".".join([rk_origin, RK.CATALOG_PUT, RK.FAILED])
+            self.log(
+                f"Sending failed PathList from CATALOG_PUT {self.failedlist}",
+                RK.LOG_DEBUG,
+            )
+            self.send_pathlist(
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body,
+                state=State.FAILED,
+            )
+        else:
+            # complete
+            rk_complete = ".".join([rk_origin, RK.CATALOG_PUT, RK.INIT_COMPLETE])
+            self.publish_message(rk_complete, body)
 
     def _catalog_put(self, body: Dict, rk_origin: str) -> None:
         """Put a file record into the catalog - end of a put transaction"""
