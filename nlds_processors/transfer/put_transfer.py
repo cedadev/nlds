@@ -128,7 +128,7 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
             raise TransferError(message=msg)
         return group
 
-    @retry(S3Error, tries=5, delay=10, backoff=10, logger=None)
+    @retry((S3Error, BucketError), tries=5, delay=10, backoff=10, logger=None)
     def transfer(
         self,
         transaction_id: str,
