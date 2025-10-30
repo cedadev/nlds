@@ -15,8 +15,10 @@ import json
 from nlds.errors import MessageError
 import grp
 
+
 class BucketError(MessageError):
     pass
+
 
 class BucketMixin:
     """
@@ -44,7 +46,6 @@ class BucketMixin:
 
         if bucket_name is None:
             raise BucketError(message="Transaction id is None")
-
         # Check that bucket exists, and create if not
         try:
             if not self.s3_client.bucket_exists(bucket_name):
@@ -171,7 +172,7 @@ class BucketMixin:
         return grp_details.gr_name
 
     # write the policy setting functions below
-    def _set_access_policies(self, bucket_name: str, group: str|int):
+    def _set_access_policies(self, bucket_name: str, group: str | int):
         """Set the access policies for a bucket.
         These are stored in the /etc/nlds-config file, in the
         `object_store_access_policy` section, under the `nlds_user` and `group` keys.
