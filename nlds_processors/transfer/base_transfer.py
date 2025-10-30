@@ -9,7 +9,6 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from abc import ABC, abstractmethod
-import json
 import os
 from typing import List, NamedTuple, Dict, Tuple
 import pathlib as pth
@@ -174,18 +173,34 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                     state=new_state,
                 )
         elif self.rk_parts[2] == RK.START:
-            # Start transfer - this is implementation specific and handled by
-            # child classes
-            self.log(f"Starting object store transfer with {self.tenancy}", RK.LOG_INFO)
-            self.transfer(
-                self.transaction_id,
-                self.tenancy,
-                self.access_key,
-                self.secret_key,
-                self.filelist,
-                self.rk_parts[0],
-                self.body_json,
-            )
+            if self.rk_parts[1] == RK.TRANSFER_SETUP:
+                self.log(
+                    f"Starting object store setup with {self.tenancy}", RK.LOG_INFO
+                )
+                self.setup(
+                    self.transaction_id,
+                    self.tenancy,
+                    self.access_key,
+                    self.secret_key,
+                    self.filelist,
+                    self.rk_parts[0],
+                    self.body_json,
+                )
+            else:
+                # Start transfer - this is implementation specific and handled by
+                # child classes
+                self.log(
+                    f"Starting object store transfer with {self.tenancy}", RK.LOG_INFO
+                )
+                self.transfer(
+                    self.transaction_id,
+                    self.tenancy,
+                    self.access_key,
+                    self.secret_key,
+                    self.filelist,
+                    self.rk_parts[0],
+                    self.body_json,
+                )
         else:
             raise TransferError(f"Unknown routing key {self.rk_parts[2]}")
 
@@ -222,6 +237,19 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self, path: pth.Path, stat_result: NamedTuple = None, access: int = os.R_OK
     ) -> bool:
         return super().check_path_access(path, stat_result, access)
+
+    @abstractmethod
+    def setup(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
+        raise NotImplementedError
 
     @abstractmethod
     def transfer(

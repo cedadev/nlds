@@ -15,16 +15,14 @@ from minio.error import S3Error
 from retry import retry
 from urllib3.exceptions import HTTPError, MaxRetryError
 
-from nlds_processors.transfer.base_transfer import BaseTransferConsumer
+from nlds_processors.transfer.bucket_transfer import BucketTransferConsumer
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails, PathType
 import nlds.rabbit.routing_keys as RK
-import nlds.rabbit.message_keys as MSG
-from nlds_processors.transfer.transfer_error import TransferError
-from nlds_processors.bucket_mixin import BucketMixin, BucketError
+from nlds_processors.bucket_mixin import BucketError
 
 
-class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
+class PutTransferConsumer(BucketTransferConsumer):
     DEFAULT_QUEUE_NAME = "transfer_put_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_PUT}." f"{RK.WILD}"
     DEFAULT_STATE = State.TRANSFER_PUTTING
@@ -44,8 +42,13 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
         """Transfer the files to the Object Storage"""
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
+
+        # get the bucket name and check that it exists
+        # it should have been created by the *.transfer-setup.start process / message
         try:
             bucket_name = self._get_bucket_name(transaction_id)
+            if not self._bucket_exists(bucket_name):
+                raise BucketError(f"Bucket {bucket_name} does not exist")
         except BucketError as e:
             raise RuntimeError(e.message)
 
@@ -116,19 +119,7 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
                 )
                 continue
 
-    def _parse_group(self, body_json: Dict[str, Any]):
-        # get the group from the details section of the message
-        try:
-            group = body_json[MSG.DETAILS][MSG.GROUP]
-            if group is None:
-                raise ValueError
-        except (KeyError, ValueError):
-            msg = "Group not in message, exiting callback."
-            self.log(msg, RK.LOG_ERROR)
-            raise TransferError(message=msg)
-        return group
-
-    @retry((S3Error, BucketError), tries=5, delay=10, backoff=10, logger=None)
+    @retry(S3Error, tries=5, delay=1, backoff=2, logger=None)
     def transfer(
         self,
         transaction_id: str,
@@ -139,6 +130,8 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
         rk_origin: str,
         body_json: Dict[str, Any],
     ):
+        # create a new client as the access key and secret key could (probably will)
+        # change between messages
         self.s3_client = minio.Minio(
             tenancy,
             access_key=access_key,
@@ -146,42 +139,22 @@ class PutTransferConsumer(BaseTransferConsumer, BucketMixin):
             secure=self.require_secure_fl,
         )
 
-        rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
-        rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
-
-        group = self._parse_group(body_json=body_json)
-
-        try:
-            bucket_name = self._get_bucket_name(transaction_id=transaction_id)
-            # set access policies only if bucket is created
-            if (self._make_bucket(bucket_name)):
-                self._set_access_policies(bucket_name=bucket_name, group=group)
-        except BucketError as e:
-            # If the bucket cannot be created, due to a S3 error, then fail all the
-            # files in the transaction
-            for f in filelist:
-                f.failure_reason = f"S3 error: {e.message} when creating bucket"
-                self.append_and_send(
-                    self.failedlist,
-                    f,
-                    routing_key=rk_failed,
-                    body_json=body_json,
-                    state=State.FAILED,
-                )
-        else:
-            self._transfer_files(
-                transaction_id=transaction_id,
-                tenancy=tenancy,
-                filelist=filelist,
-                rk_origin=rk_origin,
-                body_json=body_json,
-            )
+        self._transfer_files(
+            transaction_id=transaction_id,
+            tenancy=tenancy,
+            filelist=filelist,
+            rk_origin=rk_origin,
+            body_json=body_json,
+        )
 
         self.log(
             "Transfer complete, passing lists back to worker for "
             "re-routing and cataloguing.",
             RK.LOG_INFO,
         )
+
+        rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
+        rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
 
         # Send whatever remains after all items have been (attempted to be) put
         if len(self.completelist) > 0:

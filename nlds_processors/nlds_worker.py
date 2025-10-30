@@ -79,7 +79,7 @@ class NLDSWorkerConsumer(RMQC):
         self.log(f"Sending put command to be indexed", RK.LOG_INFO)
 
         # create the holding
-        new_routing_key = ".".join([RK.ROOT, RK.CATALOG_PUT, RK.INITIATE])
+        new_routing_key = ".".join([RK.ROOT, RK.CATALOG_SETUP, RK.START])
         self.publish_and_log_message(new_routing_key, body_json)
 
         # Initialise the monitoring record to ensure that a subrecord at ROUTING is
@@ -116,7 +116,12 @@ class NLDSWorkerConsumer(RMQC):
         )
         self.publish_and_log_message(new_routing_key, body_json)
 
-    def _process_rk_catalog_init_complete(self, body_json: Dict[str, str]) -> None:
+    def _process_rk_catalog_setup_complete(self, body_json: Dict[str, str]) -> None:
+        # create the bucket
+        new_routing_key = ".".join([RK.ROOT, RK.TRANSFER_SETUP, RK.START])
+        self.publish_and_log_message(new_routing_key, body_json)
+
+    def _process_rk_transfer_setup_complete(self, body_json: Dict[str, str]) -> None:
         # start the indexing
         new_routing_key = ".".join([RK.ROOT, RK.INDEX, RK.INITIATE])
         self.publish_and_log_message(new_routing_key, body_json)
@@ -389,6 +394,10 @@ class NLDSWorkerConsumer(RMQC):
             elif rk_parts[1] == f"{RK.TRANSFER_GET}":
                 self._process_rk_transfer_get_complete(body_json)
 
+            # If transfer_setup completed then start the indexing
+            elif rk_parts[1] == f"{RK.TRANSFER_SETUP}":
+                self._process_rk_transfer_setup_complete(body_json)
+
             # if catalog_get completed then we need to decide whether it was
             # part of a regular get or an archive_put workflow
             elif rk_parts[1] == f"{RK.CATALOG_GET}":
@@ -410,18 +419,19 @@ class NLDSWorkerConsumer(RMQC):
             elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
                 self._process_rk_archive_put_complete(rk_parts, body_json)
 
+            # If finished with catalog setup (create holding) then pass to indexing
+            elif rk_parts[1] == f"{RK.CATALOG_SETUP}":
+                self._process_rk_catalog_setup_complete(body_json)
+
             # If finished with catalog update then pass for transfer get
             elif rk_parts[1] == f"{RK.CATALOG_UPDATE}":
                 self._process_rk_catalog_update_complete(rk_parts, body_json)
-
+                
             # if finished with catalog archive update then mark ARCHIVE_PUT flow as
             # complete
             elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_UPDATE}":
                 self._process_rk_catalog_archive_update_complete(rk_parts, body_json)
 
-        elif rk_parts[2] == f"{RK.INIT_COMPLETE}":
-            if rk_parts[1] == f"{RK.CATALOG_PUT}":
-                self._process_rk_catalog_init_complete(body_json)
         # If a archive-restore has happened from the catalog then we need to get from
         # archive before we can do the transfer from object store.
         elif rk_parts[2] == f"{RK.ARCHIVE_RESTORE}":

@@ -491,7 +491,7 @@ class CatalogConsumer(RMQC):
             raise e
         return holding
 
-    def _catalog_init(self, body: Dict, rk_origin: str) -> None:
+    def _catalog_setup(self, body: Dict, rk_origin: str) -> None:
         """
         Create a holding in the catalog, if necessary.
         Three cases:
@@ -620,7 +620,7 @@ class CatalogConsumer(RMQC):
             )
         else:
             # complete
-            rk_complete = ".".join([rk_origin, RK.CATALOG_PUT, RK.INIT_COMPLETE])
+            rk_complete = ".".join([rk_origin, RK.CATALOG_SETUP, RK.COMPLETE])
             self.publish_message(rk_complete, body)
 
     def _catalog_put(self, body: Dict, rk_origin: str) -> None:
@@ -1902,9 +1902,7 @@ class CatalogConsumer(RMQC):
                     "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
                 )
                 return
-            if rk_parts[2] == RK.INITIATE:
-                self._catalog_init(body, rk_parts[0])
-            elif rk_parts[2] == RK.START:
+            if rk_parts[2] == RK.START:
                 # Check the routing key worker section to determine which method
                 # to call, as a del could be being called from a failed
                 # transfer_put
@@ -1914,6 +1912,8 @@ class CatalogConsumer(RMQC):
                     self._catalog_del(body, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
                     self._catalog_update(body, rk_parts[0], create=True)
+                elif rk_parts[1] == RK.CATALOG_SETUP:
+                    self._catalog_setup(body, rk_parts[0])
 
         # Archive put requires getting from the catalog
         elif api_method == RK.ARCHIVE_PUT:

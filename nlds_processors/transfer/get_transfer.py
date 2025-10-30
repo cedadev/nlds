@@ -23,10 +23,11 @@ from nlds.details import PathDetails, PathType
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
-from nlds_processors.bucket_mixin import BucketMixin, BucketError
+from nlds_processors.transfer.bucket_transfer import BucketTransferConsumer
+from nlds_processors.bucket_mixin import BucketError
 
 
-class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
+class GetTransferConsumer(BucketTransferConsumer):
     DEFAULT_QUEUE_NAME = "transfer_get_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_GET}." f"{RK.WILD}"
     DEFAULT_STATE = State.TRANSFER_GETTING
@@ -319,10 +320,10 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 routing_key=rk_failed,
                 body_json=body_json,
                 state=State.FAILED,
-                warning=link_warnings
+                warning=link_warnings,
             )
 
-    @retry(S3Error, tries=5, delay=10, backoff=10, logger=None)
+    @retry(S3Error, tries=5, delay=1, backoff=2, logger=None)
     def transfer(
         self,
         transaction_id: str,
