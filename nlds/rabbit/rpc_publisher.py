@@ -56,7 +56,7 @@ class RabbitMQRPCPublisher(RMQP):
                 "must be True or False."
             )
 
-    @retry(ChannelClosedByBroker, tries=5, backoff=1, delay=0)
+    @retry(ChannelClosedByBroker, tries=5, backoff=2, delay=1)
     def declare_bindings(self) -> None:
         # Declare an exclusive queue to receive our reply back on. Here we use
         # the hostname of the machine running the Publisher and the pid of the
