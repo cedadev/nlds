@@ -70,7 +70,7 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         with_for_update: bool = False,
     ) -> Holding:
-        """Get a single holding from the database."""
+        """Get a single holding from the catalog database."""
         if self.session is None:
             raise RuntimeError("self.session is None")
         holding_q = self.session.query(Holding)
@@ -96,7 +96,7 @@ class Catalog(DBMixin):
                 if not groupall and user != "**all**":
                     holding_q = holding_q.filter(Holding.user == user)
                 holding_q = holding_q.filter(Holding.label == label)
-            # if we are doing an update on the holding then lock the database
+            # if we are doing an update on the holding then lock the catalog database
             if with_for_update:
                 holding = holding_q.with_for_update().one()
             else:
@@ -143,8 +143,8 @@ class Catalog(DBMixin):
         limit: int = None,
         descending: bool = False,
     ) -> List[Holding]:
-        """Get a list of matching holdings from the database.  This function can be
-        quite slow!"""
+        """Get a list of matching holdings from the catalog database.  This function 
+        can be quite slow!"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
@@ -265,11 +265,12 @@ class Catalog(DBMixin):
             self.session.add(holding)
             # commit early for this as it is at the top of the tree
             self.session.commit()
-            # update holding.id and prevent contention with any other catalog worker instances
+            # commit holding.id and prevent contention with any other catalog worker 
+            # instances
         except (IntegrityError, KeyError) as e:
             self.session.rollback()
             raise CatalogError(
-                f"Holding with label:{label} could not be added to the database "
+                f"Holding with label:{label} could not be added to the catalog "
                 f"for user:{user} and group:{group}"
             )
         return holding
@@ -331,7 +332,7 @@ class Catalog(DBMixin):
         transaction_id: str = None,
         with_for_update: bool = False,
     ) -> Transaction:
-        """Get a transaction from the database"""
+        """Get a transaction from the catalog database"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
@@ -368,7 +369,7 @@ class Catalog(DBMixin):
     def get_location_file(
         self, location: Location, with_for_update: bool = False
     ) -> File:
-        """Get a File but from the other end of the database tree, starting from
+        """Get a File but from the other end of the catalog database tree, starting from
         a location.
         """
         if self.session is None:
@@ -399,7 +400,7 @@ class Catalog(DBMixin):
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Transaction with transaction_id:{transaction_id} could not "
-                "be added to the database"
+                "be added to the catalog"
             )
         return transaction
 
@@ -473,7 +474,7 @@ class Catalog(DBMixin):
         limit: int = None,
         descending: bool = False,
     ) -> list:
-        """Get a multitude of file details from the database, given the user,
+        """Get a multitude of file details from the catalog database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
         if self.session is None:
             raise RuntimeError("self.session is None")
@@ -662,7 +663,9 @@ class Catalog(DBMixin):
             # This rollsback only to the checkpoint, so any successful deletes
             # done already will stay in the transaction.
             checkpoint.rollback()
-            err_msg = f"File with original_path:{path} could not be deleted"
+            err_msg = (
+                f"File with original_path:{path} could not be deleted from the catalog"
+            )
             raise CatalogError(err_msg)
 
     def get_location(
@@ -726,7 +729,7 @@ class Catalog(DBMixin):
             raise CatalogError(
                 f"Location with root {root}, path {file_.original_path} and "
                 f"storage type {storage_type} could not be added to "
-                "the database"
+                "the catalog"
             )
         return location
 
@@ -742,7 +745,7 @@ class Catalog(DBMixin):
             checkpoint.rollback()
             err_msg = (
                 f"Location with file.id {file.id} and storage_type "
-                f"{storage_type} could not be deleted."
+                f"{storage_type} could not be deleted from the catalog"
             )
             raise CatalogError(err_msg)
 
@@ -829,7 +832,7 @@ class Catalog(DBMixin):
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Aggregation with tarname:{tarname} could not be added to the "
-                f"database"
+                f"catalog"
             )
         return aggregation
 
