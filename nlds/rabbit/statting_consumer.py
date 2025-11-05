@@ -203,3 +203,12 @@ class StattingConsumer(RMQC):
         except PermissionError:
             check_path = False
         return check_path
+
+    def check_path_exists(self, path: pth.Path) -> bool:
+        if self.uid is None or self.gids is None or not isinstance(self.gids, list):
+            raise ValueError("uid and gid not set properly.")
+
+        if not isinstance(path, pth.Path):
+            raise ValueError("No valid path object was given.")
+
+        return path.exists()

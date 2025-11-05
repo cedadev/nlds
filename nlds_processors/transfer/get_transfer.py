@@ -57,8 +57,15 @@ class GetTransferConsumer(BucketTransferConsumer):
         target = body_json[MSG.DETAILS][MSG.TARGET]
         if target:
             target_path = Path(target)
+            if not self.check_path_exists(target_path):
+                msg = f"Unable to copy, target path {target_path} does not exist."
+                self.log(msg, RK.LOG_ERROR)
+                raise TransferError(msg)
             if not self.check_path_access(target_path, access=os.W_OK):
-                msg = f"Unable to copy, target path {target_path} is inaccessible."
+                msg = (
+                    f"Unable to copy, target path {target_path} is inaccessible."
+                    f"Please check the permissions of the path."
+                )
                 self.log(msg, RK.LOG_ERROR)
                 raise TransferError(msg)
         else:
@@ -71,9 +78,15 @@ class GetTransferConsumer(BucketTransferConsumer):
             # In the case of no given target, we just download the files
             # back to their original location.
             download_path = path_details.path
+            # Check the parent folder of the download path exists
+            if not self.check_path_exists(path_details.path.parent):
+                reason = (
+                    f"Unable to download {download_path}. Target path does not exist."
+                )
+                self.log(f"{reason}. Adding to failed list.", RK.LOG_INFO)
+                raise TransferError(message=reason)
             # Check we have permission to write to the parent folder of the
-            # original location. If the parent folder doesn't exist this
-            # will fail.
+            # original location.
             if not self.check_path_access(path_details.path.parent, access=os.W_OK):
                 reason = (
                     f"Unable to download {download_path}. Target path is inaccesible."
@@ -95,10 +108,13 @@ class GetTransferConsumer(BucketTransferConsumer):
         return download_path
 
     def _get_linked_path(self, path_details, target_path):
-        # If there is no target_path then the it is just the link path converted to
+        # If there is no target_path then it is just the link path converted to
         # a path object
         if not target_path:
             linked_path = Path(path_details.link_path)
+            if not self.check_path_exists(path_details.path.parent):
+                reason = f"Unable to access {linked_path}. Directory does not exist."
+                raise TransferError(message=reason)
             if not self.check_path_access(path_details.path.parent, access=os.W_OK):
                 reason = f"Unable to access {linked_path}. Linked path is inaccesible."
                 raise TransferError(message=reason)

@@ -238,6 +238,9 @@ class BaseTransferConsumer(StattingConsumer, ABC):
     ) -> bool:
         return super().check_path_access(path, stat_result, access)
 
+    def check_path_exists(self, path: pth.Path) -> bool:
+        return super().check_path_exists(path)
+
     @abstractmethod
     def setup(
         self,

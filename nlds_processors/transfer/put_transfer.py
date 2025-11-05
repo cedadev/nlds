@@ -66,8 +66,16 @@ class PutTransferConsumer(BucketTransferConsumer):
 
             # If check_permissions active then check again that file exists and
             # is accessible.
+            failure = False
+            if not self.check_path_exists(item_path):
+                reason = f"Path:{path_details.path} does not exist."
+                failure = True
+
             if not self.check_path_access(item_path):
                 reason = f"Path:{path_details.path} is inaccessible."
+                failure = True
+
+            if failure:
                 self.log(reason, RK.LOG_DEBUG)
                 path_details.failure_reason = reason
                 self.append_and_send(

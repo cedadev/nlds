@@ -161,9 +161,13 @@ class IndexerConsumer(StattingConsumer):
         """Recursively index the item_path"""
         # check that there is sufficient permission to access the item_path
         try:
+            if not self.check_path_exists(item_path.path):
+                raise IndexError(f"Path: {item_path.path} does not exist.")
             if not self.check_path_access(item_path.path):
-                error_reason = f"Path:{item_path.path} is inaccessible."
-                raise IndexError(message=error_reason)
+                raise IndexError(
+                    f"Path: {item_path.path} is inaccessible. Please check the "
+                    f"permissions of the path."
+                )
             if item_path.path.is_dir():
                 # check if item is a link and just add as a link entry if it is
                 # do not recurse into linked directories!
