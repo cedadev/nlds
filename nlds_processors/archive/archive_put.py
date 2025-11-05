@@ -130,7 +130,18 @@ class PutArchiveConsumer(BaseArchiveConsumer):
     ):
         """Put shouldn't have a prepare check method"""
         raise NotImplementedError
-
+    
+    def setup(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
+        raise NotImplementedError
 
 def main():
     consumer = PutArchiveConsumer()
