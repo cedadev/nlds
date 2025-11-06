@@ -169,6 +169,9 @@ class IndexerConsumer(StattingConsumer):
                     f"permissions of the path."
                 )
             if item_path.path.is_dir():
+                # change directory to try to overcome bug with auto-mounter
+                self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
+                os.chdir(item_path.path)
                 # check if item is a link and just add as a link entry if it is
                 # do not recurse into linked directories!
                 item_path.stat()
@@ -262,6 +265,10 @@ class IndexerConsumer(StattingConsumer):
         rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 
         for item_path in raw_filelist:
+            # change directory to parent directory to work-around the automounter
+            # not always working correctly
+            self.log(f"Changing directory to {item_path.path.parent}", RK.LOG_INFO)
+            os.chdir(item_path.path.parent)
             # all errors will now be handled by raising an IndexError in the _index_r
             # function
             self._index_r(item_path, rk_complete, rk_failed, body_json=body_json)
