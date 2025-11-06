@@ -425,7 +425,6 @@ class MonitorConsumer(RMQC):
             f"last process {route_parts[-1]}.",
             RK.LOG_INFO,
         )
-
         # get the filelist
         filelist = self.parse_filelist(body)
         # start the database transactions
@@ -640,9 +639,10 @@ class MonitorConsumer(RMQC):
 
         ret_list = []
         for id_ in trecs_dict:
-            if len(trecs_dict[id_]["sub_records"]) > 0:
-                ret_list.append(trecs_dict[id_])
-
+            # NRM - return all trecs, even if they are empty - the client will interpret
+            # them
+            #if len(trecs_dict[id_]["sub_records"]) > 0:
+            ret_list.append(trecs_dict[id_])
         body[MSG.DATA][MSG.RECORD_LIST] = ret_list
         self.publish_message(
             properties.reply_to,
