@@ -197,8 +197,6 @@ class S3ToTarfileStream(BucketMixin):
                     # Log successful
                     self.log(f"Successfully archived {path_details.path}", RK.LOG_DEBUG)
                     completelist.append(path_details)
-                finally:
-                    # Terminate any hanging/unclosed connections
                     try:
                         stream.close()
                         stream.release_conn()
