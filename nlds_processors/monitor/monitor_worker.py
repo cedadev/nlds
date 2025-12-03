@@ -530,7 +530,6 @@ class MonitorConsumer(RMQC):
         scale out database reads separately from database writes - which at the
         moment need to be done one at a time to avoid clashes.
         """
-
         # get the required details from the message
         try:
             transaction_id = self._parse_transaction_id(body, mandatory=False)
@@ -564,6 +563,13 @@ class MonitorConsumer(RMQC):
         else:
             query_user = user
             query_group = group
+            # exclude the 'archive-put' api action for normal users as they don't
+            # really need to know what's going on with the tape archive and it fills
+            # their stat return with TMI
+            if exclude_api_action:
+                exclude_api_action.append("archive-put")
+            else:
+                exclude_api_action = ["archive-put"]
 
         try:
             trecs = self.monitor.get_transaction_records(
