@@ -52,7 +52,7 @@ async def get():
         os_tenancy = os.environ["OS_TENANCY"]
     except KeyError as e:
         response_error = ResponseError(
-            loc=["init", "get"], msg="Unable to get api keys.", type="Failed request."
+            loc=["init", "get"], msg="Unable to get environment variables.", type="Failed request."
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
