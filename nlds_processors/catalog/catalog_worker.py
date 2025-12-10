@@ -1605,7 +1605,7 @@ class CatalogConsumer(RMQC):
             # failed to get the tape quota - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
             body[MSG.DETAILS][MSG.FAILURE] = e.message
-            body[MSG.DATA][MSG.QUOTA] = None
+            body[MSG.DATA][MSG.SYNC_QUOTA] = None
 
         # Get the used diskspace value
         try:
@@ -1614,7 +1614,7 @@ class CatalogConsumer(RMQC):
             # failed to get the used diskspace - send a return message saying so
             self.log(e.message, RK.LOG_ERROR)
             body[MSG.DETAILS][MSG.FAILURE] = e.message
-            body[MSG.DATA][MSG.QUOTA_SYNC] = None
+            body[MSG.DATA][MSG.SYNC_QUOTA] = None
 
         # Write to the logs saying the sync is beginning
         self.log(f"Starting quota sync for {group}...")
@@ -1640,7 +1640,19 @@ class CatalogConsumer(RMQC):
             # Add the quota value to the database
             self.catalog.modify_quota(user, group, quota, new_quota_size, new_quota_used)
 
+        # Check the new quota value in the db
+        new_quota = self.catalog.get_quota(user, group)
+        body[MSG.DATA][MSG.SYNC_QUOTA] = new_quota
+
         self.catalog.end_session()
+
+        # return message to complete RPC
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={"name": ""},
+            correlation_id=properties.correlation_id,
+        )
 
         # Write to the logs saying the sync is done
         self.log(f"Finished quota sync for {group}.")
@@ -1797,6 +1809,9 @@ class CatalogConsumer(RMQC):
         elif api_method == RK.QUOTA:
             # don't need to split any routing key for an RPC method
             self._catalog_quota(body, properties)
+
+        elif api_method == RK.SYNC_QUOTA:
+            self._sync_catalog_quota(body, properties)
 
         # If received system test message, reply to it (this is for system status check)
         elif api_method == "system_stat":

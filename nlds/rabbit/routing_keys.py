@@ -22,6 +22,7 @@ STAT = "stat"
 FIND = "find"
 META = "meta"
 QUOTA = "quota"
+SYNC_QUOTA = "sync-quota"
 SYSTEM_STAT = "system-stat"
 
 # Exchange routing key parts – root
