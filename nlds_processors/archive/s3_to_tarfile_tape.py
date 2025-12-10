@@ -29,6 +29,7 @@ from nlds_processors.archive.s3_to_tarfile_stream import (
 from nlds_processors.archive.adler32file import Adler32XRDFile
 import nlds.rabbit.routing_keys as RK
 
+
 class S3ToTarfileTape(S3ToTarfileStream):
     """Class to stream files from / to an S3 resource (AWS, minio, DataCore Swarm etc.)
     to a tarfile that resides on tape.
@@ -48,6 +49,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         s3_secret_key: str,
         tape_url: str,
         secure_fl: bool,
+        http_timeout: int,
         logger,
     ) -> None:
         # Initialise the S3 client first
@@ -56,6 +58,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
             s3_access_key=s3_access_key,
             s3_secret_key=s3_secret_key,
             require_secure_fl=secure_fl,
+            http_timeout=http_timeout,
             logger=logger,
         )
         # get the location of the tape server and the base directory from the tape_url
@@ -84,7 +87,11 @@ class S3ToTarfileTape(S3ToTarfileStream):
         self.log(f"Connected to tape server: {self.tape_server_url}", RK.LOG_INFO)
 
     def put(
-        self, holding_prefix: str, filelist: List[PathDetails], chunk_size: int
+        self,
+        holding_prefix: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+        num_parallel_uploads: int,
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """
         Put the filelist to the tape server using the already created S3 client and
@@ -124,7 +131,10 @@ class S3ToTarfileTape(S3ToTarfileStream):
                     )
                 file_object = Adler32XRDFile(XRD_file, debug_fl=False)
                 completelist, failedlist, checksum = self._stream_to_fileobject(
-                    file_object, filelist, chunk_size
+                    file_object,
+                    filelist,
+                    chunk_size,
+                    num_parallel_uploads,
                 )
         except S3StreamError as e:
             msg = (
@@ -167,11 +177,12 @@ class S3ToTarfileTape(S3ToTarfileStream):
         tarfile: str,
         filelist: List[PathDetails],
         chunk_size: int,
+        num_parallel_uploads: int,
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on tape to Object Store"""
         if self.filelist != []:
             raise S3StreamError(f"self.filelist is not Empty: {self.filelist[0]}")
-        
+
         self.filelist = filelist
         self.holding_prefix = holding_prefix
         try:
@@ -186,7 +197,10 @@ class S3ToTarfileTape(S3ToTarfileStream):
                     )
                 file_object = Adler32XRDFile(file, debug_fl=True)
                 completelist, failedlist = self._stream_to_s3object(
-                   file_object, self.filelist, chunk_size
+                    file_object,
+                    self.filelist,
+                    chunk_size,
+                    num_parallel_uploads,
                 )
         except FileNotFoundError:
             msg = f"Couldn't open tarfile ({tarfile})."
@@ -205,8 +219,8 @@ class S3ToTarfileTape(S3ToTarfileStream):
     def __relative_tarfile(tarfile):
         # tarfile has the full name here, including the root://server/ part of it
         # we only need the path on the FileSystem
-        return("/"+tarfile.split("//")[2])
-    
+        return "/" + tarfile.split("//")[2]
+
     def __relative_tarfile_list(tarfile_list):
         # clean up the tarfilelist by removing the root://server/ part of each file name
         return [S3ToTarfileTape.__relative_tarfile(t) for t in tarfile_list]
@@ -273,7 +287,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # complete
         prepare_complete = True
         for r in jr:
-            prepare_complete &= r['online']
+            prepare_complete &= r["online"]
         return prepare_complete
 
     def evict(self, tarfilelist: List[str]):
@@ -282,7 +296,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
             # trap this as it causes a seg-fault if it is passed to XRD.prepare
             raise S3StreamError("tarfilelist is empty in evict")
 
-        # First check whether the tarfiles have already been requested by another 
+        # First check whether the tarfiles have already been requested by another
         # prepare
         clean_tarlist = S3ToTarfileTape.__relative_tarfile_list(tarfilelist)
         self.log(

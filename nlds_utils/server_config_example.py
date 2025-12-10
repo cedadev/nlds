@@ -74,9 +74,9 @@ def get_config_dictionary():
         "tenancy" : "",
         "tape_url" : "",
         "tape_pool" : None,
-        "chunk_size" : 262144,
+        "chunk_size" : 500 * 1024 * 1024,
         "filelist_max_length" : 1000,
-        "filelist_max_size" : 16 * 1000 * 1000,
+        "filelist_max_size" : 16 * 1024 * 1024,
         "print_tracebacks" : False,
         "check_filesize" : True,
         "require_secure" : False,
@@ -85,7 +85,7 @@ def get_config_dictionary():
         "logging_enable" : True,
         "logging_add_stdout" : False,
         "logging_stdout_log_level" : None,
-        "logging_max_bytes" : 16 * 1000 * 1000,
+        "logging_max_bytes" : 16 * 1024 * 1024,
         "logging_backup_count" : 0,
 
         "rabbit_exchange_name" : ""

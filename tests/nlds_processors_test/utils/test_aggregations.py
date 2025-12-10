@@ -121,7 +121,7 @@ class TestAggregationsLargeFiles:
         compare_total_length(sample_large_files, result)
 
     def test_aggregate_files_custom_target_size_10MB(self, sample_large_files):
-        target_size = 10 * (1000**2)  # 10MB
+        target_size = 10 * (1024**2)  # 10MB
         result = bin_files(sample_large_files, target_bin_size=target_size)
         assert len(result) == 5
         assert len(result[0]) == 1
@@ -132,7 +132,7 @@ class TestAggregationsLargeFiles:
         compare_total_length(sample_large_files, result)
 
     def test_aggregate_files_custom_target_size_10GB(self, sample_large_files):
-        target_size = 10 * (1000**3)  # 10GB
+        target_size = 10 * (1024**3)  # 10GB
         result = bin_files(sample_large_files, target_bin_size=target_size)
 
         # This is unchanged from the above as it's only controlled by the number

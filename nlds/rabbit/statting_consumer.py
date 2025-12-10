@@ -46,8 +46,8 @@ class StattingConsumer(RMQC):
 
     # The corresponding default values
     DEFAULT_CONSUMER_CONFIG = {
-        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,
-        _FILELIST_MAX_LENGTH: 1000,
+        _FILELIST_MAX_SIZE: 16 * 1024 * 1024,
+        _FILELIST_MAX_LENGTH: 1024,
         _CHECK_FILESIZE: True,
     }
 

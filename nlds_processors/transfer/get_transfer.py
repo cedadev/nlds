@@ -228,8 +228,8 @@ class GetTransferConsumer(BucketTransferConsumer):
                 return
 
         # Create client
-        self.s3_client = minio.Minio(
-            tenancy,
+        self.s3_client = self._create_s3_client(
+            tenancy=tenancy,
             access_key=access_key,
             secret_key=secret_key,
             secure=self.require_secure_fl,

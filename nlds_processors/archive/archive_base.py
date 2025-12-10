@@ -39,12 +39,10 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
     _TAPE_POOL = "tape_pool"
     _TAPE_URL = "tape_url"
-    _CHUNK_SIZE = "chunk_size"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
     ARCHIVE_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
         _TAPE_URL: None,
-        _CHUNK_SIZE: 5 * (1024**2),  # Default to 5 MiB
         _PRINT_TRACEBACKS: False,
     }
     DEFAULT_CONSUMER_CONFIG = (
@@ -53,10 +51,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
-
         self.tape_pool = self.load_config_value(self._TAPE_POOL)
         self.tape_url = self.load_config_value(self._TAPE_URL)
-        self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
         self.reset()
 
     def _create_streamer(
@@ -80,6 +76,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 s3_secret_key=secret_key,
                 disk_location=disk_loc,
                 secure_fl=self.require_secure_fl,
+                http_timeout=self.http_timeout,
                 logger=self.log,
             )
         else:
@@ -94,6 +91,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 s3_secret_key=secret_key,
                 tape_url=tape_url,
                 secure_fl=self.require_secure_fl,
+                http_timeout=self.http_timeout,
                 logger=self.log,
             )
         return streamer

@@ -16,13 +16,17 @@ from datetime import datetime
 from abc import abstractmethod
 
 import minio
+import urllib3
+import certifi
 from minio.error import S3Error
+from urllib3.util import Timeout, Retry
 
 from nlds.details import PathDetails
 import nlds.rabbit.routing_keys as RK
 from nlds.errors import MessageError
 from nlds_processors.bucket_mixin import BucketMixin, BucketError
 import nlds.server_config as CFG
+
 
 class S3StreamError(MessageError):
     pass
@@ -45,19 +49,50 @@ class S3ToTarfileStream(BucketMixin):
         s3_access_key: str,
         s3_secret_key: str,
         require_secure_fl: bool,
+        http_timeout: int,
         logger,
     ) -> None:
         """Initialise the Minio / S3 client"""
-        self.s3_client = minio.Minio(
+        self.s3_client = self._create_s3_client(
             s3_tenancy,
             access_key=s3_access_key,
             secret_key=s3_secret_key,
             secure=require_secure_fl,
+            http_timeout=http_timeout,
         )
         self.filelist = []
         self.log = logger
         # load the whole config as it is needed for the object store access policies
         self.whole_config = CFG.load_config()
+
+    def _create_s3_client(
+        self,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        secure: bool,
+        http_timeout: int,
+    ):
+        # Create a minio S3 client with a custom http client with a timeout of 24
+        # hours
+        _http = urllib3.PoolManager(
+            timeout=Timeout(connect=http_timeout, read=http_timeout),
+            maxsize=10,
+            cert_reqs="CERT_NONE",
+            ca_certs=certifi.where(),
+            retries=Retry(
+                total=5, backoff_factor=0.2, status_forcelist=[500, 502, 503, 504]
+            ),
+        )
+        # create Minio client with supplied info and custom http client created above
+        _client = minio.Minio(
+            tenancy,
+            access_key=access_key,
+            secret_key=secret_key,
+            secure=secure,
+            http_client=_http,
+        )
+        return _client
 
     def _generate_filelist_hash(self):
         # Generate a name for the tarfile by hashing the combined filelist.
@@ -144,7 +179,11 @@ class S3ToTarfileStream(BucketMixin):
         return [], failed_list
 
     def _stream_to_fileobject(
-        self, file_object, filelist: List[PathDetails], chunk_size: int
+        self,
+        file_object,
+        filelist: List[PathDetails],
+        chunk_size: int,
+        num_parallel_uploads: int,
     ):
         if self.s3_client is None:
             raise S3StreamError("self.s3_client is None")
@@ -179,6 +218,7 @@ class S3ToTarfileStream(BucketMixin):
                 tar_info.size = int(path_details.size)
 
                 # Attempt to stream the object directly into the tarfile object
+                # NRM - could we do this part by part?
                 try:
                     stream = self.s3_client.get_object(bucket_name, object_name)
                     # Adds bytes to xrd.File from result, one chunk_size at a time
@@ -206,7 +246,11 @@ class S3ToTarfileStream(BucketMixin):
         return completelist, failedlist, file_object.checksum
 
     def _stream_to_s3object(
-        self, file_object, filelist: List[PathDetails], chunk_size: int
+        self,
+        file_object,
+        filelist: List[PathDetails],
+        chunk_size: int,
+        num_parallel_uploads: int,
     ):
         if self.s3_client is None:
             raise S3StreamError("self.s3_client is None")
@@ -254,7 +298,7 @@ class S3ToTarfileStream(BucketMixin):
                     # get or create the bucket
                     try:
                         # set access policies only if bucket is created
-                        if (self._make_bucket(bucket_name=bucket_name)):
+                        if self._make_bucket(bucket_name=bucket_name):
                             self._set_access_policies(
                                 bucket_name=bucket_name, group=path_details.group
                             )
@@ -275,6 +319,7 @@ class S3ToTarfileStream(BucketMixin):
                         f,
                         -1,
                         part_size=chunk_size,
+                        num_parallel_uploads=num_parallel_uploads,
                     )
                     self.log(
                         f"Finished stream of {tarinfo.name} to object store",
@@ -314,7 +359,11 @@ class S3ToTarfileStream(BucketMixin):
 
     @abstractmethod
     def put(
-        self, holding_prefix: str, filelist: List[PathDetails], chunk_size: int
+        self,
+        holding_prefix: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+        num_parallel_uploads: int,
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         raise NotImplementedError
 
@@ -325,6 +374,7 @@ class S3ToTarfileStream(BucketMixin):
         tarfile: str,
         filelist: List[PathDetails],
         chunk_size: int,
+        num_parallel_uploads: int,
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         raise NotImplementedError
 

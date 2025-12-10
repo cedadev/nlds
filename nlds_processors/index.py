@@ -39,10 +39,10 @@ class IndexerConsumer(StattingConsumer):
 
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
-        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,  # in bytes, default = 16MB
+        _FILELIST_MAX_SIZE: 16 * 1024 * 1024,  # in bytes, default = 16MB
         _PRINT_TRACEBACKS: False,
         _CHECK_FILESIZE: True,
-        _MAX_FILESIZE: (500 * 1000 * 1000),  # in bytes, default=500MB
+        _MAX_FILESIZE: (500 * 1024 * 1024),  # in bytes, default=500MB
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -206,11 +206,11 @@ class IndexerConsumer(StattingConsumer):
                 # check the filesize
                 if self.check_filesize_fl and item_path.size > self.max_filesize:
                     error_reason = (
-                        f"Filesize: {item_path.size / (1000*1000)}MB for path: "
+                        f"Filesize: {item_path.size / (1024*1024)}MB for path: "
                         f"{item_path.path}"
                         f" is too big for the NLDS tape system."
                         f" The max allowed file size is "
-                        f"{self.max_filesize / (1000*1000)}MB."
+                        f"{self.max_filesize / (1024*1024)}MB."
                     )
 
                     raise IndexError(message=error_reason)
