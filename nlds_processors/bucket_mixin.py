@@ -71,7 +71,7 @@ class BucketMixin:
         # permissions
         try:
             bucket_exists = self.s3_client.bucket_exists(bucket_name)
-        except (S3Error, HTTPError, AccessDenied) as e:
+        except (S3Error, HTTPError) as e:
             raise BucketError(message=str(e))
         return bucket_exists
 
