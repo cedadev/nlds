@@ -88,7 +88,7 @@ class PutTransferConsumer(BucketTransferConsumer):
                 continue
 
             self.log(
-                f"Attempting to upload file {path_details.original_path}", RK.LOG_DEBUG
+                f"Starting to upload file {path_details.original_path}", RK.LOG_DEBUG
             )
 
             # Add this to the PathDetails as the StorageLocation

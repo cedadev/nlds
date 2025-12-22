@@ -255,7 +255,7 @@ class GetTransferConsumer(BucketTransferConsumer):
                         f"_transfer_files"
                     )
                 self.log(
-                    f"Attempting to get file {object_name} from {bucket_name}",
+                    f"Starting to get file {object_name} from {bucket_name}",
                     RK.LOG_DEBUG,
                 )
                 download_path = self._get_download_path(path_details, target_path)
