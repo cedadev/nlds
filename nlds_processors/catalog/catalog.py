@@ -204,7 +204,7 @@ class Catalog(DBMixin):
             if holding_q.count() == 0:
                 holding = []
             elif limit:  # might have to change this back to .limit if DB gets big
-                holding = holding_q.all()[0:limit]
+                holding = holding_q.limit(limit)
             else:
                 holding = holding_q.all()
 
@@ -551,7 +551,6 @@ class Catalog(DBMixin):
                         break
                 if limit and len(file_list) >= limit:
                     break
-
             # no files found
             if len(file_list) == 0:
                 raise KeyError
@@ -569,8 +568,10 @@ class Catalog(DBMixin):
                 )
             elif tag:
                 err_msg = f"File not found in holding with tag:{tag}"
-            else:
+            elif original_path:
                 err_msg = f"File with original_path:{original_path} not found "
+            else:
+                err_msg = f"No files found for user {user} and group {group}"
             raise CatalogError(err_msg)
 
         except DataError as e:

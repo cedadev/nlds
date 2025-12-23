@@ -1,8 +1,8 @@
 # encoding: utf-8
 """
 archive_put.py
-NOTE: This module is imported into a revision, and so should be very defensive 
-with how it imports external modules (like xrootd). 
+NOTE: This module is imported into a revision, and so should be very defensive
+with how it imports external modules (like xrootd).
 """
 __author__ = "Jack Leland and Neil Massey"
 __date__ = "30 Nov 2021"
@@ -70,7 +70,10 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             holding_prefix = self.get_holding_prefix(body_json)
             try:
                 self.completelist, self.failedlist, tarfile, checksum = streamer.put(
-                    holding_prefix, filelist, self.chunk_size
+                    holding_prefix,
+                    filelist,
+                    self.chunk_size,
+                    self.num_parallel_uploads,
                 )
             except S3StreamError as e:
                 # if a S3StreamError occurs then all files have failed
@@ -130,7 +133,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
     ):
         """Put shouldn't have a prepare check method"""
         raise NotImplementedError
-    
+
     def setup(
         self,
         transaction_id: str,
@@ -142,6 +145,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         body_json: Dict[str, str],
     ):
         raise NotImplementedError
+
 
 def main():
     consumer = PutArchiveConsumer()

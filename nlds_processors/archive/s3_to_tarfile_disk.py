@@ -38,6 +38,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         s3_secret_key: str,
         disk_location: str,
         secure_fl: bool,
+        http_timeout: int,
         logger,
     ) -> None:
         # Initialise the S3 client first
@@ -46,6 +47,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             s3_access_key=s3_access_key,
             s3_secret_key=s3_secret_key,
             require_secure_fl=secure_fl,
+            http_timeout=http_timeout,
             logger=logger,
         )
         # record and make the disk location directory if it doesn't exist
@@ -61,7 +63,11 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             )
 
     def put(
-        self, holding_prefix: str, filelist: List[PathDetails], chunk_size: int
+        self,
+        holding_prefix: str,
+        filelist: List[PathDetails],
+        chunk_size: int,
+        num_parallel_uploads: int,
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """Stream from Object Store to a tarfile on disk"""
         if self.filelist != []:
@@ -149,6 +155,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         tarfile: str,
         filelist: List[PathDetails],
         chunk_size: int,
+        num_parallel_uploads: int,
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on disk to Object Store"""
         if self.filelist != []:
@@ -160,7 +167,10 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             with open(tarfile, "rb") as file:
                 file_object = Adler32File(file, debug_fl=False)
                 completelist, failedlist = self._stream_to_s3object(
-                    file_object, self.filelist, chunk_size
+                    file_object,
+                    self.filelist,
+                    chunk_size,
+                    num_parallel_uploads,
                 )
         except FileNotFoundError:
             msg = f"Couldn't open tarfile ({self.tarfile_diskpath})."
@@ -171,7 +181,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
                 f"Exception occurred during read of tarfile {self.tarfile_diskpath}. "
                 f"Original Exception: {e}"
             )
-                   
+
             self.log(msg, RK.LOG_ERROR)
             raise S3StreamError(msg)
 
@@ -180,7 +190,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     def prepare_required(self, tarfile: str) -> bool:
         """Query the storage system as to whether a file needs to be prepared."""
         # return True for the disktape / faketape™ for every other request
-        return (S3ToTarfileDisk.prepare_id % 2 == 0)
+        return S3ToTarfileDisk.prepare_id % 2 == 0
 
     def prepare_request(self, tarfilelist: List[str]) -> str:
         """Request the storage system for a file to be prepared"""

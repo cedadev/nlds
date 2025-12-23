@@ -228,8 +228,8 @@ class GetTransferConsumer(BucketTransferConsumer):
                 return
 
         # Create client
-        self.s3_client = minio.Minio(
-            tenancy,
+        self.s3_client = self._create_s3_client(
+            tenancy=tenancy,
             access_key=access_key,
             secret_key=secret_key,
             secure=self.require_secure_fl,
@@ -255,7 +255,7 @@ class GetTransferConsumer(BucketTransferConsumer):
                         f"_transfer_files"
                     )
                 self.log(
-                    f"Attempting to get file {object_name} from {bucket_name}",
+                    f"Starting to get file {object_name} from {bucket_name}",
                     RK.LOG_DEBUG,
                 )
                 download_path = self._get_download_path(path_details, target_path)

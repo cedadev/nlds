@@ -84,7 +84,11 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                 try:
                     # stream the tarfile from tape (cache) to the object store
                     completelist, failedlist = streamer.get(
-                        holding_prefix, tarfile, aggregate_filelist, self.chunk_size
+                        holding_prefix,
+                        tarfile,
+                        aggregate_filelist,
+                        self.chunk_size,
+                        self.num_parallel_uploads,
                     )
                     # dispatch any completed tarfiles to the next stage
                     for path_details in completelist:
@@ -390,6 +394,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
         body_json: Dict[str, str],
     ):
         raise NotImplementedError
+
 
 def main():
     consumer = GetArchiveConsumer()

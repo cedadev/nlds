@@ -46,8 +46,8 @@ class StattingConsumer(RMQC):
 
     # The corresponding default values
     DEFAULT_CONSUMER_CONFIG = {
-        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,
-        _FILELIST_MAX_LENGTH: 1000,
+        _FILELIST_MAX_SIZE: 16 * 1024 * 1024,
+        _FILELIST_MAX_LENGTH: 1024,
         _CHECK_FILESIZE: True,
     }
 
@@ -211,4 +211,9 @@ class StattingConsumer(RMQC):
         if not isinstance(path, pth.Path):
             raise ValueError("No valid path object was given.")
 
-        return path.exists()
+        try:
+            return path.exists()
+        except PermissionError:
+            # return True as the path exists but the check_path_access should follow
+            # this call and return False
+            return True

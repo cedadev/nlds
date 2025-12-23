@@ -88,7 +88,7 @@ class PutTransferConsumer(BucketTransferConsumer):
                 continue
 
             self.log(
-                f"Attempting to upload file {path_details.original_path}", RK.LOG_DEBUG
+                f"Starting to upload file {path_details.original_path}", RK.LOG_DEBUG
             )
 
             # Add this to the PathDetails as the StorageLocation
@@ -98,6 +98,8 @@ class PutTransferConsumer(BucketTransferConsumer):
                     bucket_name,
                     pl.path,
                     path_details.original_path,
+                    part_size=self.chunk_size,
+                    num_parallel_uploads=self.num_parallel_uploads,
                 )
                 self.log(
                     f"Successfully uploaded {path_details.original_path} to "
@@ -140,8 +142,8 @@ class PutTransferConsumer(BucketTransferConsumer):
     ):
         # create a new client as the access key and secret key could (probably will)
         # change between messages
-        self.s3_client = minio.Minio(
-            tenancy,
+        self.s3_client = self._create_s3_client(
+            tenancy=tenancy,
             access_key=access_key,
             secret_key=secret_key,
             secure=self.require_secure_fl,
