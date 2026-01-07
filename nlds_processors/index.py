@@ -271,11 +271,11 @@ class IndexerConsumer(StattingConsumer):
         rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 
         for item_path in raw_filelist:
-            # change directory to directory to work-around the automounter not always
-            # working correctly
+            # change directory to parent directory to work-around the automounter not 
+            # always working correctly
             try:
-                self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
-                os.chdir(item_path.path)
+                self.log(f"Changing directory to {item_path.path.parent}", RK.LOG_INFO)
+                os.chdir(item_path.path.parent)
             except PermissionError:
                 message = (
                     f"Path: {item_path.path} is inaccessible.  Please check the "
