@@ -274,8 +274,12 @@ class IndexerConsumer(StattingConsumer):
             # change directory to parent directory to work-around the automounter not 
             # always working correctly
             try:
-                self.log(f"Changing directory to {item_path.path.parent}", RK.LOG_INFO)
-                os.chdir(item_path.path.parent)
+                if item_path.path.is_dir():
+                    chpath = item_path.path
+                else:
+                    chpath = item_path.path.parent
+                self.log(f"Changing directory to {chpath}", RK.LOG_INFO)
+                os.chdir(chpath)
             except PermissionError:
                 message = (
                     f"Path: {item_path.path} is inaccessible.  Please check the "
