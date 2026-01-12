@@ -171,7 +171,13 @@ class IndexerConsumer(StattingConsumer):
             if item_path.path.is_dir():
                 # change directory to try to overcome bug with auto-mounter
                 self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
-                os.chdir(item_path.path)
+                try:
+                    os.chdir(item_path.path)
+                except PermissionError:
+                    raise IndexError(
+                        f"Path: {item_path.path} is inaccessible.  Please check the "
+                        f"permissions of the path."
+                    )
                 # check if item is a link and just add as a link entry if it is
                 # do not recurse into linked directories!
                 item_path.stat()
@@ -265,13 +271,32 @@ class IndexerConsumer(StattingConsumer):
         rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 
         for item_path in raw_filelist:
-            # change directory to parent directory to work-around the automounter
-            # not always working correctly
-            self.log(f"Changing directory to {item_path.path.parent}", RK.LOG_INFO)
-            os.chdir(item_path.path.parent)
-            # all errors will now be handled by raising an IndexError in the _index_r
-            # function
-            self._index_r(item_path, rk_complete, rk_failed, body_json=body_json)
+            # change directory to parent directory to work-around the automounter not 
+            # always working correctly
+            try:
+                if item_path.path.is_dir():
+                    chpath = item_path.path
+                else:
+                    chpath = item_path.path.parent
+                self.log(f"Changing directory to {chpath}", RK.LOG_INFO)
+                os.chdir(chpath)
+            except PermissionError:
+                message = (
+                    f"Path: {item_path.path} is inaccessible.  Please check the "
+                    f"permissions of the path."
+                )
+                item_path.failure_reason = message
+                self.append_and_send(
+                    self.failedlist,
+                    item_path,
+                    routing_key=rk_failed,
+                    body_json=body_json,
+                    state=State.FAILED,
+                )
+            else:
+                # all errors will now be handled by raising an IndexError in the
+                # _index_r function
+                self._index_r(item_path, rk_complete, rk_failed, body_json=body_json)
 
         # finalise the pathlists - anything left in the completed and failed lists
         if len(self.completelist) > 0:
