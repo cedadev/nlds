@@ -610,7 +610,6 @@ class Catalog(DBMixin):
                 file_permissions=file_permissions,
             )
             self.session.add(new_file)
-            self.session.flush()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"File with original path {original_path} could not be added to"
@@ -725,7 +724,6 @@ class Catalog(DBMixin):
                 aggregation_id=aggregation_id,
             )
             self.session.add(location)
-            self.session.flush()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location with root {root}, path {file_.original_path} and "
@@ -757,7 +755,6 @@ class Catalog(DBMixin):
         try:
             tag = Tag(key=key, value=value, holding_id=holding.id)
             self.session.add(tag)
-            self.session.flush()
         except (IntegrityError, KeyError):
             raise CatalogError(f"Tag could not be added to holding:{holding.label}")
         return tag
@@ -829,7 +826,6 @@ class Catalog(DBMixin):
                 failed_fl=False,  # Aggregations fail before creation now
             )
             self.session.add(aggregation)
-            self.session.flush()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Aggregation with tarname:{tarname} could not be added to the "
