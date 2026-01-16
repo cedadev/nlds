@@ -523,18 +523,23 @@ class RabbitMQConsumer(ABC, RMQP):
         # Wrap callback with a try-except catching a selection of common
         # errors which can be caught without stopping consumption.
         # NRM - this has changed to stop on all exceptions!
+        # NRM - change to acknowledge the message straight away.  If it fails with an
+        # exception then resend the message
         try:
-            ack_fl = self.callback(ch, method, properties, body, connection)
+            self.acknowledge_message(ch, method.delivery_tag, connection)
+            self.callback(ch, method, properties, body, connection)
         except Exception as e:
-            # this is very unsatisfactory - it's basically crash and burn!
-            raise Exception(e)
-        finally:
-            # Only ack message if the message has not been flagged for nacking
-            # in the callback with a `return False`
-            if ack_fl is False:
-                self.nack_message(ch, method.delivery_tag, connection)
-            else:
-                self.acknowledge_message(ch, method.delivery_tag, connection)
+            self.log(
+                f"Exception occurred in callback.  Requeuing message.", RK.LOG_INFO
+            )
+            self.log(f"{e}", RK.LOG_DEBUG)
+            self.channel.basic_publish(
+                exchange=method.exchange,
+                routing_key=method.routing_key,
+                properties=properties,
+                body=body,
+                mandatory=True,
+            )
 
         # Clear the consuming event so the keepalive stops polling the connection
         self.keepalive.stop_polling()
