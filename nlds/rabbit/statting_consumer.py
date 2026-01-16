@@ -8,13 +8,13 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from typing import Dict, Union, List, NamedTuple, Any
+from typing import Dict, List, NamedTuple, Any
 import grp
 import pwd
 import pathlib as pth
 import os
-from uuid import uuid4
-from copy import copy
+
+from retry import retry
 
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 import nlds.rabbit.message_keys as MSG
@@ -138,6 +138,7 @@ class StattingConsumer(RMQC):
 
         self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
 
+    @retry((KeyError, ValueError), tries=-1, delay=2, backoff=2, max_delay=60)
     def set_ids(
         self,
         body_json: Dict[str, str],
@@ -147,7 +148,11 @@ class StattingConsumer(RMQC):
         on each file in a filelist can be checked.
 
         """
-        # Attempt to get uid from, given username, in password db
+        # Use the retry mechanism to loop while trying to set the uids and gids.
+        # This is to get around the pods in the Kubernetes Cluster taking a while to
+        # read the LDAP configurations.
+
+        # Attempt to get uid from, given username, in password db.
         try:
             username = body_json[MSG.DETAILS][MSG.USER]
             pwddata = pwd.getpwnam(username)
