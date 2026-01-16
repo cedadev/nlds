@@ -573,7 +573,6 @@ class CatalogConsumer(RMQC):
             create_label = ""
             create_holding = True
 
-
         if create_holding:
             # try to create the holding and, if it fails, then fail all the files
             try:
@@ -596,8 +595,8 @@ class CatalogConsumer(RMQC):
                 raise e
             self.log(
                 (
-                    f"... Successfully created / found catalog holding: {holding.id} and "
-                    f"created transaction: {transaction.transaction_id}"
+                    f"... Successfully created / found catalog holding: {holding.id} "
+                    f" and created transaction: {transaction.transaction_id}"
                 ),
                 RK.LOG_INFO,
             )
@@ -607,11 +606,9 @@ class CatalogConsumer(RMQC):
         # send the failed or complete messages
         if len(self.failedlist) > 0:
             # failed
-            rk_failed = ".".join([rk_origin, RK.CATALOG_PUT, RK.FAILED])
-            self.log(
-                f"Sending failed PathList from CATALOG_PUT {self.failedlist}",
-                RK.LOG_DEBUG,
-            )
+            rk_failed = ".".join([rk_origin, RK.CATALOG_SETUP, RK.FAILED])
+            self.log(f"Sending failed PathList from CATALOG_SETUP", RK.LOG_INFO)
+            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -724,10 +721,8 @@ class CatalogConsumer(RMQC):
         # SUCCESS
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_PUT, RK.COMPLETE])
-            self.log(
-                f"Sending completed PathList from CATALOG_PUT {self.completelist}",
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending completed PathList from CATALOG_PUT", RK.LOG_INFO)
+            self.log(f"{self.completelist}",RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -738,10 +733,8 @@ class CatalogConsumer(RMQC):
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_PUT, RK.FAILED])
-            self.log(
-                f"Sending failed PathList from CATALOG_PUT {self.failedlist}",
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending failed PathList from CATALOG_PUT", RK.LOG_INFO)
+            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -865,10 +858,8 @@ class CatalogConsumer(RMQC):
         # SUCCESS
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.COMPLETE])
-            self.log(
-                f"Sending completed PathList from CATALOG_UPDATE {self.completelist}",
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending completed PathList from CATALOG_UPDATE", RK.LOG_INFO)
+            self.log(f"{self.completelist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -878,10 +869,8 @@ class CatalogConsumer(RMQC):
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.FAILED])
-            self.log(
-                f"Sending failed PathList from CATALOG_UPDATE {self.failedlist}",
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending failed PathList from CATALOG_UPDATE", RK.LOG_INFO)
+            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1040,10 +1029,8 @@ class CatalogConsumer(RMQC):
         # COMPLETED
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_GET, RK.COMPLETE])
-            self.log(
-                f"Sending completed PathList from CATALOG_GET {self.completelist}",
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending completed PathList from CATALOG_GET", RK.LOG_INFO)
+            self.log(f"{self.completelist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1056,9 +1043,9 @@ class CatalogConsumer(RMQC):
             rk_restore = ".".join([rk_origin, RK.ROUTE, RK.ARCHIVE_RESTORE])
             self.log(
                 f"Rerouting PathList from CATALOG_GET to ARCHIVE_GET for archive "
-                f"retrieval ({self.tapelist})",
-                RK.LOG_DEBUG,
+                f"retrieval", RK.LOG_INFO
             )
+            self.log(f"{self.tapelist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.tapelist,
                 routing_key=rk_restore,
@@ -1069,10 +1056,8 @@ class CatalogConsumer(RMQC):
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
-            self.log(
-                f"Sending failed PathList from CATALOG_GET {self.failedlist}",
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending failed PathList from CATALOG_GET", RK.LOG_INFO)
+            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1160,10 +1145,9 @@ class CatalogConsumer(RMQC):
 
         if len(self.completelist) > 0:
             self.log(
-                f"Sending completed PathList from CATALOG_ARCHIVE_PUT "
-                f"{self.completelist}",
-                RK.LOG_DEBUG,
+                f"Sending completed PathList from CATALOG_ARCHIVE_PUT", RK.LOG_INFO
             )
+            self.log(f"{self.completelist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1270,8 +1254,9 @@ class CatalogConsumer(RMQC):
             # Send confirmation on to monitor/worker
             rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_UPDATE, RK.COMPLETE])
             self.log(
-                f"Sending completed PathList from CATALOG_ARCHIVE_UPDATE", RK.LOG_DEBUG
+                f"Sending completed PathList from CATALOG_ARCHIVE_UPDATE", RK.LOG_INFO
             )
+            self.log(f"{self.completelist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1282,10 +1267,9 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_ARCHIVE_UPDATE, RK.FAILED])
             self.log(
-                f"Sending failed PathList from CATALOG_ARCHIVE_UPDATE "
-                f"{self.failedlist}",
-                RK.LOG_DEBUG,
+                f"Sending failed PathList from CATALOG_ARCHIVE_UPDATE ", RK.LOG_INFO
             )
+            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1365,13 +1349,8 @@ class CatalogConsumer(RMQC):
                     self.failedlist.append(f)
 
         if len(self.completelist) > 0:
-            self.log(
-                (
-                    f"Sending completed PathList from CATALOG_REMOVE "
-                    f"{self.completelist}"
-                ),
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending completed PathList from CATALOG_REMOVE ", RK.LOG_INFO)
+            self.log(f"{self.completelist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1380,10 +1359,8 @@ class CatalogConsumer(RMQC):
             )
 
         if len(self.failedlist) > 0:
-            self.log(
-                (f"Sending failed PathList from CATALOG_REMOVE " f"{self.failedlist}"),
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending failed PathList from CATALOG_REMOVE ", RK.LOG_INFO)
+            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1445,10 +1422,8 @@ class CatalogConsumer(RMQC):
         # SUCCESS
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_DEL, RK.COMPLETE])
-            self.log(
-                f"Sending completed PathList from CATALOG_DEL {self.completelist}",
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending completed PathList from CATALOG_DEL", RK.LOG_INFO)
+            self.log(f"{self.completelist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1458,10 +1433,8 @@ class CatalogConsumer(RMQC):
         # FAILED
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_DEL, RK.FAILED])
-            self.log(
-                f"Sending failed PathList from CATALOG_DEL {self.failedlist}",
-                RK.LOG_DEBUG,
-            )
+            self.log(f"Sending failed PathList from CATALOG_DEL", RK.LOG_INFO)
+            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1543,7 +1516,8 @@ class CatalogConsumer(RMQC):
                 ret_list.append(ret_dict)
             # add the return list to successfully completed holding listings
             body[MSG.DATA][MSG.HOLDING_LIST] = ret_list
-            self.log(f"Listing holdings from CATALOG_LIST {ret_list}", RK.LOG_DEBUG)
+            self.log(f"Listing holdings from CATALOG_LIST", RK.LOG_INFO)
+            self.log(f"{ret_list}", RK.LOG_DEBUG)
         self.catalog.end_session()
 
         # send the rpc return message for failed or success
@@ -1600,9 +1574,8 @@ class CatalogConsumer(RMQC):
             # add the return list to successfully completed holding listings
             body[MSG.DATA][MSG.TRANSACTIONS] = ret_dict
             body[MSG.DATA][MSG.RECORD_LIST] = transaction_records
-            self.log(
-                f"Getting holding labels from CATALOG_STAT {ret_dict}", RK.LOG_DEBUG
-            )
+            self.log(f"Getting holding labels from CATALOG_STAT", RK.LOG_INFO)
+            self.log(f"{ret_dict}", RK.LOG_DEBUG)
         self.catalog.end_session()
 
         # send the rpc return message for failed or success
@@ -1629,7 +1602,7 @@ class CatalogConsumer(RMQC):
             regex = self._parse_regex(body)
         except CatalogError:
             # functions above handled message logging, here we just return
-            raise Exception
+            raise Exception("Unhandled error in _catalog_find")
 
         self.catalog.start_session()
 
@@ -1719,7 +1692,8 @@ class CatalogConsumer(RMQC):
         else:
             # add the return list to successfully completed holding listings
             body[MSG.DATA][MSG.HOLDING_LIST] = ret_dict
-            self.log(f"Listing files from CATALOG_FIND {ret_dict}", RK.LOG_DEBUG)
+            self.log(f"Listing files from CATALOG_FIND", RK.LOG_INFO) 
+            self.log(f"{ret_dict}", RK.LOG_DEBUG)
 
         self.catalog.end_session()
 
@@ -1790,7 +1764,8 @@ class CatalogConsumer(RMQC):
         else:
             # fill the return message with a dictionary of the holding(s)
             body[MSG.DATA][MSG.HOLDING_LIST] = ret_list
-            self.log(f"Modified metadata from CATALOG_META {ret_list}", RK.LOG_DEBUG)
+            self.log(f"Modified metadata from CATALOG_META", RK.LOG_INFO)
+            self.log(f"{ret_list}", RK.LOG_DEBUG)
 
         self.catalog.end_session()
 
