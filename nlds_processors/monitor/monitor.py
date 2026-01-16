@@ -220,9 +220,6 @@ class Monitor(DBMixin):
                 transaction_record_id=transaction_record.id,
             )
             self.session.add(sub_record)
-            # need to flush to update the transaction_record.id
-            # and prevent contention with any other monitor worker processes
-            self.session.flush()
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"SubRecord for transaction_record_id:{transaction_record.id} "
@@ -246,8 +243,6 @@ class Monitor(DBMixin):
                 sub_record_id=sub_record.id,
             )
             self.session.add(failed_file)
-            # flush to prevent contention with any other monitor worker processes
-            self.session.flush()
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"FailedFile for sub_record_id:{sub_record.id} could not be "
@@ -336,8 +331,6 @@ class Monitor(DBMixin):
                 f"Attempted {sub_record.state}->{new_state}"
             )
         sub_record.state = new_state
-        self.session.flush()
-        # flush to prevent contention with any other monitor worker processes
 
     def check_completion(self, transaction_record: TransactionRecord) -> None:
         """Get the complete list of sub records from a transaction record and
@@ -387,8 +380,6 @@ class Monitor(DBMixin):
                 warning=warning, transaction_record_id=transaction_record.id
             )
             self.session.add(warning)
-            self.session.flush()
-            # flush to prevent contention with any other monitor worker processes
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"Warning for transaction_record:{transaction_record.id} could "
