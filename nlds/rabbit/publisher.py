@@ -483,7 +483,14 @@ class RabbitMQPublisher:
                             f"Failed to create log file for " f"{log_file}: {str(e)}"
                         )
 
-    def _log(self, log_message: str, log_level: str, target: str, **kwargs) -> None:
+    def _log(
+        self,
+        log_message: str,
+        log_level: str,
+        target: str,
+        remote: bool = True,
+        **kwargs,
+    ) -> None:
         """
         Catch-all function to log a message, both sending it to the local logger
         and sending a message to the exchange en-route to the logger
@@ -497,6 +504,7 @@ class RabbitMQPublisher:
         :param str target:          The intended target log on the logging
                                     microservice. Must be one of the configured
                                     logging handlers
+        :param bool remote:         Log with the remote logger via message
         :param kwargs:              Optional. Keyword args to pass into the call
                                     to logging.log()
         """
@@ -517,10 +525,11 @@ class RabbitMQPublisher:
         log_level_int = getattr(logging, log_level.upper())
         logger.log(log_level_int, log_message, **kwargs)
 
-        # Then assemble a message to send to the logging consumer
-        routing_key = ".".join([RK.ROOT, RK.LOG, log_level.lower()])
-        message = self.create_log_message(log_message, target)
-        self.publish_message(routing_key, message)
+        # Then assemble a message to send to the logging consumer, if remote set
+        if remote:
+            routing_key = ".".join([RK.ROOT, RK.LOG, log_level.lower()])
+            message = self.create_log_message(log_message, target)
+            self.publish_message(routing_key, message)
 
     def log(
         self,
@@ -528,6 +537,7 @@ class RabbitMQPublisher:
         log_level: str,
         target: str = None,
         body_json: str = None,
+        remote: bool = True,
         **kwargs,
     ) -> None:
         # Attempt to log to publisher's name
@@ -536,7 +546,7 @@ class RabbitMQPublisher:
         # convert string json to nice formatted json and append to message
         if body_json:
             log_message += f"\n{json.dumps(body_json, indent=4)}\n"
-        self._log(log_message, log_level, target, **kwargs)
+        self._log(log_message, log_level, target, remote, **kwargs)
 
     @classmethod
     def create_log_message(
