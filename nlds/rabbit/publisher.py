@@ -71,7 +71,8 @@ class RabbitMQPublisher:
         self.connection = None
         self.channel = None
         self.heartbeat = self.config.get(CFG.RABBIT_CONFIG_HEARTBEAT) or 300
-        self.timeout = self.config.get(CFG.RABBIT_CONFIG_TIMEOUT) or 1800  # 30 mins
+        self.timeout = self.config.get(CFG.RABBIT_CONFIG_TIMEOUT) or 1800
+        # 30 mins in s
         self.keepalive = None
 
         # setup the logger
@@ -137,9 +138,7 @@ class RabbitMQPublisher:
 
         """
         if "name" not in exchange or "type" not in exchange:
-            raise ValueError(
-                "Exchange in config file incomplete, cannot be declared."
-            )
+            raise ValueError("Exchange in config file incomplete, cannot be declared.")
 
     def _get_default_properties(self) -> pika.BasicProperties:
         return pika.BasicProperties(
@@ -186,9 +185,9 @@ class RabbitMQPublisher:
         mandatory_fl: bool = True,
     ):
         """
-           Publish to the queue in the thread.
-           Opens its own connection and channel.
-           Replicates a very shortened and specialized part of "get_connection"
+        Publish to the queue in the thread.
+        Opens its own connection and channel.
+        Replicates a very shortened and specialized part of "get_connection"
         """
         try:
             # Start the rabbitMQ connection
@@ -210,9 +209,7 @@ class RabbitMQPublisher:
             channel.confirm_delivery()
             # add the exchanges from the config
             for e in self.exchanges:
-                channel.exchange_declare(
-                    exchange=e["name"], exchange_type=e["type"]
-                )
+                channel.exchange_declare(exchange=e["name"], exchange_type=e["type"])
             channel.basic_publish(
                 exchange=exchange,
                 routing_key=routing_key,

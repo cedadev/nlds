@@ -516,8 +516,6 @@ class RabbitMQConsumer(ABC, RMQP):
         This should be performed on all consumers and should be left untouched
         in child implementations.
         """
-        ack_fl = None
-        # Begin the
         self.keepalive.start_polling()
 
         # Wrap callback with a try-except catching a selection of common
@@ -527,12 +525,18 @@ class RabbitMQConsumer(ABC, RMQP):
         # exception then resend the message
         try:
             self.acknowledge_message(ch, method.delivery_tag, connection)
+            self.log(
+                f"Acknowledged message with routing key {method.routing_key}.",
+                RK.LOG_INFO,
+            )
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
             self.log(
-                f"Exception occurred in callback.  Requeuing message.", RK.LOG_INFO
+                f"Unhandled exception occurred in callback.  Requeuing message.",
+                RK.LOG_INFO,
             )
-            self.log(f"{e}", RK.LOG_DEBUG)
+            tb = traceback.format_exc()
+            self.log(tb, RK.LOG_INFO, exc_info=e)
             self.channel.basic_publish(
                 exchange=method.exchange,
                 routing_key=method.routing_key,
