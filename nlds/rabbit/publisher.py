@@ -548,7 +548,8 @@ class RabbitMQPublisher:
             log_message += f"\n{json.dumps(body_json, indent=4)}\n"
         # set remote to false for LOG_INFO and LOG_WARNING
         if log_level == RK.LOG_INFO or log_level == RK.LOG_WARNING:
-            self._log(log_message, log_level, target, remote, **kwargs)
+            remote = False
+        self._log(log_message, log_level, target, remote, **kwargs)
 
     @classmethod
     def create_log_message(
