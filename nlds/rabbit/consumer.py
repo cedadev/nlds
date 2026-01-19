@@ -236,7 +236,6 @@ class RabbitMQConsumer(ABC, RMQP):
                     f"Invalid value for {config_option} in config file. "
                     f"Using default value instead.",
                     RK.LOG_WARNING,
-                    remote=False
                 )
 
         return return_val
@@ -254,7 +253,7 @@ class RabbitMQConsumer(ABC, RMQP):
             self.log(
                 "Failed to reformat list into PathDetails objects. Filelist in "
                 "message does not appear to be in the correct format.",
-                RK.LOG_ERROR
+                RK.LOG_ERROR,
             )
             raise e
         # de-duplicate the filelist
@@ -528,15 +527,13 @@ class RabbitMQConsumer(ABC, RMQP):
             self.acknowledge_message(ch, method.delivery_tag, connection)
             self.log(
                 f"Acknowledged message with routing key {method.routing_key}",
-                RK.LOG_INFO,
-                remote=False,
+                RK.LOG_INFO
             )
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
             self.log(
                 f"Unhandled exception occurred in callback.  Requeuing message",
-                RK.LOG_INFO,
-                remote=False,
+                RK.LOG_INFO
             )
             tb = traceback.format_exc()
             self.log(tb, RK.LOG_INFO, exc_info=e)
@@ -666,7 +663,7 @@ class RabbitMQConsumer(ABC, RMQP):
             except Exception as e:
                 # Catch all other exceptions and log them as critical.
                 tb = traceback.format_exc()
-                self.log(tb, RK.LOG_CRITICAL, remote=False, exc_info=e)
+                self.log(tb, RK.LOG_CRITICAL, exc_info=e)
                 self.loop = False
                 break
 
