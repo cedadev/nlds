@@ -194,7 +194,7 @@ class CatalogConsumer(RMQC):
         try:
             _ = filelist[0]
         except IndexError as e:
-            msg = f"filelist field must contain a list"
+            msg = f"filelist field must contain a list and not be empty."
             self.log(msg, RK.LOG_ERROR)
             raise CatalogError(message=msg)
 
@@ -515,14 +515,28 @@ class CatalogConsumer(RMQC):
         and an exception will occur!  We need to handle this exception, and warn the
         user appropriately
         """
+        filelist = []  # empty filelist incase _parse_filelist fails
         # Parse the message body for required variables
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
+            filelist = self._parse_filelist(body)   # check if file list is empty
             transaction_id = self._parse_transaction_id(body, mandatory=True)
             label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
-        except CatalogError:
-            # functions above handled message logging, here we just return
+        except CatalogError as e:
+            self.log(e.message, RK.LOG_ERROR)
+            for filepath in filelist:
+                filepath_details = PathDetails.from_dict(filepath)
+                filepath_details.failure_reason = e.message
+                self.failedlist.append(filepath_details)
+            #
+            rk_failed = ".".join([rk_origin, RK.CATALOG_PUT, RK.FAILED])
+            self.send_pathlist(
+                self.failedlist,
+                routing_key=rk_failed,
+                body_json=body,
+                state=State.FAILED,
+            )
             return
 
         self.log(
