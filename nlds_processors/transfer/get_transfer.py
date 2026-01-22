@@ -183,7 +183,7 @@ class GetTransferConsumer(BucketTransferConsumer):
                 raise TransferError(
                     f"Could not change owner of downloaded file: {path_str}"
                 )
-        except (KeyError, PermissionError) as e:
+        except (KeyError, PermissionError, FileNotFoundError) as e:
             self.log("Couldn't change owner of downloaded file", RK.LOG_WARNING)
             self.log(f"Original error: {e}", RK.LOG_DEBUG)
 

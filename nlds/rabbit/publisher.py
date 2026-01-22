@@ -71,7 +71,8 @@ class RabbitMQPublisher:
         self.connection = None
         self.channel = None
         self.heartbeat = self.config.get(CFG.RABBIT_CONFIG_HEARTBEAT) or 300
-        self.timeout = self.config.get(CFG.RABBIT_CONFIG_TIMEOUT) or 1800  # 30 mins
+        self.timeout = self.config.get(CFG.RABBIT_CONFIG_TIMEOUT) or 1800
+        # 30 mins in s
         self.keepalive = None
 
         # setup the logger
@@ -137,9 +138,7 @@ class RabbitMQPublisher:
 
         """
         if "name" not in exchange or "type" not in exchange:
-            raise ValueError(
-                "Exchange in config file incomplete, cannot be declared."
-            )
+            raise ValueError("Exchange in config file incomplete, cannot be declared.")
 
     def _get_default_properties(self) -> pika.BasicProperties:
         return pika.BasicProperties(
@@ -186,9 +185,9 @@ class RabbitMQPublisher:
         mandatory_fl: bool = True,
     ):
         """
-           Publish to the queue in the thread.
-           Opens its own connection and channel.
-           Replicates a very shortened and specialized part of "get_connection"
+        Publish to the queue in the thread.
+        Opens its own connection and channel.
+        Replicates a very shortened and specialized part of "get_connection"
         """
         try:
             # Start the rabbitMQ connection
@@ -210,9 +209,7 @@ class RabbitMQPublisher:
             channel.confirm_delivery()
             # add the exchanges from the config
             for e in self.exchanges:
-                channel.exchange_declare(
-                    exchange=e["name"], exchange_type=e["type"]
-                )
+                channel.exchange_declare(exchange=e["name"], exchange_type=e["type"])
             channel.basic_publish(
                 exchange=exchange,
                 routing_key=routing_key,
@@ -486,7 +483,14 @@ class RabbitMQPublisher:
                             f"Failed to create log file for " f"{log_file}: {str(e)}"
                         )
 
-    def _log(self, log_message: str, log_level: str, target: str, **kwargs) -> None:
+    def _log(
+        self,
+        log_message: str,
+        log_level: str,
+        target: str,
+        remote: bool = True,
+        **kwargs,
+    ) -> None:
         """
         Catch-all function to log a message, both sending it to the local logger
         and sending a message to the exchange en-route to the logger
@@ -500,6 +504,7 @@ class RabbitMQPublisher:
         :param str target:          The intended target log on the logging
                                     microservice. Must be one of the configured
                                     logging handlers
+        :param bool remote:         Log with the remote logger via message
         :param kwargs:              Optional. Keyword args to pass into the call
                                     to logging.log()
         """
@@ -520,10 +525,11 @@ class RabbitMQPublisher:
         log_level_int = getattr(logging, log_level.upper())
         logger.log(log_level_int, log_message, **kwargs)
 
-        # Then assemble a message to send to the logging consumer
-        routing_key = ".".join([RK.ROOT, RK.LOG, log_level.lower()])
-        message = self.create_log_message(log_message, target)
-        self.publish_message(routing_key, message)
+        # Then assemble a message to send to the logging consumer, if remote set
+        if remote:
+            routing_key = ".".join([RK.ROOT, RK.LOG, log_level.lower()])
+            message = self.create_log_message(log_message, target)
+            self.publish_message(routing_key, message)
 
     def log(
         self,
@@ -531,6 +537,7 @@ class RabbitMQPublisher:
         log_level: str,
         target: str = None,
         body_json: str = None,
+        remote: bool = True,
         **kwargs,
     ) -> None:
         # Attempt to log to publisher's name
@@ -539,7 +546,10 @@ class RabbitMQPublisher:
         # convert string json to nice formatted json and append to message
         if body_json:
             log_message += f"\n{json.dumps(body_json, indent=4)}\n"
-        self._log(log_message, log_level, target, **kwargs)
+        # set remote to false for LOG_INFO and LOG_WARNING
+        if log_level == RK.LOG_INFO or log_level == RK.LOG_WARNING:
+            remote = False
+        self._log(log_message, log_level, target, remote, **kwargs)
 
     @classmethod
     def create_log_message(

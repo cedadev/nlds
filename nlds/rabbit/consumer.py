@@ -516,25 +516,34 @@ class RabbitMQConsumer(ABC, RMQP):
         This should be performed on all consumers and should be left untouched
         in child implementations.
         """
-        ack_fl = None
-        # Begin the
         self.keepalive.start_polling()
 
         # Wrap callback with a try-except catching a selection of common
         # errors which can be caught without stopping consumption.
         # NRM - this has changed to stop on all exceptions!
+        # NRM - change to acknowledge the message straight away.  If it fails with an
+        # exception then resend the message
         try:
-            ack_fl = self.callback(ch, method, properties, body, connection)
+            self.acknowledge_message(ch, method.delivery_tag, connection)
+            self.log(
+                f"Acknowledged message with routing key {method.routing_key}",
+                RK.LOG_INFO
+            )
+            self.callback(ch, method, properties, body, connection)
         except Exception as e:
-            # this is very unsatisfactory - it's basically crash and burn!
-            raise Exception(e)
-        finally:
-            # Only ack message if the message has not been flagged for nacking
-            # in the callback with a `return False`
-            if ack_fl is False:
-                self.nack_message(ch, method.delivery_tag, connection)
-            else:
-                self.acknowledge_message(ch, method.delivery_tag, connection)
+            self.log(
+                f"Unhandled exception occurred in callback.  Requeuing message",
+                RK.LOG_INFO
+            )
+            tb = traceback.format_exc()
+            self.log(tb, RK.LOG_INFO, exc_info=e)
+            self.channel.basic_publish(
+                exchange=method.exchange,
+                routing_key=method.routing_key,
+                properties=properties,
+                body=body,
+                mandatory=True,
+            )
 
         # Clear the consuming event so the keepalive stops polling the connection
         self.keepalive.stop_polling()

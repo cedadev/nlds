@@ -173,7 +173,7 @@ class IndexerConsumer(StattingConsumer):
                 self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
                 try:
                     os.chdir(item_path.path)
-                except PermissionError:
+                except (FileNotFoundError, PermissionError):
                     raise IndexError(
                         f"Path: {item_path.path} is inaccessible.  Please check the "
                         f"permissions of the path."
@@ -280,7 +280,7 @@ class IndexerConsumer(StattingConsumer):
                     chpath = item_path.path.parent
                 self.log(f"Changing directory to {chpath}", RK.LOG_INFO)
                 os.chdir(chpath)
-            except PermissionError:
+            except (FileNotFoundError, PermissionError):
                 message = (
                     f"Path: {item_path.path} is inaccessible.  Please check the "
                     f"permissions of the path."

@@ -340,7 +340,6 @@ class S3ToTarfileStream(BucketMixin):
                         f"Unexpected exception occurred during stream {e}",
                         RK.LOG_ERROR,
                     )
-                    raise Exception(e)
                     self.log(reason, RK.LOG_DEBUG)
                     failedlist.append(path_details)
                 else:
