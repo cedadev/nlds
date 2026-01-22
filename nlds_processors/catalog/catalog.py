@@ -11,7 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 from typing import List
 
 # SQLalchemy imports
-from sqlalchemy import func, Enum
+from sqlalchemy import func, Enum, insert
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
@@ -592,13 +592,13 @@ class Catalog(DBMixin):
         link_path: str = None,
         size: str = None,
         file_permissions: str = None,
-    ) -> File:
+    ) -> None:
         """Create a file that belongs to a transaction and will contain
         locations"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
-            new_file = File(
+            statement = insert(File).values(
                 transaction_id=transaction.id,
                 original_path=original_path,
                 path_type=path_type,
@@ -607,14 +607,14 @@ class Catalog(DBMixin):
                 user=user,
                 group=group,
                 file_permissions=file_permissions,
-            )
-            self.session.add(new_file)
+            ).inline()
+            self.session.execute(statement)
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"File with original path {original_path} could not be added to"
                 " the database"
             )
-        return new_file
+        return
 
     def delete_files(
         self,
