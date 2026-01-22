@@ -303,8 +303,6 @@ class RabbitMQConsumer(ABC, RMQP):
         # monitoring routing
         monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
         # shouldn't send empty pathlist
-        if len(pathlist) == 0:
-            raise MessageError("Pathlist is empty")
         # If necessary values not set at this point then use default values
         if state is None:
             state = self.DEFAULT_STATE
@@ -333,6 +331,14 @@ class RabbitMQConsumer(ABC, RMQP):
         # add any warning
         if warning and len(warning) > 0:
             body_json[MSG.DETAILS][MSG.WARNING] = warning
+
+        if len(pathlist) == 0:
+            warning_msg = "No files in pathlist"
+            if (MSG.WARNING in body_json[MSG.DETAILS] and 
+                len(body_json[MSG.DETAILS][MSG.WARNING])> 0):
+                body_json[MSG.DETAILS][MSG.WARNING].append(warning_msg)
+            else:
+                body_json[MSG.DETAILS][MSG.WARNING]= [warning_msg]
 
         # added the delay back in for the PREPARE method, but now works differently
         self.publish_message(monitoring_rk, body_json, delay=delay)
