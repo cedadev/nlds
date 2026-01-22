@@ -203,8 +203,8 @@ class Catalog(DBMixin):
 
             if holding_q.count() == 0:
                 holding = []
-            elif limit:  # might have to change this back to .limit if DB gets big
-                holding = holding_q.limit(limit)
+            elif limit:
+                holding = holding_q.limit(limit).all()
             else:
                 holding = holding_q.all()
 
