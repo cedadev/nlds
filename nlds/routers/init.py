@@ -49,6 +49,7 @@ async def get():
         oauth_token_url = os.environ["OAUTH_TOKEN_URL"]
         oauth_scopes = os.environ["OAUTH_SCOPES"]
         enc_key = os.environ["SYM_KEY"].encode()
+        os_tenancy = os.environ["OS_TENANCY"]
     except KeyError as e:
         response_error = ResponseError(
             loc=["init", "get"], msg="Unable to get api keys.", type="Failed request."
@@ -60,10 +61,15 @@ async def get():
 
     api_info_bytes = json.dumps(
         {
-            "oauth_client_id": oauth_id,
-            "oauth_client_secret": oauth_secret,
-            "oauth_token_url": oauth_token_url,
-            "oauth_scopes": oauth_scopes,
+            "authentication": {
+                "oauth_client_id": oauth_id,
+                "oauth_client_secret": oauth_secret,
+                "oauth_token_url": oauth_token_url,
+                "oauth_scopes": oauth_scopes,
+            },
+            "object_storage": {
+                "tenancy": os_tenancy,
+            }
         }
     ).encode()
 

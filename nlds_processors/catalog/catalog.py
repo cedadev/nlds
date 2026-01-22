@@ -699,7 +699,7 @@ class Catalog(DBMixin):
         path: str,
         access_time: float,
         aggregation: Aggregation = None,
-    ) -> Location:
+    ) -> None:
         """Add the storage location for either object storage or tape"""
         if self.session is None:
             raise RuntimeError("self.session is None")
@@ -708,7 +708,7 @@ class Catalog(DBMixin):
         else:
             aggregation_id = aggregation.id
         try:
-            location = Location(
+            statement = insert(Location).values(
                 storage_type=storage_type,
                 url_scheme=url_scheme,
                 url_netloc=url_netloc,
@@ -721,15 +721,30 @@ class Catalog(DBMixin):
                 access_time=access_time,
                 file_id=file_.id,
                 aggregation_id=aggregation_id,
-            )
-            self.session.add(location)
+            ).inline()
+            self.session.execute(statement)
+            # location = Location(
+            #     storage_type=storage_type,
+            #     url_scheme=url_scheme,
+            #     url_netloc=url_netloc,
+            #     # root is bucket for Object Storage which is the transaction id
+            #     # which is now stored in the Holding record
+            #     root=root,
+            #     # path is object_name for object storage
+            #     path=path,
+            #     # access time is passed in the file details
+            #     access_time=access_time,
+            #     file_id=file_.id,
+            #     aggregation_id=aggregation_id,
+            # )
+            # self.session.add(location)
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location with root {root}, path {file_.original_path} and "
                 f"storage type {storage_type} could not be added to "
                 "the catalog"
             )
-        return location
+        return
 
     def delete_location(self, file: File, storage_type: Enum) -> None:
         """Delete the location for a given file and storage_type"""
