@@ -829,7 +829,7 @@ class CatalogConsumer(RMQC):
                     self.completelist.append(pd)
                 elif create:
                     # create location
-                    location = self.catalog.create_location(
+                    self.catalog.create_location(
                         file,
                         storage_type=st,
                         url_scheme=pl.url_scheme,
