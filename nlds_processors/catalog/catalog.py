@@ -607,7 +607,7 @@ class Catalog(DBMixin):
                 user=user,
                 group=group,
                 file_permissions=file_permissions,
-            )
+            ).inline()
             self.session.execute(statement)
         except (IntegrityError, KeyError):
             raise CatalogError(
