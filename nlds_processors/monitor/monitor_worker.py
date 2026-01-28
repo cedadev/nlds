@@ -344,7 +344,6 @@ class MonitorConsumer(RMQC):
                 srec = self.monitor.create_sub_record(trec, sub_id, state)
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
-
         # consistency check
         if srec.transaction_record_id != trec.id:
             msg = (
@@ -469,18 +468,14 @@ class MonitorConsumer(RMQC):
             )
         except MonitorError as e:
             # Function above handled message logging, here we just return
-            # don't ack - try again
             return False
-
+        # flush to update the srec id
+        self.monitor.session.flush()
         # Update subrecord to match new monitoring data
         try:
             self.monitor.update_sub_record(srec, state)
         except MonitorError as e:
-            # If the state update is invalid then rollback session and exit
-            # callback
             self.log(e.message, RK.LOG_ERROR)
-            # session.rollback() # rollback needed?
-            # don't ack - try again
             return False
 
         # Create failed_files if necessary

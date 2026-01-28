@@ -41,6 +41,7 @@ class DBMixin:
         # connect to the database using the information in the config
         # get the database connection string
         db_connect = self.get_db_string()
+        print(f"Database string is {db_connect}")
 
         # indicate database not connected yet
         self.db_engine = None
@@ -74,11 +75,9 @@ class DBMixin:
             self.session = None
         self.session = Session(bind=self.db_engine, future=True)
 
-    def save(self):
-        """Commit all pending transactions"""
-        self.session.commit()
-
     def end_session(self):
         """Close the SQL alchemy session"""
-        self.session.close()
-        self.session = None
+        if self.session is not None:
+            self.session.commit()
+            self.session.close()
+            self.session = None

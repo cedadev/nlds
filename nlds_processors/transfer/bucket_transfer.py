@@ -81,6 +81,7 @@ class BucketTransferConsumer(BaseTransferConsumer, BucketMixin, ABC):
             secure=self.require_secure_fl,
         )
 
+        failed = False
         try:
             bucket_name = self._get_bucket_name(transaction_id=transaction_id)
             # set access policies only if bucket is created
@@ -93,6 +94,7 @@ class BucketTransferConsumer(BaseTransferConsumer, BucketMixin, ABC):
         except BucketError as e:
             # If the bucket cannot be created, due to a S3 error, then fail all the
             # files in the transaction
+            failed = True
             for f in filelist:
                 f.failure_reason = f"S3 error: {e.message} when creating bucket"
                 self.append_and_send(
@@ -111,6 +113,6 @@ class BucketTransferConsumer(BaseTransferConsumer, BucketMixin, ABC):
                 body_json=body_json,
                 state=State.FAILED,
             )
-        else:
+        elif not failed:
             # complete
             self.publish_message(rk_complete, body_json)
