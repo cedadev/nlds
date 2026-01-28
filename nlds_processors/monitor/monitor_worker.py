@@ -379,8 +379,6 @@ class MonitorConsumer(RMQC):
             RK.LOG_INFO,
         )
 
-        # start the database transactions
-        self.monitor.start_session()
         # create the transaction record
         try:
             trec = self.monitor.create_transaction_record(
@@ -389,8 +387,6 @@ class MonitorConsumer(RMQC):
         except MonitorError as e:
             self.log(e.message, RK.LOG_ERROR)
         # save and end the sessions
-        self.monitor.save()
-        self.monitor.end_session()
         self.log(
             f"... Successfully created monitoring record",
             RK.LOG_INFO,
@@ -508,9 +504,6 @@ class MonitorConsumer(RMQC):
                 self.log(e.message, RK.LOG_ERROR)
                 return False
 
-        # Commit all transactions when we're sure everything is as it should be.
-        self.monitor.save()
-        self.monitor.end_session()
         self.log(
             f"... Successfully commited monitoring update",
             RK.LOG_INFO,
@@ -636,8 +629,6 @@ class MonitorConsumer(RMQC):
                 }
                 t_rec["sub_records"].append(s_rec)
 
-        self.monitor.end_session()
-
         ret_list = []
         for id_ in trecs_dict:
             # NRM - return all trecs, even if they are empty - the client will interpret
@@ -729,6 +720,12 @@ class MonitorConsumer(RMQC):
                 self.log(f"db_connect string is {db_connect}", RK.LOG_DEBUG)
         except DBError as e:
             self.log(e.message, RK.LOG_CRITICAL)
+        # start the session - just have one
+        self.monitor.start_session()
+
+    def detach_database(self):
+        # end the session
+        self.monitor.end_session()
 
     def get_engine(self):
         # Method for making the db_engine available to alembic
@@ -753,6 +750,8 @@ def main():
     consumer.attach_database()
     # run the loop
     consumer.run()
+    # detach DB
+    consumer.detach_database()
 
 
 if __name__ == "__main__":

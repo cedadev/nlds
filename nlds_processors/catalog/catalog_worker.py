@@ -1750,7 +1750,7 @@ class CatalogConsumer(RMQC):
         self.catalog.start_session()
 
     def detach_database(self):
-        # end the session to see if a session exists
+        # end the session
         self.catalog.end_session()
 
     def get_engine(self):

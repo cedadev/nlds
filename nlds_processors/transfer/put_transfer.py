@@ -45,10 +45,18 @@ class PutTransferConsumer(BucketTransferConsumer):
 
         # get the bucket name and check that it exists
         # it should have been created by the *.transfer-setup.start process / message
+        # if it hasn't then have another go
         try:
             bucket_name = self._get_bucket_name(transaction_id)
+            group = self._parse_group(body_json=body_json)
             if not self._bucket_exists(bucket_name):
-                raise BucketError(f"Bucket {bucket_name} does not exist")
+                # set access policies only if bucket is created
+                if self._make_bucket(bucket_name):
+                    self._set_access_policies(bucket_name=bucket_name, group=group)
+                self.log(
+                    f"Created bucket on tenancy: {tenancy} with name: {bucket_name}",
+                    RK.LOG_INFO,
+            )
         except BucketError as e:
             raise RuntimeError(e.message)
 
