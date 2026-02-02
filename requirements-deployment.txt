@@ -1,1 +1,3 @@
-psycopg[binary,pool]
+psycopg
+psycopg-binary
+psycopg-pool
