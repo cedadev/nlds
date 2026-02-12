@@ -384,6 +384,8 @@ class MonitorConsumer(RMQC):
             trec = self.monitor.create_transaction_record(
                 user, group, transaction_id, job_label, api_action
             )
+            # commit early as it is the top of the tree
+            self.monitor.commit()
         except MonitorError as e:
             self.log(e.message, RK.LOG_ERROR)
         # save and end the sessions
@@ -503,6 +505,7 @@ class MonitorConsumer(RMQC):
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
                 return False
+        self.monitor.commit()
 
         self.log(
             f"... Successfully commited monitoring update",
