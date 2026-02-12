@@ -81,3 +81,7 @@ class DBMixin:
             self.session.commit()
             self.session.close()
             self.session = None
+
+    def commit(self):
+        if self.session is not None:
+            self.session.commit()
