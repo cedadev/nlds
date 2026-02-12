@@ -33,7 +33,7 @@ from nlds_processors.catalog.catalog_models import (
 )
 from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
-from nlds.details import PathType
+from nlds.details import PathType, PathDetails
 
 
 class Catalog(DBMixin):
@@ -263,15 +263,13 @@ class Catalog(DBMixin):
         try:
             holding = Holding(label=label, user=user, group=group)
             self.session.add(holding)
-            # commit early for this as it is at the top of the tree
-            self.session.commit()
-            # commit holding.id and prevent contention with any other catalog worker
-            # instances
         except (IntegrityError, KeyError) as e:
             raise CatalogError(
                 f"Holding with label:{label} could not be added to the catalog "
                 f"for user:{user} and group:{group}"
             )
+        # flush to create an id for the holding
+        self.session.flush()
         return holding
 
     def modify_holding(
@@ -293,7 +291,6 @@ class Catalog(DBMixin):
         if new_label:
             try:
                 holding.label = new_label
-                self.session.commit()
             except IntegrityError:
                 raise CatalogError(
                     f"Cannot change holding with label:{holding.label} and "
@@ -319,7 +316,6 @@ class Catalog(DBMixin):
                 tag = self.get_tag(holding, k)
                 if tag.value == del_tags[k]:
                     self.delete_tag(holding, k)
-        self.session.commit()
         return holding
 
     def get_transaction(
@@ -391,13 +387,13 @@ class Catalog(DBMixin):
                 ingest_time=func.now(),
             )
             self.session.add(transaction)
-            self.session.commit()
-            # Commit to generate transaction.id and prevent additional creations
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Transaction with transaction_id:{transaction_id} could not "
                 "be added to the catalog"
             )
+        # flush to create an id
+        self.session.flush()
         return transaction
 
     def _user_has_get_file_permission(self, user: str, group: str, file: File) -> bool:
@@ -423,19 +419,22 @@ class Catalog(DBMixin):
 
         return permitted
 
-    def file_exists(
-        self, user: str, group: str, holding_id: int, original_path: str
-    ) -> bool:
-        """Quick check to see if a file exists in a holding."""
-        if self.session is None:
-            raise RuntimeError("self.session is None")
-        file_exists = self.session.query(
-            exists(File.id)
-            .where(Transaction.holding_id == holding_id)
-            .where(File.transaction_id == Transaction.id)
-            .where(File.original_path == original_path)
-        ).scalar()
-        return file_exists
+    def _filelist_exists_in_holding(
+        self, user: str, group: str, holding_id: int, filelist: list[PathDetails]
+    ) -> list:
+        """Determine whether any of the files in PathDetails already exist in any
+        of the Transactions in the Holding."""
+        transactions = self.session.query(Transaction.id, File).filter(
+            Transaction.holding_id == holding_id
+        )
+        filelist2 = [f.original_path for f in filelist]
+        # this is an explicit join, just for my understanding
+        files_q = transactions.join(File, File.transaction_id == Transaction.id).where(
+            File.original_path.in_(filelist2)
+        )
+        # files here are FileModels.  Convert to PathDetails, as the input was
+        files = [PathDetails.from_filemodel(f[1]) for f in files_q]
+        return files
 
     def get_file(
         self,
@@ -459,9 +458,9 @@ class Catalog(DBMixin):
             )
             # if we're going to update the file then use with_for_update
             if with_for_update:
-                file = file_q.with_for_update().one()
+                file = file_q.with_for_update().first()
             else:
-                file = file_q.one()
+                file = file_q.first()
         except NoResultFound:
             msg = (
                 f"File: {original_path} not found in holding with holding_id: "
@@ -597,8 +596,8 @@ class Catalog(DBMixin):
     def create_file(
         self,
         transaction: Transaction,
-        user: str = None,
-        group: str = None,
+        user: int = None,
+        group: int = None,
         original_path: str = None,
         path_type: str = None,
         link_path: str = None,
@@ -625,8 +624,6 @@ class Catalog(DBMixin):
                 .inline()
             )
             self.session.execute(statement)
-            # commit upon creation
-            self.session.commit()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"File with original path {original_path} could not be added to"
@@ -661,7 +658,7 @@ class Catalog(DBMixin):
             original_path=path,
             tag=tag,
         )
-        #checkpoint = self.session.begin_nested()
+        # checkpoint = self.session.begin_nested()
         try:
             for f in files:
                 # First get parent transaction and holding
@@ -676,14 +673,12 @@ class Catalog(DBMixin):
                     self.session.delete(transaction)
                 if len(holding.transactions) == 0:
                     self.session.delete(holding)
-                self.session.commit()
         except (IntegrityError, KeyError, OperationalError):
-            # This rollsback only to the checkpoint, so any successful deletes
-            # done already will stay in the transaction.
             err_msg = (
                 f"File with original_path:{path} could not be deleted from the catalog"
             )
             raise CatalogError(err_msg)
+        self.save()
 
     def get_location(
         self, file: File, storage_type: Enum, with_for_update: bool = False
@@ -745,7 +740,6 @@ class Catalog(DBMixin):
                 .inline()
             )
             self.session.execute(statement)
-            self.session.commit()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location with root {root}, path {file_.original_path} and "
@@ -762,7 +756,7 @@ class Catalog(DBMixin):
         root: str,
         path: str,
         access_time: float,
-        aggregation_id: Aggregation
+        aggregation_id: Aggregation = None,
     ):
         # Modify the location to update it
         # otherwise update if exists and not empty
@@ -772,15 +766,13 @@ class Catalog(DBMixin):
         location.path = path
         location.access_time = access_time
         location.aggregation_id = aggregation_id
-        self.session.commit()
 
     def delete_location(self, file: File, storage_type: Enum) -> None:
         """Delete the location for a given file and storage_type"""
         location = self.get_location(file, storage_type=storage_type)
-        #checkpoint = self.session.begin_nested()
+        # checkpoint = self.session.begin_nested()
         try:
             self.session.delete(location)
-            self.session.commit()
         except (IntegrityError, KeyError, OperationalError):
             # This rollsback only to the checkpoint, so any successful deletes
             # done already will stay in the transaction.
@@ -797,9 +789,9 @@ class Catalog(DBMixin):
         try:
             tag = Tag(key=key, value=value, holding_id=holding.id)
             self.session.add(tag)
-            self.session.commit()
         except (IntegrityError, KeyError):
             raise CatalogError(f"Tag could not be added to holding:{holding.label}")
+        self.session.flush()
         return tag
 
     def get_tag(self, holding: Holding, key: str, with_for_update: bool = False):
@@ -831,7 +823,6 @@ class Catalog(DBMixin):
                 .one()
             )  # uniqueness constraint guarantees only one
             tag.value = value
-            self.session.commit()
         except (NoResultFound, KeyError):
             raise CatalogError(f"Tag with key:{key} not found")
         return tag
@@ -842,7 +833,7 @@ class Catalog(DBMixin):
             raise RuntimeError("self.session is None")
         # use a checkpoint as the tags are being deleted in an external loop and
         # using a checkpoint will ensure that any completed deletes are committed
-        #checkpoint = self.session.begin_nested()
+        # checkpoint = self.session.begin_nested()
         try:
             tag = (
                 self.session.query(Tag)
@@ -851,7 +842,6 @@ class Catalog(DBMixin):
                 .one()
             )  # uniqueness constraint guarantees only one
             self.session.delete(tag)
-            self.session.commit()
         except (NoResultFound, KeyError):
             raise CatalogError(f"Tag with key:{key} not found")
         return None
@@ -870,12 +860,12 @@ class Catalog(DBMixin):
                 failed_fl=False,  # Aggregations fail before creation now
             )
             self.session.add(aggregation)
-            self.session.commit()
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Aggregation with tarname:{tarname} could not be added to the "
                 f"catalog"
             )
+        self.session.flush()
         return aggregation
 
     def get_aggregation(
@@ -904,7 +894,6 @@ class Catalog(DBMixin):
         """Delete a given aggregation"""
         try:
             self.session.delete(aggregation)
-            self.session.commit()
         except (IntegrityError, KeyError, OperationalError):
             err_msg = (
                 f"Aggregation with aggregation.id {aggregation.id} could "
