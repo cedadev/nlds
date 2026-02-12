@@ -431,7 +431,7 @@ class CatalogConsumer(RMQC):
         except (KeyError, CatalogError):
             transaction = None
 
-        # create the transaction within the  holding if it doesn't exist
+        # create the transaction within the holding if it doesn't exist
         if transaction is None:
             try:
                 transaction = self.catalog.create_transaction(holding, transaction_id)
@@ -458,6 +458,7 @@ class CatalogConsumer(RMQC):
                         f":{label} as that tag already exists.  Tags can be modified"
                         f" using the meta command"
                     )
+            self.catalog.commit()
         return warnings
 
     def _get_holding_with_retry(
@@ -485,7 +486,7 @@ class CatalogConsumer(RMQC):
                 fkwargs=kwargs,
                 delay=1,
                 tries=5,
-                backoff=2,
+                backoff=1,
             )
         except Exception as e:
             raise e
@@ -612,6 +613,8 @@ class CatalogConsumer(RMQC):
                 ),
                 RK.LOG_INFO,
             )
+            # commit the transaction and the holding
+            self.catalog.commit()
         # send the failed or complete messages
         if len(self.failedlist) > 0:
             # failed
@@ -648,7 +651,7 @@ class CatalogConsumer(RMQC):
         # get the (regex) search label
         search_label = self._get_search_label(label, holding_id)
 
-        # get, or create the holding
+        # get the holding - it should have been created in the _catalog_setup
         try:
             holding = self._get_holding_with_retry(
                 user,
@@ -678,41 +681,54 @@ class CatalogConsumer(RMQC):
                     self.failedlist.append(pd)
 
         if holding and transaction:
-            # loop over the filelist
+            # convert the JSON file descriptions in the filelist into a list of
+            # PathDetails
+            path_details_list = []
             for f in filelist:
                 # convert to PathDetails class
                 pd = PathDetails.from_dict(f)
                 # add the holding id to the PathDetails
                 pd.holding_id = holding.id
-                try:
-                    if self.catalog.file_exists(
-                        user,
-                        group,
-                        holding_id=holding.id,
-                        original_path=pd.original_path,
-                    ):
-                        raise CatalogError("File(s) already exists in holding")
+                path_details_list.append(pd)
 
-                    # create the file
-                    self.catalog.create_file(
-                        transaction,
-                        pd.user,
-                        pd.group,
-                        pd.original_path,
-                        pd.path_type,
-                        pd.link_path,
-                        pd.size,
-                        pd.permissions,
-                    )
-                    self.completelist.append(pd)
-                except CatalogError as e:
-                    pd.failure_reason = e.message
-                    self.failedlist.append(pd)
-                    self.log(e.message, RK.LOG_ERROR)
-                    continue
+            # check whether any member of this path_details_list already occurs in the
+            # holding
+            files_exist = self.catalog._filelist_exists_in_holding(
+                user, group, holding.id, path_details_list
+            )
+            # fail the files that exist
+            for e in files_exist:
+                # this little bit of code gets the original PathDetails from the
+                # filelist for a file that failed
+                pd = path_details_list[path_details_list.index(e)]
+                # add the failure reason
+                msg = "File already exists in holding."
+                pd.failure_reason = msg
+                self.failedlist.append(pd)
+                self.log(msg, RK.LOG_ERROR)
+
+            # find the files in the path_details_list that didn't already occur in the
+            # holding - i.e. they are not in the files_exist list
+            files_to_add = list(set(path_details_list) - set(files_exist))
+            for pd in files_to_add:
+                # create the file
+                self.catalog.create_file(
+                    transaction,
+                    pd.user,
+                    pd.group,
+                    pd.original_path,
+                    pd.path_type,
+                    pd.link_path,
+                    pd.size,
+                    pd.permissions,
+                )
+                self.completelist.append(pd)
 
             # Add any user tags to the holding
             tag_warnings = self._create_tags(tags, holding, label)
+
+        # commit to DB
+        self.catalog.commit()
 
         # log the successful and non-successful catalog puts
         # SUCCESS
@@ -734,6 +750,16 @@ class CatalogConsumer(RMQC):
             self.log(f"{self.failedlist}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
+                routing_key=rk_failed,
+                body_json=body,
+                state=State.FAILED,
+                warning=tag_warnings,
+            )
+        # NO FILES!
+        if len(self.failedlist) == 0 and len(self.completelist) == 0:
+            rk_failed = ".".join([rk_origin, RK.CATALOG_PUT, RK.FAILED])
+            self.send_pathlist(
+                [],
                 routing_key=rk_failed,
                 body_json=body,
                 state=State.FAILED,
@@ -849,6 +875,8 @@ class CatalogConsumer(RMQC):
                 pd.failure_reason = e.message
                 self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
+        # commit
+        self.catalog.commit()
 
         # log the successful and non-successful catalog updates
         # SUCCESS
@@ -1118,6 +1146,8 @@ class CatalogConsumer(RMQC):
                 self.failedlist.append(pd)
                 continue
 
+        self.catalog.commit()
+
         # Forward successful file details to archive for tape write
         rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.COMPLETE])
 
@@ -1231,6 +1261,8 @@ class CatalogConsumer(RMQC):
                 self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
+        # commit when all files complete
+        self.catalog.commit()
 
         if len(self.completelist) > 0:
             # Send confirmation on to monitor/worker
@@ -1328,6 +1360,8 @@ class CatalogConsumer(RMQC):
                 except (CatalogError, IndexError) as e:
                     f.failure_reason = e.message
                     self.failedlist.append(f)
+            # commit
+            self.catalog.commit()
 
         if len(self.completelist) > 0:
             self.log(f"Sending completed PathList from CATALOG_REMOVE ", RK.LOG_INFO)
@@ -1391,6 +1425,7 @@ class CatalogConsumer(RMQC):
                 self.failedlist.append(file_details)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
+        self.catalog.commit()
 
         # log the successful and non-successful catalog dels
         # SUCCESS
@@ -1698,6 +1733,7 @@ class CatalogConsumer(RMQC):
                 )
                 self.catalog.modify_holding(holding, new_label, new_tag, del_tag)
 
+            self.catalog.commit()
             for holding, old_meta in zip(holdings, old_meta_list):
                 # record the new metadata
                 new_meta = {"label": holding.label, "tags": holding.get_tags()}
@@ -1712,6 +1748,7 @@ class CatalogConsumer(RMQC):
                     "new_meta": new_meta,
                 }
                 ret_list.append(ret_dict)
+            self.catalog.commit()
 
         except CatalogError as e:
             # failed to get the holdings - send a return message saying so
