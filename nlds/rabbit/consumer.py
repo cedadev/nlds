@@ -37,6 +37,7 @@ from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 import nlds.server_config as CFG
 from nlds.details import PathDetails
 from nlds.errors import MessageError
+from nlds.nlds_setup import REQUEUE
 
 logger = logging.getLogger("nlds.root")
 
@@ -537,19 +538,22 @@ class RabbitMQConsumer(ABC, RMQP):
             )
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
-            self.log(
-                f"Unhandled exception occurred in callback.  Requeuing message",
-                RK.LOG_INFO
-            )
-            tb = traceback.format_exc()
-            self.log(tb, RK.LOG_INFO, exc_info=e)
-            self.channel.basic_publish(
-                exchange=method.exchange,
-                routing_key=method.routing_key,
-                properties=properties,
-                body=body,
-                mandatory=True,
-            )
+            if REQUEUE:
+                self.log(
+                    f"Unhandled exception occurred in callback.  Requeuing message",
+                    RK.LOG_INFO
+                )
+                tb = traceback.format_exc()
+                self.log(tb, RK.LOG_INFO, exc_info=e)
+                self.channel.basic_publish(
+                    exchange=method.exchange,
+                    routing_key=method.routing_key,
+                    properties=properties,
+                    body=body,
+                    mandatory=True,
+                )
+            else:
+                raise Exception(e)
 
         # Clear the consuming event so the keepalive stops polling the connection
         self.keepalive.stop_polling()
