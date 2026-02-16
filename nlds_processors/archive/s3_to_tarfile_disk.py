@@ -67,7 +67,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         holding_prefix: str,
         filelist: List[PathDetails],
         chunk_size: int,
-        num_parallel_uploads: int,
+        num_parallel_uploads: int = 1,
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """Stream from Object Store to a tarfile on disk"""
         if self.filelist != []:
@@ -155,7 +155,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         tarfile: str,
         filelist: List[PathDetails],
         chunk_size: int,
-        num_parallel_uploads: int,
+        num_parallel_uploads: int = 1,
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on disk to Object Store"""
         if self.filelist != []:

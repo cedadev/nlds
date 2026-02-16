@@ -865,6 +865,7 @@ class Catalog(DBMixin):
                 f"Aggregation with tarname:{tarname} could not be added to the "
                 f"catalog"
             )
+        # flush aggregation to sync
         self.session.flush()
         return aggregation
 

@@ -1245,12 +1245,19 @@ class CatalogConsumer(RMQC):
                 location = self.catalog.get_location(
                     file, storage_type, with_for_update=True
                 )
+                # set access time to now if no access time set in PathLocation
+                if pl.access_time is None:
+                    access_time = datetime.now()
+                else:
+                    access_time = datetime.fromtimestamp(pl.access_time)
+
                 self.catalog.modify_location(
                     location,
                     url_scheme=pl.url_scheme,
                     url_netloc=pl.url_netloc,
                     root=pl.root,
                     path=pl.path,
+                    access_time=access_time,
                     aggregation_id=aggregation.id,
                 )
                 self.completelist.append(pd)

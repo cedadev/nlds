@@ -183,7 +183,7 @@ class S3ToTarfileStream(BucketMixin):
         file_object,
         filelist: List[PathDetails],
         chunk_size: int,
-        num_parallel_uploads: int,
+        num_parallel_uploads: int = 1,
     ):
         if self.s3_client is None:
             raise S3StreamError("self.s3_client is None")
@@ -250,7 +250,7 @@ class S3ToTarfileStream(BucketMixin):
         file_object,
         filelist: List[PathDetails],
         chunk_size: int,
-        num_parallel_uploads: int,
+        num_parallel_uploads: int = 1,
     ):
         if self.s3_client is None:
             raise S3StreamError("self.s3_client is None")
@@ -362,7 +362,7 @@ class S3ToTarfileStream(BucketMixin):
         holding_prefix: str,
         filelist: List[PathDetails],
         chunk_size: int,
-        num_parallel_uploads: int,
+        num_parallel_uploads: int = 1,
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         raise NotImplementedError
 
@@ -373,7 +373,7 @@ class S3ToTarfileStream(BucketMixin):
         tarfile: str,
         filelist: List[PathDetails],
         chunk_size: int,
-        num_parallel_uploads: int,
+        num_parallel_uploads: int = 1,
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         raise NotImplementedError
 

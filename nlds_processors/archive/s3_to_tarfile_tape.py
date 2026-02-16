@@ -91,7 +91,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         holding_prefix: str,
         filelist: List[PathDetails],
         chunk_size: int,
-        num_parallel_uploads: int,
+        num_parallel_uploads: int = 1,
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """
         Put the filelist to the tape server using the already created S3 client and
@@ -177,7 +177,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         tarfile: str,
         filelist: List[PathDetails],
         chunk_size: int,
-        num_parallel_uploads: int,
+        num_parallel_uploads: int = 1,
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on tape to Object Store"""
         if self.filelist != []:
