@@ -450,17 +450,17 @@ class Catalog(DBMixin):
         try:
             # File belongs to a particular holding, access directly through
             # Transaction.holding_id
-            file_q = (
-                self.session.query(File)
-                .where(Transaction.holding_id == holding_id)
-                .where(File.transaction_id == Transaction.id)
-                .where(File.original_path == original_path)
+            transaction = self.session.query(Transaction.id, File).filter(
+                Transaction.holding_id == holding_id
             )
+            file_q = transaction.join(
+                File, File.transaction_id == Transaction.id
+            ).where(File.original_path == original_path)
             # if we're going to update the file then use with_for_update
             if with_for_update:
-                file = file_q.with_for_update().first()
+                file = file_q.with_for_update().first()[1]
             else:
-                file = file_q.first()
+                file = file_q.first()[1]
         except NoResultFound:
             msg = (
                 f"File: {original_path} not found in holding with holding_id: "
