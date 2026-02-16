@@ -441,26 +441,28 @@ class Catalog(DBMixin):
         user: str,
         group: str,
         holding_id: int,
+        transaction_id: str,
         original_path: str,
         with_for_update: bool = False,
     ) -> File:
-        """Quick access to a single file, in a particular holding."""
+        """Quick access to a single file, in a particular holding and transaction."""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
             # File belongs to a particular holding, access directly through
             # Transaction.holding_id
-            transaction = self.session.query(Transaction.id, File).filter(
-                Transaction.holding_id == holding_id
+            file_q = (
+                self.session.query(File)
+                .select_from(Transaction)
+                .where(
+                    Transaction.holding_id == holding_id,
+                ).join(File).filter(File.original_path == original_path)
             )
-            file_q = transaction.join(
-                File, File.transaction_id == Transaction.id
-            ).where(File.original_path == original_path)
             # if we're going to update the file then use with_for_update
             if with_for_update:
-                file = file_q.with_for_update().first()[1]
+                file = file_q.with_for_update().first()
             else:
-                file = file_q.first()[1]
+                file = file_q.first()
         except NoResultFound:
             msg = (
                 f"File: {original_path} not found in holding with holding_id: "

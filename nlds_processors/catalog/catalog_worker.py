@@ -780,6 +780,7 @@ class CatalogConsumer(RMQC):
         # Parse the message body for required variables
         try:
             filelist = self._parse_filelist(body)
+            transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
         except CatalogError as e:
@@ -813,6 +814,7 @@ class CatalogConsumer(RMQC):
                     user,
                     group,
                     holding_id=pd.holding_id,
+                    transaction_id=transaction_id,
                     original_path=pd.original_path,
                     with_for_update=True,
                 )
@@ -1182,6 +1184,7 @@ class CatalogConsumer(RMQC):
         # Parse the message body for required variables
         try:
             filelist = self._parse_filelist(body)
+            transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
             _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
@@ -1237,6 +1240,7 @@ class CatalogConsumer(RMQC):
                     user,
                     group,
                     holding_id=holding_id,
+                    transaction_id=transaction_id,
                     original_path=pd.original_path,
                     with_for_update=True,
                 )
@@ -1308,6 +1312,7 @@ class CatalogConsumer(RMQC):
 
         try:
             filelist_ = self._parse_filelist(body)
+            transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
             _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
@@ -1343,6 +1348,7 @@ class CatalogConsumer(RMQC):
                         user,
                         group,
                         holding_id=holding_id,
+                        transaction_id=transaction_id,
                         original_path=f.original_path,
                         with_for_update=True,
                     )
