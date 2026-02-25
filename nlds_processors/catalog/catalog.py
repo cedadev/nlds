@@ -8,10 +8,8 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from typing import List
-
 # SQLalchemy imports
-from sqlalchemy import func, Enum, insert, exists
+from sqlalchemy import func, Enum
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
@@ -142,7 +140,7 @@ class Catalog(DBMixin):
         regex: bool = False,
         limit: int = None,
         descending: bool = False,
-    ) -> List[Holding]:
+    ) -> list[Holding]:
         """Get a list of matching holdings from the catalog database.  This function
         can be quite slow!"""
         if self.session is None:
@@ -376,7 +374,11 @@ class Catalog(DBMixin):
             raise CatalogError(f"File for location:{location.id} not retrievable.")
         return file_
 
-    def create_transaction(self, holding: Holding, transaction_id: str) -> Transaction:
+    def create_transaction(
+        self,
+        holding: Holding,
+        transaction_id: str,
+    ) -> Transaction:
         """Create a transaction that belongs to a holding and will contain files"""
         if self.session is None:
             raise RuntimeError("self.session is None")
@@ -396,7 +398,12 @@ class Catalog(DBMixin):
         self.session.flush()
         return transaction
 
-    def _user_has_get_file_permission(self, user: str, group: str, file: File) -> bool:
+    def _user_has_get_file_permission(
+        self,
+        user: str,
+        group: str,
+        file: File,
+    ) -> bool:
         """Check whether a user has permission to access a file.
         Later, when we implement the ROLES this function will be a lot more
         complicated!"""
@@ -420,7 +427,9 @@ class Catalog(DBMixin):
         return permitted
 
     def _filelist_exists_in_holding(
-        self, user: str, group: str, holding_id: int, filelist: list[PathDetails]
+        self,
+        holding_id: int,
+        filelist: list[PathDetails],
     ) -> list:
         """Determine whether any of the files in PathDetails already exist in any
         of the Transactions in the Holding."""
@@ -438,10 +447,7 @@ class Catalog(DBMixin):
 
     def get_file(
         self,
-        user: str,
-        group: str,
         holding_id: int,
-        transaction_id: str,
         original_path: str,
         with_for_update: bool = False,
     ) -> File:
@@ -456,7 +462,9 @@ class Catalog(DBMixin):
                 .select_from(Transaction)
                 .where(
                     Transaction.holding_id == holding_id,
-                ).join(File).filter(File.original_path == original_path)
+                )
+                .join(File)
+                .filter(File.original_path == original_path)
             )
             # if we're going to update the file then use with_for_update
             if with_for_update:
@@ -470,6 +478,41 @@ class Catalog(DBMixin):
             )
             raise CatalogError(msg)
         return file
+
+    def get_files_from_filelist(
+        self,
+        transaction_id: str,
+        filelist: list[PathDetails],
+        with_for_update: bool = False,
+    ) -> list[File]:
+        """Get a list of file models from a transaction, where the original path
+        matches the original path in the PathDetails"""
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+
+        try:
+            filelist2 = [f.original_path for f in filelist]
+            err_msg = (
+                f"Files in pathlist: {filelist2} not found in holding with "
+                f"transaction_id: {transaction_id}"
+            )
+            file_q = (
+                self.session.query(File)
+                .select_from(Transaction)
+                .where(
+                    Transaction.transaction_id == transaction_id,
+                )
+                .join(File)
+                .filter(File.original_path.in_(filelist2))
+            )
+            # if we're going to update the file then use with_for_update
+            if with_for_update:
+                file_q = file_q.with_for_update()
+            else:
+                file_q = file_q
+        except NoResultFound:
+            raise CatalogError(err_msg)
+        return file_q
 
     def get_files(
         self,
@@ -606,32 +649,26 @@ class Catalog(DBMixin):
         size: str = None,
         file_permissions: str = None,
     ) -> None:
-        """Create a file that belongs to a transaction and will contain
-        locations"""
+        """Create a file that belongs to a transaction and will contain locations"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
-            statement = (
-                insert(File)
-                .values(
-                    transaction_id=transaction.id,
-                    original_path=original_path,
-                    path_type=path_type,
-                    link_path=link_path,
-                    size=int(size),
-                    user=user,
-                    group=group,
-                    file_permissions=file_permissions,
-                )
-                .inline()
+            file = File(
+                transaction_id=transaction.id,
+                original_path=original_path,
+                path_type=path_type,
+                link_path=link_path,
+                size=int(size),
+                user=user,
+                group=group,
+                file_permissions=file_permissions,
             )
-            self.session.execute(statement)
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"File with original path {original_path} could not be added to"
                 " the database"
             )
-        return
+        return file
 
     def delete_files(
         self,
@@ -683,7 +720,10 @@ class Catalog(DBMixin):
         self.save()
 
     def get_location(
-        self, file: File, storage_type: Enum, with_for_update: bool = False
+        self,
+        file: File,
+        storage_type: Enum,
+        with_for_update: bool = False,
     ) -> Location:
         """Get a storage location for a file, given the file and the storage
         type"""
@@ -723,32 +763,23 @@ class Catalog(DBMixin):
         else:
             aggregation_id = aggregation.id
         try:
-            statement = (
-                insert(Location)
-                .values(
-                    storage_type=storage_type,
-                    url_scheme=url_scheme,
-                    url_netloc=url_netloc,
-                    # root is bucket for Object Storage which is the transaction id
-                    # which is now stored in the Holding record
-                    root=root,
-                    # path is object_name for object storage
-                    path=path,
-                    # access time is passed in the file details
-                    access_time=access_time,
-                    file_id=file_.id,
-                    aggregation_id=aggregation_id,
-                )
-                .inline()
+            location = Location(
+                storage_type=storage_type,
+                url_scheme=url_scheme,
+                url_netloc=url_netloc,
+                root=root,
+                path=path,
+                access_time=access_time,
+                file_id=file_.id,
+                aggregation_id=aggregation_id,
             )
-            self.session.execute(statement)
         except (IntegrityError, KeyError):
             raise CatalogError(
                 f"Location with root {root}, path {file_.original_path} and "
                 f"storage type {storage_type} could not be added to "
                 "the catalog"
             )
-        return
+        return location
 
     def modify_location(
         self,
@@ -762,6 +793,7 @@ class Catalog(DBMixin):
     ):
         # Modify the location to update it
         # otherwise update if exists and not empty
+        # rec
         location.url_scheme = url_scheme
         location.url_netloc = url_netloc
         location.root = root
@@ -930,7 +962,6 @@ class Catalog(DBMixin):
             # 4. Files with a Tape location, but no Object Storage location have been
             #    removed from Object Storage due to space constraints, and will need to
             #    be fetched from Tape on a user GET
-
             next_holding = (
                 self.session.query(Holding)
                 .filter(
@@ -954,7 +985,7 @@ class Catalog(DBMixin):
 
     def get_unarchived_files(
         self, holding: Holding, with_for_update: bool = False
-    ) -> List[File]:
+    ) -> list[File]:
         """The principal function for getting unarchived files to aggregate and
         send to archive put."""
         if self.session is None:
@@ -971,11 +1002,9 @@ class Catalog(DBMixin):
                 File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
             )
             if with_for_update:
-                unarchived_files = unarchived_files_q.with_for_update().all()
-            else:
-                unarchived_files = unarchived_files_q.all()
+                unarchived_files_q = unarchived_files_q.with_for_update()
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Couldn't find unarchived files for holding with id:{holding.id}"
             )
-        return unarchived_files
+        return unarchived_files_q
