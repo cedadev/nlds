@@ -83,5 +83,25 @@ class DBMixin:
             self.session = None
 
     def commit(self):
+        """Commit any pending transactions."""
         if self.session is not None:
             self.session.commit()
+
+    def defer(self, db_object: any):
+        """Defer committing until the bulk commit"""
+        self.session.expunge(db_object)
+
+    def bulk_commit(self, db_objects: list[any]):
+        """Commit a load of transactions at once"""
+        try:
+            self.session.bulk_save_objects(db_objects)
+        except (IntegrityError, KeyError):
+            # generate a decent error message
+            original_paths = []
+            for d in db_objects:
+                original_paths.append(l["path_details"].original_path)
+            raise CatalogError(
+                f"Files in filelist with original paths: {original_paths} could not be "
+                "added to the database"
+            )
+        return
