@@ -30,7 +30,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 
 
-from nlds.details import PathType
+from nlds.details import PathType, PathDetails
 from nlds_processors.catalog.catalog_error import CatalogError
 import nlds.rabbit.message_keys as MSG
 
@@ -140,6 +140,25 @@ class File(CatalogBase):
     locations = relationship("Location", cascade="delete, delete-orphan")
     # relationship for checksum (one to one)
     checksums = relationship("Checksum", cascade="delete, delete-orphan")
+
+    @classmethod
+    def from_pathdetails(cls, pd: PathDetails):
+        return cls(
+            transaction_id=0,
+            original_path=pd.original_path,
+            path_type=pd.path_type,
+            link_path=pd.link_path,
+            size=pd.size,
+            user=pd.user,
+            group=pd.group,
+            file_permissions=pd.permissions,
+        )
+
+    def get_object_store(self):
+        for l in self.locations:
+            if l.storage_type == Storage.OBJECT_STORAGE:
+                return l
+        return None
 
 
 class Storage(enum.Enum):
