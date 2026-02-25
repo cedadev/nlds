@@ -680,6 +680,8 @@ class CatalogConsumer(RMQC):
                     pd.failure_reason = e.message
                     self.failedlist.append(pd)
 
+        # keep a list of files that we are going to bulk commit
+        files_to_commit = []
         if holding and transaction:
             # convert the JSON file descriptions in the filelist into a list of
             # PathDetails
@@ -694,12 +696,15 @@ class CatalogConsumer(RMQC):
             # check whether any member of this path_details_list already occurs in the
             # holding
             files_exist = self.catalog._filelist_exists_in_holding(
-                user, group, holding.id, path_details_list
+                holding.id, path_details_list
             )
             # fail the files that exist
             for e in files_exist:
                 # this little bit of code gets the original PathDetails from the
                 # filelist for a file that failed
+                # files_exist is not guaranteed to be in the same order as
+                # path_details_list
+                # and may not contain all of the same entries as path_details_list
                 pd = path_details_list[path_details_list.index(e)]
                 # add the failure reason
                 msg = "File already exists in holding."
@@ -710,24 +715,29 @@ class CatalogConsumer(RMQC):
             # find the files in the path_details_list that didn't already occur in the
             # holding - i.e. they are not in the files_exist list
             files_to_add = list(set(path_details_list) - set(files_exist))
-            for pd in files_to_add:
-                # create the file
-                self.catalog.create_file(
-                    transaction,
-                    pd.user,
-                    pd.group,
-                    pd.original_path,
-                    pd.path_type,
-                    pd.link_path,
-                    pd.size,
-                    pd.permissions,
+            # use a bulk insert method for creating the files
+            for f in files_to_add:
+                file_ = self.catalog.create_file(
+                    transaction=transaction,
+                    user=f.user,
+                    group=f.group,
+                    original_path=f.original_path,
+                    path_type=f.path_type,
+                    link_path=f.link_path,
+                    size=f.size,
+                    file_permissions=f.permissions,
                 )
-                self.completelist.append(pd)
+                files_to_commit.append(file_)
+            #self.catalog.create_files(transaction=transaction, filelist=files_to_add)
+            self.completelist.extend(files_to_add)
 
             # Add any user tags to the holding
             tag_warnings = self._create_tags(tags, holding, label)
 
         # commit to DB
+        if len(files_to_commit) > 0:
+            self.catalog.bulk_commit(files_to_commit)
+
         self.catalog.commit()
 
         # log the successful and non-successful catalog puts
@@ -790,43 +800,54 @@ class CatalogConsumer(RMQC):
         # reset lists, etc.
         self.reset()
 
+        # build a list of PathDetails from the input filelist
+        path_details_list = [PathDetails.from_dict(f) for f in filelist]
+
+        # get all the files in the filelist as File objects from the database
+        files = self.catalog.get_files_from_filelist(
+            transaction_id=transaction_id,  # assume all same holding id
+            filelist=path_details_list,
+            with_for_update=True,
+        )
+
         # loop over the filelist
-        for f in filelist:
-            # convert to PathDetails class
-            pd = PathDetails.from_dict(f)
+        create_location_list = []
+        modify_location_list = []
+        for f in files:
             # if path is a link then continue - no updating needed
-            if pd.path_type == PathType.LINK:
+            if f.path_type == PathType.LINK:
                 self.completelist.append(pd)
                 continue
             # need to
             #   1. find the file,
             #   2. find or create the object storage location (if create==True),
             #   3. add the details to the object storage location from the PathDetails
-            # get the file
             try:
-                pl = pd.get_object_store()  # this returns a PathLocation object
+                # this gets the original path_details from the list as the DB return
+                # might be out of order
+                pd = path_details_list[path_details_list.index(f)]
+                pl = pd.get_object_store()
                 if pl is None:
                     raise CatalogError(
                         f"No object store location in PathDetails for file "
                         f"{pd.original_path}"
                     )
-                file = self.catalog.get_file(
-                    user,
-                    group,
-                    holding_id=pd.holding_id,
-                    transaction_id=transaction_id,
-                    original_path=pd.original_path,
-                    with_for_update=True,
-                )
                 # access time is now if None
                 if pl.access_time is None:
                     access_time = datetime.now()
                 else:
                     access_time = datetime.fromtimestamp(pl.access_time)
+
+                # input storage type
                 st = Storage.from_str(pl.storage_type)
-                # get the location
-                location = self.catalog.get_location(file, st, with_for_update=True)
-                if location:
+
+                if len(f.locations) != 0:
+                    # modify location - get it first via loop on locations
+                    for l in f.locations:
+                        if l.storage_type == st:
+                            location = l
+                            break
+
                     # check empty or equivalent storage location - warn for equivalent
                     if location.url_scheme != "" or location.url_netloc != "":
                         if (
@@ -847,18 +868,22 @@ class CatalogConsumer(RMQC):
                             )
                     # otherwise update if exists and not empty
                     self.catalog.modify_location(
-                        location,
+                        location=location,
                         url_scheme=pl.url_scheme,
                         url_netloc=pl.url_netloc,
                         root=pl.root,
                         path=pl.path,
                         access_time=access_time,
                     )
+                    # defer update
+                    modify_location_list.append(location)
+                    self.catalog.defer(location)
+                    # mark as completed - assuming the bulk commit works correctly
                     self.completelist.append(pd)
                 elif create:
-                    # create location
-                    self.catalog.create_location(
-                        file,
+                    # add to the list to bulk create later
+                    location = self.catalog.create_location(
+                        file_=f,
                         storage_type=st,
                         url_scheme=pl.url_scheme,
                         url_netloc=pl.url_netloc,
@@ -866,6 +891,8 @@ class CatalogConsumer(RMQC):
                         path=pl.path,
                         access_time=access_time,
                     )
+                    create_location_list.append(location)
+                    # mark as completed - assuming the bulk commit works correctly
                     self.completelist.append(pd)
                 else:
                     raise CatalogError(
@@ -877,7 +904,13 @@ class CatalogConsumer(RMQC):
                 pd.failure_reason = e.message
                 self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
-        # commit
+
+        # bulk upload the created locations
+        if len(create_location_list) != 0:
+            self.catalog.bulk_commit(create_location_list)
+        if len(modify_location_list) != 0:
+            self.catalog.bulk_commit(modify_location_list)
+        # any other commits
         self.catalog.commit()
 
         # log the successful and non-successful catalog updates
@@ -1110,10 +1143,13 @@ class CatalogConsumer(RMQC):
             self.log("No holdings found to archive, exiting callback.", RK.LOG_INFO)
             return
 
+        # reset completed lists
+        self.reset()
         # get the list of unarchived files from that holding
         filelist = self.catalog.get_unarchived_files(next_holding, with_for_update=True)
+        # need a list of the created locations as they are now bulk uploaded
+        created_locations = []
         # loop over the files and modify the database to have a TAPE storage location
-        self.reset()
         for f in filelist:
             pd = self._filemodel_to_path_details(f)
             pl = pd.get_object_store()  # this returns a PathLocation object
@@ -1125,8 +1161,9 @@ class CatalogConsumer(RMQC):
                 access_time = datetime.fromtimestamp(pl.access_time)
 
             try:
-                # create a mostly empty TAPE storage location
-                self.catalog.create_location(
+                # create a mostly empty TAPE storage location - this does not create
+                # in the database, need to add to a list and then use bulk commit
+                location = self.catalog.create_location(
                     file_=f,
                     storage_type=Storage.TAPE,
                     url_scheme="",
@@ -1136,9 +1173,9 @@ class CatalogConsumer(RMQC):
                     access_time=access_time,
                     aggregation=None,
                 )
-                # update the pd now with new location
+                created_locations.append(location)
+                # add this to completed list - adding the location
                 pd = self._filemodel_to_path_details(f)
-                # add to the completelist ready for sending
                 self.completelist.append(pd)
             except CatalogError as e:
                 # In the case of failure, we can just carry on adding files to the
@@ -1148,6 +1185,12 @@ class CatalogConsumer(RMQC):
                 self.failedlist.append(pd)
                 continue
 
+        # bulk commit the created_locations
+        if len(created_locations) > 0:
+            # bulk commit
+            self.catalog.bulk_commit(created_locations)
+
+        # fallback commit
         self.catalog.commit()
 
         # Forward successful file details to archive for tape write
@@ -1211,9 +1254,6 @@ class CatalogConsumer(RMQC):
             self.log(msg, RK.LOG_ERROR)
             raise CatalogError(msg)
 
-        # reset the lists
-        self.reset()
-
         try:
             # the only route in now is to create an aggregation at this point
             aggregation = self.catalog.create_aggregation(
@@ -1224,31 +1264,43 @@ class CatalogConsumer(RMQC):
             self.log(msg, RK.LOG_ERROR)
             raise CallbackError(msg)
 
+        # reset the lists
+        self.reset()
+
+        # build a list of PathDetails from the input filelist
+        path_details_list = [PathDetails.from_dict(f) for f in filelist]
+
+        # get all the files in the filelist as File objects from the database
         # holding_id is not None, as confirmed by above check
-        for f in filelist:
-            pd = PathDetails.from_dict(f)
-            pl = pd.get_tape()
-            # get the file
+        files = self.catalog.get_files_from_filelist(
+            transaction_id=transaction_id,  # assume all same holding id
+            filelist=path_details_list,
+            with_for_update=True,
+        )
+        modify_location_list = []
+        for f in files:
             try:
+                # this gets the original path_details from the list as the DB return
+                # might be out of order
+                pd = path_details_list[path_details_list.index(f)]
+                pl = pd.get_tape()
                 # recreate the path location if it was deleted
                 if pl is None:
                     raise CatalogError(
                         f"No tape location in PathDetails for file {pd.original_path}"
                     )
-                # just one file
-                file = self.catalog.get_file(
-                    user,
-                    group,
-                    holding_id=holding_id,
-                    transaction_id=transaction_id,
-                    original_path=pd.original_path,
-                    with_for_update=True,
-                )
                 # get the already created location and update with info from
                 # PathLocation and assign the aggregation
-                location = self.catalog.get_location(
-                    file, storage_type, with_for_update=True
-                )
+                # input storage type
+                st = Storage.from_str(pl.storage_type)
+
+                if len(f.locations) != 0:
+                    # modify location - get it first via loop on locations
+                    for l in f.locations:
+                        if l.storage_type == st:
+                            location = l
+                            break
+
                 # set access time to now if no access time set in PathLocation
                 if pl.access_time is None:
                     access_time = datetime.now()
@@ -1264,6 +1316,8 @@ class CatalogConsumer(RMQC):
                     access_time=access_time,
                     aggregation_id=aggregation.id,
                 )
+                modify_location_list.append(location)
+                self.catalog.defer(location)
                 self.completelist.append(pd)
 
             except CatalogError as e:
@@ -1272,7 +1326,11 @@ class CatalogConsumer(RMQC):
                 self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
-        # commit when all files complete
+
+        # commit when all files complete - do a bulk commit followed by a safety commit
+        if len(modify_location_list) > 0:
+            self.catalog.bulk_commit(modify_location_list)
+
         self.catalog.commit()
 
         if len(self.completelist) > 0:
@@ -1345,10 +1403,7 @@ class CatalogConsumer(RMQC):
             for f in filelist:
                 try:
                     file = self.catalog.get_file(
-                        user,
-                        group,
                         holding_id=holding_id,
-                        transaction_id=transaction_id,
                         original_path=f.original_path,
                         with_for_update=True,
                     )
@@ -1878,6 +1933,7 @@ class CatalogConsumer(RMQC):
                 elif rk_parts[1] == RK.CATALOG_REMOVE:
                     self._catalog_remove(body, rk_parts[0], Storage.OBJECT_STORAGE)
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
+                    # this catalog update occurs when the file is retrieved from tape
                     self._catalog_update(body, rk_parts[0], create=False)
 
         elif api_method in (RK.PUTLIST, RK.PUT):
