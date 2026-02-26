@@ -42,7 +42,6 @@ setup(
         "pika",
         "py",
         "pydantic",
-        "pydantic-core",
         "psycopg",
         "requests",
         "retry",
