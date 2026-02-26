@@ -41,6 +41,7 @@ setup(
         "pika",
         "py",
         "pydantic",
+        "psycopg",
         "requests",
         "retry",
         "sniffio",
