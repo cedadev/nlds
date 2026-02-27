@@ -717,7 +717,6 @@ class Catalog(DBMixin):
                 f"File with original_path:{path} could not be deleted from the catalog"
             )
             raise CatalogError(err_msg)
-        self.save()
 
     def get_location(
         self,
