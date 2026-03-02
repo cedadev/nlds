@@ -254,17 +254,42 @@ class Catalog(DBMixin):
             )
         return holding
 
+    def _holding_label_in_user_groups(self, user: str, group: str, label: str) -> bool:
+        # is the holding label in use by another holding that the user owns, but may
+        # be in a different group?
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+        holding_q = self.session.query(Holding.id, Holding.group).filter(
+            Holding.user == user, Holding.label == label
+        )
+        if holding_q.count() != 0:
+            group = holding_q.first()[1]
+            return True, group
+        else:
+            return False, None
+
     def create_holding(self, user: str, group: str, label: str) -> Holding:
         """Create the new Holding with the label, user, group"""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
+            # first see if this Holding label exists for the user but in a different 
+            # group
+            in_use, group = self._holding_label_in_user_groups(
+                user=user, group=group, label=label
+            )
+            if in_use:
+                raise CatalogError(
+                    f"Holding with label {label} already exists in group {group} for "
+                    f"user {user}."
+                )
+            # not already in use so add the Holding
             holding = Holding(label=label, user=user, group=group)
             self.session.add(holding)
         except (IntegrityError, KeyError) as e:
             raise CatalogError(
                 f"Holding with label:{label} could not be added to the catalog "
-                f"for user:{user} and group:{group}"
+                f"for user:{user} and group:{group}.  Reason: {e}."
             )
         # flush to create an id for the holding
         self.session.flush()
@@ -287,6 +312,16 @@ class Catalog(DBMixin):
             )
         # change the label if a new_label supplied
         if new_label:
+            # first check the new label isn't already in use by the same user but in a
+            # different group
+            in_use, group = self._holding_label_in_user_groups(
+                user=holding.user, group=holding.group, label=new_label
+            )
+            if in_use:
+                raise CatalogError(
+                    f"Holding with label {new_label} already exists in group {group} "
+                    f"for user {holding.user}."
+                )
             try:
                 holding.label = new_label
             except IntegrityError:
