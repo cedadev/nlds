@@ -382,8 +382,13 @@ class MonitorConsumer(RMQC):
         # create the transaction record
         try:
             trec = self.monitor.create_transaction_record(
-                user, group, transaction_id, job_label, api_action
+                user=user,
+                group=group,
+                transaction_id=transaction_id,
+                job_label=job_label,
+                api_action=api_action,
             )
+
             # commit early as it is the top of the tree
             self.monitor.commit()
         except MonitorError as e:
@@ -479,7 +484,7 @@ class MonitorConsumer(RMQC):
         # Create failed_files if necessary
         if state in State.get_failed_states():
             self.log(
-                "Creating FailedFiles records as transaction appears to have failed",
+                "Creating FailedFiles records as the Transaction has failed",
                 RK.LOG_INFO,
             )
             try:
@@ -508,7 +513,7 @@ class MonitorConsumer(RMQC):
         self.monitor.commit()
 
         self.log(
-            f"... Successfully commited monitoring update",
+            f"... Successfully committed monitoring update",
             RK.LOG_INFO,
         )
         return True
@@ -636,7 +641,7 @@ class MonitorConsumer(RMQC):
         for id_ in trecs_dict:
             # NRM - return all trecs, even if they are empty - the client will interpret
             # them
-            #if len(trecs_dict[id_]["sub_records"]) > 0:
+            # if len(trecs_dict[id_]["sub_records"]) > 0:
             ret_list.append(trecs_dict[id_])
         body[MSG.DATA][MSG.RECORD_LIST] = ret_list
         self.publish_message(
