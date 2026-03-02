@@ -273,15 +273,15 @@ class Catalog(DBMixin):
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
-            # first see if this Holding label exists for the user but in a different 
+            # first see if this Holding label exists for the user but in a different
             # group
-            in_use, group = self._holding_label_in_user_groups(
+            in_use, in_group = self._holding_label_in_user_groups(
                 user=user, group=group, label=label
             )
             if in_use:
                 raise CatalogError(
-                    f"Holding with label {label} already exists in group {group} for "
-                    f"user {user}."
+                    f"Holding with label {label} already exists in group "
+                    f"{in_group} for user {user}."
                 )
             # not already in use so add the Holding
             holding = Holding(label=label, user=user, group=group)
@@ -314,13 +314,13 @@ class Catalog(DBMixin):
         if new_label:
             # first check the new label isn't already in use by the same user but in a
             # different group
-            in_use, group = self._holding_label_in_user_groups(
+            in_use, in_group = self._holding_label_in_user_groups(
                 user=holding.user, group=holding.group, label=new_label
             )
             if in_use:
                 raise CatalogError(
-                    f"Holding with label {new_label} already exists in group {group} "
-                    f"for user {holding.user}."
+                    f"Holding with label {new_label} already exists in group "
+                    f"{in_group} for user {holding.user}."
                 )
             try:
                 holding.label = new_label
