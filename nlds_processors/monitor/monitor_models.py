@@ -2,6 +2,7 @@
 """
 monitor_models.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -15,7 +16,6 @@ from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 
 from nlds.rabbit.consumer import State
-
 
 """Declarative base class, containing the Metadata object"""
 MonitorBase = declarative_base()

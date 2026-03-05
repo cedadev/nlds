@@ -2,6 +2,7 @@
 """
 put_transfer.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -56,7 +57,7 @@ class PutTransferConsumer(BucketTransferConsumer):
                 self.log(
                     f"Created bucket on tenancy: {tenancy} with name: {bucket_name}",
                     RK.LOG_INFO,
-            )
+                )
         except BucketError as e:
             raise RuntimeError(e.message)
 

@@ -2,6 +2,7 @@
 """
 catalog.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -10,6 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 # SQLalchemy imports
 from sqlalchemy import func, Enum
+from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
@@ -81,7 +83,7 @@ class Catalog(DBMixin):
             # transaction id so, we only have to use that in the query
             elif transaction_id:
                 holding_q = holding_q.filter(
-                    Transaction.holding_id == Holding.id,
+                    Holding.id == Transaction.holding_id,
                     Transaction.transaction_id == transaction_id,
                 )
             # label is unique within the user and group, so we have to filter on those
@@ -165,11 +167,14 @@ class Catalog(DBMixin):
             # transaction id filtering - for when a large upload has been split into
             # multiple uploads
             elif transaction_id:
-                holding_q = holding_q.filter(
-                    Transaction.holding_id == Holding.id,
-                    Transaction.transaction_id == transaction_id,
+                holding_q = (
+                    holding_q.filter(
+                        Holding.id == Transaction.holding_id,
+                        Transaction.transaction_id == transaction_id,
+                    )
+                    .join(Transaction)
+                    .where()
                 )
-
             # search label filtering - for when the user supplies a holding label
             elif label:
                 # regex will throw exception below if invalid
@@ -438,26 +443,18 @@ class Catalog(DBMixin):
         user: str,
         group: str,
         file: File,
+        holding: Holding,
     ) -> bool:
         """Check whether a user has permission to access a file.
         Later, when we implement the ROLES this function will be a lot more
-        complicated!"""
-        if self.session is None:
-            raise RuntimeError("self.session is None")
-        holding = (
-            self.session.query(Holding)
-            .filter(
-                Transaction.id == file.transaction_id,
-                Holding.id == Transaction.holding_id,
-            )
-            .all()
-        )
+        complicated!
+        NRM - 05/03/2026 - sped this up massively, by passing in the Holding that we
+        already have for each file!"""
         permitted = True
-        for h in holding:
-            # users have get file permission if in group
-            # permitted &= h.user == user
-            if user != "**all**" and group != "**all**":
-                permitted &= h.group == group
+        # users have get file permission if in group
+        # permitted &= h.user == user
+        if user != "**all**" and group != "**all**":
+            permitted &= holding.group == group
 
         return permitted
 
@@ -573,6 +570,7 @@ class Catalog(DBMixin):
             descending = True
         # Nones are set to .* in the regexp matching
         # get the matching holdings first, these match all but the path
+
         holding = self.get_holdings(
             user,
             group,
@@ -594,10 +592,17 @@ class Catalog(DBMixin):
         try:
             for h in holding:
                 # build the file query bit by bit
-                file_q = self.session.query(File, Transaction).filter(
-                    File.transaction_id == Transaction.id,
-                    Transaction.holding_id == h.id,
+                # load in the Locations when we access the File to speed up the queries
+                # a lot
+                file_q = (
+                    self.session.query(File, Transaction)
+                    .filter(
+                        File.transaction_id == Transaction.id,
+                        Transaction.holding_id == h.id,
+                    )
+                    .options(joinedload(File.locations))
                 )
+
                 if descending:
                     file_q = file_q.order_by(Transaction.ingest_time.desc())
                 else:
@@ -614,7 +619,6 @@ class Catalog(DBMixin):
                     result = file_q.limit(limit).all()
                 else:
                     result = file_q.all()
-
                 # only want one file if newest_only is set: (this is for downloading
                 # when only the path is specified and no holding id or label is given)
                 # the results have been ordered by the Transaction ingest time, if the
@@ -624,18 +628,28 @@ class Catalog(DBMixin):
                         continue
                     # check user has permission to access this file
                     if r.File and not self._user_has_get_file_permission(
-                        user, group, r.File
+                        user=user, group=group, file=r.File, holding=h
                     ):
                         raise CatalogError(
                             f"User:{user} in group:{group} does not have permission to "
-                            f"access the file with original path:{r.File.original_path}."
+                            f"access the file with original path: "
+                            f"{r.File.original_path}."
                         )
+                    # NRM - return dictionaries of Holding, File and
+                    # Transaction, rather than just a file.  This is to speed
+                    # up user searches
+                    file_record = {
+                        "Holding": h,
+                        "Transaction": r.Transaction,
+                        "File": r.File,
+                    }
+
                     if newest_only:
                         if not r.File.original_path in path_list:
-                            file_list.append(r.File)
+                            file_list.append(file_record)
                             path_list.append(r.File.original_path)
                     else:
-                        file_list.append(r.File)
+                        file_list.append(file_record)
                         path_list.append(r.File.original_path)
                     if limit and len(file_list) >= limit:
                         break
@@ -734,14 +748,10 @@ class Catalog(DBMixin):
         )
         # checkpoint = self.session.begin_nested()
         try:
-            for f in files:
-                # First get parent transaction and holding
-                transaction = self.get_transaction(
-                    f.transaction_id, with_for_update=True
-                )
-                holding = self.get_holding(
-                    user, group, holding_id=transaction.holding_id, with_for_update=True
-                )
+            for file_record in files:
+                f = file_record["File"]
+                transaction = file_record["Transaction"]
+                holding = file_record["Holding"]
                 self.session.delete(f)
                 if len(transaction.files) == 0:
                     self.session.delete(transaction)
@@ -838,12 +848,9 @@ class Catalog(DBMixin):
     def delete_location(self, file: File, storage_type: Enum) -> None:
         """Delete the location for a given file and storage_type"""
         location = self.get_location(file, storage_type=storage_type)
-        # checkpoint = self.session.begin_nested()
         try:
             self.session.delete(location)
         except (IntegrityError, KeyError, OperationalError):
-            # This rollsback only to the checkpoint, so any successful deletes
-            # done already will stay in the transaction.
             err_msg = (
                 f"Location with file.id {file.id} and storage_type "
                 f"{storage_type} could not be deleted from the catalog"

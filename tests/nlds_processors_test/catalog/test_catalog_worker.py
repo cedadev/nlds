@@ -2,6 +2,7 @@
 """
 test_catalog_worker.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "07 Dec 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"

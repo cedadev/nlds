@@ -2,6 +2,7 @@
 """
 files.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -170,8 +171,8 @@ async def get(
         meta_dict[MSG.HOLDING_ID] = holding_id
         response.holding_id = holding_id
     if tag:
-        tag_dict = tag.strip('').split(':')
-        meta_dict[MSG.TAG] = {tag_dict[0]:tag_dict[1]}
+        tag_dict = tag.strip("").split(":")
+        meta_dict[MSG.TAG] = {tag_dict[0]: tag_dict[1]}
         response.tag = tag_dict
     if regex:
         meta_dict[MSG.REGEX] = True
@@ -327,13 +328,13 @@ async def put(
     if len(contents) == 1:
         api_method = f"{RK.PUT}"
     else:
-        api_method = f"{RK.PUTLIST}" 
+        api_method = f"{RK.PUTLIST}"
     routing_key = f"{RK.ROOT}.{RK.ROUTE}.{api_method}"
 
     # return response, transaction id accepted for processing
     response = FileResponse(
-        transaction_id=transaction_id, 
-        msg=(f"{api_method} transaction accepted for processing.")
+        transaction_id=transaction_id,
+        msg=(f"{api_method} transaction accepted for processing."),
     )
 
     # create the message dictionary

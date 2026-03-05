@@ -2,6 +2,7 @@
 """
 index.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -271,7 +272,7 @@ class IndexerConsumer(StattingConsumer):
         rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 
         for item_path in raw_filelist:
-            # change directory to parent directory to work-around the automounter not 
+            # change directory to parent directory to work-around the automounter not
             # always working correctly
             try:
                 if item_path.path.is_dir():

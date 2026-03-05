@@ -2,6 +2,7 @@
 """
 test_index.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "07 Dec 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -21,6 +22,7 @@ from nlds.details import PathDetails
 from nlds_processors.index import IndexerConsumer
 import nlds.server_config as CFG
 from nlds_utils.generate_server_config import generate_server_config
+
 
 def mock_load_config(template_config):
     return template_config
@@ -48,9 +50,9 @@ class fs:
         pathlib.Path(dirname).mkdir(parents=True, exist_ok=True)
 
     def create_file(filename, st_size):
-        fh = open(filename, 'w')
+        fh = open(filename, "w")
         bytes_chars = os.urandom(st_size)
-        byte_str = ''.join(chr(b % 256) for b in bytes_chars)
+        byte_str = "".join(chr(b % 256) for b in bytes_chars)
         fh.write(byte_str)
         fh.close()
 

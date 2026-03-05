@@ -2,6 +2,7 @@
 """
 logger.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -89,7 +90,7 @@ class LoggingConsumer(RMQP):
         loggers = {
             name: logging.getLogger(name)
             for name in logging.root.manager.loggerDict
-            if RK.LOGGER_PREFIX == name[:len(RK.LOGGER_PREFIX)]
+            if RK.LOGGER_PREFIX == name[: len(RK.LOGGER_PREFIX)]
         }
         try:
             consumer_logger = loggers[consumer]

@@ -2,6 +2,7 @@
 """
 monitor.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "15 Sep 2022"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -96,9 +97,7 @@ class Monitor(DBMixin):
                     f"not found"
                 )
             else:
-                raise MonitorError(
-                    f"No TransactionRecords found"
-                )
+                raise MonitorError(f"No TransactionRecords found")
         return trec
 
     def get_transaction_records(
@@ -189,9 +188,7 @@ class Monitor(DBMixin):
                     f"not found"
                 )
             else:
-                raise MonitorError(
-                    f"No TransactionRecords found"
-                )
+                raise MonitorError(f"No TransactionRecords found")
         except DataError as e:
             if regex:
                 raise MonitorError(f"Invalid regular expression: {transaction_search}")

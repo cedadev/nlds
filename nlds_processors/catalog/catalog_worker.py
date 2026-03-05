@@ -2,6 +2,7 @@
 """
 catalog_worker.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "15 Sep 2022"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -388,6 +389,23 @@ class CatalogConsumer(RMQC):
 
         return new_label, new_tag, del_tag
 
+    def _get_query_user_group(
+        self, user: str, group: str, query_user: str, query_group: str
+    ):
+        """Get the search user and group.  Checks whether the user is the privileged
+        user (nlds).
+        """
+        # form the request with the query user, special case for 'nlds' user
+        if user == "nlds":
+            if query_user is None:
+                query_user = "**all**"
+            if query_group is None:
+                query_group = "**all**"
+        else:
+            query_user = user
+            query_group = group
+        return query_user, query_group
+
     def _get_search_label(self, holding_label, holding_id):
         """Determine the search label, this is a regex and depends on whether the
         holding_label and/or holding_id has been supplied"""
@@ -728,7 +746,7 @@ class CatalogConsumer(RMQC):
                     file_permissions=f.permissions,
                 )
                 files_to_commit.append(file_)
-            #self.catalog.create_files(transaction=transaction, filelist=files_to_add)
+            # self.catalog.create_files(transaction=transaction, filelist=files_to_add)
             self.completelist.extend(files_to_add)
 
             # Add any user tags to the holding
@@ -943,7 +961,7 @@ class CatalogConsumer(RMQC):
         found on tape then it will be first restored by the archive processor
         for retrieval to object store cache."""
         # Parse the message body for required variables
-        filelist = []  # empty filelist incase _parse_filelist fails
+        filelist = []  # empty filelist in case _parse_filelist fails
         try:
             filelist = self._parse_filelist(body)
             user = self._parse_user(body)
@@ -984,7 +1002,6 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
             return
-
         # reset the lists
         self.reset()
 
@@ -1004,14 +1021,14 @@ class CatalogConsumer(RMQC):
                     newest_only=True,
                     regex=regex,
                 )
-
                 if len(files) == 0:
                     raise CatalogError(
                         f"Could not find file(s) with original path: "
                         f"{filepath_details.original_path}"
                     )
                 # If the filepath was a regex then more than one file will be returned
-                for file in files:
+                for file_record in files:
+                    file = file_record["File"]
                     # determine the storage location - None, OBJECT_STORAGE and/or TAPE
                     pd = self._filemodel_to_path_details(file)
                     # downloading links is handled in the get_transfer microservice.
@@ -1525,7 +1542,7 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            (holding_label, holding_id, tag, transaction_id, limit, descending) = (
+            holding_label, holding_id, tag, transaction_id, limit, descending = (
                 self._parse_metadata_vars(body)
             )
             query_user = self._parse_queryuser(body, user)
@@ -1536,15 +1553,10 @@ class CatalogConsumer(RMQC):
             # functions above handled message logging, here we just return
             return
 
-        # form the request with the query user, special case for 'nlds' user
-        if user == "nlds":
-            if query_user is None:
-                query_user = "**all**"
-            if query_group is None:
-                query_group = "**all**"
-        else:
-            query_user = user
-            query_group = group
+        # get which user / group to query on
+        query_user, query_group = self._get_query_user_group(
+            user, group, query_user, query_group
+        )
 
         # holding_label and holding_id is None means that more than one
         # holding wil be returned
@@ -1671,15 +1683,10 @@ class CatalogConsumer(RMQC):
             # functions above handled message logging, here we just return
             raise Exception("Unhandled error in _catalog_find")
 
-        # form the request with the query user, special case for 'nlds' user
-        if user == "nlds":
-            if query_user is None:
-                query_user = "**all**"
-            if query_group is None:
-                query_group = "**all**"
-        else:
-            query_user = user
-            query_group = group
+        # get which user / group to query on
+        query_user, query_group = self._get_query_user_group(
+            user, group, query_user, query_group
+        )
 
         ret_dict = {}
         try:
@@ -1696,13 +1703,12 @@ class CatalogConsumer(RMQC):
                 limit=limit,
                 descending=descending,
             )
-            for f in files:
-                # get the transaction and the holding:
-                t = self.catalog.get_transaction(id=f.transaction_id)
-                h = self.catalog.get_holding(
-                    query_user, query_group, groupall=groupall, holding_id=t.holding_id
-                )
-                # create a holding dictionary if it doesn't exists
+            for file_record in files:
+                # NRM - these are now supplied by the get_files to speed things up a lot
+                h = file_record["Holding"]
+                t = file_record["Transaction"]
+                f = file_record["File"]
+                # create a holding dictionary entry if it doesn't exists
                 if h.label in ret_dict:
                     h_rec = ret_dict[h.label]
                 else:

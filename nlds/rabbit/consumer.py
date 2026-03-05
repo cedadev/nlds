@@ -2,6 +2,7 @@
 """
 consumer.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "07 Dec 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -335,11 +336,13 @@ class RabbitMQConsumer(ABC, RMQP):
 
         if len(pathlist) == 0:
             warning_msg = "No files in pathlist"
-            if (MSG.WARNING in body_json[MSG.DETAILS] and 
-                len(body_json[MSG.DETAILS][MSG.WARNING])> 0):
+            if (
+                MSG.WARNING in body_json[MSG.DETAILS]
+                and len(body_json[MSG.DETAILS][MSG.WARNING]) > 0
+            ):
                 body_json[MSG.DETAILS][MSG.WARNING].append(warning_msg)
             else:
-                body_json[MSG.DETAILS][MSG.WARNING]= [warning_msg]
+                body_json[MSG.DETAILS][MSG.WARNING] = [warning_msg]
 
         # added the delay back in for the PREPARE method, but now works differently
         self.publish_message(monitoring_rk, body_json, delay=delay)
@@ -534,14 +537,14 @@ class RabbitMQConsumer(ABC, RMQP):
             self.acknowledge_message(ch, method.delivery_tag, connection)
             self.log(
                 f"Acknowledged message with routing key {method.routing_key}",
-                RK.LOG_INFO
+                RK.LOG_INFO,
             )
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
             if REQUEUE:
                 self.log(
                     f"Unhandled exception occurred in callback.  Requeuing message",
-                    RK.LOG_INFO
+                    RK.LOG_INFO,
                 )
                 tb = traceback.format_exc()
                 self.log(tb, RK.LOG_INFO, exc_info=e)

@@ -2,6 +2,7 @@
 """
 test_system_status.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -69,9 +70,7 @@ def mock_callback_offline(host_ip, api_port, queue_name, login, password, vhost)
     return mock_consumer_tags
 
 
-def mock_callback_rabbit(
-    host_ip, api_port, queue_name, login, password, vhost
-):
+def mock_callback_rabbit(host_ip, api_port, queue_name, login, password, vhost):
     # throws a custom error summulating what happens if rabbits is offline
 
     from nlds.routers import system
@@ -217,7 +216,7 @@ def test_get_consumer_status_requests_error(
         "nlds.server_config.load_config",
         functools.partial(mock_load_config, template_config),
     )
-    
+
     # test if it handels the error properly if requests is offline
 
     from nlds.routers import system
@@ -573,9 +572,7 @@ async def mock_blue_consumer_status(key, target, msg_dict, time_limit, skip_num=
     return mock_consumer_tags
 
 
-def test_get_success(
-    monkeypatch, loop: asyncio.AbstractEventLoop, load_connection
-):
+def test_get_success(monkeypatch, loop: asyncio.AbstractEventLoop, load_connection):
     # test if get function correctly runs
 
     from nlds.routers import system
@@ -640,9 +637,7 @@ def test_get_success(
     assert str(attrs["context"]["status"]) == status
 
 
-def test_get_alert_green(
-    monkeypatch, loop: asyncio.AbstractEventLoop, load_connection
-):
+def test_get_alert_green(monkeypatch, loop: asyncio.AbstractEventLoop, load_connection):
     # test if get function correctly returns a green alert
 
     from nlds.routers import system
@@ -668,9 +663,7 @@ def test_get_alert_green(
     assert failed["failed_colour"] == "alert-success"
 
 
-def test_get_alert_red(
-    monkeypatch, loop: asyncio.AbstractEventLoop, load_connection
-):
+def test_get_alert_red(monkeypatch, loop: asyncio.AbstractEventLoop, load_connection):
     # test if get function correctly returns a red alert
 
     from nlds.routers import system
@@ -696,9 +689,7 @@ def test_get_alert_red(
     assert failed["failed_colour"] == "alert-danger"
 
 
-def test_get_alert_blue(
-    monkeypatch, loop: asyncio.AbstractEventLoop, load_connection
-):
+def test_get_alert_blue(monkeypatch, loop: asyncio.AbstractEventLoop, load_connection):
     # test if get function correctly returns a blue alert
 
     from nlds.routers import system
