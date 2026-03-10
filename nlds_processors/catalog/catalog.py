@@ -97,15 +97,16 @@ class Catalog(DBMixin):
                     holding_q = holding_q.filter(Holding.user == user)
                 holding_q = holding_q.filter(Holding.label == label)
 
-            # pre-load the tags
-            holding_q = holding_q.options(joinedload(Holding.transactions))
-            holding_q = holding_q.options(joinedload(Holding.tags))
             # if we are doing an update on the holding then lock the catalog database
             if with_for_update:
                 holding = holding_q.with_for_update().one()
             else:
+                # pre-load the tags and transactions
+                holding_q = holding_q.options(joinedload(Holding.transactions))
+                holding_q = holding_q.options(joinedload(Holding.tags))
                 # get one holding
                 holding = holding_q.one()
+
         except NoResultFound as e:
             msg = ""
             if holding_id:
@@ -171,11 +172,9 @@ class Catalog(DBMixin):
             # transaction id filtering - for when a large upload has been split into
             # multiple uploads
             elif transaction_id:
-                holding_q = (
-                    holding_q.filter(
-                        Holding.id == Transaction.holding_id,
-                        Transaction.transaction_id == transaction_id,
-                    )
+                holding_q = holding_q.filter(
+                    Holding.id == Transaction.holding_id,
+                    Transaction.transaction_id == transaction_id,
                 )
             # search label filtering - for when the user supplies a holding label
             elif label:
@@ -185,7 +184,7 @@ class Catalog(DBMixin):
                 else:
                     holding_q = holding_q.filter(Holding.label == label)
 
-            # pre-load the tags
+            # pre-load the tags
             holding_q = holding_q.options(joinedload(Holding.transactions))
             holding_q = holding_q.options(joinedload(Holding.tags))
             # filter the query on any tags
@@ -599,12 +598,9 @@ class Catalog(DBMixin):
                 # build the file query bit by bit
                 # load in the Locations when we access the File to speed up the queries
                 # a lot
-                file_q = (
-                    self.session.query(File, Transaction)
-                    .filter(
-                        File.transaction_id == Transaction.id,
-                        Transaction.holding_id == h.id,
-                    )
+                file_q = self.session.query(File, Transaction).filter(
+                    File.transaction_id == Transaction.id,
+                    Transaction.holding_id == h.id,
                 )
                 file_q = file_q.options(joinedload(File.locations))
 
