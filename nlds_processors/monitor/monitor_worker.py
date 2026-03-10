@@ -603,14 +603,7 @@ class MonitorConsumer(RMQC):
             # Note that state is used to filter on the final state, not the state of
             # each sub record - so return the sub records no matter what state they
             # are in
-            srecs = self.monitor.get_sub_records(
-                transaction_record=tr,
-                sub_id=sub_id,
-                user=query_user,
-                group=query_group,
-                state=None,
-                api_action=api_action,
-            )
+            srecs = tr.sub_records
 
             if tr.id in trecs_dict:
                 t_rec = trecs_dict[tr.id]
@@ -623,7 +616,7 @@ class MonitorConsumer(RMQC):
                     "job_label": tr.job_label,
                     "api_action": tr.api_action,
                     "creation_time": tr.creation_time.isoformat(),
-                    "warnings": tr.get_warnings(),
+                    "warnings": [w.warning for w in tr.warnings],
                     "sub_records": [],
                 }
                 trecs_dict[tr.id] = t_rec
