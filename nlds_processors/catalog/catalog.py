@@ -96,6 +96,10 @@ class Catalog(DBMixin):
                 if not groupall and user != "**all**":
                     holding_q = holding_q.filter(Holding.user == user)
                 holding_q = holding_q.filter(Holding.label == label)
+
+            # pre-load the tags
+            holding_q = holding_q.options(joinedload(Holding.transactions))
+            holding_q = holding_q.options(joinedload(Holding.tags))
             # if we are doing an update on the holding then lock the catalog database
             if with_for_update:
                 holding = holding_q.with_for_update().one()
@@ -172,8 +176,6 @@ class Catalog(DBMixin):
                         Holding.id == Transaction.holding_id,
                         Transaction.transaction_id == transaction_id,
                     )
-                    .join(Transaction)
-                    .where()
                 )
             # search label filtering - for when the user supplies a holding label
             elif label:
@@ -183,6 +185,9 @@ class Catalog(DBMixin):
                 else:
                     holding_q = holding_q.filter(Holding.label == label)
 
+            # pre-load the tags
+            holding_q = holding_q.options(joinedload(Holding.transactions))
+            holding_q = holding_q.options(joinedload(Holding.tags))
             # filter the query on any tags
             if tag:
                 # get the holdings that have a key that matches one or more of
@@ -600,8 +605,8 @@ class Catalog(DBMixin):
                         File.transaction_id == Transaction.id,
                         Transaction.holding_id == h.id,
                     )
-                    .options(joinedload(File.locations))
                 )
+                file_q = file_q.options(joinedload(File.locations))
 
                 if descending:
                     file_q = file_q.order_by(Transaction.ingest_time.desc())
