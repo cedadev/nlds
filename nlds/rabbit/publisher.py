@@ -2,6 +2,7 @@
 """
 publisher.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -298,6 +299,7 @@ class RabbitMQPublisher:
             logger.debug(f"{type(e).__name__}: {e}")
             # NOTE: don't reraise in this case, can cause an infinite loop as
             # the message will never be sent.
+            # is it the use case for a dead-letter queue?
             # raise RabbitRetryError(str(e), ampq_exception=e)
 
     def close_connection(self) -> None:

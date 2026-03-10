@@ -2,6 +2,7 @@
 """
 status.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -34,10 +35,12 @@ router = APIRouter()
 class StatusResponse(BaseModel):
     holdings: List[Dict]
 
+
 class StatBody(BaseModel):
     api_action: Optional[List[str]] = None
     exclude_api_action: Optional[List[str]] = None
     state: Optional[List[str]] = None
+
 
 ############################ GET METHOD ############################
 @router.get(
@@ -68,9 +71,9 @@ async def get(
 ):
     # create the message dictionary
     search_api_action = stat_options.api_action
-    api_action = f"{RK.STAT}"   # this is overwriting the api_action we want to
-                                # filter on, so we have saved it above - we will
-                                # put it in the META section of the message
+    api_action = f"{RK.STAT}"  # this is overwriting the api_action we want to
+    # filter on, so we have saved it above - we will
+    # put it in the META section of the message
 
     # Validate state at this point.
     states = []
@@ -94,7 +97,8 @@ async def get(
                     type="Incomplete request.",
                 )
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=response_error.json()
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=response_error.json(),
                 )
             states.append(state)
 

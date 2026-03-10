@@ -2,6 +2,7 @@
 """
 get_transfer.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -273,7 +274,10 @@ class GetTransferConsumer(BucketTransferConsumer):
             else:
                 # change ownership and permissions
                 try:
-                    self._change_permissions(download_path, path_details)
+                    # don't change permissions on directories, as that will cause
+                    # subsequent writes to the directory to fail!
+                    if path_details.path_type != PathType.DIRECTORY:
+                        self._change_permissions(download_path, path_details)
                 except TransferError as e:
                     self.log(f"Error downloading: {e}", RK.LOG_ERROR)
                 # all finished successfully!

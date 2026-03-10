@@ -2,6 +2,7 @@
 """
 message_keys.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "08 Apr 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -52,7 +53,7 @@ TAPE_URL = "tape_url"
 TAPE_POOL = "tape_pool"
 AGGREGATION_ID = "aggregation_id"
 CHECKSUM = "checksum"
-TARFILE= "tarfile"
+TARFILE = "tarfile"
 PREPARE_ID = "prepare_id"
 STORAGE_LOCATIONS = "storage_locations"
 STORAGE_COUNT = "storage_count"

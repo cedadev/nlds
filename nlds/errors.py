@@ -2,6 +2,7 @@
 """
 errors.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -31,6 +32,7 @@ class CallbackError(BaseException):
 
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
+
 
 class MessageError(Exception):
     def __init__(self, message, *args):

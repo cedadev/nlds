@@ -2,6 +2,7 @@
 """
 monitor.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "15 Sep 2022"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -9,6 +10,7 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError, NoResultFound
+from sqlalchemy.orm import joinedload
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -53,9 +55,6 @@ class Monitor(DBMixin):
             )
 
             self.session.add(transaction_record)
-            self.session.commit()
-            # commit early to update the transaction_record.id and prevent contention
-            # with any other monitor worker processes
         except (IntegrityError, KeyError) as e:
             raise MonitorError(
                 f"Transaction record with transaction_id {transaction_id} "
@@ -99,9 +98,7 @@ class Monitor(DBMixin):
                     f"not found"
                 )
             else:
-                raise MonitorError(
-                    f"No TransactionRecords found"
-                )
+                raise MonitorError(f"No TransactionRecords found")
         return trec
 
     def get_transaction_records(
@@ -153,6 +150,15 @@ class Monitor(DBMixin):
                     trec = self.session.query(TransactionRecord).filter(
                         TransactionRecord.transaction_id == transaction_search,
                     )
+            # autoload the warnings
+            trec = trec.options(joinedload(TransactionRecord.warnings))
+            # autoload the subrecords
+            trec = trec.options(
+                joinedload(TransactionRecord.sub_records).joinedload(
+                    SubRecord.failed_files
+                )
+            )
+
             if api_action:
                 trec = trec.filter(TransactionRecord.api_action.in_(api_action))
             if exclude_api_action:
@@ -192,9 +198,7 @@ class Monitor(DBMixin):
                     f"not found"
                 )
             else:
-                raise MonitorError(
-                    f"No TransactionRecords found"
-                )
+                raise MonitorError(f"No TransactionRecords found")
         except DataError as e:
             if regex:
                 raise MonitorError(f"Invalid regular expression: {transaction_search}")
@@ -263,7 +267,7 @@ class Monitor(DBMixin):
                 self.session.query(SubRecord)
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
-            )
+            ).options(joinedload(SubRecord.failed_files))
             if with_for_update:
                 srec = srec_q.with_for_update().one()
             else:
@@ -289,6 +293,7 @@ class Monitor(DBMixin):
             query = self.session.query(SubRecord).filter(
                 SubRecord.transaction_record_id == transaction_record.id
             )
+            query = query.options(joinedload(SubRecord.failed_files))
 
             # apply filters one at a time if present. Results in a big 'and' query
             # of the passed flags

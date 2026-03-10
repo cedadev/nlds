@@ -2,6 +2,7 @@
 """
 init.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -69,7 +70,7 @@ async def get():
             },
             "object_storage": {
                 "tenancy": os_tenancy,
-            }
+            },
         }
     ).encode()
 

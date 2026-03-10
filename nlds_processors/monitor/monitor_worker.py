@@ -2,6 +2,7 @@
 """
 monitor_worker.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "15 Sep 2022"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -344,7 +345,6 @@ class MonitorConsumer(RMQC):
                 srec = self.monitor.create_sub_record(trec, sub_id, state)
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
-
         # consistency check
         if srec.transaction_record_id != trec.id:
             msg = (
@@ -380,18 +380,21 @@ class MonitorConsumer(RMQC):
             RK.LOG_INFO,
         )
 
-        # start the database transactions
-        self.monitor.start_session()
         # create the transaction record
         try:
             trec = self.monitor.create_transaction_record(
-                user, group, transaction_id, job_label, api_action
+                user=user,
+                group=group,
+                transaction_id=transaction_id,
+                job_label=job_label,
+                api_action=api_action,
             )
+
+            # commit early as it is the top of the tree
+            self.monitor.commit()
         except MonitorError as e:
             self.log(e.message, RK.LOG_ERROR)
         # save and end the sessions
-        self.monitor.save()
-        self.monitor.end_session()
         self.log(
             f"... Successfully created monitoring record",
             RK.LOG_INFO,
@@ -469,24 +472,20 @@ class MonitorConsumer(RMQC):
             )
         except MonitorError as e:
             # Function above handled message logging, here we just return
-            # don't ack - try again
             return False
-
+        # flush to update the srec id
+        self.monitor.session.flush()
         # Update subrecord to match new monitoring data
         try:
             self.monitor.update_sub_record(srec, state)
         except MonitorError as e:
-            # If the state update is invalid then rollback session and exit
-            # callback
             self.log(e.message, RK.LOG_ERROR)
-            # session.rollback() # rollback needed?
-            # don't ack - try again
             return False
 
         # Create failed_files if necessary
         if state in State.get_failed_states():
             self.log(
-                "Creating FailedFiles records as transaction appears to have failed",
+                "Creating FailedFiles records as the Transaction has failed",
                 RK.LOG_INFO,
             )
             try:
@@ -512,12 +511,10 @@ class MonitorConsumer(RMQC):
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
                 return False
+        self.monitor.commit()
 
-        # Commit all transactions when we're sure everything is as it should be.
-        self.monitor.save()
-        self.monitor.end_session()
         self.log(
-            f"... Successfully commited monitoring update",
+            f"... Successfully committed monitoring update",
             RK.LOG_INFO,
         )
         return True
@@ -606,14 +603,7 @@ class MonitorConsumer(RMQC):
             # Note that state is used to filter on the final state, not the state of
             # each sub record - so return the sub records no matter what state they
             # are in
-            srecs = self.monitor.get_sub_records(
-                transaction_record=tr,
-                sub_id=sub_id,
-                user=query_user,
-                group=query_group,
-                state=None,
-                api_action=api_action,
-            )
+            srecs = tr.sub_records
 
             if tr.id in trecs_dict:
                 t_rec = trecs_dict[tr.id]
@@ -626,7 +616,7 @@ class MonitorConsumer(RMQC):
                     "job_label": tr.job_label,
                     "api_action": tr.api_action,
                     "creation_time": tr.creation_time.isoformat(),
-                    "warnings": tr.get_warnings(),
+                    "warnings": [w.warning for w in tr.warnings],
                     "sub_records": [],
                 }
                 trecs_dict[tr.id] = t_rec
@@ -641,13 +631,11 @@ class MonitorConsumer(RMQC):
                 }
                 t_rec["sub_records"].append(s_rec)
 
-        self.monitor.end_session()
-
         ret_list = []
         for id_ in trecs_dict:
             # NRM - return all trecs, even if they are empty - the client will interpret
             # them
-            #if len(trecs_dict[id_]["sub_records"]) > 0:
+            # if len(trecs_dict[id_]["sub_records"]) > 0:
             ret_list.append(trecs_dict[id_])
         body[MSG.DATA][MSG.RECORD_LIST] = ret_list
         self.publish_message(
@@ -734,6 +722,12 @@ class MonitorConsumer(RMQC):
                 self.log(f"db_connect string is {db_connect}", RK.LOG_DEBUG)
         except DBError as e:
             self.log(e.message, RK.LOG_CRITICAL)
+        # start the session - just have one
+        self.monitor.start_session()
+
+    def detach_database(self):
+        # end the session
+        self.monitor.end_session()
 
     def get_engine(self):
         # Method for making the db_engine available to alembic
@@ -758,6 +752,8 @@ def main():
     consumer.attach_database()
     # run the loop
     consumer.run()
+    # detach DB
+    consumer.detach_database()
 
 
 if __name__ == "__main__":

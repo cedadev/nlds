@@ -2,6 +2,7 @@
 """
 base_transfer.py
 """
+
 __author__ = "Jack Leland and Neil Massey"
 __date__ = "30 Nov 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -41,7 +42,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         _FILELIST_MAX_LENGTH: 1000,
         _CHUNK_SIZE: 5 * (1024**2),  # Default to 5 MiB
         _PARALLEL_UPLOADS: 1,
-        _HTTP_TIMEOUT: 24 * 60 * 60,       # Default to 24 hours
+        _HTTP_TIMEOUT: 24 * 60 * 60,  # Default to 24 hours
         StattingConsumer._FILELIST_MAX_SIZE: 16 * 1024 * 1024,
     }
 
@@ -99,7 +100,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             return
 
         try:
-            (self.access_key, self.secret_key, self.tenancy) = (
+            self.access_key, self.secret_key, self.tenancy = (
                 self.get_objectstore_config(self.body_json)
             )
         except TransferError:

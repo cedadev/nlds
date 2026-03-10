@@ -2,6 +2,7 @@
 """
 nlds_worker.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "07 Dec 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -426,7 +427,7 @@ class NLDSWorkerConsumer(RMQC):
             # If finished with catalog update then pass for transfer get
             elif rk_parts[1] == f"{RK.CATALOG_UPDATE}":
                 self._process_rk_catalog_update_complete(rk_parts, body_json)
-                
+
             # if finished with catalog archive update then mark ARCHIVE_PUT flow as
             # complete
             elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_UPDATE}":

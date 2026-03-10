@@ -2,6 +2,7 @@
 """
 test_archive_base.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "07 Dec 2021"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -13,6 +14,7 @@ import pytest
 pyxrootd = pytest.importorskip("pyxrootd")
 from nlds_processors.archive.archive_base import ArchiveError
 from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape, S3StreamError
+
 
 class TestSplitTapeUrl:
 

@@ -2,6 +2,7 @@
 """
 details.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -183,18 +184,20 @@ class PathDetails(BaseModel):
             locations = PathLocations.from_dict(json_contents)
         else:
             locations = PathLocations()
-        return cls(original_path = json_contents["file_details"]["original_path"],
-                   path_type = json_contents["file_details"]["path_type"],
-                   link_path = json_contents["file_details"]["link_path"],
-                   size = json_contents["file_details"]["size"],
-                   user = json_contents["file_details"]["user"],
-                   group = json_contents["file_details"]["group"],
-                   permissions = json_contents["file_details"]["permissions"],
-                   mode = json_contents["file_details"]["mode"],
-                   access_time = json_contents["file_details"]["access_time"],
-                   failure_reason = json_contents["file_details"]["failure_reason"],
-                   holding_id = json_contents["file_details"]["holding_id"],
-                   locations=locations)
+        return cls(
+            original_path=json_contents["file_details"]["original_path"],
+            path_type=json_contents["file_details"]["path_type"],
+            link_path=json_contents["file_details"]["link_path"],
+            size=json_contents["file_details"]["size"],
+            user=json_contents["file_details"]["user"],
+            group=json_contents["file_details"]["group"],
+            permissions=json_contents["file_details"]["permissions"],
+            mode=json_contents["file_details"]["mode"],
+            access_time=json_contents["file_details"]["access_time"],
+            failure_reason=json_contents["file_details"]["failure_reason"],
+            holding_id=json_contents["file_details"]["holding_id"],
+            locations=locations,
+        )
 
     @classmethod
     def from_path(cls, path: str):
@@ -254,7 +257,7 @@ class PathDetails(BaseModel):
         self.link_path = None
         if stat.S_ISLNK(self.mode):
             self.path_type = PathType.LINK
-            self.link_path = self.path.resolve().as_posix() # convert this to a string
+            self.link_path = self.path.resolve().as_posix()  # convert this to a string
         elif stat.S_ISDIR(self.mode):
             self.path_type = PathType.DIRECTORY
         elif stat.S_ISREG(self.mode):
@@ -388,3 +391,12 @@ class PathDetails(BaseModel):
         else:
             tape_name = f"{pl.url_scheme}://{pl.url_netloc}/{pl.root}/{pl.path}"
             return tape_name
+
+    def __eq__(self, item) -> bool:
+        return self.original_path == item.original_path
+
+    def __hash__(self) -> hash:
+        return hash(self.original_path)
+
+    def __contains__(self, item) -> bool:
+        return self.original_path == item.original_path
