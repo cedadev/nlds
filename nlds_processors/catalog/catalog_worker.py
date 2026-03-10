@@ -1630,18 +1630,18 @@ class CatalogConsumer(RMQC):
             # Get the transaction and holding for each transaction_record
             for tr in transaction_records:
                 transaction_id = tr["transaction_id"]
-                t = self.catalog.get_transaction(transaction_id=transaction_id)
-                # A transaction_id might not have an associated transaction in
+                # A transaction_id might not have an associated holding in
                 # the catalog if the transaction FAILED or has not COMPLETED
                 # yet.  We allow for this and return an empty string instead.
-                if t is None:
-                    label = ""
-                else:
+                try:
                     h = self.catalog.get_holding(
-                        user, group, groupall=groupall, holding_id=t.holding_id
+                        user, group, groupall=groupall, transaction_id=transaction_id
                     )
                     label = h.label
-                    ret_dict[t.transaction_id] = label
+                except CatalogError:
+                    # just return a blank label
+                    label = ""
+                ret_dict[transaction_id] = label
 
                 # Add label to the transaction_record dict
                 tr[MSG.LABEL] = label
