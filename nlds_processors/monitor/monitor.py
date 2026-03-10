@@ -267,10 +267,11 @@ class Monitor(DBMixin):
                 self.session.query(SubRecord)
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
-            ).options(joinedload(SubRecord.failed_files))
+            )
             if with_for_update:
                 srec = srec_q.with_for_update().one()
             else:
+                srec = srec.options(joinedload(SubRecord.failed_files))
                 srec = srec_q.one()
         except (IntegrityError, IndexError, NoResultFound):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
