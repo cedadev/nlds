@@ -1289,64 +1289,70 @@ class CatalogConsumer(RMQC):
 
         # get all the files in the filelist as File objects from the database
         # holding_id is not None, as confirmed by above check
-        files = self.catalog.get_files_from_filelist(
-            transaction_id=transaction_id,  # assume all same holding id
-            filelist=path_details_list,
-            with_for_update=True,
-        )
-        modify_location_list = []
-        for f in files:
-            try:
-                # this gets the original path_details from the list as the DB return
-                # might be out of order
-                pd = path_details_list[path_details_list.index(f)]
-                pl = pd.get_tape()
-                # recreate the path location if it was deleted
-                if pl is None:
-                    raise CatalogError(
-                        f"No tape location in PathDetails for file {pd.original_path}"
+        # need all the transactions for a holding, as files belong to a Transaction
+        holding = self.catalog.get_holding(user, group, holding_id=holding_id)
+        for transaction in holding.transactions:
+            files = self.catalog.get_files_from_filelist(
+                transaction_id=transaction.transaction_id,
+                filelist=path_details_list,
+                with_for_update=True,
+            )
+            modify_location_list = []
+            # we now have a list of all the files in a transaction that is part of a 
+            # holding
+            for f in files:
+                try:
+                    # this gets the original path_details from the list as the DB return
+                    # might be out of order
+                    pd = path_details_list[path_details_list.index(f)]
+                    pl = pd.get_tape()
+                    # recreate the path location if it was deleted
+                    if pl is None:
+                        raise CatalogError(
+                            f"No tape location in PathDetails for file {pd.original_path}"
+                        )
+                    # get the already created location and update with info from
+                    # PathLocation and assign the aggregation
+                    # input storage type
+                    st = Storage.from_str(pl.storage_type)
+
+                    if len(f.locations) != 0:
+                        # modify location - get it first via loop on locations
+                        for l in f.locations:
+                            if l.storage_type == st:
+                                location = l
+                                break
+
+                    # set access time to now if no access time set in PathLocation
+                    if pl.access_time is None:
+                        access_time = datetime.now()
+                    else:
+                        access_time = datetime.fromtimestamp(pl.access_time)
+
+                    self.catalog.modify_location(
+                        location,
+                        url_scheme=pl.url_scheme,
+                        url_netloc=pl.url_netloc,
+                        root=pl.root,
+                        path=pl.path,
+                        access_time=access_time,
+                        aggregation_id=aggregation.id,
                     )
-                # get the already created location and update with info from
-                # PathLocation and assign the aggregation
-                # input storage type
-                st = Storage.from_str(pl.storage_type)
+                    modify_location_list.append(location)
+                    self.catalog.defer(location)
+                    self.completelist.append(pd)
 
-                if len(f.locations) != 0:
-                    # modify location - get it first via loop on locations
-                    for l in f.locations:
-                        if l.storage_type == st:
-                            location = l
-                            break
+                except CatalogError as e:
+                    # the file wasn't found or the location couldn't be created
+                    pd.failure_reason = e.message
+                    self.failedlist.append(pd)
+                    self.log(e.message, RK.LOG_ERROR)
+                    continue
 
-                # set access time to now if no access time set in PathLocation
-                if pl.access_time is None:
-                    access_time = datetime.now()
-                else:
-                    access_time = datetime.fromtimestamp(pl.access_time)
-
-                self.catalog.modify_location(
-                    location,
-                    url_scheme=pl.url_scheme,
-                    url_netloc=pl.url_netloc,
-                    root=pl.root,
-                    path=pl.path,
-                    access_time=access_time,
-                    aggregation_id=aggregation.id,
-                )
-                modify_location_list.append(location)
-                self.catalog.defer(location)
-                self.completelist.append(pd)
-
-            except CatalogError as e:
-                # the file wasn't found or the location couldn't be created
-                pd.failure_reason = e.message
-                self.failedlist.append(pd)
-                self.log(e.message, RK.LOG_ERROR)
-                continue
-
-        # commit when all files complete - do a bulk commit followed by a safety commit
-        if len(modify_location_list) > 0:
-            self.catalog.bulk_commit(modify_location_list)
+            # commit when all files complete - do a bulk commit of the transactions 
+            # modifications followed by a safety commit later
+            if len(modify_location_list) > 0:
+                self.catalog.bulk_commit(modify_location_list)
 
         self.catalog.commit()
 
