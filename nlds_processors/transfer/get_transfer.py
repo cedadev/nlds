@@ -156,7 +156,7 @@ class GetTransferConsumer(BucketTransferConsumer):
             )
             raise TransferError(message=reason)
 
-    def _change_permissions(self, download_path, path_details):
+    def _change_permissions(self, download_path: str, path_details: PathDetails):
         """Change the permission of the downloaded file"""
         download_path_str = str(download_path)
         self.log(
@@ -169,18 +169,19 @@ class GetTransferConsumer(BucketTransferConsumer):
         except (KeyError, PermissionError) as e:
             self.log("Couldn't change permissions of downloaded file", RK.LOG_WARNING)
             self.log(f"Original error: {e}", RK.LOG_DEBUG)
-        self._change_owner(download_path_str)
+        self._change_owner(download_path_str, path_details.user, path_details.group)
 
-    def _change_owner(self, path_str):
+    def _change_owner(self, path_str: str, uid: int=-1, gid: int=-1):
         # Attempt to chown the path back to the requesting user using the
         # configured binary/command.
+        # assign default uid / gid if not passed in
+        if uid == -1:
+            uid = self.uid
+        if gid == -1:
+            gid = self.gids[0]
+
         try:
-            cmd = [
-                self.chown_cmd,
-                str(self.uid),
-                str(self.gids[0]),
-                path_str,
-            ]
+            cmd = [self.chown_cmd, str(uid), str(gid), path_str,]
             try:
                 P = subprocess.run(cmd)
                 P.check_returncode()
