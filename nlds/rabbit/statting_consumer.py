@@ -164,10 +164,10 @@ class StattingConsumer(RMQC):
             raise e
 
         # Get list of groups containing the given username
-        gids = {g.gr_gid for g in grp.getgrall() if username in g.gr_mem}
-        # Add the gid from the pwd call.
-        gids.add(pwd_gid)
-        gids = list(gids)
+        gids = [g.gr_gid for g in grp.getgrall() if username in g.gr_mem]
+        # Add the gid from the pwd call.  This is the default gid, so we put it at the
+        # beginning
+        gids.insert(0, pwd_gid)
 
         # Check for list validity
         if len(gids) == 0:
