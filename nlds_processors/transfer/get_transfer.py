@@ -287,10 +287,14 @@ class GetTransferConsumer(BucketTransferConsumer):
                         os.chmod(p, 0o770)
                         created_paths.append(p)
                 try:
-                    # change ownership only for now
-                    self._change_owner(download_path)
+                    # change ownership and permissions.
+                    # This might have to be move to an additional process.
+                    self._change_permissions(download_path, target_path)
                 except TransferError as e:
-                    self.log(f"Error changing file owner: {e}", RK.LOG_ERROR)
+                    self.log(
+                        f"Error changing file owner and permissions: {e}", 
+                        RK.LOG_ERROR
+                    )
                 # all finished successfully!
                 self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
                 self.append_and_send(
