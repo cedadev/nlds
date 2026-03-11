@@ -84,7 +84,7 @@ class Transaction(CatalogBase):
     consist of many transactions."""
 
     __tablename__ = "transaction"
-    # primay key / integer id
+    # primary key / integer id
     id = Column(Integer, primary_key=True)
     # transaction id - this will be the String of the UUID
     transaction_id = Column(String, nullable=False, index=True)
