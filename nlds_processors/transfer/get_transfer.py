@@ -289,7 +289,7 @@ class GetTransferConsumer(BucketTransferConsumer):
                 try:
                     # change ownership and permissions.
                     # This might have to be move to an additional process.
-                    self._change_permissions(download_path, target_path)
+                    self._change_permissions(download_path, path_details)
                 except TransferError as e:
                     self.log(
                         f"Error changing file owner and permissions: {e}", 
