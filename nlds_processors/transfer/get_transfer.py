@@ -14,7 +14,6 @@ from pathlib import Path
 import os
 import subprocess
 
-import minio
 from minio.error import S3Error
 from retry import retry
 
@@ -35,7 +34,7 @@ class GetTransferConsumer(BucketTransferConsumer):
 
     _CHOWN_COMMAND = "chown_cmd"
     _CHOWN_FL = "chown_fl"
-    _CHOWN_USER = "nlds"
+    _CHOWN_USER = "chown_user"
     TRANSFER_GET_CONSUMER_CONFIG = {
         _CHOWN_COMMAND: "chown",
         _CHOWN_FL: False,
@@ -138,6 +137,11 @@ class GetTransferConsumer(BucketTransferConsumer):
         download_path_str = str(download_path)
         # Attempt the download!
         try:
+            # make any parent directories first
+            # fget_object will make parent directories, but the permissions will be
+            # masked by the users current permissions.
+            # We will have to change the permissions for all of the created parent
+            # directories later
             resp = self.s3_client.fget_object(
                 bucket_name,
                 object_name,
@@ -272,6 +276,16 @@ class GetTransferConsumer(BucketTransferConsumer):
                     state=State.FAILED,
                 )
             else:
+                # This is where we change the permissions for all of the created parent
+                # directories
+                # get the parent directories all the way up to the target_path
+                par_dirs = self._get_parent_dirs(download_path, target_path)
+                for p in par_dirs:
+                    if p not in created_paths:
+                        # change the permissions to allow other files to be downloaded
+                        # into the created directories
+                        os.chmod(p, 0o770)
+                        created_paths.append(p)
                 try:
                     # change ownership only for now
                     self._change_owner(download_path)
@@ -286,13 +300,8 @@ class GetTransferConsumer(BucketTransferConsumer):
                     body_json=body_json,
                     state=State.TRANSFER_GETTING,
                 )
-                # get the parent directories all the way up to the target_path
-                par_dirs = self._get_parent_dirs(download_path, target_path)
-                for p in par_dirs:
-                    if p not in created_paths:
-                        created_paths.append(p)
 
-        # change the permissions on the created paths
+        # change the owner on the created paths
         for cp in created_paths:
             try:
                 self._change_owner(cp)
