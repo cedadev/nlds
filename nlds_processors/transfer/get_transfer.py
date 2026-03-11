@@ -272,14 +272,11 @@ class GetTransferConsumer(BucketTransferConsumer):
                     state=State.FAILED,
                 )
             else:
-                # change ownership and permissions
                 try:
-                    # don't change permissions on directories, as that will cause
-                    # subsequent writes to the directory to fail!
-                    if path_details.path_type != PathType.DIRECTORY:
-                        self._change_permissions(download_path, path_details)
+                    # change ownership only for now
+                    self._change_owner(download_path)
                 except TransferError as e:
-                    self.log(f"Error downloading: {e}", RK.LOG_ERROR)
+                    self.log(f"Error changing file owner: {e}", RK.LOG_ERROR)
                 # all finished successfully!
                 self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
                 self.append_and_send(
