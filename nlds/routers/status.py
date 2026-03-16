@@ -166,27 +166,27 @@ async def get(
     response = await rpc_publisher.call(msg_dict=msg_dict, routing_key=routing_key)
     # Check if response is valid or whether the request timed out
     if response is not None:
-        # convert byte response to dict for label fetching
-        response_dict = deserialize(response)
-        # Attempt to get list of transaction records
-        transaction_records = None
-        try:
-            transaction_records = response_dict[MSG.DATA][MSG.RECORD_LIST]
-        except KeyError as e:
-            print(
-                f"Encountered error when trying to get a record list from the"
-                f" message response ({e})"
-            )
-        transaction_response = None
-        # Only continue if the response actually had any transactions in it
-        if transaction_records is not None and len(transaction_records) > 0:
-            routing_key = "catalog_q"
-            transaction_response = await rpc_publisher.call(
-                msg_dict=response_dict, routing_key=routing_key
-            )
+        # # convert byte response to dict for label fetching
+        # response_dict = deserialize(response)
+        # # Attempt to get list of transaction records
+        # transaction_records = None
+        # try:
+        #     transaction_records = response_dict[MSG.DATA][MSG.RECORD_LIST]
+        # except KeyError as e:
+        #     print(
+        #         f"Encountered error when trying to get a record list from the"
+        #         f" message response ({e})"
+        #     )
+        # transaction_response = None
+        # # Only continue if the response actually had any transactions in it
+        # if transaction_records is not None and len(transaction_records) > 0:
+        #     routing_key = "catalog_q"
+        #     transaction_response = await rpc_publisher.call(
+        #         msg_dict=response_dict, routing_key=routing_key
+        #     )
 
-        if transaction_response is not None:
-            response = transaction_response
+        # if transaction_response is not None:
+        #     response = transaction_response
 
         # convert byte response to str
         response = json.dumps(deserialize(response))
