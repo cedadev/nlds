@@ -116,7 +116,11 @@ class Monitor(DBMixin):
         descending: bool = False,
     ) -> list:
         """Gets a list of TransactionRecords from the DB from the given a whole host of
-        information.  Only used for user queries."""
+        information.  Only used for user queries.
+        This function is only used via user interaction.
+        NRM - 16/03/2026.  Removed the joinedload on the transaction query as it made
+        everything about 5 times slower!"""
+        
         if transaction_id:
             transaction_search = transaction_id
             transaction_regex = False
@@ -168,16 +172,6 @@ class Monitor(DBMixin):
                 trec = trec.order_by(TransactionRecord.creation_time.desc())
             else:
                 trec = trec.order_by(TransactionRecord.creation_time)
-
-            if trec.count() > 0:
-                # autoload the warnings
-                trec = trec.options(joinedload(TransactionRecord.warnings))
-                # autoload the subrecords
-                trec = trec.options(
-                    joinedload(TransactionRecord.sub_records).joinedload(
-                        SubRecord.failed_files
-                    )
-                )
 
             # limit for speed - but how many sub-records (where the api-action is 
             # stored)            
