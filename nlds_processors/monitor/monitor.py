@@ -168,7 +168,19 @@ class Monitor(DBMixin):
                 trec = trec.order_by(TransactionRecord.creation_time.desc())
             else:
                 trec = trec.order_by(TransactionRecord.creation_time)
-            # limit for speed - but how many sub-records (where the api-action is stored)
+
+            if trec.count() > 0:
+                # autoload the warnings
+                trec = trec.options(joinedload(TransactionRecord.warnings))
+                # autoload the subrecords
+                trec = trec.options(
+                    joinedload(TransactionRecord.sub_records).joinedload(
+                        SubRecord.failed_files
+                    )
+                )
+
+            # limit for speed - but how many sub-records (where the api-action is 
+            # stored)            
             if limit:
                 trecs = trec.limit(limit).all()
             else:
@@ -176,15 +188,6 @@ class Monitor(DBMixin):
 
             if len(trecs) == 0:
                 raise KeyError
-
-            # autoload the warnings
-            trec = trec.options(joinedload(TransactionRecord.warnings))
-            # autoload the subrecords
-            trec = trec.options(
-                joinedload(TransactionRecord.sub_records).joinedload(
-                    SubRecord.failed_files
-                )
-            )
 
         except (IntegrityError, KeyError, OperationalError):
             if idd:
