@@ -18,7 +18,6 @@ import pika
 from pika.frame import Method, Header
 from pika.channel import Channel
 from pika.exceptions import ChannelClosedByBroker
-import time, random
 
 from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 
@@ -114,8 +113,6 @@ class RabbitMQRPCPublisher(RMQP):
 
         self.response = None
 
-        # make the messages out of sync
-        time.sleep(random.uniform(0.0, 1.0))
         self.publish_message(
             routing_key=routing_key,
             msg_dict=msg_dict,
