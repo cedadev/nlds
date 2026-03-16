@@ -1660,7 +1660,7 @@ class CatalogConsumer(RMQC):
             # add the return list to successfully completed holding listings
             body[MSG.DATA][MSG.TRANSACTIONS] = ret_dict
             body[MSG.DATA][MSG.RECORD_LIST] = transaction_records
-            self.log(f"Getting holding labels from CATALOG_STAT", RK.LOG_INFO)
+            self.log(f"Got holding labels from CATALOG_STAT", RK.LOG_INFO)
             self.log(f"{ret_dict}", RK.LOG_DEBUG)
 
         # send the rpc return message for failed or success
