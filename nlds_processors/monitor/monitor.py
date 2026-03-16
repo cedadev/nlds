@@ -150,15 +150,7 @@ class Monitor(DBMixin):
                     trec = self.session.query(TransactionRecord).filter(
                         TransactionRecord.transaction_id == transaction_search,
                     )
-            # autoload the warnings
-            trec = trec.options(joinedload(TransactionRecord.warnings))
-            # autoload the subrecords
-            trec = trec.options(
-                joinedload(TransactionRecord.sub_records).joinedload(
-                    SubRecord.failed_files
-                )
-            )
-
+            # api_action and exclude_api_action
             if api_action:
                 trec = trec.filter(TransactionRecord.api_action.in_(api_action))
             if exclude_api_action:
@@ -184,6 +176,15 @@ class Monitor(DBMixin):
 
             if len(trecs) == 0:
                 raise KeyError
+
+            # autoload the warnings
+            trec = trec.options(joinedload(TransactionRecord.warnings))
+            # autoload the subrecords
+            trec = trec.options(
+                joinedload(TransactionRecord.sub_records).joinedload(
+                    SubRecord.failed_files
+                )
+            )
 
         except (IntegrityError, KeyError, OperationalError):
             if idd:
