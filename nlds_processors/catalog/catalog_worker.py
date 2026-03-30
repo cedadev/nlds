@@ -1298,7 +1298,7 @@ class CatalogConsumer(RMQC):
                 with_for_update=True,
             )
             modify_location_list = []
-            # we now have a list of all the files in a transaction that is part of a 
+            # we now have a list of all the files in a transaction that is part of a
             # holding
             for f in files:
                 try:
@@ -1349,7 +1349,7 @@ class CatalogConsumer(RMQC):
                     self.log(e.message, RK.LOG_ERROR)
                     continue
 
-            # commit when all files complete - do a bulk commit of the transactions 
+            # commit when all files complete - do a bulk commit of the transactions
             # modifications followed by a safety commit later
             if len(modify_location_list) > 0:
                 self.catalog.bulk_commit(modify_location_list)
