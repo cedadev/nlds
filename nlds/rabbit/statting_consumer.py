@@ -107,8 +107,16 @@ class StattingConsumer(RMQC):
         # Select correct pathlist and append the given PathDetails object
         pathlist.append(path_details)
 
+        # The default message cap is the length of the pathlist. This applies
+        # to failed or problem lists by default
+        if len(pathlist) >= self.filelist_max_len:
+            # Send directly to exchange and reset filelist
+            self.send_pathlist(pathlist, routing_key, body_json, state=state)
+            pathlist.clear()
+            self.completelist_size = 0
+
         # If filesize has been passed then use total list size as message cap
-        if path_details.size:
+        elif path_details.size:
             self.completelist_size += path_details.size
 
             # Send directly to exchange and reset filelist
@@ -116,14 +124,6 @@ class StattingConsumer(RMQC):
                 self.send_pathlist(pathlist, routing_key, body_json, state=state)
                 pathlist.clear()
                 self.completelist_size = 0
-
-        # The default message cap is the length of the pathlist. This applies
-        # to failed or problem lists by default
-        elif len(pathlist) >= self.filelist_max_len:
-            # Send directly to exchange and reset filelist
-            self.send_pathlist(pathlist, routing_key, body_json, state=state)
-            pathlist.clear()
-            self.completelist_size = 0
 
     def _fail_all(
         self,
@@ -139,7 +139,7 @@ class StattingConsumer(RMQC):
 
         self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
 
-    @retry((KeyError, ValueError), tries=-1, delay=2, backoff=2, max_delay=60)
+    @retry((KeyError, ValueError), tries=5, delay=2, backoff=2, max_delay=60)
     def set_ids(
         self,
         body_json: Dict[str, str],
