@@ -531,14 +531,7 @@ class RabbitMQConsumer(ABC, RMQP):
         # Wrap callback with a try-except catching a selection of common
         # errors which can be caught without stopping consumption.
         # NRM - this has changed to stop on all exceptions!
-        # NRM - change to acknowledge the message straight away.  If it fails with an
-        # exception then resend the message
         try:
-            self.acknowledge_message(ch, method.delivery_tag, connection)
-            self.log(
-                f"Acknowledged message with routing key {method.routing_key}",
-                RK.LOG_INFO,
-            )
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
             if REQUEUE:
@@ -557,6 +550,14 @@ class RabbitMQConsumer(ABC, RMQP):
                 )
             else:
                 raise Exception(e)
+        finally:
+            # NRM - changed back to acknowledge the message after processing
+            self.acknowledge_message(ch, method.delivery_tag, connection)
+            self.log(
+                f"Callback complete.  Acknowledged message with routing key "
+                f"{method.routing_key}",
+                RK.LOG_INFO,
+            )
 
         # Clear the consuming event so the keepalive stops polling the connection
         self.keepalive.stop_polling()
