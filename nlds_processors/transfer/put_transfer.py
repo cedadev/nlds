@@ -44,6 +44,15 @@ class PutTransferConsumer(BucketTransferConsumer):
         rk_complete = ".".join([rk_origin, RK.TRANSFER_PUT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_PUT, RK.FAILED])
 
+        # check the ids and fail the files if id not found
+        try:
+            self.set_ids(body_json)
+        except KeyError as e:
+            msg = "Problem running set_ids in _transfer_files"
+            self.log(msg, RK.LOG_ERROR)
+            self._fail_all(self.filelist, self.rk_parts, self.body_json, msg)
+            return
+
         # get the bucket name and check that it exists
         # it should have been created by the *.transfer-setup.start process / message
         # if it hasn't then have another go
