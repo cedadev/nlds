@@ -50,6 +50,13 @@ async def authenticate_user(user: str, token: str = Depends(oauth2_scheme)):
     """Check the user by calling the authenticator's authenticate_user
     method."""
     try:
+        # generic ResponseError
+        response_error = ResponseError(
+            loc=["authenticate_methods", "authenticate_user"],
+            msg="Cannot reach authentication server.",
+            type="Resource not found.",
+        )
+
         if token is None:
             response_error = ResponseError(
                 loc=["authenticate_methods", "authenticate_user"],
@@ -79,6 +86,11 @@ async def authenticate_group(group: str, token: str = Depends(oauth2_scheme)):
     """Check the group by calling the authenticator's authenticate_user
     method."""
     try:
+        response_error = ResponseError(
+            loc=["authenticate_methods", "authenticate_user"],
+            msg="Cannot reach authentication server.",
+            type="Resource not found.",
+        )
         if token is None:
             response_error = ResponseError(
                 loc=["authenticate_methods", "authenticate_group"],
