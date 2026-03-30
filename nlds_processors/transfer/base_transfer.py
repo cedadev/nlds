@@ -107,16 +107,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
             return
 
-        # Set uid and gid from message contents
-        self.log("Setting uid and gids now.", RK.LOG_INFO)
-        try:
-            self.set_ids(self.body_json)
-        except (KeyError, ValueError):
-            # reset uid and gid for deletion process
-            msg = "Problem running set_ids in _callback_common, exiting"
-            self.log(msg, RK.LOG_ERROR)
-            return
-
         # Append route info to message to track the route of the message
         self.body_json = self.append_route_info(self.body_json)
         return True
