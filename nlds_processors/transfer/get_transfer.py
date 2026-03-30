@@ -171,7 +171,7 @@ class GetTransferConsumer(BucketTransferConsumer):
             self.log(f"Original error: {e}", RK.LOG_DEBUG)
         self._change_owner(download_path_str, path_details.user, path_details.group)
 
-    def _change_owner(self, path_str: str, uid: int=-1, gid: int=-1):
+    def _change_owner(self, path_str: str, uid: int = -1, gid: int = -1):
         # Attempt to chown the path back to the requesting user using the
         # configured binary/command.
         # assign default uid / gid if not passed in
@@ -181,7 +181,12 @@ class GetTransferConsumer(BucketTransferConsumer):
             gid = self.gids[0]
 
         try:
-            cmd = [self.chown_cmd, str(uid), str(gid), path_str,]
+            cmd = [
+                self.chown_cmd,
+                str(uid),
+                str(gid),
+                path_str,
+            ]
             try:
                 P = subprocess.run(cmd)
                 P.check_returncode()
@@ -293,8 +298,7 @@ class GetTransferConsumer(BucketTransferConsumer):
                     self._change_permissions(download_path, path_details)
                 except TransferError as e:
                     self.log(
-                        f"Error changing file owner and permissions: {e}", 
-                        RK.LOG_ERROR
+                        f"Error changing file owner and permissions: {e}", RK.LOG_ERROR
                     )
                 # all finished successfully!
                 self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
