@@ -10,7 +10,7 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError, NoResultFound
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, lazyload
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -120,7 +120,7 @@ class Monitor(DBMixin):
         This function is only used via user interaction.
         NRM - 16/03/2026.  Removed the joinedload on the transaction query as it made
         everything about 5 times slower!"""
-        
+
         if transaction_id:
             transaction_search = transaction_id
             transaction_regex = False
@@ -130,57 +130,55 @@ class Monitor(DBMixin):
 
         try:
             if idd:
-                trec = self.session.query(TransactionRecord).filter(
+                trec_q = self.session.query(TransactionRecord).filter(
                     TransactionRecord.id == idd
                 )
             elif job_label:
                 if regex:
-                    trec = self.session.query(TransactionRecord).filter(
+                    trec_q = self.session.query(TransactionRecord).filter(
                         TransactionRecord.job_label.regexp_match(job_label),
                     )
                 else:
-                    trec = self.session.query(TransactionRecord).filter(
+                    trec_q = self.session.query(TransactionRecord).filter(
                         TransactionRecord.job_label == job_label,
                     )
 
             else:
                 if transaction_regex:
-                    trec = self.session.query(TransactionRecord).filter(
+                    trec_q = self.session.query(TransactionRecord).filter(
                         TransactionRecord.transaction_id.regexp_match(
                             transaction_search
                         ),
                     )
                 else:
-                    trec = self.session.query(TransactionRecord).filter(
+                    trec_q = self.session.query(TransactionRecord).filter(
                         TransactionRecord.transaction_id == transaction_search,
                     )
             # api_action and exclude_api_action
             if api_action:
-                trec = trec.filter(TransactionRecord.api_action.in_(api_action))
+                trec_q = trec_q.filter(TransactionRecord.api_action.in_(api_action))
             if exclude_api_action:
-                trec = trec.filter(
+                trec_q = trec_q.filter(
                     TransactionRecord.api_action.not_in(exclude_api_action)
                 )
             # group filter
             if group != "**all**":
-                trec = trec.filter(TransactionRecord.group == group)
+                trec_q = trec_q.filter(TransactionRecord.group == group)
             # user filter
             if not groupall and user != "**all**":
-                trec = trec.filter(TransactionRecord.user == user)
+                trec_q = trec_q.filter(TransactionRecord.user == user)
             # Order up or down
             if descending:
-                trec = trec.order_by(TransactionRecord.creation_time.desc())
+                trec_q = trec_q.order_by(TransactionRecord.creation_time.desc())
             else:
-                trec = trec.order_by(TransactionRecord.creation_time)
+                trec_q = trec_q.order_by(TransactionRecord.creation_time)
 
-            # limit for speed - but how many sub-records (where the api-action is 
-            # stored)            
+            # limit for speed - but how many sub-records (where the api-action is
+            # stored)
             if limit:
-                trecs = trec.limit(limit).all()
-            else:
-                trecs = trec.all()
+                trec_q = trec_q.limit(limit)
 
-            if len(trecs) == 0:
+            if trec_q.count() == 0:
                 raise KeyError
 
         except (IntegrityError, KeyError, OperationalError):
@@ -202,7 +200,8 @@ class Monitor(DBMixin):
                 raise MonitorError(f"Invalid regular expression: {transaction_search}")
             else:
                 raise MonitorError(f"Error getting transaction_record: {e}")
-        return trecs
+        trec_q = trec_q.options(joinedload(TransactionRecord.sub_records))
+        return trec_q
 
     def create_sub_record(
         self, transaction_record: TransactionRecord, sub_id: str, state: State = None
