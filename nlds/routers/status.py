@@ -184,7 +184,6 @@ async def get(
             transaction_response = await rpc_publisher.call(
                 msg_dict=response_dict, routing_key=routing_key
             )
-
         if transaction_response is not None:
             response = transaction_response
 
