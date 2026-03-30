@@ -563,10 +563,12 @@ class MonitorConsumer(RMQC):
             # exclude the 'archive-put' api action for normal users as they don't
             # really need to know what's going on with the tape archive and it fills
             # their stat return with TMI
-            if exclude_api_action:
-                exclude_api_action.append("archive-put")
-            else:
-                exclude_api_action = ["archive-put"]
+            list_archive_put = api_action and "archive-put" in api_action
+            if not list_archive_put:
+                if exclude_api_action:
+                    exclude_api_action.append("archive-put")
+                else:
+                    exclude_api_action = ["archive-put"]
 
         try:
             trecs = self.monitor.get_transaction_records(
@@ -603,8 +605,6 @@ class MonitorConsumer(RMQC):
             # Note that state is used to filter on the final state, not the state of
             # each sub record - so return the sub records no matter what state they
             # are in
-            srecs = tr.sub_records
-
             if tr.id in trecs_dict:
                 t_rec = trecs_dict[tr.id]
             else:
@@ -621,14 +621,18 @@ class MonitorConsumer(RMQC):
                 }
                 trecs_dict[tr.id] = t_rec
 
-            for sr in srecs:
+            for sr in tr.sub_records:
                 s_rec = {
                     "id": sr.id,
                     "sub_id": sr.sub_id,
                     "state": sr.state.name,
                     "last_updated": sr.last_updated.isoformat(),
-                    "failed_files": [orm_to_dict(ff) for ff in sr.failed_files],
                 }
+                # only get the failed files if the user asked for them - i.e. they
+                # specified a transaction id
+                if idd or job_label or transaction_id:
+                    s_rec["failed_files"] = [orm_to_dict(ff) for ff in sr.failed_files]
+
                 t_rec["sub_records"].append(s_rec)
 
         ret_list = []
