@@ -531,6 +531,7 @@ class RabbitMQConsumer(ABC, RMQP):
         # Wrap callback with a try-except catching a selection of common
         # errors which can be caught without stopping consumption.
         # NRM - this has changed to stop on all exceptions!
+        self.setup_signal_handling()
         try:
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
@@ -550,7 +551,7 @@ class RabbitMQConsumer(ABC, RMQP):
                 )
             else:
                 raise Exception(e)
-        finally:
+        else:
             # NRM - changed back to acknowledge the message after processing
             self.acknowledge_message(ch, method.delivery_tag, connection)
             self.log(
@@ -637,6 +638,12 @@ class RabbitMQConsumer(ABC, RMQP):
     def exit(self, *args):
         raise SigTermError
 
+    def setup_signal_handling(self):
+        # set up SigTerm handler
+        signal.signal(signal.SIGTERM, self.exit)
+        # set up SigHup handler
+        signal.signal(signal.SIGHUP, self.exit)
+
     def run(self):
         """
         Method to run when thread is started. Creates an AMQP connection
@@ -647,15 +654,9 @@ class RabbitMQConsumer(ABC, RMQP):
 
         :return:
         """
-
-        # set up SigTerm handler
-        signal.signal(signal.SIGTERM, self.exit)
-        # set up SigHup handler
-        signal.signal(signal.SIGHUP, self.exit)
-
+        self.setup_signal_handling()
         while self.loop:
             self.get_connection()
-
             try:
                 startup_message = f"{self.DEFAULT_QUEUE_NAME} - READY"
                 logger.info(startup_message)
@@ -663,11 +664,9 @@ class RabbitMQConsumer(ABC, RMQP):
 
             except KeyboardInterrupt:
                 self.loop = False
-                break
 
             except SigTermError:
                 self.loop = False
-                break
 
             except (StreamLostError, AMQPConnectionError) as e:
                 # Log problem
@@ -679,13 +678,11 @@ class RabbitMQConsumer(ABC, RMQP):
                 tb = traceback.format_exc()
                 self.log(tb, RK.LOG_CRITICAL, exc_info=e)
                 self.loop = False
-                break
-
-        self.channel.stop_consuming()
 
         # Wait for all threads to complete
         # TODO: what happens if we try to sigterm?
         for t in self.threads:
             t.join()
 
+        self.channel.stop_consuming()
         self.connection.close()
