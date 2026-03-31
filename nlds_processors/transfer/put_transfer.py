@@ -176,8 +176,8 @@ class PutTransferConsumer(BucketTransferConsumer):
         )
 
         self.log(
-            "Transfer complete, passing lists back to worker for "
-            "re-routing and cataloguing.",
+            "Transfer complete, passing lists back to worker for re-routing and "
+            "cataloguing.",
             RK.LOG_INFO,
         )
 
