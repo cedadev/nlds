@@ -490,7 +490,6 @@ class RabbitMQPublisher:
         log_message: str,
         log_level: str,
         target: str,
-        remote: bool = True,
         **kwargs,
     ) -> None:
         """
@@ -527,10 +526,15 @@ class RabbitMQPublisher:
         log_level_int = getattr(logging, log_level.upper())
         logger.log(log_level_int, log_message, **kwargs)
 
-        # Then assemble a message to send to the logging consumer, if remote set
-        if remote:
-            routing_key = ".".join([RK.ROOT, RK.LOG, log_level.lower()])
-            message = self.create_log_message(log_message, target)
+        low_priority = (
+            log_level == RK.LOG_INFO
+            or log_level == RK.LOG_WARNING
+            or log_level == RK.LOG_DEBUG
+        )
+
+        routing_key = ".".join([RK.ROOT, RK.LOG, log_level.lower()])
+        message = self.create_log_message(log_message, target)
+        if not low_priority:
             self.publish_message(routing_key, message)
 
     def log(
@@ -539,7 +543,6 @@ class RabbitMQPublisher:
         log_level: str,
         target: str = None,
         body_json: str = None,
-        remote: bool = True,
         **kwargs,
     ) -> None:
         # Attempt to log to publisher's name
@@ -548,10 +551,7 @@ class RabbitMQPublisher:
         # convert string json to nice formatted json and append to message
         if body_json:
             log_message += f"\n{json.dumps(body_json, indent=4)}\n"
-        # set remote to false for LOG_INFO and LOG_WARNING
-        if log_level == RK.LOG_INFO or log_level == RK.LOG_WARNING:
-            remote = False
-        self._log(log_message, log_level, target, remote, **kwargs)
+        self._log(log_message, log_level, target, **kwargs)
 
     @classmethod
     def create_log_message(
