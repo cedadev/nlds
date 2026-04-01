@@ -178,6 +178,62 @@ class S3ToTarfileStream(BucketMixin):
                 continue
         return [], failed_list
 
+    def _write_tar_header(self, tar: tarfile):
+        tar_info = tarfile.TarInfo()
+        # write the header for the tarfile, using the format, encoding, etc
+
+    def _stream_write_chunk_by_chunk(
+        self, tar: tarfile, path_details: PathDetails, chunksize: int
+    ):
+        """Stream the file from the S3 to a tarfile chunk by chunk, using HTTP range get."""
+        # get the bucket and object name
+        bucket_name, object_name = self._get_bucket_name_object_name(path_details)
+        # We need the size details from the object first
+        obj_details = self.s3_client.stat_object(bucket_name, object_name)
+
+        # here is some hacking to allow an empty file to be opened in python3.14
+        # we are essentially using undocumented members of the class to hand write
+        # the tar_info into the file
+        tar_info = tarfile.TarInfo(name=object_name)
+        tar_info.size = obj_details.size
+        tar_info.type = tarfile.REGTYPE
+        # we can assign the user details to the items in the tarfile
+        tar_info.uid = path_details.user
+        tar_info.gid = path_details.group
+        if path_details.permissions:
+            tar_info.mode = path_details.permissions
+        if path_details.access_time:
+            tar_info.mtime = path_details.access_time
+
+        # write the information buffer header
+        buf = tar_info.tobuf(tar.format, tar.encoding, tar.errors)
+        tar.fileobj.write(buf)
+        tar.offset += len(buf)
+
+        # stream the file chunk by chunk and add it to the tarfile
+        for chunk in range(0, obj_details.size, chunksize):
+            # get the object using HTTP range get
+            s3_stream = self.s3_client.get_object(
+                bucket_name=bucket_name,
+                object_name=object_name,
+                offset=chunk,
+                length=chunksize,
+            )
+            # read part of the object and write to the tarfile
+            d = s3_stream.read()
+            tar.fileobj.write(d)
+            # release the connection so it can be reused
+            s3_stream.release_conn()
+
+        # null pad to end of BLOCKSIZE and locate offset for next file in the tar
+        blocks, remainder = divmod(tar_info.size, tarfile.BLOCKSIZE)
+        if remainder > 0:
+            tar.fileobj.write(tarfile.NUL * (tarfile.BLOCKSIZE - remainder))
+            blocks += 1
+        tar.offset += blocks * tarfile.BLOCKSIZE
+
+        tar.members.append(tar_info)
+
     def _stream_to_fileobject(
         self,
         file_object,
@@ -190,22 +246,24 @@ class S3ToTarfileStream(BucketMixin):
 
         # Stream from the S3 Object Store to a tar file that is created using the
         # file_object - this is usually an Adler32File
-        with tarfile.open(mode="w", fileobj=file_object, copybufsize=chunk_size) as tar:
+        with tarfile.open(mode="w|", fileobj=file_object, bufsize=chunk_size) as tar:
             # local versions of the completelist and failedlist
             completelist = []
             failedlist = []
 
+            # write the tar header first
+            self._write_tar_header(tar=tar)
             for path_details in filelist:
                 self.log(
                     f"Streaming file {path_details.path} from object store to tape "
                     f"archive",
                     RK.LOG_DEBUG,
                 )
-
-                # Add file info to the tarfile
+                # Attempt to stream the object directly into the tarfile object
+                # NRM - chunk by chunk now
                 try:
-                    bucket_name, object_name = self._get_bucket_name_object_name(
-                        path_details
+                    self._stream_write_chunk_by_chunk(
+                        tar=tar, path_details=path_details, chunksize=chunk_size
                     )
                 except BucketError as e:
                     reason = str(e)
@@ -213,16 +271,6 @@ class S3ToTarfileStream(BucketMixin):
                     path_details.failure_reason = reason
                     failedlist.append(path_details)
                     continue
-
-                tar_info = tarfile.TarInfo(name=object_name)
-                tar_info.size = int(path_details.size)
-
-                # Attempt to stream the object directly into the tarfile object
-                # NRM - could we do this part by part?
-                try:
-                    stream = self.s3_client.get_object(bucket_name, object_name)
-                    # Adds bytes to xrd.File from result, one chunk_size at a time
-                    tar.addfile(tar_info, fileobj=stream)
 
                 except (HTTPError, S3Error) as e:
                     # Catch error, add to failed list
@@ -237,12 +285,6 @@ class S3ToTarfileStream(BucketMixin):
                     # Log successful
                     self.log(f"Successfully archived {path_details.path}", RK.LOG_DEBUG)
                     completelist.append(path_details)
-                    try:
-                        stream.close()
-                        stream.release_conn()
-                    except AttributeError:
-                        # If it can't be closed then dw
-                        pass
         return completelist, failedlist, file_object.checksum
 
     def _stream_to_s3object(
