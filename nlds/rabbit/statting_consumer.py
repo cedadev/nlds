@@ -125,20 +125,6 @@ class StattingConsumer(RMQC):
                 pathlist.clear()
                 self.completelist_size = 0
 
-    def _fail_all(
-        self,
-        filelist: List[PathDetails],
-        rk_parts: List[str],
-        body_json: Dict[str, Any],
-        msg: str,
-    ):
-        # fail all the files in the filelist
-        rk_transfer_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
-        for file in filelist:
-            file.failure_reason = msg
-
-        self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
-
     @retry((KeyError, ValueError), tries=5, delay=2, backoff=2, max_delay=60)
     def set_ids(
         self,

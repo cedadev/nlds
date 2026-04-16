@@ -83,7 +83,7 @@ def deserialize(body: str) -> dict:
             decompressed_string = zlib.decompress(base64.b64decode(byte_string))
             body_dict[MSG.DATA] = json.loads(decompressed_string)
             logger.debug(
-                f"Decompressing message, compressed size {len(byte_string)}, "
+                f"Decompressed message, compressed size {len(byte_string)}, "
                 f" actual size {len(decompressed_string)}"
             )
         # specify that the message is now decompressed, in case it gets passed through
@@ -99,7 +99,6 @@ class RabbitMQConsumer(ABC, RMQP):
     DEFAULT_REROUTING_INFO = "->"
 
     DEFAULT_CONSUMER_CONFIG: Dict[str, Any] = dict()
-
     # The state associated with finishing the consumer, must be set but can be
     # overridden
     DEFAULT_STATE = State.ROUTING
@@ -410,6 +409,20 @@ class RabbitMQConsumer(ABC, RMQP):
             log_max_bytes=log_max_bytes,
             log_backup_count=log_backup_count,
         )
+
+    def _fail_all(
+        self,
+        filelist: List[PathDetails],
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+        msg: str,
+    ):
+        # fail all the files in the filelist
+        rk_transfer_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
+        for file in filelist:
+            file.failure_reason = msg
+
+        self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
 
     #######
     # Callback wrappers
