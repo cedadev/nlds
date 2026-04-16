@@ -730,6 +730,8 @@ class MonitorConsumer(RMQC):
         self.monitor.start_session()
 
     def detach_database(self):
+        # rollback any pending
+        self.monitor.session.rollback()
         # end the session
         self.monitor.end_session()
 
