@@ -25,7 +25,7 @@ Requires these settings in the /etc/nlds/server_config file:
         }
 """
 
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple
 from datetime import datetime
 
 from pika.channel import Channel
@@ -110,7 +110,7 @@ def format_datetime(date: datetime):
     return datetime_str
 
 
-def build_retrieval_dict(filelist: List[PathDetails], fullpath: bool = False):
+def build_retrieval_dict(filelist: list[PathDetails], fullpath: bool = False):
     """Build a retrieval dict from the filelist.  The retrieval dict contains a
     tarfile name, a holding id, and the list of files to retrieve from the tarfile.
     """
@@ -955,6 +955,73 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
+    def _process_get_files_result(
+        self,
+        result,
+        user: str,
+        group: str,
+        holding_label: str = None,
+        holding_id: int = None,
+        transaction_id: str = None,
+        tag: dict = None,
+        regex: bool = False,
+    ):
+        # Process files not being found - two cases:
+        # 1. No files matching were found, returns a CatalogError, fail all files
+        # 2. Some files were found, but not others - fail the files that were not
+        #    found but allow those found to continue
+
+        if result is None or result.count() == 0:
+            err_msg = f"No matching files found"
+            if holding_label:
+                err_msg += f" in holding with holding_label: {holding_label}"
+            elif holding_id:
+                err_msg += f" in holding with holding_id: {holding_id}"
+            elif transaction_id:
+                err_msg += f" in holding with transaction_id: {transaction_id}"
+            elif tag:
+                err_msg += f" in holding with tag: {tag}"
+            if regex:
+                err_msg += f", regex did not match any files"
+            else:
+                err_msg += f" for user {user} and group {group}"
+            raise CatalogError(err_msg)
+
+    def _process_not_found_files(
+        self,
+        input_path_list: list[PathDetails],
+        output_path_list: list[str],
+        user: str,
+        group: str,
+        holding_label: str = None,
+        holding_id: int = None,
+        transaction_id: str = None,
+        tag: dict = None,
+        regex: bool = False,
+    ):
+        """Send failed_file messages for those files that are in the input_path_list,
+        but not in the output_path_list. i.e. they were not found in the holding."""
+        for input_path in input_path_list:
+            if input_path.original_path not in output_path_list:
+                # input path was not found in the holding / etc:
+                err_msg = f"File: {input_path.original_path} not found"
+
+                if holding_label:
+                    err_msg += f" in holding with holding_label: {holding_label}"
+                elif holding_id:
+                    err_msg += f" in holding with holding_id: {holding_id}"
+                elif transaction_id:
+                    err_msg += f" in holding with transaction_id: {transaction_id}"
+                elif tag:
+                    err_msg += f" in holding with tag: {tag}"
+
+                if regex:
+                    err_msg += f", regex did not match any files"
+                else:
+                    err_msg += f" for user {user} and group {group}"
+                input_path.failure_reason = err_msg
+                self.failedlist.append(input_path)
+
     def _catalog_get(self, body: Dict, rk_origin: str) -> None:
         """Get the details for each file in a filelist and send it to the
         exchange to be processed by the transfer processor. If any file is only
@@ -964,6 +1031,7 @@ class CatalogConsumer(RMQC):
         filelist = []  # empty filelist in case _parse_filelist fails
         try:
             filelist = self._parse_filelist(body)
+            input_path_list = [PathDetails.from_dict(f) for f in filelist]
             user = self._parse_user(body)
             group = self._parse_group(body)
             tenancy = self._parse_tenancy(body)
@@ -985,116 +1053,162 @@ class CatalogConsumer(RMQC):
                     "holding_id is None or holding_tag is None"
                 )
                 raise CatalogError(message=msg)
-
         except CatalogError as e:
             # functions above handled message logging, here we just return
             self.log(e.message, RK.LOG_ERROR)
-            for filepath in filelist:
-                filepath_details = PathDetails.from_dict(filepath)
-                filepath_details.failure_reason = e.message
-                self.failedlist.append(filepath_details)
-            #
-            rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
-            self.send_pathlist(
-                self.failedlist,
-                routing_key=rk_failed,
-                body_json=body,
-                state=State.FAILED,
+            self._fail_all(
+                input_path_list,
+                [rk_origin, RK.CATALOG_GET, RK.FAILED],
+                body,
+                e.message,
             )
             return
+
         # reset the lists
         self.reset()
+        # keep track of which filepaths have been returned
+        # this is so only the most recent file with the filepath is returned
+        output_path_list = []
+        try:
+            # get the files first
+            result = self.catalog.get_files(
+                user,
+                group,
+                groupall=groupall,
+                holding_label=holding_label,
+                holding_id=holding_id,
+                transaction_id=transaction_id,
+                filelist=input_path_list,
+                tag=holding_tag,
+                regex=regex,
+                # always want the newest files (for a filepath) in a get, but
+                # specifying holding_id / label will override (as the newest file
+                # in the holding will be got, and there is only one per holding)
+                descending=True,
+            )
+            # process the returned file query for not found files, etc.
+            self._process_get_files_result(
+                result,
+                user,
+                group,
+                holding_label=holding_label,
+                holding_id=holding_id,
+                transaction_id=transaction_id,
+                tag=holding_tag,
+                regex=regex,
+            )
+        except CatalogError as e:
+            # if .get_files fails then something drastic has gone wrong with the DB
+            # - fail all files
+            self.log(e.message, RK.LOG_ERROR)
+            self._fail_all(
+                input_path_list,
+                [rk_origin, RK.CATALOG_GET, RK.FAILED],
+                body,
+                e.message,
+            )
+            return
 
-        for filepath in filelist:
-            filepath_details = PathDetails.from_dict(filepath)
-            try:
-                # get the files first
-                files = self.catalog.get_files(
-                    user,
-                    group,
-                    groupall=groupall,
-                    holding_label=holding_label,
-                    holding_id=holding_id,
-                    transaction_id=transaction_id,
-                    original_path=filepath_details.original_path,
-                    tag=holding_tag,
-                    newest_only=True,
-                    regex=regex,
+        # Refactoring means that a query will be returned as a result (or None)
+        for file_record in result:
+            # continue loop if no file record
+            if file_record.File is None:
+                continue
+            else:
+                f = file_record.File
+
+            # check user has permission to access this file
+            if not self.catalog._user_has_get_file_permission(
+                user=user,
+                group=group,
+                file=f,
+                holding=file_record.Holding,
+            ):
+                raise CatalogError(
+                    f"User:{user} in group:{group} does not have permission to "
+                    f"access the file with original path: "
+                    f"{f.original_path}."
                 )
-                if len(files) == 0:
-                    raise CatalogError(
-                        f"Could not find file(s) with original path: "
-                        f"{filepath_details.original_path}"
+            # check that a file with this filepath has not already been added
+            # this is so only the most recent file with a filepath are fetched
+            # descending=True makes sure the files are in the correct order
+            if f.original_path in output_path_list:
+                continue
+            else:
+                output_path_list.append(f.original_path)
+            # determine the storage location - None, OBJECT_STORAGE and/or TAPE
+            pd = self._filemodel_to_path_details(f)
+            # downloading links is handled in the get_transfer microservice.
+            # we have to pass through the links, but without the checks
+            if pd.path_type == PathType.LINK:
+                self.completelist.append(pd)
+            elif pd.locations.count == 0:
+                # empty storage location denotes that it is still in its initial
+                # transfer to OBJECT STORAGE
+                reason = (
+                    f"No Storage Location found for file with original path: "
+                    f"{pd.original_path}.  Has it completed transfer_put?"
+                )
+                raise CatalogError(reason)
+
+            elif pd.locations.has_storage_type(MSG.OBJECT_STORAGE):
+                # empty OBJECT_STORAGE denotes that it is restoring from tape
+                # we want to only fetch things from tape once.
+                if pd.get_object_store().url_scheme == "":
+                    reason = (
+                        "File is already transferring from tape to Object " "Storage."
                     )
-                # If the filepath was a regex then more than one file will be returned
-                for file_record in files:
-                    file = file_record["File"]
-                    # determine the storage location - None, OBJECT_STORAGE and/or TAPE
-                    pd = self._filemodel_to_path_details(file)
-                    # downloading links is handled in the get_transfer microservice.
-                    # we have to pass through the links, but without the checks
-                    if pd.path_type == PathType.LINK:
-                        self.completelist.append(pd)
-                    elif pd.locations.count == 0:
-                        # empty storage location denotes that it is still in its initial
-                        # transfer to OBJECT STORAGE
-                        reason = (
-                            f"No Storage Location found for file with original path: "
-                            f"{pd.original_path}.  Has it completed transfer?"
-                        )
-                        raise CatalogError(reason)
+                    raise CatalogError(reason)
+                else:
+                    self.completelist.append(pd)
 
-                    elif pd.locations.has_storage_type(MSG.OBJECT_STORAGE):
-                        # empty OBJECT_STORAGE denotes that it is restoring from tape
-                        # we want to only fetch things from tape once.
-                        if pd.get_object_store().url_scheme == "":
-                            reason = (
-                                "File is already transferring from tape to Object "
-                                "Storage."
-                            )
-                            raise CatalogError(reason)
-                        else:
-                            self.completelist.append(pd)
+            elif pd.locations.has_storage_type(MSG.TAPE):
+                # get the aggregation
+                pl = pd.get_tape()
+                tr = self.catalog.get_transaction(f.transaction_id)
+                if pl.access_time is None:
+                    access_time = datetime.now()
+                else:
+                    access_time = datetime.fromtimestamp(pl.access_time)
 
-                    elif pd.locations.has_storage_type(MSG.TAPE):
-                        # get the aggregation
-                        pl = pd.get_tape()
-                        agg = self.catalog.get_aggregation(pl.aggregation_id)
-                        tr = self.catalog.get_transaction(file.transaction_id)
-                        if pl.access_time is None:
-                            access_time = datetime.now()
-                        else:
-                            access_time = datetime.fromtimestamp(pl.access_time)
+                # create a mostly empty OBJECT STORAGE location in the database
+                # as a marker that the file is currently transferring
+                self.catalog.create_location(
+                    file_=f,
+                    storage_type=Storage.OBJECT_STORAGE,
+                    url_scheme="",
+                    url_netloc="",
+                    root="",
+                    path=f.original_path,
+                    access_time=access_time,
+                    aggregation=None,
+                )
 
-                        # create a mostly empty OBJECT STORAGE location in the database
-                        # as a marker that the file is currently transferring
-                        self.catalog.create_location(
-                            file_=file,
-                            storage_type=Storage.OBJECT_STORAGE,
-                            url_scheme="",
-                            url_netloc="",
-                            root="",
-                            path=file.original_path,
-                            access_time=access_time,
-                            aggregation=None,
-                        )
+                # create the OBJECT STORAGE Path Location for the message (not
+                # the database)
+                pd.set_object_store(tenancy=tenancy, bucket=tr.transaction_id)
+                self.tapelist.append(pd)
+            else:
+                # this shouldn't occur but we'll trap the error anyway
+                reason = (
+                    f"No compatible Storage Location found for file with "
+                    f"original path: {pd.original_path}."
+                )
+                raise CatalogError(reason)
 
-                        # create the OBJECT STORAGE Path Location for the message (not
-                        # the database)
-                        pd.set_object_store(tenancy=tenancy, bucket=tr.transaction_id)
-                        self.tapelist.append(pd)
-                    else:
-                        # this shouldn't occur but we'll trap the error anyway
-                        reason = (
-                            f"No compatible Storage Location found for file with "
-                            f"original path: {pd.original_path}."
-                        )
-                        raise CatalogError(reason)
-
-            except CatalogError as e:
-                filepath_details.failure_reason = e.message
-                self.failedlist.append(filepath_details)
-                self.log(e.message, RK.LOG_ERROR)
+        # process those files not found, i.e. those in the input_list but not in the
+        # output_list
+        self._process_not_found_files(
+            input_path_list=input_path_list,
+            output_path_list=output_path_list,
+            user=user,
+            group=group,
+            holding_label=holding_label,
+            holding_id=holding_id,
+            transaction_id=transaction_id,
+            tag=holding_tag,
+            regex=regex,
+        )
 
         # COMPLETED
         if len(self.completelist) > 0:
@@ -1684,6 +1798,9 @@ class CatalogConsumer(RMQC):
             query_user = self._parse_queryuser(body, user)
             query_group = self._parse_querygroup(body, user, group)
             path = self._parse_path(body)
+            # path has to be a list
+            if path is not None:
+                path = [PathDetails(original_path=path)]
             regex = self._parse_regex(body)
         except CatalogError:
             # functions above handled message logging, here we just return
@@ -1696,24 +1813,24 @@ class CatalogConsumer(RMQC):
 
         ret_dict = {}
         try:
-            files = self.catalog.get_files(
+            query_result = self.catalog.get_files(
                 query_user,
                 query_group,
                 groupall=groupall,
                 holding_label=holding_label,
                 holding_id=holding_id,
                 transaction_id=transaction_id,
-                original_path=path,
+                filelist=path,
                 tag=tag,
                 regex=regex,
                 limit=limit,
                 descending=descending,
             )
-            for file_record in files:
+            for file_record in query_result:
                 # NRM - these are now supplied by the get_files to speed things up a lot
-                h = file_record["Holding"]
-                t = file_record["Transaction"]
-                f = file_record["File"]
+                h = file_record.Holding
+                t = file_record.Transaction
+                f = file_record.File
                 # create a holding dictionary entry if it doesn't exists
                 if h.label in ret_dict:
                     h_rec = ret_dict[h.label]
@@ -1770,7 +1887,7 @@ class CatalogConsumer(RMQC):
             # add the return list to successfully completed holding listings
             body[MSG.DATA][MSG.HOLDING_LIST] = ret_dict
             self.log(f"Listing files from CATALOG_FIND", RK.LOG_INFO)
-            self.log(f"{ret_dict}", RK.LOG_DEBUG)
+            # self.log(f"{ret_dict}", RK.LOG_DEBUG)
 
         self.publish_message(
             properties.reply_to,
@@ -1867,6 +1984,7 @@ class CatalogConsumer(RMQC):
         self.catalog.start_session()
 
     def detach_database(self):
+        self.catalog.session.rollback()
         # end the session
         self.catalog.end_session()
 

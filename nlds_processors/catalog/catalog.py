@@ -209,14 +209,14 @@ class Catalog(DBMixin):
                 holding_q = holding_q.order_by(Transaction.ingest_time)
 
             if holding_q.count() == 0:
-                holding = []
+                holding = None
             elif limit:
-                holding = holding_q.limit(limit).all()
+                holding = holding_q.limit(limit)
             else:
-                holding = holding_q.all()
+                holding = holding_q
 
             # check if at least one holding found
-            if len(holding) == 0:
+            if not holding or holding.count() == 0:
                 raise KeyError
             # check the user has permission to view the holding(s)
             for h in holding:
@@ -229,7 +229,7 @@ class Catalog(DBMixin):
             msg = ""
             if holding_id:
                 msg = (
-                    f"Holding with holding_id:{holding_id} not found for "
+                    f"Holding with rrr holding_id:{holding_id} not found for "
                     f"user:{user} and group:{group}"
                 )
             elif transaction_id:
@@ -522,7 +522,10 @@ class Catalog(DBMixin):
         with_for_update: bool = False,
     ) -> list[File]:
         """Get a list of file models from a transaction, where the original path
-        matches the original path in the PathDetails"""
+        matches the original path in the PathDetails, given a transaction and a list of
+        PathDetails.
+        This is a much faster method of getting files than looping over `get_files`,
+        but is less flexible."""
         if self.session is None:
             raise RuntimeError("self.session is None")
 
@@ -558,9 +561,8 @@ class Catalog(DBMixin):
         holding_label: str = None,
         holding_id: int = None,
         transaction_id: str = None,
-        original_path: str = None,
+        filelist: list[PathDetails] = None,
         tag: dict = None,
-        newest_only: bool = False,
         regex: bool = False,
         limit: int = None,
         descending: bool = False,
@@ -569,13 +571,9 @@ class Catalog(DBMixin):
         group, label, holding_id, path (can be regex) or tag(s)"""
         if self.session is None:
             raise RuntimeError("self.session is None")
-        # newest only we always want to sort descending
-        if newest_only:
-            descending = True
-        # Nones are set to .* in the regexp matching
-        # get the matching holdings first, these match all but the path
 
-        holding = self.get_holdings(
+        # get the matching holdings first, these match all inputs except for the path
+        holdings = self.get_holdings(
             user,
             group,
             groupall=groupall,
@@ -585,98 +583,45 @@ class Catalog(DBMixin):
             tag=tag,
             descending=descending,
         )
-        if original_path:
-            search_path = original_path
+        # check for inclusion on the holding is, rather than looping over the holdings
+        holding_ids = [h.id for h in holdings]
+
+        if filelist:
+            search_path = [f.original_path for f in filelist]
         else:
             search_path = ".*"
 
-        # (permissions have been checked by get_holding)
-        file_list = []
-        path_list = []
+        # (permissions have been checked by get_holdings called above)
         try:
-            for h in holding:
-                # build the file query bit by bit
-                # load in the Locations when we access the File to speed up the queries
-                # a lot
-                file_q = self.session.query(File, Transaction).filter(
-                    File.transaction_id == Transaction.id,
-                    Transaction.holding_id == h.id,
-                )
-                file_q = file_q.options(joinedload(File.locations))
+            # build the file query bit by bit
+            file_q = self.session.query(File, Transaction, Holding).filter(
+                Holding.id.in_(holding_ids),
+                File.transaction_id == Transaction.id,
+                Transaction.holding_id == Holding.id,
+            )
+            # load in the Locations with the File to speed up the queries a lot
+            file_q = file_q.options(joinedload(File.locations))
 
-                if descending:
-                    file_q = file_q.order_by(Transaction.ingest_time.desc())
-                else:
-                    file_q = file_q.order_by(Transaction.ingest_time)
-                if regex or search_path == ".*":
-                    # will throw an exception here for bad regex
-                    file_q = file_q.filter(File.original_path.regexp_match(search_path))
-                else:
-                    file_q = file_q.filter(File.original_path == search_path)
-
-                if file_q.count() == 0:
-                    result = []
-                elif limit:
-                    result = file_q.limit(limit).all()
-                else:
-                    result = file_q.all()
-                # only want one file if newest_only is set: (this is for downloading
-                # when only the path is specified and no holding id or label is given)
-                # the results have been ordered by the Transaction ingest time, if the
-                # file already exists in the file_list then it is newer
-                for r in result:
-                    if r.File is None:
-                        continue
-                    # check user has permission to access this file
-                    if r.File and not self._user_has_get_file_permission(
-                        user=user, group=group, file=r.File, holding=h
-                    ):
-                        raise CatalogError(
-                            f"User:{user} in group:{group} does not have permission to "
-                            f"access the file with original path: "
-                            f"{r.File.original_path}."
-                        )
-                    # NRM - return dictionaries of Holding, File and
-                    # Transaction, rather than just a file.  This is to speed
-                    # up user searches
-                    file_record = {
-                        "Holding": h,
-                        "Transaction": r.Transaction,
-                        "File": r.File,
-                    }
-
-                    if newest_only:
-                        if not r.File.original_path in path_list:
-                            file_list.append(file_record)
-                            path_list.append(r.File.original_path)
-                    else:
-                        file_list.append(file_record)
-                        path_list.append(r.File.original_path)
-                    if limit and len(file_list) >= limit:
-                        break
-                if limit and len(file_list) >= limit:
-                    break
-            # no files found
-            if len(file_list) == 0:
-                raise KeyError
-
-        except (IntegrityError, KeyError, OperationalError):
-            if holding_label:
-                err_msg = (
-                    f"File not found in holding with holding_label:{holding_label}"
-                )
-            elif holding_id:
-                err_msg = f"File not found in holding with holding_id:{holding_id}"
-            elif transaction_id:
-                err_msg = (
-                    f"File not found in holding with transaction_id:{transaction_id}"
-                )
-            elif tag:
-                err_msg = f"File not found in holding with tag:{tag}"
-            elif original_path:
-                err_msg = f"File with original_path:{original_path} not found "
+            if descending:
+                file_q = file_q.order_by(Transaction.ingest_time.desc())
             else:
-                err_msg = f"No files found for user {user} and group {group}"
+                file_q = file_q.order_by(Transaction.ingest_time)
+
+            if regex or search_path == ".*":
+                # will throw an exception here for bad regex
+                file_q = file_q.filter(File.original_path.regexp_match(search_path))
+            else:
+                file_q = file_q.filter(File.original_path.in_(search_path))
+
+            if file_q.count() == 0:
+                result = None
+            elif limit:
+                result = file_q.limit(limit)
+            else:
+                result = file_q
+
+        except (IntegrityError, OperationalError) as e:
+            err_msg = f"Error in catalog.get_files, reason: {e}"
             raise CatalogError(err_msg)
 
         except DataError as e:
@@ -686,7 +631,7 @@ class Catalog(DBMixin):
                 msg = f"Error getting Holding: {e}"
             raise CatalogError(msg)
 
-        return file_list
+        return result
 
     def create_file(
         self,
