@@ -31,6 +31,8 @@ else
     source $NLDS_VENV/bin/activate
 fi
 
+clear
+
 if [ $1 = 'nlds_q' ]; then
     $USER_CMD nlds_q
 elif [ $1 = 'catalog_q' ]; then
@@ -52,7 +54,7 @@ elif [ $1 = 'archive_get_q' ]; then
 elif [ $1 = 'archive_next' ]; then
     $USER_CMD send_archive_next
 elif [ $1 = 'nlds-api' ]; then
-    $USER_CMD uvicorn nlds.main:nlds --reload --log-level=trace --port=8000
+    $USER_CMD uvicorn nlds.main:nlds --log-level=trace --port=8000
 fi
 
 deactivate
