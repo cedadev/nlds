@@ -38,7 +38,6 @@ from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 import nlds.server_config as CFG
 from nlds.details import PathDetails
 from nlds.errors import MessageError
-from nlds.nlds_setup import REQUEUE
 
 logger = logging.getLogger("nlds.root")
 
