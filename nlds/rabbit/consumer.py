@@ -548,22 +548,7 @@ class RabbitMQConsumer(ABC, RMQP):
         try:
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
-            if REQUEUE:
-                self.log(
-                    f"Unhandled exception occurred in callback.  Requeuing message",
-                    RK.LOG_INFO,
-                )
-                tb = traceback.format_exc()
-                self.log(tb, RK.LOG_INFO, exc_info=e)
-                self.channel.basic_publish(
-                    exchange=method.exchange,
-                    routing_key=method.routing_key,
-                    properties=properties,
-                    body=body,
-                    mandatory=True,
-                )
-            else:
-                raise Exception(e)
+            raise Exception("Unhandled exception " + e)
         else:
             # NRM - changed back to acknowledge the message after processing
             self.acknowledge_message(ch, method.delivery_tag, connection)
