@@ -26,6 +26,7 @@ Requires these settings in the /etc/nlds/server_config file:
 """
 
 from typing import Dict
+import sys
 
 from retry.api import retry_call
 
@@ -750,7 +751,11 @@ class MonitorConsumer(RMQC):
 
 
 def main():
-    consumer = MonitorConsumer()
+    if len(sys.argv) > 1:
+        queue_name = sys.argv[1]
+    else:
+        queue_name = MonitorConsumer.DEFAULT_QUEUE_NAME
+    consumer = MonitorConsumer(queue=queue_name)
     # connect to message queue early so that we can send logging messages about
     # connecting to the database
     consumer.get_connection()
