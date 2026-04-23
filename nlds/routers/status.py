@@ -162,7 +162,7 @@ async def get(
         msg_dict[MSG.META] = meta_dict
 
     # call RPC function
-    routing_key = "monitor_q"
+    routing_key = "monitor_q_user"
     response = await rpc_publisher.call(msg_dict=msg_dict, routing_key=routing_key)
     # Check if response is valid or whether the request timed out
     if response is not None:
@@ -180,7 +180,7 @@ async def get(
         transaction_response = None
         # Only continue if the response actually had any transactions in it
         if transaction_records is not None and len(transaction_records) > 0:
-            routing_key = "catalog_q"
+            routing_key = "catalog_q_user"
             transaction_response = await rpc_publisher.call(
                 msg_dict=response_dict, routing_key=routing_key
             )
