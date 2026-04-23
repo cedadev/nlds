@@ -547,7 +547,7 @@ class RabbitMQConsumer(ABC, RMQP):
         try:
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
-            raise Exception("Unhandled exception " + e)
+            raise Exception("Unhandled exception " + str(e))
         else:
             # NRM - changed back to acknowledge the message after processing
             self.acknowledge_message(ch, method.delivery_tag, connection)
@@ -652,11 +652,12 @@ class RabbitMQConsumer(ABC, RMQP):
         :return:
         """
         self.setup_signal_handling()
+
         while self.loop:
-            self.get_connection()
             try:
                 startup_message = f"{self.DEFAULT_QUEUE_NAME} - READY"
                 logger.info(startup_message)
+                self.get_connection()
                 self.channel.start_consuming()
 
             except KeyboardInterrupt:
@@ -668,7 +669,6 @@ class RabbitMQConsumer(ABC, RMQP):
             except (StreamLostError, AMQPConnectionError) as e:
                 # Log problem
                 logger.error("Connection lost, reconnecting", exc_info=e)
-                continue
 
             except Exception as e:
                 # Catch all other exceptions and log them as critical.
@@ -676,10 +676,13 @@ class RabbitMQConsumer(ABC, RMQP):
                 self.log(tb, RK.LOG_CRITICAL, exc_info=e)
                 self.loop = False
 
-        # Wait for all threads to complete
-        # TODO: what happens if we try to sigterm?
-        for t in self.threads:
-            t.join()
+            # if the loop reaches this point then the consuming has stopped
+            # Wait for all threads to complete
+            # TODO: what happens if we try to sigterm?
+            for t in self.threads:
+                t.join()
 
-        self.channel.stop_consuming()
-        self.connection.close()
+            if self.channel:
+                self.channel.stop_consuming()
+            if self.connection:
+                self.connection.close()
