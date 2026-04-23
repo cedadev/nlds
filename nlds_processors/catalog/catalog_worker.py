@@ -27,6 +27,7 @@ Requires these settings in the /etc/nlds/server_config file:
 
 from typing import Dict, Tuple
 from datetime import datetime
+import sys
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -434,7 +435,8 @@ class CatalogConsumer(RMQC):
                 backoff=2,
             )
         except CatalogError as c:
-            self.log(e.message, RK.LOG_ERROR)
+            self.log(c.message, RK.LOG_ERROR)
+            raise c
         except Exception as e:
             raise e
         return transaction
@@ -833,6 +835,7 @@ class CatalogConsumer(RMQC):
         modify_location_list = []
         for f in files:
             # if path is a link then continue - no updating needed
+            pd = path_details_list[path_details_list.index(f)]
             if f.path_type == PathType.LINK:
                 self.completelist.append(pd)
                 continue
@@ -843,7 +846,6 @@ class CatalogConsumer(RMQC):
             try:
                 # this gets the original path_details from the list as the DB return
                 # might be out of order
-                pd = path_details_list[path_details_list.index(f)]
                 pl = pd.get_object_store()
                 if pl is None:
                     raise CatalogError(
@@ -2110,16 +2112,14 @@ class CatalogConsumer(RMQC):
             elif rk_parts[1] == RK.CATALOG_REMOVE:
                 self._catalog_remove(body, rk_parts[0], Storage.TAPE)
 
+        # RPC methods follow - don't need to split any routing key for an RPC method
         elif api_method == RK.LIST:
-            # don't need to split any routing key for an RPC method
             self._catalog_list(body, properties)
 
         elif api_method == RK.FIND:
-            # don't need to split any routing key for an RPC method
             self._catalog_find(body, properties)
 
         elif api_method == RK.META:
-            # don't need to split any routing key for an RPC method
             self._catalog_meta(body, properties)
 
         elif api_method == RK.STAT:
@@ -2127,7 +2127,11 @@ class CatalogConsumer(RMQC):
 
 
 def main():
-    consumer = CatalogConsumer()
+    if len(sys.argv) > 1:
+        queue_name = sys.argv[1]
+    else:
+        queue_name = CatalogConsumer.DEFAULT_QUEUE_NAME
+    consumer = CatalogConsumer(queue=queue_name)
     # connect to message queue early so that we can send logging messages about
     # connecting to the database
     consumer.get_connection()
