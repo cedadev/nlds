@@ -389,15 +389,13 @@ class Catalog(DBMixin):
                 )
             else:
                 raise CatalogError(f"Transaction with id {id} not found.")
-        except MultipleResultsFound as e:
+        except MultipleResultsFound:
             # this should not happen, but if it does then recover and return the first
             # good transaction
-            transactions = transaction_q.all()
-            msg = (
-                f"Multiple transactions found for {transactions[0].transaction_id}, "
-                f"count: {len(transactions)}"
-            )
-            raise CatalogError(msg)
+            if with_for_update:
+                transaction = transaction_q.with_for_update().first()
+            else:
+                transaction = transaction_q.first()
         return transaction
 
     def get_location_file(
