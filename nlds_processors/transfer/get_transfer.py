@@ -33,11 +33,9 @@ class GetTransferConsumer(BucketTransferConsumer):
     DEFAULT_STATE = State.TRANSFER_GETTING
 
     _CHOWN_COMMAND = "chown_cmd"
-    _CHOWN_FL = "chown_fl"
     _CHOWN_USER = "chown_user"
     TRANSFER_GET_CONSUMER_CONFIG = {
         _CHOWN_COMMAND: "chown",
-        _CHOWN_FL: False,
         _CHOWN_USER: "nlds",
     }
     DEFAULT_CONSUMER_CONFIG = (
@@ -48,7 +46,6 @@ class GetTransferConsumer(BucketTransferConsumer):
         super().__init__(queue=queue)
 
         self.chown_cmd = self.load_config_value(self._CHOWN_COMMAND)
-        self.chown_fl = self.load_config_value(self._CHOWN_FL)
         self.chown_user = self.load_config_value(self._CHOWN_USER)
         self.s3_client = None
 
@@ -228,15 +225,6 @@ class GetTransferConsumer(BucketTransferConsumer):
         # build the routing keys
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
-        # set the ids for the files
-        if self.chown_fl:
-            try:
-                self.set_ids(body_json)
-            except KeyError as e:
-                msg = "Problem running set_ids in _transfer_files"
-                self.log(msg, RK.LOG_ERROR)
-                self._fail_all(self.filelist, self.rk_parts, self.body_json, msg)
-                return
 
         # Create client
         self.s3_client = self._create_s3_client(
@@ -373,6 +361,15 @@ class GetTransferConsumer(BucketTransferConsumer):
         # build the routing keys
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
+
+        # set the ids for the files
+        try:
+            self.set_ids(body_json)
+        except KeyError as e:
+            msg = "Problem running set_ids in _transfer_files"
+            self.log(msg, RK.LOG_ERROR)
+            self._fail_all(self.filelist, self.rk_parts, self.body_json, msg)
+            return
 
         # get the target directory and fail all the transfers if it cannot be created
         try:

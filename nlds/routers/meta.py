@@ -113,7 +113,7 @@ async def post(
             msg_dict[MSG.META][MSG.NEW_META] = new_meta_dict
 
     # call RPC function
-    routing_key = "catalog_q"
+    routing_key = "catalog_q_user"
     response = await rpc_publisher.call(msg_dict=msg_dict, routing_key=routing_key)
     # Check if response is valid or whether the request timed out
     if response is not None:

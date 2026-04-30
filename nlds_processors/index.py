@@ -114,6 +114,61 @@ class IndexerConsumer(StattingConsumer):
         self.index(filelist, rk_parts[0], body_json)
         self.log(f"Scan finished.", RK.LOG_INFO)
 
+    def _filter(
+        self,
+        filelist: List[PathDetails],
+    ) -> List[PathDetails]:
+        """This filters out any filepaths in the filelist where the directory for that
+        filepath already exists in the filelist.
+        e.g.:
+            /home/user/path
+            /home/user/path/file1
+            /home/user/path/file2
+        will just return
+            /home/user/path
+
+        This is like the inverse of a scan, and is necessary as users quite often submit
+        the output of a find command, which lists all directories and files, so some
+        files will be scanned multiple times.
+        This causes the indexer to do extra work, and may cause an attempt to add the
+        to the catalog more than once - leading to an error.
+        consumer.dedup_filelist will not catch this as the indexer splits filelists as
+        it goes, so will only trap if the duplicate files are in the same message.
+        """
+        # get a list of all the directories first
+        dir_list_fp = []
+        for fp in filelist:
+            path = pathlib.Path(fp.original_path)
+            if path.is_dir():
+                dir_list_fp.append(fp)
+
+        # iterate again to remove the directories that are subdirectories of a base
+        # directory
+        dir_list = [fp.original_path for fp in dir_list_fp]
+        dir_list_fp_2 = []
+        for d in dir_list_fp:
+            path = pathlib.Path(d.original_path)
+            if not (path.parent.as_posix() in dir_list):
+                dir_list_fp_2.append(d)
+
+        # add files where the path of any directory in the dir_list_fp_2 does not
+        # occur in the path of the file
+        filelist_2 = []
+        for fp in filelist:
+            add = True
+            # loop over every directory
+            for d in dir_list_fp_2:
+                # compare first characters of the filepath with the path of the
+                # directory - if they match then do not add as the scanner will catch
+                # them
+                if d.original_path == fp.original_path[: len(d.original_path)]:
+                    add = False
+            # add if no match made
+            if add:
+                filelist_2.append(fp)
+
+        return filelist_2
+
     def callback(self, ch, method, properties, body, connection):
         self.reset()
         body_json = self._deserialize(body)
@@ -138,7 +193,9 @@ class IndexerConsumer(StattingConsumer):
             return
 
         # parse the input filelist from the JSON passed in via the HTTP body
-        filelist = self.parse_filelist(body_json)
+        filelist_in = self.parse_filelist(body_json)
+        # filter the filelist to remove repeated directories and sub-files
+        filelist = self._filter(filelist_in)
         filelist_len = len(filelist)
 
         # Upon initiation, split the filelist into manageable chunks
@@ -162,23 +219,24 @@ class IndexerConsumer(StattingConsumer):
         """Recursively index the item_path"""
         # check that there is sufficient permission to access the item_path
         try:
+            # store / generate the error message just once
+            inaccessible_err_msg = (
+                f"Path: {item_path.path} is inaccessible. Please check the "
+                f"permissions of the path."
+            )
             if not self.check_path_exists(item_path.path):
                 raise IndexError(f"Path: {item_path.path} does not exist.")
             if not self.check_path_access(item_path.path):
-                raise IndexError(
-                    f"Path: {item_path.path} is inaccessible. Please check the "
-                    f"permissions of the path."
-                )
-            if item_path.path.is_dir():
+                raise IndexError(inaccessible_err_msg)
+
+            if item_path.path.is_dir() and os.getcwd() != item_path.path.as_posix():
                 # change directory to try to overcome bug with auto-mounter
+                # only do it if the current directory is not the path
                 self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
                 try:
                     os.chdir(item_path.path)
                 except (FileNotFoundError, PermissionError):
-                    raise IndexError(
-                        f"Path: {item_path.path} is inaccessible.  Please check the "
-                        f"permissions of the path."
-                    )
+                    raise IndexError(inaccessible_err_msg)
                 # check if item is a link and just add as a link entry if it is
                 # do not recurse into linked directories!
                 item_path.stat()
@@ -193,7 +251,10 @@ class IndexerConsumer(StattingConsumer):
 
                 else:
                     # item is a directory - list what is in the directory
-                    sub_file_list = os.listdir(item_path.path)
+                    try:
+                        sub_file_list = os.listdir(item_path.path)
+                    except (FileNotFoundError, PermissionError):
+                        raise IndexError(inaccessible_err_msg)
                     # process and send via recursion
                     for sf in sub_file_list:
                         root_path = pathlib.Path(item_path.path)
@@ -209,7 +270,10 @@ class IndexerConsumer(StattingConsumer):
 
             elif item_path.path.is_file():
                 # item is a file - stat it - calls the PathDetails member function
-                item_path.stat()
+                try:
+                    item_path.stat()
+                except (FileNotFoundError, PermissionError):
+                    raise IndexError(inaccessible_err_msg)
                 # check the filesize
                 if self.check_filesize_fl and item_path.size > self.max_filesize:
                     error_reason = (
@@ -279,8 +343,9 @@ class IndexerConsumer(StattingConsumer):
                     chpath = item_path.path
                 else:
                     chpath = item_path.path.parent
-                self.log(f"Changing directory to {chpath}", RK.LOG_INFO)
-                os.chdir(chpath)
+                if os.getcwd() != chpath.as_posix():
+                    self.log(f"Changing directory to {chpath}", RK.LOG_INFO)
+                    os.chdir(chpath)
             except (FileNotFoundError, PermissionError):
                 message = (
                     f"Path: {item_path.path} is inaccessible.  Please check the "

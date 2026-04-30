@@ -5,8 +5,10 @@ if [[ -z $1 ]]; then
     echo "nlds-up <microservice>"
     echo "    nlds_q"
     echo "    catalog_q"
+    echo "    catalog_q_user"
     echo "    index_q"
     echo "    monitor_q"
+    echo "    monitor_q_user"
     echo "    transfer_put_q"
     echo "    transfer_get_q"
     echo "    logging_q"
@@ -17,12 +19,13 @@ if [[ -z $1 ]]; then
     exit 1
 fi
 
-# Change to user supplied in 2nd argument (if supplied)
-if [ -n "$2" ]; then
-    USER_CMD="sudo -u $2 "
-else
-    USER_CMD=""
-fi
+# Change to user supplied in -u argument (if supplied)
+USER_CMD=""
+while getopts ':u' option; do
+  case $option in
+    u) USER_CMD="sudo -u $2 ";;
+  esac
+done
 
 if [[ -z $NLDS_VENV ]]; then
     echo "NLDS_VENV environment variable not set"
@@ -30,6 +33,8 @@ if [[ -z $NLDS_VENV ]]; then
 else
     source $NLDS_VENV/bin/activate
 fi
+
+clear
 
 if [ $1 = 'nlds_q' ]; then
     $USER_CMD nlds_q
@@ -52,7 +57,11 @@ elif [ $1 = 'archive_get_q' ]; then
 elif [ $1 = 'archive_next' ]; then
     $USER_CMD send_archive_next
 elif [ $1 = 'nlds-api' ]; then
-    $USER_CMD uvicorn nlds.main:nlds --reload --log-level=trace --port=8000
+    $USER_CMD uvicorn nlds.main:nlds --log-level=trace --port=8000
+elif [ $1 = 'catalog_q_user' ]; then
+    $USER_CMD catalog_q catalog_q_user
+elif [ $1 = 'monitor_q_user' ]; then
+    $USER_CMD monitor_q monitor_q_user
 fi
 
 deactivate

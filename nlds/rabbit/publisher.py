@@ -168,7 +168,7 @@ class RabbitMQPublisher:
                 zlib.compress(byte_string, level=1)
             ).decode("ascii")
             logger.debug(
-                f"Compressing message, original size: {len(byte_string)}, "
+                f"Compressed message, original size: {len(byte_string)}, "
                 f" compressed size: {len(msg_dict_out[MSG.DATA])}"
             )
         else:

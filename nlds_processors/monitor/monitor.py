@@ -98,7 +98,9 @@ class Monitor(DBMixin):
                     f"not found"
                 )
             else:
-                raise MonitorError(f"No TransactionRecords found")
+                raise MonitorError(
+                    f"No TransactionRecords found for user:{user} and group:{group}"
+                )
         return trec
 
     def get_transaction_records(
@@ -186,15 +188,18 @@ class Monitor(DBMixin):
                 raise MonitorError(f"TransactionRecord with id:{idd} not found")
             elif job_label:
                 raise MonitorError(
-                    f"TransactionRecord with job_label:{job_label} " f"not found"
+                    f"TransactionRecord with job_label:{job_label} not found for "
+                    f"user:{user} and group:{group}"
                 )
             elif transaction_id:
                 raise MonitorError(
                     f"TransactionRecord with transaction_id:{transaction_id} "
-                    f"not found"
+                    f"not found for user:{user} and group:{group}"
                 )
             else:
-                raise MonitorError(f"No TransactionRecords found")
+                raise MonitorError(
+                    f"No TransactionRecords found for user:{user} and group:{group}"
+                )
         except DataError as e:
             if regex:
                 raise MonitorError(f"Invalid regular expression: {transaction_search}")

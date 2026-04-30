@@ -38,7 +38,6 @@ from nlds.rabbit.publisher import RabbitMQPublisher as RMQP
 import nlds.server_config as CFG
 from nlds.details import PathDetails
 from nlds.errors import MessageError
-from nlds.nlds_setup import REQUEUE
 
 logger = logging.getLogger("nlds.root")
 
@@ -83,7 +82,7 @@ def deserialize(body: str) -> dict:
             decompressed_string = zlib.decompress(base64.b64decode(byte_string))
             body_dict[MSG.DATA] = json.loads(decompressed_string)
             logger.debug(
-                f"Decompressing message, compressed size {len(byte_string)}, "
+                f"Decompressed message, compressed size {len(byte_string)}, "
                 f" actual size {len(decompressed_string)}"
             )
         # specify that the message is now decompressed, in case it gets passed through
@@ -99,7 +98,6 @@ class RabbitMQConsumer(ABC, RMQP):
     DEFAULT_REROUTING_INFO = "->"
 
     DEFAULT_CONSUMER_CONFIG: Dict[str, Any] = dict()
-
     # The state associated with finishing the consumer, must be set but can be
     # overridden
     DEFAULT_STATE = State.ROUTING
@@ -411,6 +409,20 @@ class RabbitMQConsumer(ABC, RMQP):
             log_backup_count=log_backup_count,
         )
 
+    def _fail_all(
+        self,
+        filelist: List[PathDetails],
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+        msg: str,
+    ):
+        # fail all the files in the filelist
+        rk_transfer_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
+        for file in filelist:
+            file.failure_reason = msg
+
+        self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
+
     #######
     # Callback wrappers
 
@@ -535,22 +547,7 @@ class RabbitMQConsumer(ABC, RMQP):
         try:
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
-            if REQUEUE:
-                self.log(
-                    f"Unhandled exception occurred in callback.  Requeuing message",
-                    RK.LOG_INFO,
-                )
-                tb = traceback.format_exc()
-                self.log(tb, RK.LOG_INFO, exc_info=e)
-                self.channel.basic_publish(
-                    exchange=method.exchange,
-                    routing_key=method.routing_key,
-                    properties=properties,
-                    body=body,
-                    mandatory=True,
-                )
-            else:
-                raise Exception(e)
+            raise Exception("Unhandled exception " + str(e))
         else:
             # NRM - changed back to acknowledge the message after processing
             self.acknowledge_message(ch, method.delivery_tag, connection)
@@ -655,11 +652,12 @@ class RabbitMQConsumer(ABC, RMQP):
         :return:
         """
         self.setup_signal_handling()
+
         while self.loop:
-            self.get_connection()
             try:
                 startup_message = f"{self.DEFAULT_QUEUE_NAME} - READY"
                 logger.info(startup_message)
+                self.get_connection()
                 self.channel.start_consuming()
 
             except KeyboardInterrupt:
@@ -671,7 +669,6 @@ class RabbitMQConsumer(ABC, RMQP):
             except (StreamLostError, AMQPConnectionError) as e:
                 # Log problem
                 logger.error("Connection lost, reconnecting", exc_info=e)
-                continue
 
             except Exception as e:
                 # Catch all other exceptions and log them as critical.
@@ -679,10 +676,13 @@ class RabbitMQConsumer(ABC, RMQP):
                 self.log(tb, RK.LOG_CRITICAL, exc_info=e)
                 self.loop = False
 
-        # Wait for all threads to complete
-        # TODO: what happens if we try to sigterm?
-        for t in self.threads:
-            t.join()
+            # if the loop reaches this point then the consuming has stopped
+            # Wait for all threads to complete
+            # TODO: what happens if we try to sigterm?
+            for t in self.threads:
+                t.join()
 
-        self.channel.stop_consuming()
-        self.connection.close()
+            if self.channel:
+                self.channel.stop_consuming()
+            if self.connection:
+                self.connection.close()

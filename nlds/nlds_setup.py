@@ -18,5 +18,3 @@ if USE_DISKTAPE:
     DISKTAPE_LOC = "~/DISKTAPE"
 else:
     DISKTAPE_LOC = None
-
-REQUEUE = True
