@@ -1828,6 +1828,17 @@ class CatalogConsumer(RMQC):
                 limit=limit,
                 descending=descending,
             )
+            # raise any exceptions resulting from the query - e.g. no files found
+            self._process_get_files_result(
+                query_result,
+                user,
+                group,
+                holding_label=holding_label,
+                holding_id=holding_id,
+                transaction_id=transaction_id,
+                tag=tag,
+                regex=regex,
+            )
             for file_record in query_result:
                 # NRM - these are now supplied by the get_files to speed things up a lot
                 h = file_record.Holding
