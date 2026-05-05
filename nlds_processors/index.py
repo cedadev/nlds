@@ -130,44 +130,25 @@ class IndexerConsumer(StattingConsumer):
         This is like the inverse of a scan, and is necessary as users quite often submit
         the output of a find command, which lists all directories and files, so some
         files will be scanned multiple times.
-        This causes the indexer to do extra work, and may cause an attempt to add the
+        This causes the indexer to do extra work, and may cause an attempt to add them
         to the catalog more than once - leading to an error.
         consumer.dedup_filelist will not catch this as the indexer splits filelists as
         it goes, so will only trap if the duplicate files are in the same message.
         """
-        # get a list of all the directories first
-        dir_list_fp = []
+        out_list = []
+        # build a list of Path objects from the filelist passed in
+        paths = [pathlib.Path(fp.original_path) for fp in filelist]
+        # for each path check in the filelist the parent is not in the paths list
         for fp in filelist:
             path = pathlib.Path(fp.original_path)
-            if path.is_dir():
-                dir_list_fp.append(fp)
-
-        # iterate again to remove the directories that are subdirectories of a base
-        # directory
-        dir_list = [fp.original_path for fp in dir_list_fp]
-        dir_list_fp_2 = []
-        for d in dir_list_fp:
-            path = pathlib.Path(d.original_path)
-            if not (path.parent.as_posix() in dir_list):
-                dir_list_fp_2.append(d)
-
-        # add files where the path of any directory in the dir_list_fp_2 does not
-        # occur in the path of the file
-        filelist_2 = []
-        for fp in filelist:
-            add = True
-            # loop over every directory
-            for d in dir_list_fp_2:
-                # compare first characters of the filepath with the path of the
-                # directory - if they match then do not add as the scanner will catch
-                # them
-                if d.original_path == fp.original_path[: len(d.original_path)]:
-                    add = False
-            # add if no match made
-            if add:
-                filelist_2.append(fp)
-
-        return filelist_2
+            in_parent = False
+            # path.parents provides a list of paths up to the root directory
+            for p in path.parents:
+                if p in paths:
+                    in_parent = True
+            if not in_parent:
+                out_list.append(fp)
+        return out_list
 
     def callback(self, ch, method, properties, body, connection):
         self.reset()
