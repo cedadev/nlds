@@ -455,8 +455,8 @@ class S3ToTarfileTape(S3ToTarfileStream):
         else:
             try:
                 method, value = result.decode().split()
-                if method != "adler32":
-                    raise S3StreamError("method is not adler32")
+                if method not in ["adler32", "md5sum"]:
+                    raise S3StreamError(f"Unknown checksum method {method}")
                 # Convert checksum from hex to int for comparison
                 checksum = int(value[:8], 16)
                 if checksum != tarfile_checksum:
