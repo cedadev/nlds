@@ -210,14 +210,15 @@ class IndexerConsumer(StattingConsumer):
             if not self.check_path_access(item_path.path):
                 raise IndexError(inaccessible_err_msg)
 
-            if item_path.path.is_dir() and os.getcwd() != item_path.path.as_posix():
+            if item_path.path.is_dir():
                 # change directory to try to overcome bug with auto-mounter
                 # only do it if the current directory is not the path
-                self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
-                try:
-                    os.chdir(item_path.path)
-                except (FileNotFoundError, PermissionError):
-                    raise IndexError(inaccessible_err_msg)
+                if os.getcwd() != item_path.path.as_posix():
+                    self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
+                    try:
+                        os.chdir(item_path.path)
+                    except (FileNotFoundError, PermissionError):
+                        raise IndexError(inaccessible_err_msg)
                 # check if item is a link and just add as a link entry if it is
                 # do not recurse into linked directories!
                 item_path.stat()
