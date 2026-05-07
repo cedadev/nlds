@@ -727,10 +727,11 @@ class CatalogConsumer(RMQC):
                 # and may not contain all of the same entries as path_details_list
                 pd = path_details_list[path_details_list.index(e)]
                 # add the failure reason
-                msg = "File already exists in holding."
+                msg = f"File already exists in holding."
+                log_msg = msg + f" {holding.id} : {pd.original_path}"
                 pd.failure_reason = msg
                 self.failedlist.append(pd)
-                self.log(msg, RK.LOG_ERROR)
+                self.log(log_msg, RK.LOG_ERROR)
 
             # find the files in the path_details_list that didn't already occur in the
             # holding - i.e. they are not in the files_exist list
@@ -1113,90 +1114,96 @@ class CatalogConsumer(RMQC):
 
         # Refactoring means that a query will be returned as a result (or None)
         for file_record in result:
-            # continue loop if no file record
-            if file_record.File is None:
-                continue
-            else:
-                f = file_record.File
+            try:
+                # continue loop if no file record
+                if file_record.File is None:
+                    continue
+                else:
+                    f = file_record.File
 
-            # check user has permission to access this file
-            if not self.catalog._user_has_get_file_permission(
-                user=user,
-                group=group,
-                file=f,
-                holding=file_record.Holding,
-            ):
-                raise CatalogError(
-                    f"User:{user} in group:{group} does not have permission to "
-                    f"access the file with original path: "
-                    f"{f.original_path}."
-                )
-            # check that a file with this filepath has not already been added
-            # this is so only the most recent file with a filepath are fetched
-            # descending=True makes sure the files are in the correct order
-            if f.original_path in output_path_list:
-                continue
-            else:
-                output_path_list.append(f.original_path)
-            # determine the storage location - None, OBJECT_STORAGE and/or TAPE
-            pd = self._filemodel_to_path_details(f)
-            # downloading links is handled in the get_transfer microservice.
-            # we have to pass through the links, but without the checks
-            if pd.path_type == PathType.LINK:
-                self.completelist.append(pd)
-            elif pd.locations.count == 0:
-                # empty storage location denotes that it is still in its initial
-                # transfer to OBJECT STORAGE
-                reason = (
-                    f"No Storage Location found for file with original path: "
-                    f"{pd.original_path}.  Has it completed transfer_put?"
-                )
-                raise CatalogError(reason)
-
-            elif pd.locations.has_storage_type(MSG.OBJECT_STORAGE):
-                # empty OBJECT_STORAGE denotes that it is restoring from tape
-                # we want to only fetch things from tape once.
-                if pd.get_object_store().url_scheme == "":
+                # convert file object to path details
+                pd = self._filemodel_to_path_details(f)
+                # check user has permission to access this file
+                if not self.catalog._user_has_get_file_permission(
+                    user=user,
+                    group=group,
+                    file=f,
+                    holding=file_record.Holding,
+                ):
+                    raise CatalogError(
+                        f"User:{user} in group:{group} does not have permission to "
+                        f"access the file with original path: "
+                        f"{f.original_path}."
+                    )
+                # check that a file with this filepath has not already been added
+                # this is so only the most recent file with a filepath are fetched
+                # descending=True makes sure the files are in the correct order
+                if f.original_path in output_path_list:
+                    continue
+                else:
+                    output_path_list.append(f.original_path)
+                # determine the storage location - None, OBJECT_STORAGE and/or TAPE
+                # downloading links is handled in the get_transfer microservice.
+                # we have to pass through the links, but without the checks
+                if pd.path_type == PathType.LINK:
+                    self.completelist.append(pd)
+                elif pd.locations.count == 0:
+                    # empty storage location denotes that it is still in its initial
+                    # transfer to OBJECT STORAGE
                     reason = (
-                        "File is already transferring from tape to Object " "Storage."
+                        f"No Storage Location found for file with original path: "
+                        f"{pd.original_path}.  Has it completed transfer_put?"
                     )
                     raise CatalogError(reason)
+
+                elif pd.locations.has_storage_type(MSG.OBJECT_STORAGE):
+                    # empty OBJECT_STORAGE denotes that it is restoring from tape
+                    # we want to only fetch things from tape once.
+                    if pd.get_object_store().url_scheme == "":
+                        reason = (
+                            "File is already transferring from tape to Object Storage."
+                        )
+                        raise CatalogError(reason)
+                    else:
+                        self.completelist.append(pd)
+
+                elif pd.locations.has_storage_type(MSG.TAPE):
+                    # get the aggregation
+                    pl = pd.get_tape()
+                    tr = self.catalog.get_transaction(f.transaction_id)
+                    if pl.access_time is None:
+                        access_time = datetime.now()
+                    else:
+                        access_time = datetime.fromtimestamp(pl.access_time)
+
+                    # create a mostly empty OBJECT STORAGE location in the database
+                    # as a marker that the file is currently transferring
+                    self.catalog.create_location(
+                        file_=f,
+                        storage_type=Storage.OBJECT_STORAGE,
+                        url_scheme="",
+                        url_netloc="",
+                        root="",
+                        path=f.original_path,
+                        access_time=access_time,
+                        aggregation=None,
+                    )
+
+                    # create the OBJECT STORAGE Path Location for the message (not
+                    # the database)
+                    pd.set_object_store(tenancy=tenancy, bucket=tr.transaction_id)
+                    self.tapelist.append(pd)
                 else:
-                    self.completelist.append(pd)
+                    # this shouldn't occur but we'll trap the error anyway
+                    reason = (
+                        f"No compatible Storage Location found for file with "
+                        f"original path: {pd.original_path}."
+                    )
+                    raise CatalogError(reason)
 
-            elif pd.locations.has_storage_type(MSG.TAPE):
-                # get the aggregation
-                pl = pd.get_tape()
-                tr = self.catalog.get_transaction(f.transaction_id)
-                if pl.access_time is None:
-                    access_time = datetime.now()
-                else:
-                    access_time = datetime.fromtimestamp(pl.access_time)
-
-                # create a mostly empty OBJECT STORAGE location in the database
-                # as a marker that the file is currently transferring
-                self.catalog.create_location(
-                    file_=f,
-                    storage_type=Storage.OBJECT_STORAGE,
-                    url_scheme="",
-                    url_netloc="",
-                    root="",
-                    path=f.original_path,
-                    access_time=access_time,
-                    aggregation=None,
-                )
-
-                # create the OBJECT STORAGE Path Location for the message (not
-                # the database)
-                pd.set_object_store(tenancy=tenancy, bucket=tr.transaction_id)
-                self.tapelist.append(pd)
-            else:
-                # this shouldn't occur but we'll trap the error anyway
-                reason = (
-                    f"No compatible Storage Location found for file with "
-                    f"original path: {pd.original_path}."
-                )
-                raise CatalogError(reason)
+            except CatalogError as ce:
+                pd.failure_reason = ce.message
+                self.failedlist.append(pd)
 
         # process those files not found, i.e. those in the input_list but not in the
         # output_list
@@ -1805,7 +1812,8 @@ class CatalogConsumer(RMQC):
                 path = [PathDetails(original_path=path)]
             regex = self._parse_regex(body)
         except CatalogError:
-            # functions above handled message logging, here we just return
+            # functions above handled message logging, here we raise an unhandled
+            # exception (why?)
             raise Exception("Unhandled error in _catalog_find")
 
         # get which user / group to query on
