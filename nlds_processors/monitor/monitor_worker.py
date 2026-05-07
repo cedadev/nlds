@@ -512,6 +512,7 @@ class MonitorConsumer(RMQC):
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
                 return False
+
         self.monitor.commit()
 
         self.log(
@@ -705,10 +706,15 @@ class MonitorConsumer(RMQC):
                 )
                 return
             # Check whether this is init or put (put is also update)
-            if rk_parts[2] == RK.INITIATE:
-                self._monitor_init(body)
-            elif rk_parts[2] == RK.START:
-                self._monitor_put(body)
+            try:
+                if rk_parts[2] == RK.INITIATE:
+                    self._monitor_init(body)
+                elif rk_parts[2] == RK.START:
+                    self._monitor_put(body)
+            except Exception as e:
+                self.monitor.session.rollback()
+                raise Exception(e)
+
         else:
             self.log("API method key did not specify a valid task.", RK.LOG_ERROR)
 
