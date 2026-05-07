@@ -106,7 +106,6 @@ class Catalog(DBMixin):
                 holding_q = holding_q.options(joinedload(Holding.tags))
                 # get one holding
                 holding = holding_q.one()
-
         except NoResultFound as e:
             msg = ""
             if holding_id:
@@ -125,14 +124,19 @@ class Catalog(DBMixin):
                     f"group:{group}"
                 )
             raise CatalogError(msg)
+        except Exception as e:
+            if self.session:
+                self.session.rollback()
+            raise e
 
         # check user has permission to read this holding
         if not self._user_has_get_holding_permission(user, group, holding):
+            if self.session:
+                self.session.rollback()
             raise CatalogError(
                 f"User:{user} in group:{group} does not have permission "
                 f"to access the holding with label:{holding.label}."
             )
-
         return holding
 
     def get_holdings(
