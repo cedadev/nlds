@@ -101,6 +101,11 @@ class Monitor(DBMixin):
                 raise MonitorError(
                     f"No TransactionRecords found for user:{user} and group:{group}"
                 )
+        except Exception as e:
+            if self.session:
+                self.session.rollback()
+            raise e
+
         return trec
 
     def get_transaction_records(
