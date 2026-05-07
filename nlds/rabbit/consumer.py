@@ -547,6 +547,8 @@ class RabbitMQConsumer(ABC, RMQP):
         try:
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
+            # nack the message so it is sent again
+            self.nack_message(ch, method.delivery_tag, connection)
             raise Exception("Unhandled exception " + str(e))
         else:
             # NRM - changed back to acknowledge the message after processing
