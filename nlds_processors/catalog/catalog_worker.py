@@ -1621,22 +1621,40 @@ class CatalogConsumer(RMQC):
             )
             # TODO: what happens in this event?
 
-        for f in filelist:
-            file_details = PathDetails.from_dict(f)
+        # reset complete and failed lists, etc.
+        self.reset()
+
+        # get the holding and transaction
+        holding = self.catalog.get_holding(user, group, transaction_id=transaction_id)
+        transaction = self.catalog.get_transaction(
+            transaction_id=transaction_id,
+        )
+        path_details_list = [PathDetails.from_dict(f) for f in filelist]
+        file_models = self.catalog.get_files_from_filelist(
+            transaction_id=transaction_id,
+            filelist=path_details_list,
+            with_for_update=True,
+        )
+        # list the files
+        files_to_commit = []
+        for file in file_models:
+            # this gets the original path_details from the list as the DB return
+            # might be out of order
+            pd = path_details_list[path_details_list.index(file)]
             try:
-                # outsource deleting to the catalog itself
-                self.catalog.delete_files(
-                    user,
-                    group,
-                    holding_label=holding_label,
-                    holding_id=holding_id,
-                    transaction_id=transaction_id,
-                    path=file_details.original_path,
-                    tag=holding_tag,
+                self.catalog.delete_file(
+                    file_=file,
+                    transaction=transaction,
+                    holding=holding,
                 )
+                # defer update to do bulk commit later
+                files_to_commit.append(file)
+                self.catalog.defer(file)
+                # mark as completed
+                self.completelist.append(pd)
             except CatalogError as e:
-                file_details.failure_reason = e.message
-                self.failedlist.append(file_details)
+                pd.failure_reason = e.message
+                self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
         self.catalog.commit()
