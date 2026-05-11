@@ -213,6 +213,15 @@ class Monitor(DBMixin):
         trec_q = trec_q.options(joinedload(TransactionRecord.sub_records))
         return trec_q
 
+    # def delete_transaction_record(
+    #     self,
+    #     user: str,
+    #     group: str,
+    #     transaction_id: str,
+    #     job_label: str,
+    #     api_action: str,
+    # ) -> None:
+
     def create_sub_record(
         self, transaction_record: TransactionRecord, sub_id: str, state: State = None
     ) -> SubRecord:

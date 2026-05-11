@@ -654,6 +654,11 @@ class MonitorConsumer(RMQC):
             f"Successfully returned query via RPC message to api-server", RK.LOG_INFO
         )
 
+    def _monitor_cancel(self, body: Dict[str, str], properties: Header) -> None:
+        """
+        Cancel a monitoring record, if the state is still at QUEUED
+        """
+
     def callback(
         self,
         ch: Channel,
@@ -696,6 +701,7 @@ class MonitorConsumer(RMQC):
             RK.GETLIST,
             RK.ARCHIVE_PUT,
             RK.ARCHIVE_GET,
+            RK.CANCEL,
         ):
             # Verify routing key is appropriate
             try:
@@ -711,6 +717,8 @@ class MonitorConsumer(RMQC):
                     self._monitor_init(body)
                 elif rk_parts[2] == RK.START:
                     self._monitor_put(body)
+                elif rk_parts[2] == RK.CANCEL:
+                    self._monitor_cancel(body)
             except Exception as e:
                 self.monitor.session.rollback()
                 raise Exception(e)

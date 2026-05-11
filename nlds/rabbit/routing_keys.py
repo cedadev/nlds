@@ -61,6 +61,7 @@ FAILED = "failed"
 NEXT = "next"
 PREPARE = "prepare"
 PREPARE_CHECK = "prepare-check"
+CANCEL = "cancel"
 
 # Exchange routing key parts – monitoring levels
 LOG_NONE = "none"
