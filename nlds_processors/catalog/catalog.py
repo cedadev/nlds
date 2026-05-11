@@ -233,7 +233,7 @@ class Catalog(DBMixin):
             msg = ""
             if holding_id:
                 msg = (
-                    f"Holding with rrr holding_id:{holding_id} not found for "
+                    f"Holding with holding_id:{holding_id} not found for "
                     f"user:{user} and group:{group}"
                 )
             elif transaction_id:
@@ -667,15 +667,8 @@ class Catalog(DBMixin):
             )
         return file
 
-    def delete_files(
-        self,
-        user: str,
-        group: str,
-        holding_label: str = None,
-        holding_id: int = None,
-        transaction_id: str = None,
-        path: str = None,
-        tag: dict = None,
+    def delete_file(
+        self, file_: File, transaction: Transaction, holding: Holding
     ) -> list:
         """Delete a given path from the catalog. If a holding is specified only
         the matching file from that holding will be deleted, otherwise all
@@ -683,31 +676,19 @@ class Catalog(DBMixin):
 
         """
         if self.session is None:
-            raise RuntimeError("self.session is None")
+            raise RuntimeError("self.session is None.")
 
-        files = self.get_files(
-            user,
-            group,
-            holding_label=holding_label,
-            holding_id=holding_id,
-            transaction_id=transaction_id,
-            original_path=path,
-            tag=tag,
-        )
         # checkpoint = self.session.begin_nested()
         try:
-            for file_record in files:
-                f = file_record["File"]
-                transaction = file_record["Transaction"]
-                holding = file_record["Holding"]
-                self.session.delete(f)
-                if len(transaction.files) == 0:
-                    self.session.delete(transaction)
-                if len(holding.transactions) == 0:
-                    self.session.delete(holding)
+            self.session.delete(file_)
+            if len(transaction.files) == 0:
+                self.session.delete(transaction)
+            if len(holding.transactions) == 0:
+                self.session.delete(holding)
         except (IntegrityError, KeyError, OperationalError):
             err_msg = (
-                f"File with original_path:{path} could not be deleted from the catalog"
+                f"File with original_path:{file_.original_path} could not be deleted "
+                "from the catalog."
             )
             raise CatalogError(err_msg)
 
