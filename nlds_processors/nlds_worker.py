@@ -242,6 +242,14 @@ class NLDSWorkerConsumer(RMQC):
                 RK.LOG_ERROR,
             )
 
+    def _process_rk_catalog_delete_complete(
+        self, rk_parts: List, body_json: Dict
+    ) -> None:
+        # after a catalog delete (which removes failed files from the catalog) we need
+        # to indicate to the monitor that the deletion has completed
+        new_routing_key = ".".join([RK.ROOT, RK.CATALOG_DEL, RK.COMPLETE])
+        self.send_complete(new_routing_key, body_json)
+
     def _process_rk_catalog_get_archive_restore(
         self, rk_parts: List, body_json: Dict
     ) -> None:
@@ -427,7 +435,9 @@ class NLDSWorkerConsumer(RMQC):
             # If finished with catalog update then pass for transfer get
             elif rk_parts[1] == f"{RK.CATALOG_UPDATE}":
                 self._process_rk_catalog_update_complete(rk_parts, body_json)
-
+            # If finished with catalog delete then mark as completed
+            elif rk_parts[1] == f"{RK.CATALOG_DEL}":
+                self._process_rk_catalog_delete_complete(rk_parts, body_json)
             # if finished with catalog archive update then mark ARCHIVE_PUT flow as
             # complete
             elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_UPDATE}":
