@@ -1928,6 +1928,7 @@ class CatalogConsumer(RMQC):
             self.log(f"Listing files from CATALOG_FIND", RK.LOG_INFO)
             # self.log(f"{ret_dict}", RK.LOG_DEBUG)
 
+        # publish the RPC return messages
         self.publish_message(
             properties.reply_to,
             msg_dict=body,
@@ -1996,6 +1997,45 @@ class CatalogConsumer(RMQC):
             body[MSG.DATA][MSG.HOLDING_LIST] = ret_list
             self.log(f"Modified metadata from CATALOG_META", RK.LOG_INFO)
             self.log(f"{ret_list}", RK.LOG_DEBUG)
+
+        # return message to complete RPC
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={"name": ""},
+            correlation_id=properties.correlation_id,
+        )
+
+    def _catalog_cancel(self, body: Dict, properties: Header) -> None:
+        """Delete a holding from the catalog if cancel has successfully removed
+        the TransactionRecord from the monitor database."""
+        try:
+            user = self._parse_user(body)
+            group = self._parse_group(body)
+            transaction_id = self._parse_transaction_id(body, mandatory=True)
+        except CatalogError as ce:
+            body[MSG.DETAILS][MSG.FAILURE] = ce.message
+            holding = None
+        else:
+            # get the holding - if not found then return error
+            try:
+                holding = self.catalog.get_holding(
+                    user=user,
+                    group=group,
+                    transaction_id=transaction_id,
+                )
+            except CatalogError as ce:
+                body[MSG.DETAILS][MSG.FAILURE] = ce.message
+                holding = None
+        # there is a valid holding associated with this transaction value, so now
+        # we should delete it
+        if holding:
+            try:
+                self.catalog.delete_holding(holding)
+                body[MSG.DETAILS][MSG.HOLDING_ID] = holding.id
+                body[MSG.DETAILS][MSG.LABEL] = holding.label
+            except CatalogError as ce:
+                body[MSG.DETAILS][MSG.FAILURE] = ce.message
 
         # return message to complete RPC
         self.publish_message(
@@ -2161,6 +2201,9 @@ class CatalogConsumer(RMQC):
 
         elif api_method == RK.STAT:
             self._catalog_stat(body, properties)
+
+        elif api_method == RK.CANCEL:
+            self._catalog_cancel(body, properties)
 
 
 def main():

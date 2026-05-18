@@ -308,6 +308,24 @@ class Catalog(DBMixin):
         self.session.flush()
         return holding
 
+    def delete_holding(self, holding: Holding):
+        """Delete the holding, its transactions, and all the files."""
+        try:
+            # delete the transactions
+            for trans in holding.transactions:
+                # delete the files
+                for file in trans.files:
+                    self.session.delete(file)
+                self.session.delete(trans)
+            self.session.delete(holding)
+            self.commit()
+        except (IntegrityError, KeyError, OperationalError) as e:
+            err_msg = (
+                f"Holding with holding_id:{holding.id}, label: {holding.label} could "
+                f"not be deleted from the catalog. Reason: {e._message}"
+            )
+            raise CatalogError(err_msg)
+
     def modify_holding(
         self,
         holding: Holding,
