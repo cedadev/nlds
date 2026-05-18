@@ -68,6 +68,7 @@ class Monitor(DBMixin):
         group: str,
         idd: int = None,
         transaction_id: str = None,
+        job_label: str = None,
         with_for_update: bool = False,
     ) -> TransactionRecord:
         """Fast version of get_transaction_record for internal messaging"""
@@ -77,10 +78,15 @@ class Monitor(DBMixin):
                 trec_q = self.session.query(TransactionRecord).filter(
                     TransactionRecord.id == idd
                 )
-            else:
+            elif transaction_id:
                 trec_q = self.session.query(TransactionRecord).filter(
                     TransactionRecord.transaction_id == transaction_id,
                 )
+            elif job_label:
+                trec_q = self.session.query(TransactionRecord).filter(
+                    TransactionRecord.job_label == job_label,
+                )
+
             # filter on user and group
             trec_q = trec_q.filter(
                 TransactionRecord.group == group, TransactionRecord.user == user
@@ -91,11 +97,14 @@ class Monitor(DBMixin):
                 trec = trec_q.one()
         except (NoResultFound, KeyError, OperationalError):
             if idd:
-                raise MonitorError(f"TransactionRecord with id:{idd} not found")
+                raise MonitorError(
+                    f"TransactionRecord with id:{idd} not found for user:{user} and "
+                    f"group:{group}"
+                )
             elif transaction_id:
                 raise MonitorError(
-                    f"TransactionRecord with transaction_id:{transaction_id} "
-                    f"not found"
+                    f"TransactionRecord with transaction_id:{transaction_id} not found "
+                    f"for user:{user} and group:{group}"
                 )
             else:
                 raise MonitorError(
@@ -213,14 +222,34 @@ class Monitor(DBMixin):
         trec_q = trec_q.options(joinedload(TransactionRecord.sub_records))
         return trec_q
 
-    # def delete_transaction_record(
-    #     self,
-    #     user: str,
-    #     group: str,
-    #     transaction_id: str,
-    #     job_label: str,
-    #     api_action: str,
-    # ) -> None:
+    def delete_transaction_record(
+        self,
+        user: str,
+        group: str,
+        idd: int = None,
+        job_label: str = None,
+        transaction_id: str = None,
+    ) -> None:
+        """Delete a transaction record."""
+        try:
+            trec = self.get_transaction_record(
+                user,
+                group,
+                idd=idd,
+                transaction_id=transaction_id,
+                job_label=job_label,
+                with_for_update=True,
+            )
+            for srec in trec.sub_records:
+                self.session.delete(srec)
+            self.session.delete(trec)
+            self.commit()
+        except (IntegrityError, KeyError, OperationalError) as e:
+            err_msg = (
+                f"Transaction with transaction_id:{transaction_id} could not be "
+                f"deleted from the monitor. Reason: {e._message}"
+            )
+            raise MonitorError(err_msg)
 
     def create_sub_record(
         self, transaction_record: TransactionRecord, sub_id: str, state: State = None
