@@ -575,8 +575,17 @@ class MonitorConsumer(RMQC):
             regex = self._parse_regex(body)
             limit = self._parse_limit(body)
             descending = self._parse_descending(body)
-        except MonitorError:
+        except MonitorError as me:
             # Functions above handled message logging, here we just return
+            # a message to the RPC caller
+            body[MSG.DETAILS][MSG.FAILURE] = me.message
+            body[MSG.DATA][MSG.RECORD_LIST] = []
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={"name": ""},
+                correlation_id=properties.correlation_id,
+            )
             return
 
         # start a SQL alchemy session

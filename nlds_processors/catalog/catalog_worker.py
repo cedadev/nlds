@@ -1696,8 +1696,16 @@ class CatalogConsumer(RMQC):
             query_group = self._parse_querygroup(body, user, group)
             groupall = self._parse_groupall(body)
 
-        except CatalogError:
-            # functions above handled message logging, here we just return
+        except CatalogError as ce:
+            # functions above handled message logging, here we just return a failure
+            # message to the client via a RPC return
+            body[MSG.DETAILS][MSG.FAILURE] = ce.message
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={"name": ""},
+                correlation_id=properties.correlation_id,
+            )
             return
 
         # get which user / group to query on
@@ -1767,8 +1775,16 @@ class CatalogConsumer(RMQC):
             label, _, _, _, _, _ = self._parse_metadata_vars(body)
             transaction_records = self._parse_transaction_records(body)
             groupall = self._parse_groupall(body)
-        except CatalogError:
-            # functions above handled message logging, here we just return
+        except CatalogError as ce:
+            # functions above handled message logging, here we just return a failure
+            # message to the client via a RPC return
+            body[MSG.DETAILS][MSG.FAILURE] = ce.message
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={"name": ""},
+                correlation_id=properties.correlation_id,
+            )
             return
 
         # Get transactions from catalog using transaction_ids from monitoring
@@ -1829,10 +1845,17 @@ class CatalogConsumer(RMQC):
             if path is not None:
                 path = [PathDetails(original_path=path)]
             regex = self._parse_regex(body)
-        except CatalogError:
-            # functions above handled message logging, here we raise an unhandled
-            # exception (why?)
-            raise Exception("Unhandled error in _catalog_find")
+        except CatalogError as ce:
+            # functions above handled message logging, here we just return a failure
+            # message to the client via a RPC return
+            body[MSG.DETAILS][MSG.FAILURE] = ce.message
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={"name": ""},
+                correlation_id=properties.correlation_id,
+            )
+            return
 
         # get which user / group to query on
         query_user, query_group = self._get_query_user_group(
@@ -1944,8 +1967,16 @@ class CatalogConsumer(RMQC):
             group = self._parse_group(body)
             holding_label, holding_id, tag, _, _, _ = self._parse_metadata_vars(body)
             new_label, new_tag, del_tag = self._parse_new_metadata_variables(body)
-        except CatalogError:
-            # functions above handled message logging, here we just return
+        except CatalogError as ce:
+            # functions above handled message logging, here we just return a failure
+            # message to the client via a RPC return
+            body[MSG.DETAILS][MSG.FAILURE] = ce.message
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={"name": ""},
+                correlation_id=properties.correlation_id,
+            )
             return
 
         # if there is the holding label or holding id then get the holding
