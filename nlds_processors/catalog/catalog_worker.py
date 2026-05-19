@@ -40,7 +40,7 @@ from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds.errors import CallbackError
 
-from nlds_processors.catalog.catalog import Catalog
+from nlds_processors.catalog.catalog import Catalog, Transaction, Holding
 from nlds_processors.catalog.catalog_error import CatalogError
 from nlds_processors.catalog.catalog_models import Storage, File
 from nlds.details import PathDetails, PathType
@@ -222,7 +222,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return group
 
-    def _parse_querygroup(self, body, user, group):
+    def _parse_querygroup(self, body: Dict, user: str, group: str) -> str:
         # get the desired group from the details section of the message
         try:
             query_group = body[MSG.DETAILS][MSG.GROUP_QUERY]
@@ -244,7 +244,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return query_group
 
-    def _parse_queryuser(self, body, user):
+    def _parse_queryuser(self, body: Dict, user: str) -> None:
         # get the desired user id to search for from the details section of the
         # message. this can be different than the user making the call
         try:
@@ -369,7 +369,7 @@ class CatalogConsumer(RMQC):
             regex = False
         return regex
 
-    def _parse_new_metadata_variables(self, body: dict) -> tuple:
+    def _parse_new_metadata_variables(self, body: dict) -> tuple[str, str, str]:
         # get the new label from the new meta section of the message
         try:
             new_label = body[MSG.META][MSG.NEW_META][MSG.LABEL]
@@ -392,7 +392,7 @@ class CatalogConsumer(RMQC):
 
     def _get_query_user_group(
         self, user: str, group: str, query_user: str, query_group: str
-    ):
+    ) -> tuple[str, str]:
         """Get the search user and group.  Checks whether the user is the privileged
         user (nlds).
         """
@@ -407,7 +407,7 @@ class CatalogConsumer(RMQC):
             query_group = group
         return query_user, query_group
 
-    def _get_search_label(self, holding_label, holding_id):
+    def _get_search_label(self, holding_label: str, holding_id: str) -> str:
         """Determine the search label, this is a regex and depends on whether the
         holding_label and/or holding_id has been supplied"""
         if holding_label:
@@ -420,7 +420,7 @@ class CatalogConsumer(RMQC):
 
     def _get_transaction_with_retry(
         self, id: int = None, transaction_id: str = None, with_for_update: bool = False
-    ):
+    ) -> Transaction:
         kwargs = {
             "id": id,
             "transaction_id": transaction_id,
@@ -441,7 +441,9 @@ class CatalogConsumer(RMQC):
             raise e
         return transaction
 
-    def _get_or_create_transaction(self, transaction_id, holding):
+    def _get_or_create_transaction(
+        self, transaction_id: str, holding: Holding
+    ) -> Transaction:
         # try to get the transaction to see if it already exists and can be
         # added to
         try:
@@ -460,7 +462,9 @@ class CatalogConsumer(RMQC):
                 raise e
         return transaction
 
-    def _create_tags(self, tags, holding, label):
+    def _create_tags(
+        self, tags: list[tuple[str, str]], holding: Holding, label: str
+    ) -> list[str]:
         # add the tags - if the tag already exists then don't add it or modify
         # it, with the reasoning that the user can change it with the `meta`
         # command.
@@ -490,7 +494,7 @@ class CatalogConsumer(RMQC):
         holding_id: int = None,
         transaction_id: str = None,
         with_for_update: bool = False,
-    ):
+    ) -> Holding:
         args = [user, group]
         kwargs = {
             "groupall": groupall,
@@ -968,7 +972,7 @@ class CatalogConsumer(RMQC):
         transaction_id: str = None,
         tag: dict = None,
         regex: bool = False,
-    ):
+    ) -> None:
         # Process files not being found - two cases:
         # 1. No files matching were found, returns a CatalogError, fail all files
         # 2. Some files were found, but not others - fail the files that were not
@@ -1001,7 +1005,7 @@ class CatalogConsumer(RMQC):
         transaction_id: str = None,
         tag: dict = None,
         regex: bool = False,
-    ):
+    ) -> None:
         """Send failed_file messages for those files that are in the input_path_list,
         but not in the output_path_list. i.e. they were not found in the holding."""
         for input_path in input_path_list:
@@ -1259,7 +1263,7 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
-    def _filemodel_to_path_details(self, file: File):
+    def _filemodel_to_path_details(self, file: File) -> PathDetails:
         pd = PathDetails.from_filemodel(file)
         t = self.catalog.get_transaction(id=file.transaction_id)
         pd.holding_id = t.holding_id
@@ -2076,7 +2080,7 @@ class CatalogConsumer(RMQC):
             correlation_id=properties.correlation_id,
         )
 
-    def attach_database(self, create_db_fl: bool = True):
+    def attach_database(self, create_db_fl: bool = True) -> None:
         """Attach the Catalog to the consumer"""
         # Load config options or fall back to default values.
         db_engine = self.load_config_value(self._DB_ENGINE)
@@ -2093,16 +2097,16 @@ class CatalogConsumer(RMQC):
         # start a session - use it globally to minimise DB connections
         self.catalog.start_session()
 
-    def detach_database(self):
+    def detach_database(self) -> None:
         self.catalog.session.rollback()
         # end the session
         self.catalog.end_session()
 
-    def get_engine(self):
+    def get_engine(self) -> None:
         # Method for making the db_engine available to alembic
         return self.database.db_engine
 
-    def get_url(self):
+    def get_url(self) -> None:
         """Method for making the sqlalchemy url available to alembic"""
         # Create a minimum version of the catalog to put together a url
         if self.catalog is None:
@@ -2237,7 +2241,7 @@ class CatalogConsumer(RMQC):
             self._catalog_cancel(body, properties)
 
 
-def main():
+def main() -> None:
     if len(sys.argv) > 1:
         queue_name = sys.argv[1]
     else:
