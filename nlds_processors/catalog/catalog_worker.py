@@ -2079,6 +2079,9 @@ class CatalogConsumer(RMQC):
             exchange={"name": ""},
             correlation_id=properties.correlation_id,
         )
+        self.log(
+            f"Successfully returned query via RPC message to api-server", RK.LOG_INFO
+        )
 
     def attach_database(self, create_db_fl: bool = True) -> None:
         """Attach the Catalog to the consumer"""
