@@ -372,7 +372,8 @@ class NLDSWorkerConsumer(RMQC):
             )
         # return any error using the RPC reply
         if error:
-            body_json[MSG.DETAILS][MSG.FAILURE] = error
+            return_json = body_json
+            return_json[MSG.DETAILS][MSG.FAILURE] = error
         else:
             queue = RK.MONITOR_PUT
             new_routing_key = RK.MONITOR_Q
@@ -386,31 +387,49 @@ class NLDSWorkerConsumer(RMQC):
             )
             response_monitor = asyncio.run(function)
             return_monitor_json = self._deserialize(response_monitor)
-            # check if the delete of the transaction succeeded - if it did then we
-            # also want to delete the holding with that transaction id from the catalog
+            # set the return_json to be that was returned by the monitor.  It might be
+            # overwritten by that returned by the catalog.
+            return_json = return_monitor_json
+
+            # check if the delete of the transaction succeeded
+            # if it did then we also want to delete the holding with that transaction
+            # id from the catalog - but only if the api_method was PUT or PUTLIST!
             if not MSG.FAILURE in return_monitor_json[MSG.DETAILS]:
-                queue = RK.CATALOG_PUT
-                new_routing_key = RK.CATALOG_Q
-                self.log(
-                    f"Sending message to {queue} queue with routing key "
-                    f"{new_routing_key}",
-                    RK.LOG_INFO,
-                )
-                # call the cancel method in the monitor
-                function = self.rpc_publisher.call(
-                    msg_dict=return_monitor_json, routing_key=new_routing_key
-                )
-                response_catalog = asyncio.run(function)
-                return_catalog_json = self._deserialize(response_catalog)
-                if MSG.FAILURE in return_catalog_json[MSG.DETAILS]:
-                    # if an error occurred in catalog then return the monitor_json
-                    return_json = return_monitor_json
-                else:
-                    # need to concoct some hybrid json here
-                    return_json = return_catalog_json
-            else:
-                # if an error occurred in monitor then return that error
-                return_json = return_monitor_json
+                if MSG.API_ACTION in return_monitor_json[
+                    MSG.DETAILS
+                ] and return_monitor_json[MSG.DETAILS][MSG.API_ACTION] in [
+                    RK.PUT,
+                    RK.PUTLIST,
+                ]:
+                    print("DELELELETE")
+                    # Note about the API_ACTION key:
+                    # 1. It is needed above to determine whether an attempt is made to
+                    #    delete the holding, if the original action was PUT or
+                    #    PUTLIST. We don't want to delete holdings if the method is
+                    #    ARCHIVE_PUT or GET or GETLIST, etc. So, it is returned as the
+                    #    API_ACTION in the return_monitor_json message
+                    # 2. The catalog processor needs the API_ACTION to be set back to
+                    #    CANCEL so that it can call the method to delete the holding if
+                    #    necessary,
+                    queue = RK.CATALOG_PUT
+                    new_routing_key = RK.CATALOG_Q
+                    return_monitor_json[MSG.DETAILS][MSG.API_ACTION] = RK.CANCEL
+
+                    self.log(
+                        f"Sending message to {queue} queue with routing key "
+                        f"{new_routing_key}",
+                        RK.LOG_INFO,
+                    )
+                    # call the cancel method in the monitor
+                    function = self.rpc_publisher.call(
+                        msg_dict=return_monitor_json, routing_key=new_routing_key
+                    )
+                    response_catalog = asyncio.run(function)
+                    return_catalog_json = self._deserialize(response_catalog)
+                    if not MSG.FAILURE in return_catalog_json[MSG.DETAILS]:
+                        return_json = return_catalog_json
+            # restore the cancel API ACTION
+            return_json[MSG.DETAILS][MSG.API_ACTION] = RK.CANCEL
 
         # publish the RPC return message
         self.publish_message(
