@@ -97,6 +97,10 @@ class Catalog(DBMixin):
                     holding_q = holding_q.filter(Holding.user == user)
                 holding_q = holding_q.filter(Holding.label == label)
 
+            # check that at least one result was found
+            if holding_q.count() == 0:
+                raise NoResultFound
+
             # if we are doing an update on the holding then lock the catalog database
             if with_for_update:
                 holding = holding_q.with_for_update().one()
