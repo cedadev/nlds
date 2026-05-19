@@ -38,11 +38,40 @@ from pika.frame import Header
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds_processors.monitor.monitor import Monitor, MonitorError
-from nlds_processors.monitor.monitor_models import orm_to_dict
+from nlds_processors.monitor.monitor_models import (
+    orm_to_dict,
+    TransactionRecord,
+    SubRecord,
+)
 from nlds_processors.db_mixin import DBError
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
+
+
+def _trec_to_dict(tr: TransactionRecord):
+    t_rec = {
+        "id": tr.id,
+        "transaction_id": tr.transaction_id,
+        "user": tr.user,
+        "group": tr.group,
+        "job_label": tr.job_label,
+        "api_action": tr.api_action,
+        "creation_time": tr.creation_time.isoformat(),
+        "warnings": [w.warning for w in tr.warnings],
+        "sub_records": [],
+    }
+    return t_rec
+
+
+def _srec_to_dict(sr: SubRecord):
+    s_rec = {
+        "id": sr.id,
+        "sub_id": sr.sub_id,
+        "state": sr.state.name,
+        "last_updated": sr.last_updated.isoformat(),
+    }
+    return s_rec
 
 
 class MonitorConsumer(RMQC):
@@ -546,8 +575,17 @@ class MonitorConsumer(RMQC):
             regex = self._parse_regex(body)
             limit = self._parse_limit(body)
             descending = self._parse_descending(body)
-        except MonitorError:
+        except MonitorError as me:
             # Functions above handled message logging, here we just return
+            # a message to the RPC caller
+            body[MSG.DETAILS][MSG.FAILURE] = me.message
+            body[MSG.DATA][MSG.RECORD_LIST] = []
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={"name": ""},
+                correlation_id=properties.correlation_id,
+            )
             return
 
         # start a SQL alchemy session
@@ -610,28 +648,12 @@ class MonitorConsumer(RMQC):
             if tr.id in trecs_dict:
                 t_rec = trecs_dict[tr.id]
             else:
-                t_rec = {
-                    "id": tr.id,
-                    "transaction_id": tr.transaction_id,
-                    "user": tr.user,
-                    "group": tr.group,
-                    "job_label": tr.job_label,
-                    "api_action": tr.api_action,
-                    "creation_time": tr.creation_time.isoformat(),
-                    "warnings": [w.warning for w in tr.warnings],
-                    "sub_records": [],
-                }
+                t_rec = _trec_to_dict(tr)
                 trecs_dict[tr.id] = t_rec
 
             for sr in tr.sub_records:
-                s_rec = {
-                    "id": sr.id,
-                    "sub_id": sr.sub_id,
-                    "state": sr.state.name,
-                    "last_updated": sr.last_updated.isoformat(),
-                }
-                # only get the failed files if the user asked for them - i.e. they
-                # specified a transaction id
+                s_rec = _srec_to_dict(sr)
+                # get failed files
                 if idd or job_label or transaction_id:
                     s_rec["failed_files"] = [orm_to_dict(ff) for ff in sr.failed_files]
 
@@ -644,6 +666,96 @@ class MonitorConsumer(RMQC):
             # if len(trecs_dict[id_]["sub_records"]) > 0:
             ret_list.append(trecs_dict[id_])
         body[MSG.DATA][MSG.RECORD_LIST] = ret_list
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={"name": ""},
+            correlation_id=properties.correlation_id,
+        )
+        self.log(
+            f"Successfully returned query via RPC message to api-server", RK.LOG_INFO
+        )
+
+    def _monitor_cancel(self, body: Dict[str, str], properties: Header) -> None:
+        """
+        Cancel a monitoring record, if the state is still at QUEUED
+        """
+        try:
+            user = self._parse_user(body)
+            group = self._parse_group(body)
+            transaction_id = self._parse_transaction_id(body, mandatory=False)
+            idd = self._parse_idd(body)
+            job_label = self._parse_job_label(body)
+            if not (transaction_id or idd or job_label):
+                raise MonitorError(
+                    "No method of finding the TransactionRecord has been supplied.  "
+                    "Use id, transaction_id, or job_label."
+                )
+        except MonitorError as me:
+            # there is an error - set transaction_record to None s
+            body[MSG.DETAILS][MSG.FAILURE] = me.message
+            trec = None
+        else:
+            # get the transaction record
+            try:
+                trec = self.monitor.get_transaction_record(
+                    user=user,
+                    group=group,
+                    idd=idd,
+                    job_label=job_label,
+                    transaction_id=transaction_id,
+                )
+            except MonitorError as me:
+                # transaction record not found
+                body[MSG.DETAILS][MSG.FAILURE] = me.message
+                trec = None
+
+        # check the transaction record is still in the QUEUED state
+        # (QUEUED is called SEARCHING in the server code for some reason!)
+        ret_list = []
+        if trec:
+            c_state = trec.get_state()
+            # state can be NONE or State.SEARCHING
+            if c_state and c_state != State.SEARCHING:
+                body[MSG.DETAILS][MSG.FAILURE] = (
+                    "TransactionRecord is not in the QUEUED state. It is too late to "
+                    "cancel it."
+                )
+            else:
+                if len(trec.sub_records) != 0:
+                    body[MSG.DETAILS][
+                        MSG.FAILURE
+                    ] = "TransactionRecord has SubRecords. This should not occur."
+                else:
+                    # load the return message with the details needed by the catalog
+                    # cancel command - the transaction id, primarily
+                    body[MSG.DETAILS][MSG.TRANSACT_ID] = trec.transaction_id
+                    body[MSG.DETAILS][MSG.JOB_LABEL] = trec.job_label
+                    try:
+                        t_rec_ret = _trec_to_dict(trec)
+                        for sr in trec.sub_records:
+                            s_rec = _srec_to_dict(sr)
+                            # get failed files
+                            if idd or job_label or transaction_id:
+                                s_rec["failed_files"] = [
+                                    orm_to_dict(ff) for ff in sr.failed_files
+                                ]
+                            t_rec_ret["sub_records"].append(s_rec)
+                        ret_list.append(t_rec_ret)
+                        # cancel the transaction
+                        self.monitor.delete_transaction_record(
+                            user=user,
+                            group=group,
+                            idd=trec.id,
+                            job_label=trec.job_label,
+                            transaction_id=trec.transaction_id,
+                        )
+                    except MonitorError as me:
+                        # Something went wrong - what?
+                        body[MSG.DETAILS][MSG.FAILURE] = me.message
+
+        body[MSG.DATA][MSG.RECORD_LIST] = ret_list
+        # publish the RPC return message - this could have success or failure in it
         self.publish_message(
             properties.reply_to,
             msg_dict=body,
@@ -684,11 +796,13 @@ class MonitorConsumer(RMQC):
             )
             return
 
-        # check whether this is a GET or a PUT
+        # RPC actions go first
         if api_method == RK.STAT:
             self.log("Starting stat from monitoring db.", RK.LOG_INFO)
             self._monitor_get(body, properties)
-
+        elif api_method == RK.CANCEL:
+            self._monitor_cancel(body, properties)
+        # check whether this is a GET or a PUT or a ARCHIVE action
         elif api_method in (
             RK.PUT,
             RK.PUTLIST,
