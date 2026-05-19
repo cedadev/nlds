@@ -728,9 +728,10 @@ class MonitorConsumer(RMQC):
                     ] = "TransactionRecord has SubRecords. This should not occur."
                 else:
                     # load the return message with the details needed by the catalog
-                    # cancel command - the transaction id, primarily
+                    # cancel command - the transaction id, primarily, and the api method
                     body[MSG.DETAILS][MSG.TRANSACT_ID] = trec.transaction_id
                     body[MSG.DETAILS][MSG.JOB_LABEL] = trec.job_label
+                    body[MSG.DETAILS][MSG.API_ACTION] = trec.api_action
                     try:
                         t_rec_ret = _trec_to_dict(trec)
                         for sr in trec.sub_records:
