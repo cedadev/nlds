@@ -401,7 +401,6 @@ class NLDSWorkerConsumer(RMQC):
                     RK.PUT,
                     RK.PUTLIST,
                 ]:
-                    print("DELELELETE")
                     # Note about the API_ACTION key:
                     # 1. It is needed above to determine whether an attempt is made to
                     #    delete the holding, if the original action was PUT or

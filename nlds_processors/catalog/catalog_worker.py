@@ -2062,9 +2062,19 @@ class CatalogConsumer(RMQC):
             except CatalogError as ce:
                 body[MSG.DETAILS][MSG.FAILURE] = ce.message
                 holding = None
-        # there is a valid holding associated with this transaction value, so now
-        # we should delete it
+
         if holding:
+            files = self.catalog.get_files(
+                user=user,
+                group=group,
+                holding_id=holding.id,
+            )
+            if files is None:
+                n_files = 0
+            else:
+                n_files = files.count()
+        # if there is an empty valid holding (no files) then we should delete it
+        if holding and n_files == 0:
             try:
                 self.catalog.delete_holding(holding)
                 body[MSG.DETAILS][MSG.HOLDING_ID] = holding.id
