@@ -816,8 +816,6 @@ class CatalogConsumer(RMQC):
         try:
             filelist = self._parse_filelist(body)
             transaction_id = self._parse_transaction_id(body)
-            user = self._parse_user(body)
-            group = self._parse_group(body)
         except CatalogError as e:
             # functions above handled message logging, here we just return
             raise e
@@ -865,7 +863,6 @@ class CatalogConsumer(RMQC):
 
                 # input storage type
                 st = Storage.from_str(pl.storage_type)
-
                 if len(f.locations) != 0:
                     # modify location - get it first via loop on locations
                     for l in f.locations:
@@ -1616,20 +1613,15 @@ class CatalogConsumer(RMQC):
             # functions above handled message logging, here we just return
             return
 
-        # get the holding from the database
-        if holding_label is None and holding_id is None and holding_tag is None:
-            self.log(
-                "No method for identifying a holding or transaction "
-                "provided, will continue without.",
-                RK.LOG_WARNING,
-            )
-            # TODO: what happens in this event?
-
         # reset complete and failed lists, etc.
         self.reset()
 
         # get the holding and transaction
-        holding = self.catalog.get_holding(user, group, transaction_id=transaction_id)
+        holding = self.catalog.get_holding(
+            user,
+            group,
+            transaction_id=transaction_id,
+        )
         transaction = self.catalog.get_transaction(
             transaction_id=transaction_id,
         )
