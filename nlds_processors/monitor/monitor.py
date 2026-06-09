@@ -128,7 +128,9 @@ class Monitor(DBMixin):
         exclude_api_action: list[str] = None,
         job_label: str = None,
         regex: bool = False,
+        state: list[State] = None,
         limit: int = None,
+        offset: int = None,
         descending: bool = False,
     ) -> list:
         """Gets a list of TransactionRecords from the DB from the given a whole host of
@@ -189,8 +191,17 @@ class Monitor(DBMixin):
             else:
                 trec_q = trec_q.order_by(TransactionRecord.creation_time)
 
-            # limit for speed - but how many sub-records (where the api-action is
-            # stored)
+            # Filter on any sub record having the required state
+            # I think this is probably good enough to cut down a lot of extra CPU time
+            if state:
+                trec_q = trec_q.filter(
+                    TransactionRecord.sub_records.any(SubRecord.state.in_(state))
+                )
+
+            # offset and limit for speed and paging
+            if offset:
+                trec_q = trec_q.offset(offset)
+
             if limit:
                 trec_q = trec_q.limit(limit)
 
