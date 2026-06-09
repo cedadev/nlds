@@ -302,6 +302,14 @@ class MonitorConsumer(RMQC):
             limit = None
         return limit
 
+    def _parse_offset(self, body: dict) -> str:
+        # get an integer offset from the metadata section of the message
+        try:
+            offset = body[MSG.META][MSG.OFFSET]
+        except KeyError:
+            offset = None
+        return offset
+
     def _parse_descending(self, body: dict) -> str:
         # get whether to sort ascending or descending
         try:
@@ -574,6 +582,7 @@ class MonitorConsumer(RMQC):
             idd = self._parse_idd(body)
             regex = self._parse_regex(body)
             limit = self._parse_limit(body)
+            offset = self._parse_offset(body)
             descending = self._parse_descending(body)
         except MonitorError as me:
             # Functions above handled message logging, here we just return
@@ -622,6 +631,8 @@ class MonitorConsumer(RMQC):
                 job_label=job_label,
                 regex=regex,
                 limit=limit,
+                offset=offset,
+                state=state,
                 descending=descending,
             )
         except MonitorError as e:
@@ -662,8 +673,7 @@ class MonitorConsumer(RMQC):
         ret_list = []
         for id_ in trecs_dict:
             # NRM - return all trecs, even if they are empty - the client will interpret
-            # them
-            # if len(trecs_dict[id_][MSG.SUB_RECORD_LIST]) > 0:
+            # them correctly
             ret_list.append(trecs_dict[id_])
         body[MSG.DATA][MSG.RECORD_LIST] = ret_list
         self.publish_message(
