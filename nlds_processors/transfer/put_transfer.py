@@ -133,9 +133,7 @@ class PutTransferConsumer(BucketTransferConsumer):
                     state=State.TRANSFER_PUTTING,
                 )
             except (HTTPError, MaxRetryError, PermissionError) as e:
-                reason = (
-                    f"Error uploading {path_details.path} to object " f"store: {e}."
-                )
+                reason = f"Error uploading {path_details.path} to object store: {e}."
                 self.log(f"{reason} Adding to failed list.", RK.LOG_ERROR)
                 path_details.failure_reason = reason
                 self.append_and_send(
