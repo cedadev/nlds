@@ -51,24 +51,24 @@ import nlds.rabbit.message_keys as MSG
 
 def _trec_to_dict(tr: TransactionRecord):
     t_rec = {
-        "id": tr.id,
-        "transaction_id": tr.transaction_id,
-        "user": tr.user,
-        "group": tr.group,
-        "job_label": tr.job_label,
-        "api_action": tr.api_action,
+        MSG.ID: tr.id,
+        MSG.TRANSACT_ID: tr.transaction_id,
+        MSG.USER: tr.user,
+        MSG.GROUP: tr.group,
+        MSG.JOB_LABEL: tr.job_label,
+        MSG.API_ACTION: tr.api_action,
         "creation_time": tr.creation_time.isoformat(),
         "warnings": [w.warning for w in tr.warnings],
-        "sub_records": [],
+        MSG.SUB_RECORD_LIST: [],
     }
     return t_rec
 
 
 def _srec_to_dict(sr: SubRecord):
     s_rec = {
-        "id": sr.id,
-        "sub_id": sr.sub_id,
-        "state": sr.state.name,
+        MSG.ID: sr.id,
+        MSG.SUB_ID: sr.sub_id,
+        MSG.STATE: sr.state.name,
         "last_updated": sr.last_updated.isoformat(),
     }
     return s_rec
@@ -657,13 +657,13 @@ class MonitorConsumer(RMQC):
                 if idd or job_label or transaction_id:
                     s_rec["failed_files"] = [orm_to_dict(ff) for ff in sr.failed_files]
 
-                t_rec["sub_records"].append(s_rec)
+                t_rec[MSG.SUB_RECORD_LIST].append(s_rec)
 
         ret_list = []
         for id_ in trecs_dict:
             # NRM - return all trecs, even if they are empty - the client will interpret
             # them
-            # if len(trecs_dict[id_]["sub_records"]) > 0:
+            # if len(trecs_dict[id_][MSG.SUB_RECORD_LIST]) > 0:
             ret_list.append(trecs_dict[id_])
         body[MSG.DATA][MSG.RECORD_LIST] = ret_list
         self.publish_message(
@@ -741,7 +741,7 @@ class MonitorConsumer(RMQC):
                                 s_rec["failed_files"] = [
                                     orm_to_dict(ff) for ff in sr.failed_files
                                 ]
-                            t_rec_ret["sub_records"].append(s_rec)
+                            t_rec_ret[MSG.SUB_RECORD_LIST].append(s_rec)
                         ret_list.append(t_rec_ret)
                         # cancel the transaction
                         self.monitor.delete_transaction_record(
