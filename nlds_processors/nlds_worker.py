@@ -169,12 +169,13 @@ class NLDSWorkerConsumer(RMQC):
         )
         self.publish_and_log_message(new_routing_key, body_json)
 
-    def _process_rk_transfer_get_complete(self, body_json: Dict) -> None:
+    def _process_rk_transfer_get_complete(
+        self, rk_parts: List[str], body_json: Dict
+    ) -> None:
         # After a successful TRANSFER_GET, the sub records in the Monitor need to be
         # notified that they have complete
 
-        new_routing_key = ".".join([RK.ROOT, RK.TRANSFER_GET, RK.COMPLETE])
-        self.send_complete(new_routing_key, body_json)
+        self.send_complete(rk_parts, body_json)
 
     def _process_rk_transfer_put_failed(self, body_json: Dict) -> None:
         self.log(
@@ -182,7 +183,6 @@ class NLDSWorkerConsumer(RMQC):
             "for deletion",
             RK.LOG_INFO,
         )
-
         queue = f"{RK.CATALOG_DEL}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
@@ -193,8 +193,9 @@ class NLDSWorkerConsumer(RMQC):
 
     def _process_rk_catalog_get_complete(self, rk_parts: List, body_json: Dict) -> None:
         # forward confirmation to monitor
-        self.log(f"Sending message to {RK.MONITOR} queue", RK.LOG_INFO)
-        new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
+        queue = f"{RK.MONITOR_PUT}"
+        self.log(f"Sending message to {queue} queue", RK.LOG_INFO)
+        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.publish_and_log_message(new_routing_key, body_json)
 
         # forward to transfer_get
@@ -236,8 +237,7 @@ class NLDSWorkerConsumer(RMQC):
             # For the PUT and PUTLIST method, this is the final state - i.e. the catalog
             # is updated to contain the new Object Store path
             elif api_method == RK.PUT or api_method == RK.PUTLIST:
-                new_routing_key = ".".join([RK.ROOT, RK.CATALOG_UPDATE, RK.COMPLETE])
-                self.send_complete(new_routing_key, body_json)
+                self.send_complete(rk_parts, body_json)
 
         except KeyError:
             self.log(
@@ -250,8 +250,10 @@ class NLDSWorkerConsumer(RMQC):
     ) -> None:
         # after a catalog delete (which removes failed files from the catalog) we need
         # to indicate to the monitor that the deletion has completed
-        new_routing_key = ".".join([RK.ROOT, RK.CATALOG_DEL, RK.COMPLETE])
-        self.send_complete(new_routing_key, body_json)
+        # however (and this is a bit weird) - we need to indicate that it FAILED.
+        # all files in this message will have a failure_reason and, for the monitor to
+        # tag this as a failed sub-id, we need to send a FAILED message
+        self.send_failed(rk_parts, body_json)
 
     def _process_rk_catalog_get_archive_restore(
         self, rk_parts: List, body_json: Dict
@@ -340,8 +342,7 @@ class NLDSWorkerConsumer(RMQC):
         self, rk_parts: List, body_json: Dict
     ) -> None:
         # forward confirmation to monitor
-        new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
-        self.send_complete(new_routing_key, body_json)
+        self.send_complete(rk_parts, body_json)
 
     def _process_rk_archive_put_failed(self, body_json: Dict) -> None:
         self.log(
@@ -488,7 +489,9 @@ class NLDSWorkerConsumer(RMQC):
 
                 # If transfer_get completed then finish get workflow
                 elif rk_parts[1] == f"{RK.TRANSFER_GET}":
-                    self._process_rk_transfer_get_complete(body_json)
+                    self._process_rk_transfer_get_complete(
+                        rk_parts=rk_parts, body_json=body_json
+                    )
 
                 # If transfer_setup completed then start the indexing
                 elif rk_parts[1] == f"{RK.TRANSFER_SETUP}":
