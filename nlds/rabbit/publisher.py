@@ -129,7 +129,8 @@ class RabbitMQPublisher:
         """Go through list of exchanges from config file and declare each."""
         for exchange in self.exchanges:
             self.channel.exchange_declare(
-                exchange=exchange["name"], exchange_type=exchange["type"]
+                exchange=exchange["name"],
+                exchange_type=exchange["type"],
             )
 
     @staticmethod
