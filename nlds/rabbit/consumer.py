@@ -271,10 +271,12 @@ class RabbitMQConsumer(ABC, RMQP):
 
         return new_filelist
 
-    def create_sub_id(self, filelist: List[PathDetails]) -> List[PathDetails]:
+    def create_sub_id(self, filelist: List[PathDetails]) -> str:
         """Sub id is now created by hashing the paths from the filelist"""
         if filelist != []:
             filenames = [f.original_path for f in filelist]
+            # sort the filenames to ensure hashes match!
+            filenames.sort()
             filelist_hash = md5("".join(filenames).encode()).hexdigest()
             sub_id = UUID(filelist_hash)
         else:
@@ -347,11 +349,20 @@ class RabbitMQConsumer(ABC, RMQP):
 
     def send_complete(
         self,
-        routing_key: str,
+        rk_parts: List[str],
         body_json: Dict[str, Any],
     ):
         body_json[MSG.DETAILS][MSG.STATE] = State.COMPLETE
-        monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
+        monitoring_rk = ".".join([rk_parts[0], RK.MONITOR_PUT, RK.START])
+        self.publish_message(monitoring_rk, body_json)
+
+    def send_failed(
+        self,
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+    ):
+        body_json[MSG.DETAILS][MSG.STATE] = State.FAILED
+        monitoring_rk = ".".join([rk_parts[0], RK.MONITOR_PUT, RK.START])
         self.publish_message(monitoring_rk, body_json)
 
     def setup_logging(
