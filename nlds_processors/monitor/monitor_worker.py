@@ -630,9 +630,9 @@ class MonitorConsumer(RMQC):
                 exclude_api_action=exclude_api_action,
                 job_label=job_label,
                 regex=regex,
+                state=state,
                 limit=limit,
                 offset=offset,
-                state=state,
                 descending=descending,
             )
         except MonitorError as e:
