@@ -60,6 +60,28 @@ class Catalog(DBMixin):
             permitted &= holding.group == group
         return permitted
 
+    def get_holding_label_from_transaction(
+        self,
+        transaction_id: str
+    ):
+        """Super-quick get the holding from the transaction id"""
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+        holding_q = self.session.query(Holding.label)
+
+        try:
+            holding_q = holding_q.filter(
+                Holding.id == Transaction.holding_id,
+                Transaction.transaction_id == transaction_id,
+            )
+            holding = holding_q.one_or_none()
+        except NoResultFound as e:
+            msg = (
+                f"Holding containing transaction_id:{transaction_id} not found."
+            )
+            raise CatalogError(msg)
+        return holding
+
     def get_holding(
         self,
         user: str,
@@ -192,9 +214,6 @@ class Catalog(DBMixin):
                 else:
                     holding_q = holding_q.filter(Holding.label == label)
 
-            # pre-load the tags
-            holding_q = holding_q.options(joinedload(Holding.transactions))
-            holding_q = holding_q.options(joinedload(Holding.tags))
             # filter the query on any tags
             if tag:
                 # get the holdings that have a key that matches one or more of

@@ -1770,7 +1770,6 @@ class CatalogConsumer(RMQC):
             transaction_id = self._parse_transaction_id(body)
             label, _, _, _, _, _ = self._parse_metadata_vars(body)
             transaction_records = self._parse_transaction_records(body)
-            groupall = self._parse_groupall(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
             # message to the client via a RPC return
@@ -1786,17 +1785,19 @@ class CatalogConsumer(RMQC):
         # Get transactions from catalog using transaction_ids from monitoring
         ret_dict = {}
         try:
-            # Get the transaction and holding for each transaction_record
-            for tr in transaction_records:
-                transaction_id = tr["transaction_id"]
+            for i, tr in enumerate(transaction_records):
+                transaction_id = tr[MSG.TRANSACT_ID]
                 # A transaction_id might not have an associated holding in
                 # the catalog if the transaction FAILED or has not COMPLETED
                 # yet.  We allow for this and return an empty string instead.
                 try:
-                    h = self.catalog.get_holding(
-                        user, group, groupall=groupall, transaction_id=transaction_id
+                    h = self.catalog.get_holding_label_from_transaction(
+                        transaction_id=transaction_id,
                     )
-                    label = h.label
+                    if h:
+                        label = h.label
+                    else:
+                        label = ""
                 except CatalogError:
                     # just return a blank label
                     label = ""

@@ -136,9 +136,7 @@ class Monitor(DBMixin):
         """Gets a list of TransactionRecords from the DB from the given a whole host of
         information.  Only used for user queries.
         This function is only used via user interaction.
-        NRM - 16/03/2026.  Removed the joinedload on the transaction query as it made
-        everything about 5 times slower!"""
-
+        """
         if transaction_id:
             transaction_search = transaction_id
             transaction_regex = False
@@ -230,7 +228,10 @@ class Monitor(DBMixin):
                 raise MonitorError(f"Invalid regular expression: {transaction_search}")
             else:
                 raise MonitorError(f"Error getting transaction_record: {e}")
+        # load the sub-records and the warnings.  This speeds things up for the loops
+        # over the sub-records and warnings.
         trec_q = trec_q.options(joinedload(TransactionRecord.sub_records))
+        trec_q = trec_q.options(joinedload(TransactionRecord.warnings))
         return trec_q
 
     def delete_transaction_record(
@@ -327,7 +328,8 @@ class Monitor(DBMixin):
             if with_for_update:
                 srec = srec_q.with_for_update().one()
             else:
-                srec = srec.options(joinedload(SubRecord.failed_files))
+                # pre-load the failed files
+                srec_q = srec_q.options(joinedload(SubRecord.failed_files))
                 srec = srec_q.one()
         except (IntegrityError, IndexError, NoResultFound):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
