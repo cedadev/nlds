@@ -88,9 +88,12 @@ class PutTransferConsumer(BucketTransferConsumer):
             if not self.check_path_exists(item_path):
                 reason = f"Path:{path_details.path} does not exist."
                 failure = True
-
-            if not self.check_path_access(item_path):
-                reason = f"Path:{path_details.path} is inaccessible."
+            # we want the first message to have precedence, hence the elif
+            elif not self.check_path_access(item_path):
+                reason = (
+                    f"Path:{path_details.path} is inaccessible.  Please check the "
+                    f"permissions of the path."
+                )
                 failure = True
 
             if failure:

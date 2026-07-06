@@ -205,8 +205,9 @@ class IndexerConsumer(StattingConsumer):
                 f"Path: {item_path.path} is inaccessible. Please check the "
                 f"permissions of the path."
             )
+            not_found_err_msg = f"Path: {item_path.path} does not exist."
             if not self.check_path_exists(item_path.path):
-                raise IndexError(f"Path: {item_path.path} does not exist.")
+                raise IndexError(not_found_err_msg)
             if not self.check_path_access(item_path.path):
                 raise IndexError(inaccessible_err_msg)
 
@@ -217,7 +218,9 @@ class IndexerConsumer(StattingConsumer):
                     self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
                     try:
                         os.chdir(item_path.path)
-                    except (FileNotFoundError, PermissionError):
+                    except FileNotFoundError:
+                        raise IndexError(not_found_err_msg)
+                    except PermissionError:
                         raise IndexError(inaccessible_err_msg)
                 # check if item is a link and just add as a link entry if it is
                 # do not recurse into linked directories!
@@ -235,7 +238,9 @@ class IndexerConsumer(StattingConsumer):
                     # item is a directory - list what is in the directory
                     try:
                         sub_file_list = os.listdir(item_path.path)
-                    except (FileNotFoundError, PermissionError):
+                    except FileNotFoundError:
+                        raise IndexError(not_found_err_msg)
+                    except PermissionError:
                         raise IndexError(inaccessible_err_msg)
                     # process and send via recursion
                     for sf in sub_file_list:
@@ -254,7 +259,9 @@ class IndexerConsumer(StattingConsumer):
                 # item is a file - stat it - calls the PathDetails member function
                 try:
                     item_path.stat()
-                except (FileNotFoundError, PermissionError):
+                except FileNotFoundError:
+                    raise IndexError(not_found_err_msg)
+                except PermissionError:
                     raise IndexError(inaccessible_err_msg)
                 # check the filesize
                 if self.check_filesize_fl and item_path.size > self.max_filesize:
@@ -328,23 +335,30 @@ class IndexerConsumer(StattingConsumer):
                 if os.getcwd() != chpath.as_posix():
                     self.log(f"Changing directory to {chpath}", RK.LOG_INFO)
                     os.chdir(chpath)
-            except (FileNotFoundError, PermissionError):
+                failed = False
+            except FileNotFoundError:
+                message = f"Path: {item_path.path} does not exist."
+                failed = True
+            except PermissionError:
                 message = (
                     f"Path: {item_path.path} is inaccessible.  Please check the "
                     f"permissions of the path."
                 )
-                item_path.failure_reason = message
-                self.append_and_send(
-                    self.failedlist,
-                    item_path,
-                    routing_key=rk_failed,
-                    body_json=body_json,
-                    state=State.FAILED,
-                )
+                failed = True
             else:
                 # all errors will now be handled by raising an IndexError in the
                 # _index_r function
                 self._index_r(item_path, rk_complete, rk_failed, body_json=body_json)
+            finally:
+                if failed:
+                    item_path.failure_reason = message
+                    self.append_and_send(
+                        self.failedlist,
+                        item_path,
+                        routing_key=rk_failed,
+                        body_json=body_json,
+                        state=State.FAILED,
+                    )
 
         # finalise the pathlists - anything left in the completed and failed lists
         if len(self.completelist) > 0:
