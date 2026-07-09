@@ -245,7 +245,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # tarfilelist is a list of strings, which is fine for XRootD >= 5.6,
         # but for versions < 5.5.5 the list of tar names need to be encoded as bytes,
         # from the utf-8 string, e.g. tar_list = [i.decode("utf_8") for i in tar_list]
-        # shouldn't be neccessary for us, though!
+        # shouldn't be necessary for us, though!
         if len(tarfilelist) == 0:
             # trap this as it causes a seg-fault if it is passed to XRD.prepare
             raise S3StreamError("tarfilelist is empty in prepare_request")
