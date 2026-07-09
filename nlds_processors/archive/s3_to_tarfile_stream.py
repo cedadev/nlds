@@ -105,11 +105,14 @@ class S3ToTarfileStream(BucketMixin):
         return filelist_hash
 
     def _check_files_exist(self):
-        # All files are now supposed to be from a single aggregation according
-        # to the current implementation of the PUT workflow. Here we do an
-        # initial loop over all the files to verify contents before writing
-        # anything to tape.
+        # Need to optimise this as it takes a long time to loop over the number of files
+        # that might be in an aggregation (up to 100000!)
+        # The trouble is that the files might be in different buckets, but we only want
+        # to do one stat / list on a bucket if we can get away with it.
+        # Do this by building a dictionary with:
+        # {key= the bucket name, value= the list of bucket contents as the value}
         failed_list = []
+        bucket_dict = {}
         for path_details in self.filelist:
             try:
                 check_bucket, check_object = self._get_bucket_name_object_name(
@@ -121,61 +124,68 @@ class S3ToTarfileStream(BucketMixin):
                 )
                 failed_list.append(path_details)
                 continue
-
-            try:
-                # Check the bucket exists
-                if not self._bucket_exists(check_bucket):
+            # list the bucket contents into the dictionary if not already done
+            if not check_bucket in bucket_dict:
+                try:
+                    # Check the bucket exists
+                    if not self._bucket_exists(check_bucket):
+                        path_details.failure_reason = (
+                            f"Bucket {check_bucket} does not exist when attempting to "
+                            f"write to tape."
+                        )
+                        failed_list.append(path_details)
+                        continue
+                except (BucketError, MaxRetryError) as e:
                     path_details.failure_reason = (
-                        f"Bucket {check_bucket} does not exist when attempting to "
-                        f"write to tape."
+                        f"Could not verify that bucket {check_bucket} exists before "
+                        f"writing to tape. Original exception: {e}"
                     )
                     failed_list.append(path_details)
                     continue
-            except (BucketError, MaxRetryError) as e:
-                path_details.failure_reason = (
-                    f"Could not verify that bucket {check_bucket} exists before "
-                    f"writing to tape. Original exception: {e}"
-                )
-                failed_list.append(path_details)
-                continue
+                try:
+                    results = self.s3_client.list_objects(check_bucket, recursive=True)
+                    # convert results into list of files and sizes
+                    for r in results:
+                        name = r.object_name
+                        size = r.size
+                        print(name, size)
+                        bucket_dict[check_bucket] = (name, size)
 
-            try:
-                # Check that the object is in the bucket and the names match
-                obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
-                if check_object != obj_stat_result.object_name:
+                except (S3Error, HTTPError) as e:
                     path_details.failure_reason = (
-                        f"Could not verify file {check_bucket}:{check_object} before "
-                        f"writing to tape. File name differs between original name and "
-                        f"object name."
+                        f"Could not verify file {check_bucket}:{check_object} exists "
+                        f"before writing to tape. Original exception {e}."
                     )
                     failed_list.append(path_details)
                     continue
-            except (S3Error, HTTPError) as e:
-                path_details.failure_reason = (
-                    f"Could not verify file {check_bucket}:{check_object} exists "
-                    f"before writing to tape. Original exception {e}."
-                )
-                failed_list.append(path_details)
-                continue
-
-            try:
-                # Check that the object is in the bucket and the names match
-                obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
-                if path_details.size != obj_stat_result.size:
-                    path_details.failure_reason = (
-                        f"Could not verify file {check_bucket}:{check_object} before "
-                        f"writing to tape. File size differs between original size and "
-                        f"object size."
-                    )
-                    failed_list.append(path_details)
-                    continue
-            except (S3Error, HTTPError) as e:
-                path_details.failure_reason = (
-                    f"Could not verify that file {check_bucket}:{check_object} exists "
-                    f"before writing to tape. Original exception {e}."
-                )
-                failed_list.append(path_details)
-                continue
+            # try:
+            #     # Check that the object is in the bucket and the names match
+            #     obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
+            #     if check_object != obj_stat_result.object_name:
+            #         path_details.failure_reason = (
+            #             f"Could not verify file {check_bucket}:{check_object} before "
+            #             f"writing to tape. File name differs between original name and "
+            #             f"object name."
+            #         )
+            #         failed_list.append(path_details)
+            #         continue
+            #     # Check that the size matches
+            #     if path_details.size != obj_stat_result.size:
+            #         path_details.failure_reason = (
+            #             f"Could not verify file {check_bucket}:{check_object} before "
+            #             f"writing to tape. File size differs between original size and "
+            #             f"object size."
+            #         )
+            #         failed_list.append(path_details)
+            #         continue
+            # except (S3Error, HTTPError) as e:
+            #     path_details.failure_reason = (
+            #         f"Could not verify file {check_bucket}:{check_object} exists "
+            #         f"before writing to tape. Original exception {e}."
+            #     )
+            #     failed_list.append(path_details)
+            #     continue
+        raise SystemExit
         return [], failed_list
 
     def _stream_to_fileobject(
