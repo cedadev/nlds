@@ -261,14 +261,9 @@ class RabbitMQConsumer(ABC, RMQP):
         return filelist
 
     def dedup_filelist(self, filelist: List[PathDetails]) -> List[PathDetails]:
-        """De-duplicate filelist"""
-        new_filelist = []
-        pathlist = []
-        for pd in filelist:
-            if not pd.original_path in pathlist:
-                new_filelist.append(pd)
-                pathlist.append(pd.original_path)
-
+        """De-duplicate filelist - just use sets as they are way quicker
+        Needs __eq__ method defined for PathDetails"""
+        new_filelist = list(set(filelist))
         return new_filelist
 
     def create_sub_id(self, filelist: List[PathDetails]) -> str:
