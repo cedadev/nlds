@@ -10,7 +10,7 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError, NoResultFound
-from sqlalchemy.orm import joinedload, lazyload
+from sqlalchemy.orm import subqueryload
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -230,8 +230,8 @@ class Monitor(DBMixin):
                 raise MonitorError(f"Error getting transaction_record: {e}")
         # load the sub-records and the warnings.  This speeds things up for the loops
         # over the sub-records and warnings.
-        trec_q = trec_q.options(joinedload(TransactionRecord.sub_records))
-        trec_q = trec_q.options(joinedload(TransactionRecord.warnings))
+        trec_q = trec_q.options(subqueryload(TransactionRecord.sub_records))
+        trec_q = trec_q.options(subqueryload(TransactionRecord.warnings))
         return trec_q
 
     def delete_transaction_record(
@@ -325,11 +325,11 @@ class Monitor(DBMixin):
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
             )
+            # pre-load the failed files
+            srec_q = srec_q.options(subqueryload(SubRecord.failed_files))
             if with_for_update:
                 srec = srec_q.with_for_update().one()
             else:
-                # pre-load the failed files
-                srec_q = srec_q.options(joinedload(SubRecord.failed_files))
                 srec = srec_q.one()
         except (IntegrityError, IndexError, NoResultFound):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
@@ -352,7 +352,7 @@ class Monitor(DBMixin):
             query = self.session.query(SubRecord).filter(
                 SubRecord.transaction_record_id == transaction_record.id
             )
-            query = query.options(joinedload(SubRecord.failed_files))
+            query = query.options(subqueryload(SubRecord.failed_files))
 
             # apply filters one at a time if present. Results in a big 'and' query
             # of the passed flags
