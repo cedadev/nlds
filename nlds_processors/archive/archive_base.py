@@ -21,13 +21,6 @@ from nlds.rabbit.consumer import State
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 
-from nlds.nlds_setup import USE_DISKTAPE, DISKTAPE_LOC
-
-if USE_DISKTAPE:
-    from nlds_processors.archive.s3_to_tarfile_disk import S3ToTarfileDisk
-else:
-    from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape
-
 
 class ArchiveError(Exception):
     pass
@@ -41,10 +34,12 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     _TAPE_POOL = "tape_pool"
     _TAPE_URL = "tape_url"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
+    _DISKTAPE_LOC = "disktape_location"
     ARCHIVE_CONSUMER_CONFIG = {
         _TAPE_POOL: None,
         _TAPE_URL: None,
         _PRINT_TRACEBACKS: False,
+        _DISKTAPE_LOC: None,
     }
     DEFAULT_CONSUMER_CONFIG = (
         BaseTransferConsumer.DEFAULT_CONSUMER_CONFIG | ARCHIVE_CONSUMER_CONFIG
@@ -54,6 +49,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         super().__init__(queue=queue)
         self.tape_pool = self.load_config_value(self._TAPE_POOL)
         self.tape_url = self.load_config_value(self._TAPE_URL)
+        self.disktape_loc = self.load_config_value(self._DISKTAPE_LOC)
         self.reset()
 
     def _create_streamer(
@@ -63,9 +59,13 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         secret_key: str,
         tape_url: str,
     ):
-        """Helper function to create a streamer based on status of USE_DISK_TAPE"""
-        if USE_DISKTAPE:
-            disk_loc = os.path.expanduser(DISKTAPE_LOC)
+        """Helper function to create a streamer based on status of self.disktape_loc
+        Which is now read in from the config file variable 'disktape_location' in the
+        'archive_get_q' and 'archive_put_q' sections."""
+        if self.disktape_loc:
+            from nlds_processors.archive.s3_to_tarfile_disk import S3ToTarfileDisk
+
+            disk_loc = os.path.expanduser(self.disktape_loc)
             self.log(
                 f"Starting connection between {disk_loc} and object store "
                 f"{tenancy}",
@@ -81,6 +81,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 logger=self.log,
             )
         else:
+            from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape
+
             self.log(
                 f"Starting connecting between {tape_url} and object store "
                 f"{tenancy}",
@@ -137,7 +139,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             # Make a new routing key which returns message to this queue
             rk_transfer_start = ".".join([self.rk_parts[0], self.rk_parts[1], RK.START])
             # Aggregate files into bins of approximately equal size and split
-            # the transaction into subtransactions to allow parallel transfers
+            # the transaction into sub-transactions to allow parallel transfers
             sub_lists = bin_files(
                 self.filelist,
                 target_bin_count=self.filelist_max_len,
