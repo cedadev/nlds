@@ -11,7 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 # SQLalchemy imports
 from sqlalchemy import func, Enum
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import subqueryload, Query
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
@@ -34,6 +34,7 @@ from nlds_processors.catalog.catalog_models import (
 from nlds_processors.db_mixin import DBMixin
 from nlds_processors.catalog.catalog_error import CatalogError
 from nlds.details import PathType, PathDetails
+from datetime import datetime, timedelta
 
 
 class Catalog(DBMixin):
@@ -60,10 +61,7 @@ class Catalog(DBMixin):
             permitted &= holding.group == group
         return permitted
 
-    def get_holding_label_from_transaction(
-        self,
-        transaction_id: str
-    ):
+    def get_holding_label_from_transaction(self, transaction_id: str):
         """Super-quick get the holding from the transaction id"""
         if self.session is None:
             raise RuntimeError("self.session is None")
@@ -76,10 +74,10 @@ class Catalog(DBMixin):
             )
             holding = holding_q.one_or_none()
         except NoResultFound as e:
-            msg = (
-                f"Holding containing transaction_id:{transaction_id} not found."
-            )
+            msg = f"Holding containing transaction_id:{transaction_id} not found."
             raise CatalogError(msg)
+        except MultipleResultsFound as e:
+            holding = holding_q.first()
         return holding
 
     def get_holding(
@@ -123,13 +121,13 @@ class Catalog(DBMixin):
             if holding_q.count() == 0:
                 raise NoResultFound
 
+            # pre-load the tags and transactions
+            holding_q = holding_q.options(subqueryload(Holding.transactions))
+            holding_q = holding_q.options(subqueryload(Holding.tags))
             # if we are doing an update on the holding then lock the catalog database
             if with_for_update:
                 holding = holding_q.with_for_update().one()
             else:
-                # pre-load the tags and transactions
-                holding_q = holding_q.options(joinedload(Holding.transactions))
-                holding_q = holding_q.options(joinedload(Holding.tags))
                 # get one holding
                 holding = holding_q.one()
         except NoResultFound as e:
@@ -643,7 +641,7 @@ class Catalog(DBMixin):
                 Transaction.holding_id == Holding.id,
             )
             # load in the Locations with the File to speed up the queries a lot
-            file_q = file_q.options(joinedload(File.locations))
+            file_q = file_q.options(subqueryload(File.locations))
 
             if descending:
                 file_q = file_q.order_by(Transaction.ingest_time.desc())
@@ -947,7 +945,9 @@ class Catalog(DBMixin):
             )
             raise CatalogError(err_msg)
 
-    def get_next_unarchived_holding(self, tenancy: str) -> Holding:
+    def get_next_unarchived_holding(
+        self, tenancy: str, ingest_deadline_seconds: int = 24 * 60 * 60
+    ) -> Holding:
         """The principal function for getting the next unarchived holding to
         archive aggregate.
         A tenancy is passed in so that the only holdings attempted to be backed up are
@@ -955,14 +955,17 @@ class Catalog(DBMixin):
         Otherwise, when the archive_put process tries to stream the files from the
         object store to the tape, the keys don't match the tenancy and an access denied
         error is produced.
+        The ingest_deadline is the number of seconds that must pass since there was any
+        ingest activity on the holding.  This is to prevent an attempt to backup being
+        made while files are still transferring.  It defaults to 1 day.
         """
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
             # To get unarchived Holdings we need to find Transactions in a holding that
-            # contains files that do not have a Tape location
-            # however, they do have to have a Object Storage location, as this shows
-            # that the file was successfully transferred to Object Storage.
+            # contains files that do not have a Tape location but do have an Object
+            # Storage location, as this shows that the file was successfully
+            # transferred to Object Storage.
             # There are four cases:
             # 1. Files without either a Object Storage or Tape location are mid transfer
             #    to the Object Store
@@ -973,47 +976,80 @@ class Catalog(DBMixin):
             # 4. Files with a Tape location, but no Object Storage location have been
             #    removed from Object Storage due to space constraints, and will need to
             #    be fetched from Tape on a user GET
-            next_holding = (
-                self.session.query(Holding)
-                .filter(
-                    Transaction.holding_id == Holding.id,
-                    File.transaction_id == Transaction.id,
-                    File.path_type == PathType.FILE,
-                    ~File.locations.any(Location.storage_type == Storage.TAPE),
-                    File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
-                    # tenancy is stored in url_netloc part of Location
-                    File.locations.any(Location.url_netloc == tenancy),
-                )
-                # Order randomly so that if one archive fails, it won't prevent the
-                # others from archiving
-                .order_by(func.random())
-                .first()
+            # 5. As an additional check, we want to delay backup until X hours after the
+            #    last upload, to ensure that files from the most recent transaction(s)
+            #    have completed.  This is passed in as "ingest_deadline", in seconds.
+            #    Convert this to a datetime:
+            ingest_deadline = datetime.now() - timedelta(
+                seconds=ingest_deadline_seconds
             )
+
+            next_holding_q = self.session.query(Holding).filter(
+                Transaction.holding_id == Holding.id,
+                # last ingest activity is longer ago than specified time
+                ~Holding.transactions.any(Transaction.ingest_time > ingest_deadline),
+                # Files that match the Transaction (numerical) id
+                File.transaction_id == Transaction.id,
+                # PathType is a FILE, not a LINK or DIR
+                File.path_type == PathType.FILE,
+                # At least one location does not have a storage type that is TAPE
+                ~File.locations.any(Location.storage_type == Storage.TAPE),
+                # At least one location is OBJECT_STORAGE, i.e. the transfer has
+                # completed
+                File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                # tenancy is stored in url_netloc part of Location
+                File.locations.any(Location.url_netloc == tenancy),
+            )
+            # Order randomly so that if one archive fails, it won't prevent the others
+            # from archiving
+            next_holding = next_holding_q.order_by(func.random()).first()
 
         except (NoResultFound, KeyError):
             raise CatalogError(f"Couldn't get unarchived holdings")
         return next_holding
 
     def get_unarchived_files(
-        self, holding: Holding, with_for_update: bool = False
-    ) -> list[File]:
+        self,
+        holding: Holding,
+        with_for_update: bool = False,
+        limit: int = 100000,
+    ) -> Query:
         """The principal function for getting unarchived files to aggregate and
-        send to archive put."""
+        send to archive put.
+        Limit is put in to reduce the number of files sent to archive to 100000."""
         if self.session is None:
             raise RuntimeError("self.session is None")
         try:
             # Get all files for the given holding. Again we have to ensure that the
             # transfer to object storage has completed and the files are not
             # mid-transfer
-            unarchived_files_q = self.session.query(File).filter(
-                Transaction.holding_id == holding.id,
-                File.transaction_id == Transaction.id,
-                File.path_type == PathType.FILE,
-                ~File.locations.any(Location.storage_type == Storage.TAPE),
-                File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+            unarchived_files_q = (
+                self.session.query(File)
+                .filter(
+                    # Transactions that match the (numerical) Holding id
+                    Transaction.holding_id == holding.id,
+                    # Files that match the Transaction (numerical) id
+                    File.transaction_id == Transaction.id,
+                    # PathType is a FILE, not a LINK or DIR
+                    File.path_type == PathType.FILE,
+                    # At least one storage location is not TAPE
+                    # Note that this could not have any details filled (url, root, etc.)
+                    # as files that are in the process of being sent to tape have an empty
+                    # TAPE storage location created for them.  This prevents them being
+                    # sent to tape again.
+                    ~File.locations.any(Location.storage_type == Storage.TAPE),
+                    # At least one storage location is OBJECT_STORAGE.  This indicates that
+                    # the file has been successfully transferred to object storage.
+                    File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                )
+                .limit(limit)
+            )
+            unarchived_files_q = unarchived_files_q.options(
+                subqueryload(File.locations)
             )
             if with_for_update:
                 unarchived_files_q = unarchived_files_q.with_for_update()
+
         except (NoResultFound, KeyError):
             raise CatalogError(
                 f"Couldn't find unarchived files for holding with id:{holding.id}"
