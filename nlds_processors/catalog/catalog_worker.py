@@ -43,7 +43,7 @@ from nlds.errors import CallbackError
 from nlds_processors.catalog.catalog import Catalog, Transaction, Holding
 from nlds_processors.catalog.catalog_error import CatalogError
 from nlds_processors.catalog.catalog_models import Storage, File
-from nlds.details import PathDetails, PathType
+from nlds.details import PathDetails, PathType, PathLocation
 from nlds_processors.db_mixin import DBError
 
 import nlds.rabbit.routing_keys as RK
@@ -146,6 +146,8 @@ class CatalogConsumer(RMQC):
     _DB_ECHO = "echo"
     _DEFAULT_TENANCY = "default_tenancy"
     _DEFAULT_TAPE_URL = "default_tape_url"
+    _INGEST_DEADLINE = "archive_ingest_deadline"
+    _FILELIST_MAX_LENGTH = "archive_filelist_max_length"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -157,6 +159,8 @@ class CatalogConsumer(RMQC):
         },
         _DEFAULT_TENANCY: None,
         _DEFAULT_TAPE_URL: None,
+        _INGEST_DEADLINE: 86400,  # One day
+        _FILELIST_MAX_LENGTH: 100000,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -164,7 +168,8 @@ class CatalogConsumer(RMQC):
 
         self.default_tape_url = self.load_config_value(self._DEFAULT_TAPE_URL)
         self.default_tenancy = self.load_config_value(self._DEFAULT_TENANCY)
-
+        self.ingest_deadline = self.load_config_value(self._INGEST_DEADLINE)
+        self.filelist_max_length = self.load_config_value(self._FILELIST_MAX_LENGTH)
         self.catalog = None
         self.tapelist = []
 
@@ -1275,9 +1280,14 @@ class CatalogConsumer(RMQC):
             # functions above handled message logging, here we just return
             return
 
-        # Get the next holding in the catalog, by id, which has any unarchived
+        # Get the next Holding in the catalog, by id, which has any unarchived
         # Files, i.e. any files which don't have a tape location
-        next_holding = self.catalog.get_next_unarchived_holding(tenancy)
+        # Filter on Holdings that have not had any ingests for a set period
+        # (typically one day)
+        next_holding = self.catalog.get_next_unarchived_holding(
+            tenancy,
+            self.ingest_deadline,
+        )
 
         # If no holdings left to archive then end the callback
         if not next_holding:
@@ -1287,12 +1297,18 @@ class CatalogConsumer(RMQC):
         # reset completed lists
         self.reset()
         # get the list of unarchived files from that holding
-        filelist = self.catalog.get_unarchived_files(next_holding, with_for_update=True)
+        filelist_q = self.catalog.get_unarchived_files(
+            next_holding,
+            with_for_update=True,
+            limit=self.filelist_max_length,
+        )
+
         # need a list of the created locations as they are now bulk uploaded
         created_locations = []
         # loop over the files and modify the database to have a TAPE storage location
-        for f in filelist:
-            pd = self._filemodel_to_path_details(f)
+        for f in filelist_q:
+            pd = PathDetails.from_filemodel(f)
+            pd.holding_id = next_holding.id
             pl = pd.get_object_store()  # this returns a PathLocation object
             # get the access time of the object store to mirror to tape, or set to now
             # if no access_time present
@@ -1314,15 +1330,20 @@ class CatalogConsumer(RMQC):
                     access_time=access_time,
                     aggregation=None,
                 )
+                # add to bulk commit list
                 created_locations.append(location)
-                # add this to completed list - adding the location
-                pd = self._filemodel_to_path_details(f)
+                # create a PathLocation from this model
+                pl = PathLocation.from_locationmodel(location)
+                # add to existing PathDetails
+                pd.locations.add(pl)
+                # append to the completed list
                 self.completelist.append(pd)
             except CatalogError as e:
                 # In the case of failure, we can just carry on adding files to the
                 # message
                 self.log(e.message, RK.LOG_ERROR)
                 # Keep note of the failure (we're not sending it anywhere currently)
+                # it will have another go later
                 self.failedlist.append(pd)
                 continue
 
@@ -1433,7 +1454,8 @@ class CatalogConsumer(RMQC):
                     # recreate the path location if it was deleted
                     if pl is None:
                         raise CatalogError(
-                            f"No tape location in PathDetails for file {pd.original_path}"
+                            f"No tape location in PathDetails for file "
+                            f"{pd.original_path}"
                         )
                     # get the already created location and update with info from
                     # PathLocation and assign the aggregation
@@ -1507,7 +1529,7 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
-    def _catalog_remove(
+    def _catalog_remove_storage_location(
         self, body: Dict, rk_origin: str, storage_type: Storage
     ) -> None:
         """Remove an empty storage_type storage Location if archive_put has failed."""
@@ -1547,6 +1569,12 @@ class CatalogConsumer(RMQC):
                 f.failure_reason = e.message
                 self.failedlist.append(f)
         else:
+            # files = self.catalog.get_files_from_filelist(
+            #     transaction_id=transaction.transaction_id,
+            #     filelist=path_details_list,
+            #     with_for_update=True,
+            # )
+
             for f in filelist:
                 try:
                     file = self.catalog.get_file(
@@ -1598,7 +1626,7 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
-    def _catalog_del(self, body: Dict, rk_origin: str) -> None:
+    def _catalog_delete_files(self, body: Dict, rk_origin: str) -> None:
         """Remove a given list of files from the catalog if the transfer fails"""
         # Parse the message body for required variables
         try:
@@ -2181,7 +2209,9 @@ class CatalogConsumer(RMQC):
                 if rk_parts[1] == RK.CATALOG_GET:
                     self._catalog_get(body, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_REMOVE:
-                    self._catalog_remove(body, rk_parts[0], Storage.OBJECT_STORAGE)
+                    self._catalog_remove_storage_location(
+                        body, rk_parts[0], Storage.OBJECT_STORAGE
+                    )
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
                     # this catalog update occurs when the file is retrieved from tape
                     self._catalog_update(body, rk_parts[0], create=False)
@@ -2202,7 +2232,7 @@ class CatalogConsumer(RMQC):
                 if rk_parts[1] == RK.CATALOG_PUT:
                     self._catalog_put(body, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_DEL:
-                    self._catalog_del(body, rk_parts[0])
+                    self._catalog_delete_files(body, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
                     self._catalog_update(body, rk_parts[0], create=True)
                 elif rk_parts[1] == RK.CATALOG_SETUP:
@@ -2228,7 +2258,7 @@ class CatalogConsumer(RMQC):
             elif rk_parts[1] == RK.CATALOG_ARCHIVE_UPDATE:
                 self._catalog_archive_update(body, rk_parts[0], Storage.TAPE)
             elif rk_parts[1] == RK.CATALOG_REMOVE:
-                self._catalog_remove(body, rk_parts[0], Storage.TAPE)
+                self._catalog_remove_storage_location(body, rk_parts[0], Storage.TAPE)
 
         # RPC methods follow - don't need to split any routing key for an RPC method
         elif api_method == RK.LIST:
