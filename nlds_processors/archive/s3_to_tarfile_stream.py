@@ -116,24 +116,22 @@ class S3ToTarfileStream(BucketMixin):
 
         # Stream from the S3 Object Store to a tar file that is created using the
         # file_object - this is usually an Adler32File
-        with tarfile.open(mode="w|", fileobj=file_object, bufsize=chunk_size) as tar:
+        with tarfile.open(mode="w", fileobj=file_object, copybufsize=chunk_size) as tar:
             # local versions of the completelist and failedlist
             completelist = []
             failedlist = []
 
-            # write the tar header first
-            self._write_tar_header(tar=tar)
             for path_details in filelist:
                 self.log(
                     f"Streaming file {path_details.path} from object store to tape "
                     f"archive",
                     RK.LOG_DEBUG,
                 )
-                # Attempt to stream the object directly into the tarfile object
-                # NRM - chunk by chunk now
+
+                # Add file info to the tarfile
                 try:
-                    self._stream_write_chunk_by_chunk(
-                        tar=tar, path_details=path_details, chunksize=chunk_size
+                    bucket_name, object_name = self._get_bucket_name_object_name(
+                        path_details
                     )
                 except BucketError as e:
                     reason = str(e)
