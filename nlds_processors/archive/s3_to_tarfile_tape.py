@@ -104,13 +104,9 @@ class S3ToTarfileTape(S3ToTarfileStream):
         self.filelist = filelist
         self.holding_prefix = holding_prefix
 
-        # self._generate_filelist_hash and self._check_files_exist use the member
-        # variables already set and the function definitions are in the parent class
+        # self._generate_filelist_hash uses the member variables already set and the
+        # function definitions are in the parent class
         self.filelist_hash = self._generate_filelist_hash()
-        completelist, failedlist = self._check_files_exist()
-        if len(failedlist) > 0:
-            return [], failedlist, "", 0
-
         # Make or find holding folder on the tape server
         status, _ = self.tape_client.mkdir(self.holding_tapepath, MkDirFlags.MAKEPATH)
         if status.status != 0:

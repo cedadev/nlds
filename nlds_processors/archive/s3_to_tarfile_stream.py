@@ -104,90 +104,6 @@ class S3ToTarfileStream(BucketMixin):
         filelist_hash = shake_256("".join(filenames).encode()).hexdigest(8)
         return filelist_hash
 
-    def _check_files_exist(self):
-        # Need to optimise this as it takes a long time to loop over the number of files
-        # that might be in an aggregation (up to 100000!)
-        # The trouble is that the files might be in different buckets, but we only want
-        # to do one stat / list on a bucket if we can get away with it.
-        # Do this by building a dictionary with:
-        # {key= the bucket name, value= the list of bucket contents as the value}
-        failed_list = []
-        bucket_dict = {}
-        for path_details in self.filelist:
-            try:
-                check_bucket, check_object = self._get_bucket_name_object_name(
-                    path_details
-                )
-            except BucketError as e:
-                path_details.failure_reason = (
-                    "Could not unpack bucket and object info from path_details"
-                )
-                failed_list.append(path_details)
-                continue
-            # list the bucket contents into the dictionary if not already done
-            if not check_bucket in bucket_dict:
-                try:
-                    # Check the bucket exists
-                    if not self._bucket_exists(check_bucket):
-                        path_details.failure_reason = (
-                            f"Bucket {check_bucket} does not exist when attempting to "
-                            f"write to tape."
-                        )
-                        failed_list.append(path_details)
-                        continue
-                except (BucketError, MaxRetryError) as e:
-                    path_details.failure_reason = (
-                        f"Could not verify that bucket {check_bucket} exists before "
-                        f"writing to tape. Original exception: {e}"
-                    )
-                    failed_list.append(path_details)
-                    continue
-                try:
-                    results = self.s3_client.list_objects(check_bucket, recursive=True)
-                    # convert results into list of files and sizes
-                    for r in results:
-                        name = r.object_name
-                        size = r.size
-                        print(name, size)
-                        bucket_dict[check_bucket] = (name, size)
-
-                except (S3Error, HTTPError) as e:
-                    path_details.failure_reason = (
-                        f"Could not verify file {check_bucket}:{check_object} exists "
-                        f"before writing to tape. Original exception {e}."
-                    )
-                    failed_list.append(path_details)
-                    continue
-            # try:
-            #     # Check that the object is in the bucket and the names match
-            #     obj_stat_result = self.s3_client.stat_object(check_bucket, check_object)
-            #     if check_object != obj_stat_result.object_name:
-            #         path_details.failure_reason = (
-            #             f"Could not verify file {check_bucket}:{check_object} before "
-            #             f"writing to tape. File name differs between original name and "
-            #             f"object name."
-            #         )
-            #         failed_list.append(path_details)
-            #         continue
-            #     # Check that the size matches
-            #     if path_details.size != obj_stat_result.size:
-            #         path_details.failure_reason = (
-            #             f"Could not verify file {check_bucket}:{check_object} before "
-            #             f"writing to tape. File size differs between original size and "
-            #             f"object size."
-            #         )
-            #         failed_list.append(path_details)
-            #         continue
-            # except (S3Error, HTTPError) as e:
-            #     path_details.failure_reason = (
-            #         f"Could not verify file {check_bucket}:{check_object} exists "
-            #         f"before writing to tape. Original exception {e}."
-            #     )
-            #     failed_list.append(path_details)
-            #     continue
-        raise SystemExit
-        return [], failed_list
-
     def _stream_to_fileobject(
         self,
         file_object,
@@ -234,15 +150,34 @@ class S3ToTarfileStream(BucketMixin):
                     # Adds bytes to xrd.File from result, one chunk_size at a time
                     tar.addfile(tar_info, fileobj=stream)
 
-                except (HTTPError, S3Error) as e:
-                    # Catch error, add to failed list
-                    reason = (
-                        f"Stream-time exception occurred: " f"{type(e).__name__}: {e}"
-                    )
+                except S3Error as e:
+                    # Object not found on Object Store
+                    reason = "Error archiving: "
+                    if e.code == "NoSuchKey":
+                        reason += (
+                            f"file not found: {path_details.path} "
+                            f"{type(e).__name__}: {e.code}"
+                        )
+                    elif e.code == "NoSuchBucket":
+                        reason += (
+                            f"bucket not found: {bucket_name}. "
+                            f"{type(e).__name__}: {e.code}"
+                        )
+                    else:
+                        reason += f"{type(e).__name__}: {e.code}"
                     self.log(f"{reason}", RK.LOG_ERROR)
                     # Retries have gone, replaced by straight failure
                     path_details.failure_reason = reason
                     failedlist.append(path_details)
+
+                except HTTPError as e:
+                    # Catch error, add to failed list
+                    reason = f"Error archiving: {type(e).__name__}: {e}"
+                    self.log(f"{reason}", RK.LOG_ERROR)
+                    # Retries have gone, replaced by straight failure
+                    path_details.failure_reason = reason
+                    failedlist.append(path_details)
+
                 else:
                     # Log successful
                     self.log(f"Successfully archived {path_details.path}", RK.LOG_DEBUG)
@@ -253,6 +188,7 @@ class S3ToTarfileStream(BucketMixin):
                     except AttributeError:
                         # If it can't be closed then dw
                         pass
+
         return completelist, failedlist, file_object.checksum
 
     def _stream_to_s3object(
