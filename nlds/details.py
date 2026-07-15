@@ -344,7 +344,11 @@ class PathDetails(BaseModel):
         if pl is None:
             return None
         else:
-            bucket_name = f"nlds.{pl.root}"
+            # this is a weird error, but it must have been added twice somewhere
+            if pl.root[0:5] == "nlds.":
+                bucket_name = f"{pl.root}"
+            else:
+                bucket_name = f"nlds.{pl.root}"
             return bucket_name
 
     @property
