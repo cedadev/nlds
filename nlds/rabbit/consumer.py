@@ -685,12 +685,13 @@ class RabbitMQConsumer(ABC, RMQP):
                 self.loop = False
 
             # if the loop reaches this point then the consuming has stopped
-            # Wait for all threads to complete
+            # If any threads are running then wait for all threads to complete
+            # (threads are not currently used)
             # TODO: what happens if we try to sigterm?
             for t in self.threads:
                 t.join()
 
-            if self.channel:
+        if self.connection and self.connection.is_open:
+            if self.channel and self.channel.is_open:
                 self.channel.stop_consuming()
-            if self.connection:
-                self.connection.close()
+            self.connection.close()
