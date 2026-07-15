@@ -80,6 +80,25 @@ class Catalog(DBMixin):
             holding = holding_q.first()
         return holding
 
+    def get_holding_from_id(self, holding_id: int):
+        """
+        Fast method to get a single holding from the catalog database, using the
+        holding_id
+        """
+        if self.session is None:
+            raise RuntimeError("self.session is None")
+
+        holding_q = self.session.query(Holding)
+        try:
+            # holding id is unique, so we only have to use that in the query
+            holding_q = holding_q.filter(
+                Holding.id == holding_id,
+            )
+        except NoResultFound as e:
+            msg = f"Holding with holding_id:{holding_id} not found."
+            raise CatalogError(msg)
+        return holding_q.one_or_none()
+
     def get_holding(
         self,
         user: str,

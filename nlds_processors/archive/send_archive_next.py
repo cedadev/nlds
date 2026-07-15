@@ -24,7 +24,14 @@ import nlds.rabbit.message_keys as MSG
 
 
 @click.command()
-def send_archive_next():
+@click.option(
+    "-h",
+    "--holding_id",
+    default=None,
+    type=int,
+    help="The numeric id of an existing holding to put the file into.",
+)
+def send_archive_next(holding_id: int):
     CRONJOB_CONFIG_SECTION = "cronjob_publisher"
     DEFAULT_CONFIG = {
         MSG.ACCESS_KEY: None,
@@ -60,6 +67,10 @@ def send_archive_next():
         },
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
+    # add the holding id if it exists
+    if holding_id:
+        msg_dict[MSG.META][MSG.HOLDING_ID] = holding_id
+
     routing_key = f"{RK.ROOT}.{RK.CATALOG_ARCHIVE_NEXT}.{RK.START}"
 
     click.echo(f"Sending message to {routing_key}: \n{json.dumps(msg_dict, indent=4)}")

@@ -1276,6 +1276,7 @@ class CatalogConsumer(RMQC):
         for aggregating to the Archive Put process."""
         try:
             tenancy = self._parse_tenancy(body)
+            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1284,10 +1285,13 @@ class CatalogConsumer(RMQC):
         # Files, i.e. any files which don't have a tape location
         # Filter on Holdings that have not had any ingests for a set period
         # (typically one day)
-        next_holding = self.catalog.get_next_unarchived_holding(
-            tenancy,
-            self.ingest_deadline,
-        )
+        if holding_id:
+            next_holding = self.catalog.get_holding_from_id(holding_id)
+        else:
+            next_holding = self.catalog.get_next_unarchived_holding(
+                tenancy,
+                self.ingest_deadline,
+            )
 
         # If no holdings left to archive then end the callback
         if not next_holding:
