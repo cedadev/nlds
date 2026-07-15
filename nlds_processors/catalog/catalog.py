@@ -580,7 +580,7 @@ class Catalog(DBMixin):
         transaction_id: str,
         filelist: list[PathDetails],
         with_for_update: bool = False,
-    ) -> list[File]:
+    ) -> Query[File]:
         """Get a list of file models from a transaction, where the original path
         matches the original path in the PathDetails, given a transaction and a list of
         PathDetails.
@@ -626,7 +626,8 @@ class Catalog(DBMixin):
         regex: bool = False,
         limit: int = None,
         descending: bool = False,
-    ) -> list:
+        with_for_update=False,
+    ) -> Query[File]:
         """Get a multitude of file details from the catalog database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
         if self.session is None:
@@ -679,6 +680,9 @@ class Catalog(DBMixin):
                 result = file_q.limit(limit)
             else:
                 result = file_q
+
+            if with_for_update:
+                result = result.with_for_update()
 
         except (IntegrityError, OperationalError) as e:
             err_msg = f"Error in catalog.get_files, reason: {e}"

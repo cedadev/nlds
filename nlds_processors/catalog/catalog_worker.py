@@ -884,8 +884,7 @@ class CatalogConsumer(RMQC):
                             self.log(
                                 f"Reassigning {pl.storage_type} for file "
                                 f"{pd.original_path} to matching url_scheme: "
-                                f"{pl.url_scheme} and "
-                                f"url_netloc: {pl.url_netloc}",
+                                f"{pl.url_scheme} and url_netloc: {pl.url_netloc}",
                                 RK.LOG_WARNING,
                             )
                         else:
@@ -1478,7 +1477,8 @@ class CatalogConsumer(RMQC):
                         access_time = datetime.now()
                     else:
                         access_time = datetime.fromtimestamp(pl.access_time)
-
+                    # modify location as it has been created when the tape backup was
+                    # scheduled by catalog_archive_next
                     self.catalog.modify_location(
                         location,
                         url_scheme=pl.url_scheme,
@@ -1488,10 +1488,10 @@ class CatalogConsumer(RMQC):
                         access_time=access_time,
                         aggregation_id=aggregation.id,
                     )
+                    # defer update to do as a bulk update later
                     modify_location_list.append(location)
                     self.catalog.defer(location)
                     self.completelist.append(pd)
-
                 except CatalogError as e:
                     # the file wasn't found or the location couldn't be created
                     pd.failure_reason = e.message
@@ -1503,7 +1503,7 @@ class CatalogConsumer(RMQC):
             # modifications followed by a safety commit later
             if len(modify_location_list) > 0:
                 self.catalog.bulk_commit(modify_location_list)
-
+        # catch any other commits
         self.catalog.commit()
 
         if len(self.completelist) > 0:
@@ -1562,52 +1562,69 @@ class CatalogConsumer(RMQC):
         self.reset()
 
         # convert the JSON filelist into a list of PathDetails
-        filelist = [PathDetails.from_dict(f) for f in filelist_]
+        path_details_list = [PathDetails.from_dict(f) for f in filelist_]
 
         try:
-            holding = self._get_holding_with_retry(
+            # check the holding exists
+            _ = self._get_holding_with_retry(
                 user, group, holding_id=holding_id, with_for_update=True
             )
         except CatalogError as e:
-            for f in filelist:
+            for f in path_details_list:
                 f.failure_reason = e.message
                 self.failedlist.append(f)
         else:
-            # files = self.catalog.get_files_from_filelist(
-            #     transaction_id=transaction.transaction_id,
-            #     filelist=path_details_list,
-            #     with_for_update=True,
-            # )
-
-            for f in filelist:
+            # get the files from the holding
+            results = self.catalog.get_files(
+                user=user,
+                group=group,
+                holding_id=holding_id,
+                filelist=path_details_list,
+                with_for_update=True,
+            )
+            # returned results are Files, Transactions, Holdings
+            files_to_commit = []
+            for res in results:
+                file = res.File
+                pd = PathDetails.from_filemodel(file)
                 try:
-                    file = self.catalog.get_file(
-                        holding_id=holding_id,
-                        original_path=f.original_path,
-                        with_for_update=True,
-                    )
-                    loc = self.catalog.get_location(
-                        file, storage_type, with_for_update=True
-                    )
+                    # delete location - get it first via loop on locations
+                    loc = None
+                    for l in file.locations:
+                        if l.storage_type == storage_type:
+                            loc = l
+                            break
                     # delete location if all details are empty
-                    if loc is not None and loc.storage_type == storage_type:
+                    if loc:
                         if (
                             loc.url_scheme == ""
                             and loc.url_netloc == ""
                             and loc.root == ""
                         ):
-                            self.catalog.delete_location(file, storage_type)
-                            self.completelist.append(f)
-                        else:
-                            f.failure_reason = (
-                                f"{str(storage_type.name)} location not empty details"
+                            self.catalog.delete_location(
+                                file=file, storage_type=storage_type
                             )
-                            self.failedlist.append(f)
+                            # defer update to do bulk commit later
+                            files_to_commit.append(file)
+                            self.catalog.defer(file)
+                            # add PathDetails to completed list
+                            self.completelist.append(pd)
+                        else:
+                            pd.failure_reason = (
+                                f"{str(storage_type.name)} location has existing "
+                                f"non-empty details"
+                            )
+                            self.failedlist.append(pd)
 
                 except (CatalogError, IndexError) as e:
-                    f.failure_reason = e.message
-                    self.failedlist.append(f)
-            # commit
+                    pd.failure_reason = e.message
+                    self.failedlist.append(pd)
+
+            # bulk commit to DB
+            if len(files_to_commit) > 0:
+                self.catalog.bulk_commit(files_to_commit)
+
+            # catch any other commits
             self.catalog.commit()
 
         if len(self.completelist) > 0:
@@ -1685,6 +1702,11 @@ class CatalogConsumer(RMQC):
                 self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
+
+        # bulk commit to DB
+        if len(files_to_commit) > 0:
+            self.catalog.bulk_commit(files_to_commit)
+
         self.catalog.commit()
 
         # log the successful and non-successful catalog dels
@@ -2214,7 +2236,9 @@ class CatalogConsumer(RMQC):
                     self._catalog_get(body, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_REMOVE:
                     self._catalog_remove_storage_location(
-                        body, rk_parts[0], Storage.OBJECT_STORAGE
+                        body,
+                        rk_parts[0],
+                        Storage.OBJECT_STORAGE,
                     )
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
                     # this catalog update occurs when the file is retrieved from tape
@@ -2262,7 +2286,11 @@ class CatalogConsumer(RMQC):
             elif rk_parts[1] == RK.CATALOG_ARCHIVE_UPDATE:
                 self._catalog_archive_update(body, rk_parts[0], Storage.TAPE)
             elif rk_parts[1] == RK.CATALOG_REMOVE:
-                self._catalog_remove_storage_location(body, rk_parts[0], Storage.TAPE)
+                self._catalog_remove_storage_location(
+                    body,
+                    rk_parts[0],
+                    Storage.TAPE,
+                )
 
         # RPC methods follow - don't need to split any routing key for an RPC method
         elif api_method == RK.LIST:
