@@ -261,20 +261,17 @@ class RabbitMQConsumer(ABC, RMQP):
         return filelist
 
     def dedup_filelist(self, filelist: List[PathDetails]) -> List[PathDetails]:
-        """De-duplicate filelist"""
-        new_filelist = []
-        pathlist = []
-        for pd in filelist:
-            if not pd.original_path in pathlist:
-                new_filelist.append(pd)
-                pathlist.append(pd.original_path)
-
+        """De-duplicate filelist - just use sets as they are way quicker
+        Needs __eq__ method defined for PathDetails"""
+        new_filelist = list(set(filelist))
         return new_filelist
 
-    def create_sub_id(self, filelist: List[PathDetails]) -> List[PathDetails]:
+    def create_sub_id(self, filelist: List[PathDetails]) -> str:
         """Sub id is now created by hashing the paths from the filelist"""
         if filelist != []:
             filenames = [f.original_path for f in filelist]
+            # sort the filenames to ensure hashes match!
+            filenames.sort()
             filelist_hash = md5("".join(filenames).encode()).hexdigest()
             sub_id = UUID(filelist_hash)
         else:
@@ -347,11 +344,20 @@ class RabbitMQConsumer(ABC, RMQP):
 
     def send_complete(
         self,
-        routing_key: str,
+        rk_parts: List[str],
         body_json: Dict[str, Any],
     ):
         body_json[MSG.DETAILS][MSG.STATE] = State.COMPLETE
-        monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
+        monitoring_rk = ".".join([rk_parts[0], RK.MONITOR_PUT, RK.START])
+        self.publish_message(monitoring_rk, body_json)
+
+    def send_failed(
+        self,
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+    ):
+        body_json[MSG.DETAILS][MSG.STATE] = State.FAILED
+        monitoring_rk = ".".join([rk_parts[0], RK.MONITOR_PUT, RK.START])
         self.publish_message(monitoring_rk, body_json)
 
     def setup_logging(
@@ -547,6 +553,8 @@ class RabbitMQConsumer(ABC, RMQP):
         try:
             self.callback(ch, method, properties, body, connection)
         except Exception as e:
+            # nack the message so it is sent again
+            self.nack_message(ch, method.delivery_tag, connection)
             raise Exception("Unhandled exception " + str(e))
         else:
             # NRM - changed back to acknowledge the message after processing
@@ -677,12 +685,13 @@ class RabbitMQConsumer(ABC, RMQP):
                 self.loop = False
 
             # if the loop reaches this point then the consuming has stopped
-            # Wait for all threads to complete
+            # If any threads are running then wait for all threads to complete
+            # (threads are not currently used)
             # TODO: what happens if we try to sigterm?
             for t in self.threads:
                 t.join()
 
-            if self.channel:
+        if self.connection and self.connection.is_open:
+            if self.channel and self.channel.is_open:
                 self.channel.stop_consuming()
-            if self.connection:
-                self.connection.close()
+            self.connection.close()

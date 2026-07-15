@@ -10,7 +10,7 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError, NoResultFound
-from sqlalchemy.orm import joinedload, lazyload
+from sqlalchemy.orm import subqueryload
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -68,6 +68,7 @@ class Monitor(DBMixin):
         group: str,
         idd: int = None,
         transaction_id: str = None,
+        job_label: str = None,
         with_for_update: bool = False,
     ) -> TransactionRecord:
         """Fast version of get_transaction_record for internal messaging"""
@@ -77,10 +78,15 @@ class Monitor(DBMixin):
                 trec_q = self.session.query(TransactionRecord).filter(
                     TransactionRecord.id == idd
                 )
-            else:
+            elif transaction_id:
                 trec_q = self.session.query(TransactionRecord).filter(
                     TransactionRecord.transaction_id == transaction_id,
                 )
+            elif job_label:
+                trec_q = self.session.query(TransactionRecord).filter(
+                    TransactionRecord.job_label == job_label,
+                )
+
             # filter on user and group
             trec_q = trec_q.filter(
                 TransactionRecord.group == group, TransactionRecord.user == user
@@ -91,16 +97,24 @@ class Monitor(DBMixin):
                 trec = trec_q.one()
         except (NoResultFound, KeyError, OperationalError):
             if idd:
-                raise MonitorError(f"TransactionRecord with id:{idd} not found")
+                raise MonitorError(
+                    f"TransactionRecord with id:{idd} not found for user:{user} and "
+                    f"group:{group}"
+                )
             elif transaction_id:
                 raise MonitorError(
-                    f"TransactionRecord with transaction_id:{transaction_id} "
-                    f"not found"
+                    f"TransactionRecord with transaction_id:{transaction_id} not found "
+                    f"for user:{user} and group:{group}"
                 )
             else:
                 raise MonitorError(
                     f"No TransactionRecords found for user:{user} and group:{group}"
                 )
+        except Exception as e:
+            if self.session:
+                self.session.rollback()
+            raise e
+
         return trec
 
     def get_transaction_records(
@@ -114,15 +128,15 @@ class Monitor(DBMixin):
         exclude_api_action: list[str] = None,
         job_label: str = None,
         regex: bool = False,
+        state: list[State] = None,
         limit: int = None,
+        offset: int = None,
         descending: bool = False,
     ) -> list:
         """Gets a list of TransactionRecords from the DB from the given a whole host of
         information.  Only used for user queries.
         This function is only used via user interaction.
-        NRM - 16/03/2026.  Removed the joinedload on the transaction query as it made
-        everything about 5 times slower!"""
-
+        """
         if transaction_id:
             transaction_search = transaction_id
             transaction_regex = False
@@ -175,8 +189,17 @@ class Monitor(DBMixin):
             else:
                 trec_q = trec_q.order_by(TransactionRecord.creation_time)
 
-            # limit for speed - but how many sub-records (where the api-action is
-            # stored)
+            # Filter on any sub record having the required state
+            # I think this is probably good enough to cut down a lot of extra CPU time
+            if state:
+                trec_q = trec_q.filter(
+                    TransactionRecord.sub_records.any(SubRecord.state.in_(state))
+                )
+
+            # offset and limit for speed and paging
+            if offset:
+                trec_q = trec_q.offset(offset)
+
             if limit:
                 trec_q = trec_q.limit(limit)
 
@@ -205,8 +228,40 @@ class Monitor(DBMixin):
                 raise MonitorError(f"Invalid regular expression: {transaction_search}")
             else:
                 raise MonitorError(f"Error getting transaction_record: {e}")
-        trec_q = trec_q.options(joinedload(TransactionRecord.sub_records))
+        # load the sub-records and the warnings.  This speeds things up for the loops
+        # over the sub-records and warnings.
+        trec_q = trec_q.options(subqueryload(TransactionRecord.sub_records))
+        trec_q = trec_q.options(subqueryload(TransactionRecord.warnings))
         return trec_q
+
+    def delete_transaction_record(
+        self,
+        user: str,
+        group: str,
+        idd: int = None,
+        job_label: str = None,
+        transaction_id: str = None,
+    ) -> None:
+        """Delete a transaction record."""
+        try:
+            trec = self.get_transaction_record(
+                user,
+                group,
+                idd=idd,
+                transaction_id=transaction_id,
+                job_label=job_label,
+                with_for_update=True,
+            )
+            for srec in trec.sub_records:
+                self.session.delete(srec)
+            self.session.delete(trec)
+            self.commit()
+        except (IntegrityError, KeyError, OperationalError) as e:
+            err_msg = (
+                f"Transaction with transaction_id:{transaction_id} could not be "
+                f"deleted from the monitor. Reason: {e._message}"
+            )
+            raise MonitorError(err_msg)
 
     def create_sub_record(
         self, transaction_record: TransactionRecord, sub_id: str, state: State = None
@@ -270,10 +325,11 @@ class Monitor(DBMixin):
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
             )
+            # pre-load the failed files
+            srec_q = srec_q.options(subqueryload(SubRecord.failed_files))
             if with_for_update:
                 srec = srec_q.with_for_update().one()
             else:
-                srec = srec.options(joinedload(SubRecord.failed_files))
                 srec = srec_q.one()
         except (IntegrityError, IndexError, NoResultFound):
             raise MonitorError(f"SubRecord with sub_id:{sub_id} not found")
@@ -296,7 +352,7 @@ class Monitor(DBMixin):
             query = self.session.query(SubRecord).filter(
                 SubRecord.transaction_record_id == transaction_record.id
             )
-            query = query.options(joinedload(SubRecord.failed_files))
+            query = query.options(subqueryload(SubRecord.failed_files))
 
             # apply filters one at a time if present. Results in a big 'and' query
             # of the passed flags

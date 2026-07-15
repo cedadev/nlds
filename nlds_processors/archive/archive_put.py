@@ -99,7 +99,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             )
 
         if len(self.failedlist) > 0:
-            # Send message back to worker so catalog can be scrubbed of failed puts
+            # Send message back to worker so catalog can be scrubbed of tape records
+            # for failed puts
             self.send_pathlist(
                 self.failedlist,
                 rk_failed,

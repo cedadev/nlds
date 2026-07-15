@@ -215,12 +215,20 @@ class Location(CatalogBase):
         url = f"{}
         """
         if self.storage_type == Storage.OBJECT_STORAGE:
+            # this is a bit of a weird hack, but it mirrors that in PathDetails as well
+            # check if `nlds.` already prepended to the root (bucket) and, if not, then
+            # add it to the root / bucket
+            if self.root[0:5] == "nlds.":
+                bucket = self.root
+            else:
+                bucket = "nlds." + self.root
+
             # only object storage returns a URL
             return urlunsplit(
                 (
                     self.url_scheme,
                     self.url_netloc,
-                    f"nlds.{self.root}/{self.path}",
+                    f"{bucket}/{self.path}",
                     "",
                     "",
                 )

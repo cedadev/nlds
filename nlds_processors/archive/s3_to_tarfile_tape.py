@@ -104,13 +104,9 @@ class S3ToTarfileTape(S3ToTarfileStream):
         self.filelist = filelist
         self.holding_prefix = holding_prefix
 
-        # self._generate_filelist_hash and self._check_files_exist use the member
-        # variables already set and the function definitions are in the parent class
+        # self._generate_filelist_hash uses the member variables already set and the
+        # function definitions are in the parent class
         self.filelist_hash = self._generate_filelist_hash()
-        completelist, failedlist = self._check_files_exist()
-        if len(failedlist) > 0:
-            return [], failedlist, "", 0
-
         # Make or find holding folder on the tape server
         status, _ = self.tape_client.mkdir(self.holding_tapepath, MkDirFlags.MAKEPATH)
         if status.status != 0:
@@ -245,7 +241,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # tarfilelist is a list of strings, which is fine for XRootD >= 5.6,
         # but for versions < 5.5.5 the list of tar names need to be encoded as bytes,
         # from the utf-8 string, e.g. tar_list = [i.decode("utf_8") for i in tar_list]
-        # shouldn't be neccessary for us, though!
+        # shouldn't be necessary for us, though!
         if len(tarfilelist) == 0:
             # trap this as it causes a seg-fault if it is passed to XRD.prepare
             raise S3StreamError("tarfilelist is empty in prepare_request")

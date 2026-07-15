@@ -60,7 +60,7 @@ class GetTransferConsumer(BucketTransferConsumer):
                 raise TransferError(msg)
             if not self.check_path_access(target_path, access=os.W_OK):
                 msg = (
-                    f"Unable to copy, target path {target_path} is inaccessible."
+                    f"Unable to copy, target path {target_path} is inaccessible. "
                     f"Please check the permissions of the path."
                 )
                 self.log(msg, RK.LOG_ERROR)

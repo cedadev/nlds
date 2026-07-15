@@ -87,6 +87,18 @@ class PathLocation(BaseModel):
             access_time=dictionary["access_time"],
         )
 
+    @classmethod
+    def from_locationmodel(cls, location: BaseModel):
+        pl = cls()
+        pl.storage_type = location.storage_type.to_json()
+        pl.url_scheme = location.url_scheme
+        pl.url_netloc = location.url_netloc
+        pl.root = location.root
+        pl.path = location.path
+        pl.access_time = location.access_time.timestamp()
+        pl.aggregation_id = location.aggregation_id
+        return pl
+
     @property
     def url(self):
         return urlparse.urlunparse(
@@ -220,15 +232,8 @@ class PathDetails(BaseModel):
 
         # copy the storage locations
         pd.locations = PathLocations()
-        for fl in file.locations:
-            pl = PathLocation()
-            pl.storage_type = fl.storage_type.to_json()
-            pl.url_scheme = fl.url_scheme
-            pl.url_netloc = fl.url_netloc
-            pl.root = fl.root
-            pl.path = fl.path
-            pl.access_time = fl.access_time.timestamp()
-            pl.aggregation_id = fl.aggregation_id
+        for location in file.locations:
+            pl = PathLocation.from_locationmodel(location)
             pd.locations.add(pl)
 
         return pd
@@ -339,7 +344,11 @@ class PathDetails(BaseModel):
         if pl is None:
             return None
         else:
-            bucket_name = f"nlds.{pl.root}"
+            # this is a weird error, but it must have been added twice somewhere
+            if pl.root[0:5] == "nlds.":
+                bucket_name = f"{pl.root}"
+            else:
+                bucket_name = f"nlds.{pl.root}"
             return bucket_name
 
     @property

@@ -21,7 +21,6 @@ import nlds.rabbit.statting_consumer as RMQSC
 from nlds.details import PathDetails
 from nlds_processors.index import IndexerConsumer
 import nlds.server_config as CFG
-from nlds_utils.generate_server_config import generate_server_config
 
 
 def mock_load_config(template_config):
@@ -200,3 +199,60 @@ def test_check_path_access(monkeypatch, default_indexer):
         default_indexer.check_path_access(None)
         default_indexer.check_path_access("test_file.py")
         default_indexer.check_path_access(1)
+
+
+def __print_list(prefix: str, in_list: list[PathDetails]):
+    print(f"{prefix:8} : {str(", ".join(f.original_path for f in in_list))}")
+
+
+def test_index_filter():
+    idx_c = IndexerConsumer()
+    # first test - should return just the path `/Users/nrmassey/animals`
+    test_1_paths = [
+        PathDetails(original_path="/Users/nrmassey/animals/rabbit.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals"),
+    ]
+    filtered_list = idx_c._filter(test_1_paths)
+    assert len(filtered_list) == 1
+
+    # second test - should return the two paths
+    test_2_paths = [
+        PathDetails(original_path="/Users/nrmassey/animals/rabbit.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/fox.txt"),
+    ]
+    filtered_list = idx_c._filter(test_2_paths)
+    assert len(filtered_list) == 2
+
+    # third test - should return just parent directory ../animals
+    test_3_paths = [
+        PathDetails(original_path="/Users/nrmassey/animals/"),
+        PathDetails(original_path="/Users/nrmassey/animals/wild/fox.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/wild/rabbit.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/farm/cow.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/farm/sheep.txt"),
+    ]
+    filtered_list = idx_c._filter(test_3_paths)
+    assert len(filtered_list) == 1
+
+    # fourth test - should return the ../wild and ../farm directories
+    test_4_paths = [
+        PathDetails(original_path="/Users/nrmassey/animals/wild"),
+        PathDetails(original_path="/Users/nrmassey/animals/wild/fox.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/wild/rabbit.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/farm/cow.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/farm/sheep.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/farm"),
+    ]
+    filtered_list = idx_c._filter(test_4_paths)
+    assert len(filtered_list) == 2
+
+    # fifth test - should return just the ../animals directory
+    test_5_paths = [
+        PathDetails(original_path="/Users/nrmassey/animals/farm/sheep.txt"),
+        PathDetails(original_path="/Users/nrmassey/animals/wild"),
+        PathDetails(original_path="/Users/nrmassey/animals/farm"),
+        PathDetails(original_path="/Users/nrmassey/animals"),
+        PathDetails(original_path="/Users/nrmassey/animals/farm/goose.txt"),
+    ]
+    filtered_list = idx_c._filter(test_5_paths)
+    assert len(filtered_list) == 1

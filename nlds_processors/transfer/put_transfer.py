@@ -88,9 +88,12 @@ class PutTransferConsumer(BucketTransferConsumer):
             if not self.check_path_exists(item_path):
                 reason = f"Path:{path_details.path} does not exist."
                 failure = True
-
-            if not self.check_path_access(item_path):
-                reason = f"Path:{path_details.path} is inaccessible."
+            # we want the first message to have precedence, hence the elif
+            elif not self.check_path_access(item_path):
+                reason = (
+                    f"Path:{path_details.path} is inaccessible.  Please check the "
+                    f"permissions of the path."
+                )
                 failure = True
 
             if failure:
@@ -133,9 +136,7 @@ class PutTransferConsumer(BucketTransferConsumer):
                     state=State.TRANSFER_PUTTING,
                 )
             except (HTTPError, MaxRetryError, PermissionError) as e:
-                reason = (
-                    f"Error uploading {path_details.path} to object " f"store: {e}."
-                )
+                reason = f"Error uploading {path_details.path} to object store: {e}."
                 self.log(f"{reason} Adding to failed list.", RK.LOG_ERROR)
                 path_details.failure_reason = reason
                 self.append_and_send(

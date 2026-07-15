@@ -9,7 +9,6 @@ __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-import json
 from typing import List, Dict, Tuple
 
 # Typing imports
@@ -20,9 +19,11 @@ from pika.frame import Header
 
 # NLDS imports
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
+from nlds.rabbit.rpc_publisher import RabbitMQRPCPublisher
 from nlds.rabbit.state import State
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
+import asyncio
 
 
 class NLDSWorkerConsumer(RMQC):
@@ -37,6 +38,8 @@ class NLDSWorkerConsumer(RMQC):
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
+        self.rpc_publisher = RabbitMQRPCPublisher()
+        self.rpc_publisher.get_connection()
 
     def _process_message(
         self, method: Method, body: bytes, properties: Header
@@ -166,12 +169,13 @@ class NLDSWorkerConsumer(RMQC):
         )
         self.publish_and_log_message(new_routing_key, body_json)
 
-    def _process_rk_transfer_get_complete(self, body_json: Dict) -> None:
+    def _process_rk_transfer_get_complete(
+        self, rk_parts: List[str], body_json: Dict
+    ) -> None:
         # After a successful TRANSFER_GET, the sub records in the Monitor need to be
         # notified that they have complete
 
-        new_routing_key = ".".join([RK.ROOT, RK.TRANSFER_GET, RK.COMPLETE])
-        self.send_complete(new_routing_key, body_json)
+        self.send_complete(rk_parts, body_json)
 
     def _process_rk_transfer_put_failed(self, body_json: Dict) -> None:
         self.log(
@@ -179,7 +183,6 @@ class NLDSWorkerConsumer(RMQC):
             "for deletion",
             RK.LOG_INFO,
         )
-
         queue = f"{RK.CATALOG_DEL}"
         new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.log(
@@ -190,8 +193,9 @@ class NLDSWorkerConsumer(RMQC):
 
     def _process_rk_catalog_get_complete(self, rk_parts: List, body_json: Dict) -> None:
         # forward confirmation to monitor
-        self.log(f"Sending message to {RK.MONITOR} queue", RK.LOG_INFO)
-        new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
+        queue = f"{RK.MONITOR_PUT}"
+        self.log(f"Sending message to {queue} queue", RK.LOG_INFO)
+        new_routing_key = ".".join([RK.ROOT, queue, RK.START])
         self.publish_and_log_message(new_routing_key, body_json)
 
         # forward to transfer_get
@@ -233,14 +237,23 @@ class NLDSWorkerConsumer(RMQC):
             # For the PUT and PUTLIST method, this is the final state - i.e. the catalog
             # is updated to contain the new Object Store path
             elif api_method == RK.PUT or api_method == RK.PUTLIST:
-                new_routing_key = ".".join([RK.ROOT, RK.CATALOG_UPDATE, RK.COMPLETE])
-                self.send_complete(new_routing_key, body_json)
+                self.send_complete(rk_parts, body_json)
 
         except KeyError:
             self.log(
                 f"Message did not contain an appropriate api_action.",
                 RK.LOG_ERROR,
             )
+
+    def _process_rk_catalog_delete_complete(
+        self, rk_parts: List, body_json: Dict
+    ) -> None:
+        # after a catalog delete (which removes failed files from the catalog) we need
+        # to indicate to the monitor that the deletion has completed
+        # however (and this is a bit weird) - we need to indicate that it FAILED.
+        # all files in this message will have a failure_reason and, for the monitor to
+        # tag this as a failed sub-id, we need to send a FAILED message
+        self.send_failed(rk_parts, body_json)
 
     def _process_rk_catalog_get_archive_restore(
         self, rk_parts: List, body_json: Dict
@@ -329,8 +342,7 @@ class NLDSWorkerConsumer(RMQC):
         self, rk_parts: List, body_json: Dict
     ) -> None:
         # forward confirmation to monitor
-        new_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.START])
-        self.send_complete(new_routing_key, body_json)
+        self.send_complete(rk_parts, body_json)
 
     def _process_rk_archive_put_failed(self, body_json: Dict) -> None:
         self.log(
@@ -346,6 +358,86 @@ class NLDSWorkerConsumer(RMQC):
             RK.LOG_INFO,
         )
         self.publish_and_log_message(new_routing_key, body_json)
+
+    def _process_rk_cancel(self, body_json: Dict, properties: Header) -> None:
+        """Cancel a transaction"""
+        error = None
+        try:
+            api_method = body_json[MSG.DETAILS][MSG.API_ACTION]
+        except KeyError:
+            error = f"Message did not contain an appropriate api_action. "
+        if api_method != RK.CANCEL:
+            error = (
+                f"Calling RPC in NLDS consumer with API method: {api_method} is "
+                "not supported."
+            )
+        # return any error using the RPC reply
+        if error:
+            return_json = body_json
+            return_json[MSG.DETAILS][MSG.FAILURE] = error
+        else:
+            queue = RK.MONITOR_PUT
+            new_routing_key = RK.MONITOR_Q
+            self.log(
+                f"Sending message to {queue} queue with routing key {new_routing_key}",
+                RK.LOG_INFO,
+            )
+            # call the cancel method in the monitor
+            function = self.rpc_publisher.call(
+                msg_dict=body_json, routing_key=new_routing_key
+            )
+            response_monitor = asyncio.run(function)
+            return_monitor_json = self._deserialize(response_monitor)
+            # set the return_json to be that was returned by the monitor.  It might be
+            # overwritten by that returned by the catalog.
+            return_json = return_monitor_json
+
+            # check if the delete of the transaction succeeded
+            # if it did then we also want to delete the holding with that transaction
+            # id from the catalog - but only if the api_method was PUT or PUTLIST!
+            if not MSG.FAILURE in return_monitor_json[MSG.DETAILS]:
+                if MSG.API_ACTION in return_monitor_json[
+                    MSG.DETAILS
+                ] and return_monitor_json[MSG.DETAILS][MSG.API_ACTION] in [
+                    RK.PUT,
+                    RK.PUTLIST,
+                ]:
+                    # Note about the API_ACTION key:
+                    # 1. It is needed above to determine whether an attempt is made to
+                    #    delete the holding, if the original action was PUT or
+                    #    PUTLIST. We don't want to delete holdings if the method is
+                    #    ARCHIVE_PUT or GET or GETLIST, etc. So, it is returned as the
+                    #    API_ACTION in the return_monitor_json message
+                    # 2. The catalog processor needs the API_ACTION to be set back to
+                    #    CANCEL so that it can call the method to delete the holding if
+                    #    necessary,
+                    queue = RK.CATALOG_PUT
+                    new_routing_key = RK.CATALOG_Q
+                    return_monitor_json[MSG.DETAILS][MSG.API_ACTION] = RK.CANCEL
+
+                    self.log(
+                        f"Sending message to {queue} queue with routing key "
+                        f"{new_routing_key}",
+                        RK.LOG_INFO,
+                    )
+                    # call the cancel method in the monitor
+                    function = self.rpc_publisher.call(
+                        msg_dict=return_monitor_json, routing_key=new_routing_key
+                    )
+                    response_catalog = asyncio.run(function)
+                    return_catalog_json = self._deserialize(response_catalog)
+                    if not MSG.FAILURE in return_catalog_json[MSG.DETAILS]:
+                        return_json = return_catalog_json
+            # restore the cancel API ACTION
+            return_json[MSG.DETAILS][MSG.API_ACTION] = RK.CANCEL
+
+        # publish the RPC return message
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=return_json,
+            exchange={"name": ""},
+            correlation_id=properties.correlation_id,
+        )
 
     def callback(
         self,
@@ -369,92 +461,102 @@ class NLDSWorkerConsumer(RMQC):
         if self._is_system_status_check(body_json=body_json, properties=properties):
             return
 
-        rk_parts, body_json = self._process_message(method, body, properties)
+        # RPC method first - the routing key is just "nlds"
+        if method.routing_key == RK.NLDS_Q:
+            self._process_rk_cancel(body_json=body_json, properties=properties)
+        else:
+            rk_parts, body_json = self._process_message(method, body, properties)
 
-        # If putting then first scan file/filelist
-        if rk_parts[2] in (RK.PUT, RK.PUTLIST):
-            self._process_rk_put(body_json)
+            # special cases first
+            if rk_parts[2] in (RK.PUT, RK.PUTLIST):
+                self._process_rk_put(body_json)
 
-        elif rk_parts[2] in (RK.GET, RK.GETLIST):
-            self._process_rk_get(body_json)
+            elif rk_parts[2] in (RK.GET, RK.GETLIST):
+                self._process_rk_get(body_json)
 
-        # If a task has completed, initiate new tasks
-        elif rk_parts[2] == f"{RK.COMPLETE}":
-            # If index completed then pass file list cataloguing before transfer
-            if rk_parts[1] == f"{RK.INDEX}":
-                self._process_rk_index_complete(body_json)
-            # if catalog_put completed send for transfer
-            elif rk_parts[1] == f"{RK.CATALOG_PUT}":
-                self._process_rk_catalog_put_complete(body_json)
+            # If a task has completed, initiate new tasks
+            elif rk_parts[2] == f"{RK.COMPLETE}":
+                # If index completed then pass file list cataloguing before transfer
+                if rk_parts[1] == f"{RK.INDEX}":
+                    self._process_rk_index_complete(body_json)
+                # if catalog_put completed send for transfer
+                elif rk_parts[1] == f"{RK.CATALOG_PUT}":
+                    self._process_rk_catalog_put_complete(body_json)
 
-            # If transfer_put completed then finish put workflow
-            elif rk_parts[1] == f"{RK.TRANSFER_PUT}":
-                self._process_rk_transfer_put_complete(body_json)
+                # If transfer_put completed then finish put workflow
+                elif rk_parts[1] == f"{RK.TRANSFER_PUT}":
+                    self._process_rk_transfer_put_complete(body_json)
 
-            # If transfer_get completed then finish get workflow
-            elif rk_parts[1] == f"{RK.TRANSFER_GET}":
-                self._process_rk_transfer_get_complete(body_json)
+                # If transfer_get completed then finish get workflow
+                elif rk_parts[1] == f"{RK.TRANSFER_GET}":
+                    self._process_rk_transfer_get_complete(
+                        rk_parts=rk_parts, body_json=body_json
+                    )
 
-            # If transfer_setup completed then start the indexing
-            elif rk_parts[1] == f"{RK.TRANSFER_SETUP}":
-                self._process_rk_transfer_setup_complete(body_json)
+                # If transfer_setup completed then start the indexing
+                elif rk_parts[1] == f"{RK.TRANSFER_SETUP}":
+                    self._process_rk_transfer_setup_complete(body_json)
 
-            # if catalog_get completed then we need to decide whether it was
-            # part of a regular get or an archive_put workflow
-            elif rk_parts[1] == f"{RK.CATALOG_GET}":
-                self._process_rk_catalog_get_complete(rk_parts, body_json)
+                # if catalog_get completed then we need to decide whether it was
+                # part of a regular get or an archive_put workflow
+                elif rk_parts[1] == f"{RK.CATALOG_GET}":
+                    self._process_rk_catalog_get_complete(rk_parts, body_json)
 
-            elif rk_parts[1] == f"{RK.CATALOG_PUT}":
-                self._process_rk_catalog_put_complete(rk_parts, body_json)
+                elif rk_parts[1] == f"{RK.CATALOG_PUT}":
+                    self._process_rk_catalog_put_complete(rk_parts, body_json)
 
-            # If finished with archive retrieval then pass for catalog-update
-            elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
-                self._process_rk_archive_get_complete(rk_parts, body_json)
+                # If finished with archive retrieval then pass for catalog-update
+                elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
+                    self._process_rk_archive_get_complete(rk_parts, body_json)
 
-            # If finished with aggregation of unarchived holding, then send for
-            # archive write
-            elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_NEXT}":
-                self._process_rk_catalog_archive_next_complete(rk_parts, body_json)
+                # If finished with aggregation of unarchived holding, then send for
+                # archive write
+                elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_NEXT}":
+                    self._process_rk_catalog_archive_next_complete(rk_parts, body_json)
 
-            # If finished with archive write, then pass checksum info to catalog
-            elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
-                self._process_rk_archive_put_complete(rk_parts, body_json)
+                # If finished with archive write, then pass checksum info to catalog
+                elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
+                    self._process_rk_archive_put_complete(rk_parts, body_json)
 
-            # If finished with catalog setup (create holding) then pass to indexing
-            elif rk_parts[1] == f"{RK.CATALOG_SETUP}":
-                self._process_rk_catalog_setup_complete(body_json)
+                # If finished with catalog setup (create holding) then pass to indexing
+                elif rk_parts[1] == f"{RK.CATALOG_SETUP}":
+                    self._process_rk_catalog_setup_complete(body_json)
 
-            # If finished with catalog update then pass for transfer get
-            elif rk_parts[1] == f"{RK.CATALOG_UPDATE}":
-                self._process_rk_catalog_update_complete(rk_parts, body_json)
+                # If finished with catalog update then pass for transfer get
+                elif rk_parts[1] == f"{RK.CATALOG_UPDATE}":
+                    self._process_rk_catalog_update_complete(rk_parts, body_json)
+                # If finished with catalog delete then mark as completed
+                elif rk_parts[1] == f"{RK.CATALOG_DEL}":
+                    self._process_rk_catalog_delete_complete(rk_parts, body_json)
+                # if finished with catalog archive update then mark ARCHIVE_PUT flow as
+                # complete
+                elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_UPDATE}":
+                    self._process_rk_catalog_archive_update_complete(
+                        rk_parts, body_json
+                    )
 
-            # if finished with catalog archive update then mark ARCHIVE_PUT flow as
-            # complete
-            elif rk_parts[1] == f"{RK.CATALOG_ARCHIVE_UPDATE}":
-                self._process_rk_catalog_archive_update_complete(rk_parts, body_json)
+            # If a archive-restore has happened from the catalog then we need to get from
+            # archive before we can do the transfer from object store.
+            elif rk_parts[2] == f"{RK.ARCHIVE_RESTORE}":
+                self._process_rk_catalog_get_archive_restore(rk_parts, body_json)
 
-        # If a archive-restore has happened from the catalog then we need to get from
-        # archive before we can do the transfer from object store.
-        elif rk_parts[2] == f"{RK.ARCHIVE_RESTORE}":
-            self._process_rk_catalog_get_archive_restore(rk_parts, body_json)
+            # If a transfer/archive task has failed, remove something from the
+            # catalog
+            elif rk_parts[2] == f"{RK.FAILED}":
+                # If transfer_put failed then we need to remove the failed files
+                # from the catalog
+                if rk_parts[1] == f"{RK.TRANSFER_PUT}":
+                    self._process_rk_transfer_put_failed(body_json)
 
-        # If a transfer/archive task has failed, remove something from the
-        # catalog
-        elif rk_parts[2] == f"{RK.FAILED}":
-            # If transfer_put failed then we need to remove the failed files
-            # from the catalog
-            if rk_parts[1] == f"{RK.TRANSFER_PUT}":
-                self._process_rk_transfer_put_failed(body_json)
+                # If archive_put failed then we need to remove the TAPE locations
+                # from the catalog
+                elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
+                    self._process_rk_archive_put_failed(body_json)
 
-            # If archive_put failed then we need to remove the TAPE locations
-            # from the catalog
-            elif rk_parts[1] == f"{RK.ARCHIVE_PUT}":
-                self._process_rk_archive_put_failed(body_json)
-
-            # If archive_get failed then we need to remove the OBJECT_STORAGE
-            # locations from the catalog
-            elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
-                self._process_rk_archive_get_failed(body_json)
+                # If archive_get failed then we need to remove the OBJECT_STORAGE
+                # locations from the catalog
+                elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
+                    self._process_rk_archive_get_failed(body_json)
 
         self.log(f"Worker callback complete!", RK.LOG_DEBUG)
 

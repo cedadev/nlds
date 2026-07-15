@@ -74,13 +74,9 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             raise S3StreamError(f"self.filelist is not None: {self.filelist[0]}")
         self.filelist = filelist
         self.holding_prefix = holding_prefix
-        # self._generate_filelist_hash and self._check_files_exist use the member
-        # variables already set and the function definitions are in the parent class
+        # self._generate_filelist_hash uses the member variables already set and the
+        # function definitions are in the parent class
         self.filelist_hash = self._generate_filelist_hash()
-        completelist, failedlist = self._check_files_exist()
-        if len(failedlist) > 0:
-            return [], failedlist, "", 0
-
         # make or find the holding folder on the disk
         try:
             os.mkdir(self.holding_diskpath)

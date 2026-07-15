@@ -130,44 +130,25 @@ class IndexerConsumer(StattingConsumer):
         This is like the inverse of a scan, and is necessary as users quite often submit
         the output of a find command, which lists all directories and files, so some
         files will be scanned multiple times.
-        This causes the indexer to do extra work, and may cause an attempt to add the
+        This causes the indexer to do extra work, and may cause an attempt to add them
         to the catalog more than once - leading to an error.
         consumer.dedup_filelist will not catch this as the indexer splits filelists as
         it goes, so will only trap if the duplicate files are in the same message.
         """
-        # get a list of all the directories first
-        dir_list_fp = []
+        out_list = []
+        # build a list of Path objects from the filelist passed in
+        paths = [pathlib.Path(fp.original_path) for fp in filelist]
+        # for each path check in the filelist the parent is not in the paths list
         for fp in filelist:
             path = pathlib.Path(fp.original_path)
-            if path.is_dir():
-                dir_list_fp.append(fp)
-
-        # iterate again to remove the directories that are subdirectories of a base
-        # directory
-        dir_list = [fp.original_path for fp in dir_list_fp]
-        dir_list_fp_2 = []
-        for d in dir_list_fp:
-            path = pathlib.Path(d.original_path)
-            if not (path.parent.as_posix() in dir_list):
-                dir_list_fp_2.append(d)
-
-        # add files where the path of any directory in the dir_list_fp_2 does not
-        # occur in the path of the file
-        filelist_2 = []
-        for fp in filelist:
-            add = True
-            # loop over every directory
-            for d in dir_list_fp_2:
-                # compare first characters of the filepath with the path of the
-                # directory - if they match then do not add as the scanner will catch
-                # them
-                if d.original_path == fp.original_path[: len(d.original_path)]:
-                    add = False
-            # add if no match made
-            if add:
-                filelist_2.append(fp)
-
-        return filelist_2
+            in_parent = False
+            # path.parents provides a list of paths up to the root directory
+            for p in path.parents:
+                if p in paths:
+                    in_parent = True
+            if not in_parent:
+                out_list.append(fp)
+        return out_list
 
     def callback(self, ch, method, properties, body, connection):
         self.reset()
@@ -224,19 +205,23 @@ class IndexerConsumer(StattingConsumer):
                 f"Path: {item_path.path} is inaccessible. Please check the "
                 f"permissions of the path."
             )
+            not_found_err_msg = f"Path: {item_path.path} does not exist."
             if not self.check_path_exists(item_path.path):
-                raise IndexError(f"Path: {item_path.path} does not exist.")
+                raise IndexError(not_found_err_msg)
             if not self.check_path_access(item_path.path):
                 raise IndexError(inaccessible_err_msg)
 
-            if item_path.path.is_dir() and os.getcwd() != item_path.path.as_posix():
+            if item_path.path.is_dir():
                 # change directory to try to overcome bug with auto-mounter
                 # only do it if the current directory is not the path
-                self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
-                try:
-                    os.chdir(item_path.path)
-                except (FileNotFoundError, PermissionError):
-                    raise IndexError(inaccessible_err_msg)
+                if os.getcwd() != item_path.path.as_posix():
+                    self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
+                    try:
+                        os.chdir(item_path.path)
+                    except FileNotFoundError:
+                        raise IndexError(not_found_err_msg)
+                    except PermissionError:
+                        raise IndexError(inaccessible_err_msg)
                 # check if item is a link and just add as a link entry if it is
                 # do not recurse into linked directories!
                 item_path.stat()
@@ -253,7 +238,9 @@ class IndexerConsumer(StattingConsumer):
                     # item is a directory - list what is in the directory
                     try:
                         sub_file_list = os.listdir(item_path.path)
-                    except (FileNotFoundError, PermissionError):
+                    except FileNotFoundError:
+                        raise IndexError(not_found_err_msg)
+                    except PermissionError:
                         raise IndexError(inaccessible_err_msg)
                     # process and send via recursion
                     for sf in sub_file_list:
@@ -272,7 +259,9 @@ class IndexerConsumer(StattingConsumer):
                 # item is a file - stat it - calls the PathDetails member function
                 try:
                     item_path.stat()
-                except (FileNotFoundError, PermissionError):
+                except FileNotFoundError:
+                    raise IndexError(not_found_err_msg)
+                except PermissionError:
                     raise IndexError(inaccessible_err_msg)
                 # check the filesize
                 if self.check_filesize_fl and item_path.size > self.max_filesize:
@@ -346,23 +335,30 @@ class IndexerConsumer(StattingConsumer):
                 if os.getcwd() != chpath.as_posix():
                     self.log(f"Changing directory to {chpath}", RK.LOG_INFO)
                     os.chdir(chpath)
-            except (FileNotFoundError, PermissionError):
+                failed = False
+            except FileNotFoundError:
+                message = f"Path: {item_path.path} does not exist."
+                failed = True
+            except PermissionError:
                 message = (
                     f"Path: {item_path.path} is inaccessible.  Please check the "
                     f"permissions of the path."
                 )
-                item_path.failure_reason = message
-                self.append_and_send(
-                    self.failedlist,
-                    item_path,
-                    routing_key=rk_failed,
-                    body_json=body_json,
-                    state=State.FAILED,
-                )
+                failed = True
             else:
                 # all errors will now be handled by raising an IndexError in the
                 # _index_r function
                 self._index_r(item_path, rk_complete, rk_failed, body_json=body_json)
+            finally:
+                if failed:
+                    item_path.failure_reason = message
+                    self.append_and_send(
+                        self.failedlist,
+                        item_path,
+                        routing_key=rk_failed,
+                        body_json=body_json,
+                        state=State.FAILED,
+                    )
 
         # finalise the pathlists - anything left in the completed and failed lists
         if len(self.completelist) > 0:

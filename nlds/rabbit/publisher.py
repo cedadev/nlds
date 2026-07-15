@@ -129,7 +129,8 @@ class RabbitMQPublisher:
         """Go through list of exchanges from config file and declare each."""
         for exchange in self.exchanges:
             self.channel.exchange_declare(
-                exchange=exchange["name"], exchange_type=exchange["type"]
+                exchange=exchange["name"],
+                exchange_type=exchange["type"],
             )
 
     @staticmethod
@@ -203,7 +204,6 @@ class RabbitMQPublisher:
                     blocked_connection_timeout=self.timeout,
                 )
             )
-
             # Create a new channel with basic qos
             channel = connection.channel()
             channel.basic_qos(prefetch_count=1)
@@ -218,7 +218,10 @@ class RabbitMQPublisher:
                 body=body,
                 mandatory=mandatory_fl,
             )
-            channel.close()
+            if connection.is_open:
+                if channel.is_open:
+                    channel.close()
+                connection.close()
             logger.debug(f"Sending message with key: {routing_key}")
         except (AMQPConnectionError, ChannelWrongStateError) as e:
             logger.error(
@@ -303,7 +306,8 @@ class RabbitMQPublisher:
             # raise RabbitRetryError(str(e), ampq_exception=e)
 
     def close_connection(self) -> None:
-        self.connection.close()
+        if self.connection and self.connection.is_open:
+            self.connection.close()
 
     _default_logging_conf = {
         CFG.LOGGING_CONFIG_ENABLE: True,

@@ -84,7 +84,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                 "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
             return
-
         ###
         # Verify and load message contents
         try:
@@ -104,7 +103,9 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                 self.get_objectstore_config(self.body_json)
             )
         except TransferError:
-            self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
+            self.log(
+                "Object Store config unobtainable, exiting callback.", RK.LOG_ERROR
+            )
             return
 
         # Append route info to message to track the route of the message
