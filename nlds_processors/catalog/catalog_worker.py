@@ -339,7 +339,7 @@ class CatalogConsumer(RMQC):
             aggregation_id = None
         return aggregation_id
 
-    def _parse_transaction_records(self, body: dict) -> list[str]:
+    def _parse_transaction_records(self, body: Dict) -> list[str]:
         # get the transaction_ids from the metadata section of the message
         try:
             transaction_records = body[MSG.DATA][MSG.RECORD_LIST]
@@ -358,7 +358,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return transaction_records
 
-    def _parse_path(self, body: dict) -> str:
+    def _parse_path(self, body: Dict) -> str:
         # get the path from the metadata section of the message
         try:
             path = body[MSG.META][MSG.PATH]
@@ -366,7 +366,7 @@ class CatalogConsumer(RMQC):
             path = None
         return path
 
-    def _parse_regex(self, body: dict) -> str:
+    def _parse_regex(self, body: Dict) -> str:
         # get the REGEX flag from the metadata section of the message
         try:
             regex = body[MSG.META][MSG.REGEX]
@@ -374,7 +374,7 @@ class CatalogConsumer(RMQC):
             regex = False
         return regex
 
-    def _parse_new_metadata_variables(self, body: dict) -> tuple[str, str, str]:
+    def _parse_new_metadata_variables(self, body: Dict) -> tuple[str, str, str]:
         # get the new label from the new meta section of the message
         try:
             new_label = body[MSG.META][MSG.NEW_META][MSG.LABEL]
@@ -806,7 +806,9 @@ class CatalogConsumer(RMQC):
                 warning=tag_warnings,
             )
 
-    def _catalog_update(self, body: Dict, rk_origin: str, create: bool) -> None:
+    def _catalog_update_storage_locations(
+        self, body: Dict, rk_origin: str, create: bool
+    ) -> None:
         """Upon completion of a TRANSFER_PUT, the list of completed files is returned
         back to the NLDS worker, but with location on Object Storage of the files
         appended to each PathDetails JSON object.
@@ -1533,7 +1535,41 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
-    def _catalog_remove_storage_location(
+    def _remove_storage_location(
+        self,
+        file: File,
+        storage_type: Storage,
+        pd: PathDetails,
+        force=False,
+    ):
+        # remove a single storage location
+        try:
+            # delete location - get it first via loop on locations
+            loc = None
+            for l in file.locations:
+                if l.storage_type == storage_type:
+                    loc = l
+                    break
+            # delete location if all details are empty
+            if loc:
+                if force or (
+                    loc.url_scheme == "" and loc.url_netloc == "" and loc.root == ""
+                ):
+                    self.catalog.delete_location(file=file, storage_type=storage_type)
+                    return "Success"
+                else:
+                    pd.failure_reason = (
+                        f"{str(storage_type.name)} location has existing "
+                        f"non-empty details"
+                    )
+                    return "Failed"
+        except (CatalogError, IndexError) as e:
+            pd.failure_reason = e.message
+            return "Failed"
+        # tertiary so we don't have to do anything if the location was not found
+        return "Skip"
+
+    def _catalog_remove_storage_locations(
         self, body: Dict, rk_origin: str, storage_type: Storage
     ) -> None:
         """Remove an empty storage_type storage Location if archive_put has failed."""
@@ -1586,38 +1622,30 @@ class CatalogConsumer(RMQC):
             files_to_commit = []
             for res in results:
                 file = res.File
-                pd = PathDetails.from_filemodel(file)
-                try:
-                    # delete location - get it first via loop on locations
-                    loc = None
-                    for l in file.locations:
-                        if l.storage_type == storage_type:
-                            loc = l
-                            break
-                    # delete location if all details are empty
-                    if loc:
-                        if (
-                            loc.url_scheme == ""
-                            and loc.url_netloc == ""
-                            and loc.root == ""
-                        ):
-                            self.catalog.delete_location(
-                                file=file, storage_type=storage_type
-                            )
-                            # defer update to do bulk commit later
-                            files_to_commit.append(file)
-                            self.catalog.defer(file)
-                            # add PathDetails to completed list
-                            self.completelist.append(pd)
-                        else:
-                            pd.failure_reason = (
-                                f"{str(storage_type.name)} location has existing "
-                                f"non-empty details"
-                            )
-                            self.failedlist.append(pd)
-
-                except (CatalogError, IndexError) as e:
-                    pd.failure_reason = e.message
+                # get the original path details from the path_details_list
+                pd = path_details_list[
+                    path_details_list.index(
+                        PathDetails(original_path=file.original_path)
+                    )
+                ]
+                rtape = self._remove_storage_location(file, storage_type, pd)
+                if rtape == "Success":
+                    # if the location is TAPE and the NoSuchKey or NoSuchBucket is in
+                    # the failure_reason, then this means that the file is also missing
+                    # from the Object Storage, so we want to delete that storage
+                    # location as well
+                    if storage_type == Storage.TAPE and (
+                        "NoSuchKey" in pd.failure_reason
+                        or "NoSuchBucket" in pd.failure_reason
+                    ):
+                        robj = self._remove_storage_location(
+                            file, Storage.OBJECT_STORAGE, pd, force=True
+                        )
+                    # defer update to do bulk commit later
+                    self.catalog.defer(file)
+                    files_to_commit.append(file)
+                    self.completelist.append(pd)
+                elif rtape == "Failed":
                     self.failedlist.append(pd)
 
             # bulk commit to DB
@@ -2188,11 +2216,11 @@ class CatalogConsumer(RMQC):
 
         # Connect to database if not connected yet
         # Convert body from bytes to json for ease of manipulation
-        body = self._deserialize(body)
+        body_dict = self._deserialize(body)
 
         # Get the API method and decide what to do with it
         try:
-            api_method = body[MSG.DETAILS][MSG.API_ACTION]
+            api_method = body_dict[MSG.DETAILS][MSG.API_ACTION]
         except KeyError:
             self.log(
                 f"Message did not contain an appropriate api_action, "
@@ -2202,7 +2230,7 @@ class CatalogConsumer(RMQC):
             return
 
         # Check for system status
-        if self._is_system_status_check(body_json=body, properties=properties):
+        if self._is_system_status_check(body_json=body_dict, properties=properties):
             return
 
         # Only print the message contents when we're not statting, the message
@@ -2211,7 +2239,7 @@ class CatalogConsumer(RMQC):
             self.log(
                 f"Received from {self.queues[0].name} ({method.routing_key})",
                 RK.LOG_DEBUG,
-                body_json=body,
+                body_json=body_dict,
             )
 
         self.log(
@@ -2219,7 +2247,7 @@ class CatalogConsumer(RMQC):
             f"{self.DEFAULT_REROUTING_INFO} ",
             RK.LOG_DEBUG,
         )
-        body = self.append_route_info(body)
+        body_dict = self.append_route_info(body_dict)
 
         # check whether this is a GET or a PUT
         if api_method in (RK.GETLIST, RK.GET):
@@ -2233,16 +2261,18 @@ class CatalogConsumer(RMQC):
                 return
             if rk_parts[2] == RK.START:
                 if rk_parts[1] == RK.CATALOG_GET:
-                    self._catalog_get(body, rk_parts[0])
+                    self._catalog_get(body_dict, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_REMOVE:
-                    self._catalog_remove_storage_location(
-                        body,
+                    self._catalog_remove_storage_locations(
+                        body_dict,
                         rk_parts[0],
                         Storage.OBJECT_STORAGE,
                     )
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
                     # this catalog update occurs when the file is retrieved from tape
-                    self._catalog_update(body, rk_parts[0], create=False)
+                    self._catalog_update_storage_locations(
+                        body_dict, rk_parts[0], create=False
+                    )
 
         elif api_method in (RK.PUTLIST, RK.PUT):
             # split the routing key
@@ -2258,13 +2288,15 @@ class CatalogConsumer(RMQC):
                 # to call, as a del could be being called from a failed
                 # transfer_put
                 if rk_parts[1] == RK.CATALOG_PUT:
-                    self._catalog_put(body, rk_parts[0])
+                    self._catalog_put(body_dict, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_DEL:
-                    self._catalog_delete_files(body, rk_parts[0])
+                    self._catalog_delete_files(body_dict, rk_parts[0])
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
-                    self._catalog_update(body, rk_parts[0], create=True)
+                    self._catalog_update_storage_locations(
+                        body_dict, rk_parts[0], create=True
+                    )
                 elif rk_parts[1] == RK.CATALOG_SETUP:
-                    self._catalog_setup(body, rk_parts[0])
+                    self._catalog_setup(body_dict, rk_parts[0])
 
         # Archive put requires getting from the catalog
         elif api_method == RK.ARCHIVE_PUT:
@@ -2281,32 +2313,33 @@ class CatalogConsumer(RMQC):
                 self.log(
                     "Beginning preparation of next archive aggregation", RK.LOG_DEBUG
                 )
-                self._catalog_archive_put(body, rk_parts[0])
+                self._catalog_archive_put(body_dict, rk_parts[0])
 
             elif rk_parts[1] == RK.CATALOG_ARCHIVE_UPDATE:
-                self._catalog_archive_update(body, rk_parts[0], Storage.TAPE)
+                self._catalog_archive_update(body_dict, rk_parts[0], Storage.TAPE)
             elif rk_parts[1] == RK.CATALOG_REMOVE:
-                self._catalog_remove_storage_location(
-                    body,
+                # the transfer to tape has failed so remove the TAPE location
+                self._catalog_remove_storage_locations(
+                    body_dict,
                     rk_parts[0],
                     Storage.TAPE,
                 )
 
         # RPC methods follow - don't need to split any routing key for an RPC method
         elif api_method == RK.LIST:
-            self._catalog_list(body, properties)
+            self._catalog_list(body_dict, properties)
 
         elif api_method == RK.FIND:
-            self._catalog_find(body, properties)
+            self._catalog_find(body_dict, properties)
 
         elif api_method == RK.META:
-            self._catalog_meta(body, properties)
+            self._catalog_meta(body_dict, properties)
 
         elif api_method == RK.STAT:
-            self._catalog_stat(body, properties)
+            self._catalog_stat(body_dict, properties)
 
         elif api_method == RK.CANCEL:
-            self._catalog_cancel(body, properties)
+            self._catalog_cancel(body_dict, properties)
 
 
 def main() -> None:
