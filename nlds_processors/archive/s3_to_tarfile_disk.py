@@ -136,6 +136,9 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             except S3StreamError as e:
                 msg += f" {e.message}"
             raise S3StreamError(msg)
+        # if the length of the completelist is zero then remove the tarfile
+        if len(completelist) == 0:
+            self._remove_tarfile_from_disktape()
         # add the location to the completelist
         for f in completelist:
             f.set_tape(

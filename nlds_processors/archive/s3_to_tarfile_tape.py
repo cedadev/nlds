@@ -158,6 +158,9 @@ class S3ToTarfileTape(S3ToTarfileStream):
             except S3StreamError as e:
                 msg += f" {e.message}"
             raise S3StreamError(msg)
+        # if the length of the completelist is zero then remove the tarfile from tape
+        if len(completelist) == 0:
+            self._remove_tarfile_from_tape()
         # add the location to the completelist
         for f in completelist:
             f.set_tape(
@@ -222,7 +225,9 @@ class S3ToTarfileTape(S3ToTarfileStream):
         return [S3ToTarfileTape.__relative_tarfile(t) for t in tarfile_list]
 
     def prepare_required(self, tarfile: str) -> bool:
-        """Query the storage system as to whether a file needs to be prepared (staged)."""
+        """
+        Query the storage system as to whether a file needs to be prepared (staged).
+        """
         tarfile_path = S3ToTarfileTape.__relative_tarfile(tarfile)
         # XrootD use the .stat method on the FileSystem client
         status, response = self.tape_client.stat(tarfile_path)
