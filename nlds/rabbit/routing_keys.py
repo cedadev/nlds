@@ -55,6 +55,7 @@ ARCHIVE_GET = "archive-get"
 ARCHIVE_RESTORE = "archive-restore"
 CATALOG_ARCHIVE_NEXT = "catalog-archive-next"
 CATALOG_ARCHIVE_UPDATE = "catalog-archive-update"
+UNSTAGE = "unstage"
 ROUTE = "route"
 LOG = "log"
 
