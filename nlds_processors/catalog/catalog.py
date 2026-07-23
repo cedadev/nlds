@@ -292,15 +292,18 @@ class Catalog(DBMixin):
                 msg += f" with tags:{tag}."
             else:
                 msg += "."
+            self.session.rollback()
             raise CatalogError(msg)
         except DataError as e:
             if regex:
                 msg = f"Invalid regular expression: {label}"
             else:
                 msg = f"Error getting Holding: {e}"
+            self.session.rollback()
             raise CatalogError(msg)
 
         except OperationalError as e:
+            self.session.rollback()
             raise CatalogError(
                 f"Error when listing holding for user:{user} and group:{group}. "
                 f"Original error {e}"
@@ -577,8 +580,9 @@ class Catalog(DBMixin):
 
     def get_files_from_filelist(
         self,
-        transaction_id: str,
         filelist: list[PathDetails],
+        holding_id: int = None,
+        transaction_id: str = None,
         with_for_update: bool = False,
     ) -> Query[File]:
         """Get a list of file models from a transaction, where the original path
@@ -595,15 +599,25 @@ class Catalog(DBMixin):
                 f"Files in pathlist: {filelist2} not found in holding with "
                 f"transaction_id: {transaction_id}"
             )
-            file_q = (
-                self.session.query(File)
-                .select_from(Transaction)
-                .where(
-                    Transaction.transaction_id == transaction_id,
+            if holding_id:
+                file_q = (
+                    self.session.query(File)
+                    .select_from(Transaction)
+                    .where(Transaction.holding_id == holding_id)
+                    .join(File)
+                    .filter(File.original_path.in_(filelist2))
                 )
-                .join(File)
-                .filter(File.original_path.in_(filelist2))
-            )
+            elif transaction_id:
+                file_q = (
+                    self.session.query(File)
+                    .select_from(Transaction)
+                    .where(Transaction.transaction_id == transaction_id)
+                    .join(File)
+                    .filter(File.original_path.in_(filelist2))
+                )
+            else:
+                err_msg = "Holding id or Transaction id not supplied"
+                raise CatalogError(err_msg)
             # if we're going to update the file then use with_for_update
             if with_for_update:
                 file_q = file_q.with_for_update()
@@ -646,8 +660,9 @@ class Catalog(DBMixin):
         )
         # check for inclusion on the holding is, rather than looping over the holdings
         holding_ids = [h.id for h in holdings]
-
-        if filelist:
+        if regex:
+            search_path = filelist[0].original_path
+        elif filelist:
             search_path = [f.original_path for f in filelist]
         else:
             search_path = ".*"
