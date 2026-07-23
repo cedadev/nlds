@@ -148,6 +148,13 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             )
         return completelist, failedlist, self.tarfile_diskpath, checksum
 
+    def _tarfile(self, tarfile: str):
+        """Adapt the tarfile string to remove root:// from the beginning"""
+        prefix = "root://"
+        if tarfile[: len(prefix)] == prefix:
+            tarfile = tarfile[len(prefix) :]
+        return tarfile
+
     def get(
         self,
         holding_prefix: str,
@@ -161,6 +168,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             raise S3StreamError(f"self.filelist is not Empty: {self.filelist[0]}")
         self.filelist = filelist
         self.holding_prefix = holding_prefix
+        tarfile = self._tarfile(tarfile)
         try:
             # open the tarfile to read from
             with open(tarfile, "rb") as file:
@@ -172,12 +180,12 @@ class S3ToTarfileDisk(S3ToTarfileStream):
                     num_parallel_uploads,
                 )
         except FileNotFoundError:
-            msg = f"Couldn't open tarfile ({self.tarfile_diskpath})."
+            msg = f"Couldn't open tarfile ({tarfile})."
             self.log(msg, RK.LOG_ERROR)
             raise S3StreamError(msg)
         except S3StreamError as e:
             msg = (
-                f"Exception occurred during read of tarfile {self.tarfile_diskpath}. "
+                f"Exception occurred during read of tarfile {tarfile}. "
                 f"Original Exception: {e}"
             )
 
@@ -194,14 +202,18 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     def prepare_request(self, tarfilelist: List[str]) -> str:
         """Request the storage system for a file to be prepared"""
         for tarfile in tarfilelist:
+            tarfile = self._tarfile(tarfile)
             self.log(f"Preparing tarfile: {tarfile}", RK.LOG_INFO)
         S3ToTarfileDisk.prepare_id += 1
         return str(S3ToTarfileDisk.prepare_id)
 
     def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
-        """Query the storage system whether the prepare for a file has been completed."""
+        """
+        Query the storage system whether the prepare for a file has been completed.
+        """
         # always return True for the disktape / faketape™
         for tarfile in tarfilelist:
+            tarfile = self._tarfile(tarfile)
             self.log(f"Prepare complete for tarfile: {tarfile}", RK.LOG_INFO)
         return True
 
@@ -220,15 +232,23 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         return f"{self.disk_loc}/{self.holding_prefix}"
 
     @property
-    def tarfile_diskpath(self):
+    def tarfile_diskpath(self, tarfile=None):
         """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
         if not self.disk_loc:
             raise S3StreamError("self.disk_lock is None")
         if not self.holding_prefix:
             raise S3StreamError("self.holding_prefix is None")
-        if not self.filelist_hash:
-            raise S3StreamError("self.filelist_hash is None")
-        return f"{self.disk_loc}/{self.holding_prefix}/{self.filelist_hash}.tar"
+        if tarfile:
+            if tarfile[:7] == "root://":
+                tarfile_2 = tarfile[7:]
+            else:
+                tarfile_2 = tarfile
+            path = f"{self.disk_loc}/{self.holding_prefix}/{tarfile_2}"
+        else:
+            if not self.filelist_hash:
+                raise S3StreamError("self.filelist_hash is None")
+            path = f"{self.disk_loc}/{self.holding_prefix}/{self.filelist_hash}.tar"
+        return path
 
     def _validate_tarfile_checksum(self, tarfile_checksum: str):
         """Calculate the Adler32 checksum of the tarfile and compare it to the checksum
