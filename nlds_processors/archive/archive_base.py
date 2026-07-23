@@ -212,7 +212,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
         # Check to see whether tape_url has been specified in either the message
         # or the server_config - exit if not.
-        if tape_url is None:
+        if self.disktape_loc is None and tape_url is None:
             reason = (
                 "No tape_url specified at server- or request-level, exiting callback."
             )
