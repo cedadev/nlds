@@ -31,7 +31,7 @@ class ChecksumFile(ABC):
         result = self.f.read(size)
         if len(result) == 0:
             raise IOError(f"Unable to read from file f ({self.f})")
-        self.checksum = self.checksum(result, self.checksum)
+        self.update_checksum(result)
         return result
 
     def write(self, b):
