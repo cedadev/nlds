@@ -823,6 +823,7 @@ class CatalogConsumer(RMQC):
         try:
             filelist = self._parse_filelist(body)
             transaction_id = self._parse_transaction_id(body)
+            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError as e:
             # functions above handled message logging, here we just return
             raise e
@@ -834,11 +835,18 @@ class CatalogConsumer(RMQC):
         path_details_list = [PathDetails.from_dict(f) for f in filelist]
 
         # get all the files in the filelist as File objects from the database
-        files = self.catalog.get_files_from_filelist(
-            transaction_id=transaction_id,  # assume all same holding id
-            filelist=path_details_list,
-            with_for_update=True,
-        )
+        if holding_id:
+            files = self.catalog.get_files_from_filelist(
+                holding_id=holding_id,  # assume all same holding id
+                filelist=path_details_list,
+                with_for_update=True,
+            )
+        elif transaction_id:
+            files = self.catalog.get_files_from_filelist(
+                transaction_id=transaction_id,  # assume all same holding id
+                filelist=path_details_list,
+                with_for_update=True,
+            )
 
         # loop over the filelist
         create_location_list = []
@@ -870,13 +878,15 @@ class CatalogConsumer(RMQC):
 
                 # input storage type
                 st = Storage.from_str(pl.storage_type)
+                location = None
                 if len(f.locations) != 0:
                     # modify location - get it first via loop on locations
                     for l in f.locations:
                         if l.storage_type == st:
                             location = l
                             break
-
+                # location was found so modify
+                if location:
                     # check empty or equivalent storage location - warn for equivalent
                     if location.url_scheme != "" or location.url_netloc != "":
                         if (
@@ -908,6 +918,7 @@ class CatalogConsumer(RMQC):
                     self.catalog.defer(location)
                     # mark as completed - assuming the bulk commit works correctly
                     self.completelist.append(pd)
+                # not found so create if create flag is true
                 elif create:
                     # add to the list to bulk create later
                     location = self.catalog.create_location(
@@ -1159,7 +1170,7 @@ class CatalogConsumer(RMQC):
                     # transfer to OBJECT STORAGE
                     reason = (
                         f"No Storage Location found for file with original path: "
-                        f"{pd.original_path}.  Has it completed transfer_put?"
+                        f"{pd.original_path}"
                     )
                     raise CatalogError(reason)
 
@@ -1293,6 +1304,7 @@ class CatalogConsumer(RMQC):
                 tenancy,
                 self.ingest_deadline,
             )
+            holding_id = next_holding.id
 
         # If no holdings left to archive then end the callback
         if not next_holding:
@@ -1362,6 +1374,7 @@ class CatalogConsumer(RMQC):
 
         # Forward successful file details to archive for tape write
         rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.COMPLETE])
+        rk_failed = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.FAILED])
 
         # the user and group need to be set here
         body[MSG.DETAILS][MSG.USER] = next_holding.user
@@ -1383,6 +1396,20 @@ class CatalogConsumer(RMQC):
                 routing_key=rk_complete,
                 body_json=body,
                 state=State.ARCHIVE_INIT,
+            )
+        else:
+            # The holding might not have had any files to archive (if it has been
+            # selected by the user / sys-admin).  We need to send failure in this case
+            self.log(
+                f"No files to send to archive in CATALOG_ARCHIVE_PUT",
+                RK.LOG_INFO,
+            )
+            pd = PathDetails(
+                original_path="",
+                failure_reason=f"No files to archive in Holding: {holding_id}",
+            )
+            self.send_pathlist(
+                [pd], routing_key=rk_failed, body_json=body, state=State.FAILED
             )
 
     def _catalog_archive_update(
@@ -1570,7 +1597,7 @@ class CatalogConsumer(RMQC):
         return "Skip"
 
     def _catalog_remove_storage_locations(
-        self, body: Dict, rk_origin: str, storage_type: Storage
+        self, body: Dict, rk_origin: str, storage_type: Storage, force=False
     ) -> None:
         """Remove an empty storage_type storage Location if archive_put has failed."""
         # routing keys
@@ -1628,8 +1655,8 @@ class CatalogConsumer(RMQC):
                         PathDetails(original_path=file.original_path)
                     )
                 ]
-                rtape = self._remove_storage_location(file, storage_type, pd)
-                if rtape == "Success":
+                rfirst = self._remove_storage_location(file, storage_type, pd, force)
+                if rfirst == "Success":
                     # if the location is TAPE and the NoSuchKey or NoSuchBucket is in
                     # the failure_reason, then this means that the file is also missing
                     # from the Object Storage, so we want to delete that storage
@@ -1645,7 +1672,7 @@ class CatalogConsumer(RMQC):
                     self.catalog.defer(file)
                     files_to_commit.append(file)
                     self.completelist.append(pd)
-                elif rtape == "Failed":
+                elif rfirst == "Failed":
                     self.failedlist.append(pd)
 
             # bulk commit to DB
@@ -1773,6 +1800,7 @@ class CatalogConsumer(RMQC):
             query_user = self._parse_queryuser(body, user)
             query_group = self._parse_querygroup(body, user, group)
             groupall = self._parse_groupall(body)
+            regex = self._parse_regex
 
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -1802,6 +1830,7 @@ class CatalogConsumer(RMQC):
                 holding_id=holding_id,
                 transaction_id=transaction_id,
                 tag=tag,
+                regex=regex,
                 limit=limit,
                 descending=descending,
             )
@@ -2259,9 +2288,11 @@ class CatalogConsumer(RMQC):
                     "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
                 )
                 return
+
             if rk_parts[2] == RK.START:
                 if rk_parts[1] == RK.CATALOG_GET:
                     self._catalog_get(body_dict, rk_parts[0])
+
                 elif rk_parts[1] == RK.CATALOG_REMOVE:
                     self._catalog_remove_storage_locations(
                         body_dict,
@@ -2270,8 +2301,10 @@ class CatalogConsumer(RMQC):
                     )
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
                     # this catalog update occurs when the file is retrieved from tape
+                    # the object storage has been deleted by then, so it needs
+                    # recreating
                     self._catalog_update_storage_locations(
-                        body_dict, rk_parts[0], create=False
+                        body_dict, rk_parts[0], create=True
                     )
 
         elif api_method in (RK.PUTLIST, RK.PUT):
@@ -2283,15 +2316,20 @@ class CatalogConsumer(RMQC):
                     "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
                 )
                 return
+
             if rk_parts[2] == RK.START:
                 # Check the routing key worker section to determine which method
                 # to call, as a del could be being called from a failed
                 # transfer_put
                 if rk_parts[1] == RK.CATALOG_PUT:
                     self._catalog_put(body_dict, rk_parts[0])
+
                 elif rk_parts[1] == RK.CATALOG_DEL:
                     self._catalog_delete_files(body_dict, rk_parts[0])
+
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
+                    # The location has been created in _catalog_put so here it just
+                    # needs updating
                     self._catalog_update_storage_locations(
                         body_dict, rk_parts[0], create=True
                     )
@@ -2317,12 +2355,30 @@ class CatalogConsumer(RMQC):
 
             elif rk_parts[1] == RK.CATALOG_ARCHIVE_UPDATE:
                 self._catalog_archive_update(body_dict, rk_parts[0], Storage.TAPE)
+
             elif rk_parts[1] == RK.CATALOG_REMOVE:
                 # the transfer to tape has failed so remove the TAPE location
                 self._catalog_remove_storage_locations(
-                    body_dict,
-                    rk_parts[0],
-                    Storage.TAPE,
+                    body_dict, rk_parts[0], Storage.TAPE
+                )
+
+        elif api_method == RK.UNSTAGE:
+            self.log("Starting an unstage workflow", RK.LOG_DEBUG)
+            # split the routing key
+            try:
+                rk_parts = self.split_routing_key(method.routing_key)
+            except ValueError as e:
+                self.log(
+                    "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
+                )
+
+            if rk_parts[1] == RK.CATALOG_REMOVE:
+                # Unstage removes the OBJECT_STORAGE location
+                # !!! WARNING !!! - this currently deletes even if the file(s) are not
+                # on tape yet - this needs to be fixed before UNSTAGE can go into
+                # production
+                self._catalog_remove_storage_locations(
+                    body_dict, rk_parts[0], Storage.OBJECT_STORAGE, force=True
                 )
 
         # RPC methods follow - don't need to split any routing key for an RPC method
