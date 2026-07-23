@@ -398,7 +398,16 @@ class PathDetails(BaseModel):
         if pl is None:
             return None
         else:
-            tape_name = f"{pl.url_scheme}://{pl.url_netloc}/{pl.root}/{pl.path}"
+            # Build bit by bit to support some tape systems having components marked as
+            # None / empty string
+            tape_name = ""
+            if pl.url_scheme:
+                tape_name += f"{pl.url_scheme}://"
+            if pl.url_netloc:
+                tape_name += f"{pl.url_netloc}/"
+            if pl.root:
+                tape_name += f"{pl.root}/"
+            tape_name += f"{pl.path}"
             return tape_name
 
     def __eq__(self, item) -> bool:
