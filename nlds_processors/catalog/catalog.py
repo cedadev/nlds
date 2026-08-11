@@ -641,12 +641,16 @@ class Catalog(DBMixin):
             holding_id=holding_id,
             transaction_id=transaction_id,
             tag=tag,
+            regex=regex,
             descending=descending,
         )
         # check for inclusion on the holding is, rather than looping over the holdings
         holding_ids = [h.id for h in holdings]
-
-        if filelist:
+        # Determine what the search path is, depending on which parameters have been
+        # passed in
+        if regex and filelist:
+            search_path = filelist[0].original_path
+        elif filelist:
             search_path = [f.original_path for f in filelist]
         else:
             search_path = ".*"
