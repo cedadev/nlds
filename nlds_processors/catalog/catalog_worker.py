@@ -28,6 +28,7 @@ Requires these settings in the /etc/nlds/server_config file:
 from typing import Dict, Tuple
 from datetime import datetime
 import sys
+import enum
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -48,6 +49,15 @@ from nlds_processors.db_mixin import DBError
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
+
+
+class Tertiary(enum.Enum):
+    TRUE = 0
+    FALSE = 1
+    DONT_CARE = 2
+
+    def __str__(self):
+        return ["TRUE", "FALSE", "DONT_CARE"][self.value]
 
 
 class Metadata:
@@ -1568,7 +1578,7 @@ class CatalogConsumer(RMQC):
         storage_type: Storage,
         pd: PathDetails,
         force=False,
-    ):
+    ) -> Tertiary:
         # remove a single storage location
         try:
             # delete location - get it first via loop on locations
@@ -1583,18 +1593,18 @@ class CatalogConsumer(RMQC):
                     loc.url_scheme == "" and loc.url_netloc == "" and loc.root == ""
                 ):
                     self.catalog.delete_location(file=file, storage_type=storage_type)
-                    return "Success"
+                    return Tertiary.TRUE
                 else:
                     pd.failure_reason = (
                         f"{str(storage_type.name)} location has existing "
                         f"non-empty details"
                     )
-                    return "Failed"
+                    return Tertiary.FALSE
         except (CatalogError, IndexError) as e:
             pd.failure_reason = e.message
-            return "Failed"
+            return Tertiary.FALSE
         # tertiary so we don't have to do anything if the location was not found
-        return "Skip"
+        return Tertiary.DONT_CARE
 
     def _catalog_remove_storage_locations(
         self, body: Dict, rk_origin: str, storage_type: Storage, force=False
@@ -1656,7 +1666,7 @@ class CatalogConsumer(RMQC):
                     )
                 ]
                 rfirst = self._remove_storage_location(file, storage_type, pd, force)
-                if rfirst == "Success":
+                if rfirst == Tertiary.TRUE:
                     # if the location is TAPE and the NoSuchKey or NoSuchBucket is in
                     # the failure_reason, then this means that the file is also missing
                     # from the Object Storage, so we want to delete that storage
@@ -1665,14 +1675,14 @@ class CatalogConsumer(RMQC):
                         "NoSuchKey" in pd.failure_reason
                         or "NoSuchBucket" in pd.failure_reason
                     ):
-                        robj = self._remove_storage_location(
+                        _ = self._remove_storage_location(
                             file, Storage.OBJECT_STORAGE, pd, force=True
                         )
                     # defer update to do bulk commit later
                     self.catalog.defer(file)
                     files_to_commit.append(file)
                     self.completelist.append(pd)
-                elif rfirst == "Failed":
+                elif rfirst == Tertiary.FALSE:
                     self.failedlist.append(pd)
 
             # bulk commit to DB
