@@ -131,8 +131,11 @@ def build_retrieval_dict(filelist: list[PathDetails], fullpath: bool = False):
         tarfile = file.tape_name
         # if it has not been added before then create a new record
         if not tarfile in retrieval_dict:
+            tape_loc = file.get_tape()
             retrieval_dict[tarfile] = {
                 "holding_id": file.holding_id,
+                "checksum": tape_loc.checksum,
+                "checksum_method": tape_loc.checksum_method,
                 "filelist": [file],
             }
         else:
@@ -1196,9 +1199,16 @@ class CatalogConsumer(RMQC):
                         self.completelist.append(pd)
 
                 elif pd.locations.has_storage_type(MSG.TAPE):
-                    # get the aggregation
+                    # get the tarfile name via the path details
                     pl = pd.get_tape()
                     tr = self.catalog.get_transaction(f.transaction_id)
+                    # get the checksum and the checksum algorithm from
+                    aggregation = self.catalog.get_aggregation(
+                        aggregation_id=pl.aggregation_id
+                    )
+                    pl.checksum_method = aggregation.algorithm
+                    pl.checksum = aggregation.checksum
+
                     if pl.access_time is None:
                         access_time = datetime.now()
                     else:
@@ -1289,6 +1299,8 @@ class CatalogConsumer(RMQC):
 
     def _filemodel_to_path_details(self, file: File) -> PathDetails:
         pd = PathDetails.from_filemodel(file)
+        # Get the holding id from the original transaction.  This is needed for get,
+        # etc.
         t = self.catalog.get_transaction(id=file.transaction_id)
         pd.holding_id = t.holding_id
         return pd
@@ -1448,6 +1460,7 @@ class CatalogConsumer(RMQC):
 
         try:
             checksum = body[MSG.DATA][MSG.CHECKSUM]
+            algorithm = body[MSG.DATA][MSG.CHECKSUM_METHOD]
         except KeyError:
             msg = "Checksum not in message and is required."
             self.log(msg, RK.LOG_ERROR)
@@ -1461,7 +1474,7 @@ class CatalogConsumer(RMQC):
         try:
             # the only route in now is to create an aggregation at this point
             aggregation = self.catalog.create_aggregation(
-                tarname=tarfile_name, checksum=checksum, algorithm="ADLER32"
+                tarname=tarfile_name, checksum=checksum, algorithm=algorithm
             )
         except CatalogError as e:
             msg = f"Could not create aggregation in _catalog_archive_update: {e}"

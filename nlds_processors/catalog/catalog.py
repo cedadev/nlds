@@ -940,7 +940,8 @@ class Catalog(DBMixin):
             aggregation = Aggregation(
                 tarname=tarname,
                 checksum=checksum,
-                algorithm=algorithm,
+                # convert checksum algorithm to upper case to maintain legacy records
+                algorithm=algorithm.upper(),
                 failed_fl=False,  # Aggregations fail before creation now
             )
             self.session.add(aggregation)
