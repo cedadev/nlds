@@ -10,14 +10,14 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 import os
 from typing import List
-from zlib import adler32
 
 from nlds.details import PathDetails
 from nlds_processors.archive.s3_to_tarfile_stream import (
     S3ToTarfileStream,
     S3StreamError,
 )
-from nlds_processors.archive.adler32file import Adler32File
+from nlds_processors.archive.adler32file import Adler32File, calculate_checksum_adler32
+from nlds_processors.archive.md5file import MD5File, calculate_checksum_md5
 import nlds.rabbit.routing_keys as RK
 
 
@@ -68,6 +68,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         filelist: List[PathDetails],
         chunk_size: int,
         num_parallel_uploads: int = 1,
+        checksum_method: str = "adler32",
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """Stream from Object Store to a tarfile on disk"""
         if self.filelist != []:
@@ -91,9 +92,17 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         try:
             # open the tarfile to write to
             with open(self.tarfile_diskpath, "wb") as file:
-                file_object = Adler32File(file, debug_fl=False)
+                # create the file_object type depending on checksum method
+                if checksum_method == "adler32":
+                    file_object = Adler32File(file, debug_fl=False)
+                elif checksum_method == "md5sum":
+                    file_object = MD5File(file, debug_fl=False)
+                else:
+                    raise S3StreamError(f"Unknown checksum method: {checksum_method}")
                 completelist, failedlist, checksum = self._stream_to_fileobject(
-                    file_object, self.filelist, chunk_size
+                    file_object,
+                    self.filelist,
+                    chunk_size,
                 )
         except FileExistsError:
             msg = (
@@ -124,7 +133,10 @@ class S3ToTarfileDisk(S3ToTarfileStream):
 
         # now verify the checksum
         try:
-            self._validate_tarfile_checksum(checksum)
+            self._validate_tarfile_checksum(
+                tarfile_checksum=checksum,
+                checksum_method=checksum_method,
+            )
         except S3StreamError as e:
             msg = (
                 f"Exception occurred during validation of tarfile "
@@ -162,6 +174,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         filelist: List[PathDetails],
         chunk_size: int,
         num_parallel_uploads: int = 1,
+        checksum_method="adler32",
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on disk to Object Store"""
         if self.filelist != []:
@@ -172,7 +185,13 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         try:
             # open the tarfile to read from
             with open(tarfile, "rb") as file:
-                file_object = Adler32File(file, debug_fl=False)
+                # create a file_object, type depending on checksum method
+                if checksum_method == "adler32":
+                    file_object = Adler32File(file, debug_fl=False)
+                elif checksum_method == "md5sum":
+                    file_object = MD5File(file, debug_fl=False)
+                else:
+                    raise S3StreamError(f"Unknown checksum method: {checksum_method}")
                 completelist, failedlist = self._stream_to_s3object(
                     file_object,
                     self.filelist,
@@ -250,22 +269,30 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             path = f"{self.disk_loc}/{self.holding_prefix}/{self.filelist_hash}.tar"
         return path
 
-    def _validate_tarfile_checksum(self, tarfile_checksum: str):
+    def _validate_tarfile_checksum(
+        self,
+        tarfile_checksum: str,
+        checksum_method: str = "adler32",
+    ):
         """Calculate the Adler32 checksum of the tarfile and compare it to the checksum
         calculated when streaming from the S3 server to the DISKTAPE"""
-        asum = 1
         with open(self.tarfile_diskpath, "rb") as fh:
-            while data := fh.read():
-                asum = adler32(data, asum)
-        if asum != tarfile_checksum:
+            if checksum_method == "adler32":
+                csum = calculate_checksum_adler32(fh)
+            elif checksum_method == "md5sum":
+                csum = calculate_checksum_md5(fh)
+            else:
+                raise S3StreamError(
+                    f"Checksum method: {checksum_method} not recognised."
+                )
+
+        if csum != tarfile_checksum:
             reason = (
-                f"Checksum {asum} differs from that calculated during streaming "
+                f"Checksum {csum} differs from that calculated during streaming "
                 f"upload {tarfile_checksum}."
             )
             self.log(reason, RK.LOG_ERROR)
-            raise S3StreamError(
-                f"Failure occurred during DISKTAPE-write " f"({reason})."
-            )
+            raise S3StreamError(f"Failure occurred during DISKTAPE-write ({reason}).")
 
     def _remove_tarfile_from_disktape(self):
         """On failure, remove tarfile from disk"""
