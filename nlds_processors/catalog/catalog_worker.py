@@ -1810,7 +1810,7 @@ class CatalogConsumer(RMQC):
             query_user = self._parse_queryuser(body, user)
             query_group = self._parse_querygroup(body, user, group)
             groupall = self._parse_groupall(body)
-            regex = self._parse_regex
+            regex = self._parse_regex(body)
 
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure

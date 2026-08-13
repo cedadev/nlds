@@ -59,7 +59,8 @@ async def get(
     transaction_id: Optional[str] = None,
     tag: Optional[str] = None,
     limit: Optional[int] = None,
-    descending: Optional[bool] = None,
+    descending: Optional[bool] = False,
+    regex: Optional[bool] = False,
 ):
     # create the message dictionary
     api_action = f"{RK.LIST}"
@@ -102,6 +103,8 @@ async def get(
             )
         else:
             meta_dict[MSG.TAG] = tag_dict
+    if regex:
+        meta_dict[MSG.REGEX] = True
     if len(meta_dict) > 0:
         msg_dict[MSG.META] = meta_dict
 
