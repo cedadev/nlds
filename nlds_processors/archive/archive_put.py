@@ -71,10 +71,11 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             holding_prefix = self.get_holding_prefix(body_json)
             try:
                 self.completelist, self.failedlist, tarfile, checksum = streamer.put(
-                    holding_prefix,
-                    filelist,
-                    self.chunk_size,
-                    self.num_parallel_uploads,
+                    holding_prefix=holding_prefix,
+                    filelist=filelist,
+                    chunk_size=self.chunk_size,
+                    num_parallel_uploads=self.num_parallel_uploads,
+                    checksum_method=self.checksum_method,
                 )
             except S3StreamError as e:
                 # if a S3StreamError occurs then all files have failed
@@ -87,6 +88,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # and its checksum
         body_json[MSG.DATA][MSG.CHECKSUM] = checksum
         body_json[MSG.DATA][MSG.TARFILE] = tarfile
+        body_json[MSG.DATA][MSG.CHECKSUM_METHOD] = self.checksum_method
 
         # Send whatever remains after all items have been put
         if len(self.completelist) > 0:

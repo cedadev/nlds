@@ -90,6 +90,7 @@ class GetArchiveConsumer(BaseArchiveConsumer):
                         aggregate_filelist,
                         self.chunk_size,
                         self.num_parallel_uploads,
+                        checksum_method=item["checksum_method"],
                     )
                     # dispatch any completed tarfiles to the next stage
                     for path_details in completelist:
