@@ -9,7 +9,16 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from zlib import adler32
+
 from nlds_processors.archive.checksumfile import ChecksumFile, ChecksumXRDFile
+from typing import BinaryIO
+
+
+def calculate_checksum_adler32(fh: BinaryIO) -> int:
+    csum = 1
+    while data := fh.read():
+        csum = adler32(data, csum)
+    return csum
 
 
 class Adler32SumMixin:

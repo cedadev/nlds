@@ -10,16 +10,32 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 from nlds_processors.archive.checksumfile import ChecksumFile, ChecksumXRDFile
 from hashlib import md5
+from typing import BinaryIO
+
+
+def calculate_checksum_md5(fh: BinaryIO) -> int:
+    csum = md5()
+    while data := fh.read():
+        csum.update(data)
+    return csum.hexdigest()
 
 
 class MD5SumMixin:
     def __init__(self, f, checksum=1, debug_fl=False):
-        super.__init__(f, checksum, debug_fl)
-        self.md5sum = md5(checksum)
+        self.f = f
+        self.md5sum = md5()
+        self.debug_fl = debug_fl
 
     def update_checksum(self, data):
-        self.checksum = self.md5sum.update(data)
+        self.md5sum.update(data)
+        # return the hexdigest, rather than the object
         return self.checksum
+
+    @property
+    def checksum(self):
+        """Need to return the hexdigest from a MD5 checksum as self.checksum is a
+        md5 hashlib object"""
+        return self.md5sum.hexdigest()
 
 
 class MD5File(MD5SumMixin, ChecksumFile):
