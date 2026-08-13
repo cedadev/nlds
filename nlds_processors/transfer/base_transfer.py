@@ -35,6 +35,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
     _PARALLEL_UPLOADS = "num_parallel_uploads"
     _FILELIST_MAX_LENGTH = "filelist_max_length"
     _HTTP_TIMEOUT = "http_timeout"
+    _CHECKSUM_METHOD = "checksum_method"
     DEFAULT_CONSUMER_CONFIG = {
         _TENANCY: None,
         _REQUIRE_SECURE: True,
@@ -44,6 +45,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         _PARALLEL_UPLOADS: 1,
         _HTTP_TIMEOUT: 24 * 60 * 60,  # Default to 24 hours
         StattingConsumer._FILELIST_MAX_SIZE: 16 * 1024 * 1024,
+        _CHECKSUM_METHOD: "adler32",
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -57,6 +59,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
         self.num_parallel_uploads = int(self.load_config_value(self._PARALLEL_UPLOADS))
         self.http_timeout = int(self.load_config_value(self._HTTP_TIMEOUT))
+        self.checksum_method = self.load_config_value(self._CHECKSUM_METHOD)
         self.reset()
 
     def _callback_common(self, cm, method, properties, body, connection):
