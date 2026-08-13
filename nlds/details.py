@@ -65,9 +65,11 @@ class PathLocation(BaseModel):
     path: Optional[str] = None
     access_time: Optional[float] = None
     aggregation_id: Optional[int] = None
+    checksum: Optional[str] = None
+    checksum_method: Optional[str] = None
 
     def to_dict(self) -> Dict:
-        return {
+        ret_dict = {
             "storage_type": self.storage_type,  # e.g. OBJECT_STORAGE or TAPE
             "url_scheme": self.url_scheme,  # e.g. http://
             "url_netloc": self.url_netloc,  # e.g. cedadev-o (tenancy)
@@ -75,10 +77,15 @@ class PathLocation(BaseModel):
             "path": self.path,  # e.g. /gws/cedaproc/file1.txt
             "access_time": self.access_time,
         }
+        if self.checksum:
+            ret_dict["checksum"] = self.checksum
+        if self.checksum_method:
+            ret_dict["checksum_method"] = self.checksum_method
+        return ret_dict
 
     @classmethod
     def from_dict(cls, dictionary: Dict[str, Any]):
-        return cls(
+        loc = cls(
             storage_type=dictionary["storage_type"],
             url_scheme=dictionary["url_scheme"],
             url_netloc=dictionary["url_netloc"],
@@ -86,6 +93,13 @@ class PathLocation(BaseModel):
             path=dictionary["path"],
             access_time=dictionary["access_time"],
         )
+        if "checksum" in dictionary:
+            loc.checksum = dictionary["checksum"]
+        if "checksum_method" in dictionary:
+            # convert to lower case to maintain compatibility with codebase, even
+            # though in database it is stored in uppercase (!!)
+            loc.checksum_method = dictionary["checksum_method"].lower()
+        return loc
 
     @classmethod
     def from_locationmodel(cls, location: BaseModel):
