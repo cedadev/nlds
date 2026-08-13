@@ -324,8 +324,8 @@ class NLDSWorkerConsumer(RMQC):
 
     def _process_rk_archive_put_complete(self, rk_parts: List, body_json: Dict) -> None:
         self.log(
-            "Aggregation successfully written to tape, sending checksum "
-            "info back to catalog",
+            "Aggregation successfully written to tape, sending checksum info back to "
+            "catalog",
             RK.LOG_INFO,
         )
 
