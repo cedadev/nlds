@@ -407,6 +407,20 @@ class PathDetails(BaseModel):
         return self._get_location(MSG.TAPE)
 
     @property
+    def tape_url(self) -> str:
+        pl = self._get_location(MSG.TAPE)
+        if pl is None:
+            return None
+        tape_url = ""
+        if pl.url_scheme:
+            tape_url += f"{pl.url_scheme}://"
+        if pl.url_netloc:
+            tape_url += f"{pl.url_netloc}/"
+        if pl.root:
+            tape_url += f"{pl.root}/"
+        return tape_url
+
+    @property
     def tape_name(self) -> str:
         pl = self._get_location(MSG.TAPE)
         if pl is None:
@@ -414,14 +428,9 @@ class PathDetails(BaseModel):
         else:
             # Build bit by bit to support some tape systems having components marked as
             # None / empty string
-            tape_name = ""
-            if pl.url_scheme:
-                tape_name += f"{pl.url_scheme}://"
-            if pl.url_netloc:
-                tape_name += f"{pl.url_netloc}/"
-            if pl.root:
-                tape_name += f"{pl.root}/"
-            tape_name += f"{pl.path}"
+            tape_name = self.tape_url
+            if tape_name != None:
+                tape_name += f"{pl.path}"
             return tape_name
 
     def __eq__(self, item) -> bool:
