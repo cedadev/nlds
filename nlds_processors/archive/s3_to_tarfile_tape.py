@@ -65,8 +65,8 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # get the location of the tape server and the base directory from the tape_url
         self.tape_server_url, self.tape_base_dir = self._split_tape_url(tape_url)
         self.log(
-            f"Tape url:{tape_url} split into tape server:{self.tape_server_url} "
-            f"and tape base directory:{self.tape_base_dir}.",
+            f"Tape url: {tape_url} split into tape server: {self.tape_server_url} "
+            f"and tape base directory: {self.tape_base_dir}",
             RK.LOG_INFO,
         )
 

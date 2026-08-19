@@ -31,15 +31,9 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}.{RK.ARCHIVE}.{RK.WILD}"
     DEFAULT_REROUTING_INFO = f"->{DEFAULT_QUEUE_NAME.upper()}"
 
-    _TAPE_POOL = "tape_pool"
-    _TAPE_URL = "tape_url"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
-    _DISKTAPE_LOC = "disktape_location"
     ARCHIVE_CONSUMER_CONFIG = {
-        _TAPE_POOL: None,
-        _TAPE_URL: None,
         _PRINT_TRACEBACKS: False,
-        _DISKTAPE_LOC: None,
     }
     DEFAULT_CONSUMER_CONFIG = (
         BaseTransferConsumer.DEFAULT_CONSUMER_CONFIG | ARCHIVE_CONSUMER_CONFIG
@@ -47,22 +41,31 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
-        self.tape_pool = self.load_config_value(self._TAPE_POOL)
-        self.tape_url = self.load_config_value(self._TAPE_URL)
-        self.disktape_loc = self.load_config_value(self._DISKTAPE_LOC)
         self.reset()
+
+    def _parse_tape_url(self, body: Dict) -> str:
+        # Get the tape_url from message, if none found then use the configured default
+        if (
+            MSG.TAPE_URL in body[MSG.DETAILS]
+            and body[MSG.DETAILS][MSG.TAPE_URL] is not None
+        ):
+            tape_url = body[MSG.DETAILS][MSG.TAPE_URL]
+        else:
+            raise ArchiveError("tape_url not found in message details.")
+        return tape_url
 
     def _create_streamer(
         self,
         tenancy: str,
         access_key: str,
         secret_key: str,
-        tape_url: str,
+        tape_url: str = None,
     ):
-        """Helper function to create a streamer based on status of self.disktape_loc
-        Which is now read in from the config file variable 'disktape_location' in the
-        'archive_get_q' and 'archive_put_q' sections."""
-        if self.disktape_loc:
+        """Helper function to create a streamer based on the contents of tape_url.
+        If the tape_url first character is "/" then it is a disk location.
+        If it is "root" then it is a tape location.
+        """
+        if tape_url[0] == "/":
             from nlds_processors.archive.s3_to_tarfile_disk import S3ToTarfileDisk
 
             disk_loc = os.path.expanduser(self.disktape_loc)
@@ -80,7 +83,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 http_timeout=self.http_timeout,
                 logger=self.log,
             )
-        else:
+        elif tape_url[0:7] == "root://":
             from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape
 
             self.log(
@@ -96,6 +99,12 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 secure_fl=self.require_secure_fl,
                 http_timeout=self.http_timeout,
                 logger=self.log,
+            )
+        else:
+            raise ArchiveError(
+                f"Unknown tape_url format {tape_url} passed into in function call. "
+                f"Format should be '/path/to/directory' for disktape and "
+                f"'root://' for XrootD tape location."
             )
         return streamer
 
@@ -117,17 +126,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 self.filelist, rk_transfer_failed, self.body_json, state=State.FAILED
             )
             return
-        # get tape_url for those routes that need it
-        if self.rk_parts[2] in [RK.START, RK.PREPARE, RK.PREPARE_CHECK]:
-            try:
-                tape_url = self.get_tape_config(self.body_json)
-            except ArchiveError as e:
-                self.log(
-                    "Tape config unobtainable or invalid, exiting callback.",
-                    RK.LOG_ERROR,
-                )
-                self.log(str(e), RK.LOG_DEBUG)
-                raise e
 
         # create aggregates
         if self.rk_parts[2] == RK.INITIATE:
@@ -161,65 +159,42 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                     self.body_json,
                     state=new_state,
                 )
+        # transfer files (PUT or GET)
         elif self.rk_parts[2] == RK.START:
             self.transfer(
                 self.transaction_id,
                 self.tenancy,
                 self.access_key,
                 self.secret_key,
-                tape_url,
                 self.filelist,
                 self.rk_parts[0],
                 self.body_json,
             )
+        # prepare the files for transfer (GET) - i.e. fetch them from tape
         elif self.rk_parts[2] == RK.PREPARE:
             self.prepare(
                 self.transaction_id,
                 self.tenancy,
                 self.access_key,
                 self.secret_key,
-                tape_url,
                 self.filelist,
                 self.rk_parts[0],
                 self.body_json,
             )
+        # check whether the files have been fetched from tape by the prepare phase for
+        # a transfer (GET)
         elif self.rk_parts[2] == RK.PREPARE_CHECK:
             self.prepare_check(
                 self.transaction_id,
                 self.tenancy,
                 self.access_key,
                 self.secret_key,
-                tape_url,
                 self.filelist,
                 self.rk_parts[0],
                 self.body_json,
             )
         else:
             raise ArchiveError(f"Unknown routing key {self.rk_parts[2]}")
-
-    def get_tape_config(self, body_dict) -> Tuple:
-        """Convenience function to extract tape relevant config from the message
-        details section. Currently this is just the tape
-        """
-        tape_url = None
-        if (
-            MSG.TAPE_URL in body_dict[MSG.DETAILS]
-            and body_dict[MSG.DETAILS][MSG.TAPE_URL] is not None
-        ):
-            tape_url = body_dict[MSG.DETAILS][MSG.TAPE_URL]
-        else:
-            tape_url = self.tape_url
-
-        # Check to see whether tape_url has been specified in either the message
-        # or the server_config - exit if not.
-        if self.disktape_loc is None and tape_url is None:
-            reason = (
-                "No tape_url specified at server- or request-level, exiting callback."
-            )
-            self.log(reason, RK.LOG_ERROR)
-            raise ArchiveError(reason)
-
-        return tape_url
 
     @classmethod
     def get_holding_prefix(cls, body: Dict[str, Any], holding_id: int = -1) -> str:
@@ -242,7 +217,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         tenancy: str,
         access_key: str,
         secret_key: str,
-        tape_url: str,
         filelist: List[PathDetails],
         rk_origin: str,
         body_dict: Dict[str, str],
@@ -256,7 +230,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         tenancy: str,
         access_key: str,
         secret_key: str,
-        tape_url: str,
         filelist: List[PathDetails],
         rk_origin: str,
         body_json: Dict[str, str],
@@ -270,7 +243,6 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         tenancy: str,
         access_key: str,
         secret_key: str,
-        tape_url: str,
         filelist: List[PathDetails],
         rk_origin: str,
         body_json: Dict[str, str],

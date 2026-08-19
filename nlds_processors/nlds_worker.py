@@ -302,8 +302,8 @@ class NLDSWorkerConsumer(RMQC):
         self, rk_parts: List, body_json: Dict
     ) -> None:
         self.log(
-            f"Next archivable holding aggregated, sending aggregations "
-            f"for archive-write",
+            f"Next archivable holding aggregated, sending aggregations for "
+            f"archive-write",
             RK.LOG_INFO,
         )
 

@@ -19,6 +19,7 @@ from retry import retry
 from nlds_processors.archive.archive_base import BaseArchiveConsumer
 
 from nlds_processors.archive.s3_to_tarfile_stream import S3StreamError
+from nlds_processors.archive.archive_base import ArchiveError
 
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
@@ -41,7 +42,6 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         tenancy: str,
         access_key: str,
         secret_key: str,
-        tape_url: str,
         filelist: List[PathDetails],
         rk_origin: str,
         body_json: Dict[str, str],
@@ -52,13 +52,14 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Create the S3 to tape or disk streamer
         try:
+            tape_url = self._parse_tape_url(body_json)
             streamer = self._create_streamer(
                 tenancy=tenancy,
                 access_key=access_key,
                 secret_key=secret_key,
                 tape_url=tape_url,
             )
-        except S3StreamError as e:
+        except (S3StreamError, ArchiveError) as e:
             # if a S3StreamError occurs then all files have failed
             for path_details in filelist:
                 path_details.failure_reason = e.message
@@ -77,7 +78,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
                     num_parallel_uploads=self.num_parallel_uploads,
                     checksum_method=self.checksum_method,
                 )
-            except S3StreamError as e:
+            except (S3StreamError, ArchiveError) as e:
                 # if a S3StreamError occurs then all files have failed
                 for path_details in filelist:
                     path_details.failure_reason = e.message

@@ -223,7 +223,6 @@ class Location(CatalogBase):
             else:
                 bucket = "nlds." + self.root
 
-            # only object storage returns a URL
             return urlunsplit(
                 (
                     self.url_scheme,
@@ -233,8 +232,20 @@ class Location(CatalogBase):
                     "",
                 )
             )
-        else:
-            return ""
+        elif self.storage_type == Storage.TAPE:
+            if self.url_scheme and self.url_netloc:
+                url = urlunsplit(
+                    (
+                        self.url_scheme,
+                        self.url_netloc,
+                        f"{self.root}/{self.path}",
+                        "",
+                        "",
+                    )
+                )
+            else:
+                url = ""
+            return url
 
 
 class Checksum(CatalogBase):

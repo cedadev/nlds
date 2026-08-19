@@ -74,7 +74,7 @@ class IndexerConsumer(StattingConsumer):
         if filelist_len > self.filelist_max_len:
             self.log(
                 f"Filelist longer than allowed maximum length, splitting into "
-                "batches of {self.filelist_max_len}",
+                f"batches of {self.filelist_max_len}",
                 RK.LOG_DEBUG,
             )
 

@@ -51,13 +51,13 @@ class BucketMixin:
             if not self.s3_client.bucket_exists(bucket_name):
                 self.s3_client.make_bucket(bucket_name)
                 self.log(
-                    f"Creating bucket ({bucket_name}) for this transaction",
+                    f"Creating bucket {bucket_name} for this transaction",
                     RK.LOG_INFO,
                 )
                 return True
             else:
                 self.log(
-                    f"Bucket ({bucket_name}) already exists",
+                    f"Bucket {bucket_name} already exists",
                     RK.LOG_INFO,
                 )
                 return False

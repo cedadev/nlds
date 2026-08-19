@@ -121,29 +121,6 @@ def format_datetime(date: datetime):
     return datetime_str
 
 
-def build_retrieval_dict(filelist: list[PathDetails], fullpath: bool = False):
-    """Build a retrieval dict from the filelist.  The retrieval dict contains a
-    tarfile name, a holding id, and the list of files to retrieve from the tarfile.
-    """
-    retrieval_dict = {}
-    for file in filelist:
-        # get the tape location for File or FileSystem
-        tarfile = file.tape_name
-        # if it has not been added before then create a new record
-        if not tarfile in retrieval_dict:
-            tape_loc = file.get_tape()
-            retrieval_dict[tarfile] = {
-                "holding_id": file.holding_id,
-                "checksum": tape_loc.checksum,
-                "checksum_method": tape_loc.checksum_method,
-                "filelist": [file],
-            }
-        else:
-            # if it has been added before then append to the filelist
-            retrieval_dict[tarfile]["filelist"].append(file)
-    return retrieval_dict
-
-
 class CatalogConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "catalog_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}.{RK.CATALOG}.{RK.WILD}"
@@ -179,7 +156,6 @@ class CatalogConsumer(RMQC):
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-        self.default_tape_url = self.load_config_value(self._DEFAULT_TAPE_URL)
         self.default_tenancy = self.load_config_value(self._DEFAULT_TENANCY)
         self.ingest_deadline = self.load_config_value(self._INGEST_DEADLINE)
         self.filelist_max_length = self.load_config_value(self._FILELIST_MAX_LENGTH)
@@ -329,17 +305,6 @@ class CatalogConsumer(RMQC):
         except KeyError:
             groupall = False
         return groupall
-
-    def _parse_tape_url(self, body: Dict) -> str:
-        # Get the tape_url from message, if none found then use the configured default
-        if (
-            MSG.TAPE_URL in body[MSG.DETAILS]
-            and body[MSG.DETAILS][MSG.TAPE_URL] is not None
-        ):
-            tape_url = body[MSG.DETAILS][MSG.TAPE_URL]
-        else:
-            tape_url = self.default_tape_url
-        return tape_url
 
     def _parse_aggregation_id(self, body: Dict) -> str:
         # Parse aggregation and checksum info from message.
@@ -1206,8 +1171,9 @@ class CatalogConsumer(RMQC):
                     aggregation = self.catalog.get_aggregation(
                         aggregation_id=pl.aggregation_id
                     )
-                    pl.checksum_method = aggregation.algorithm
-                    pl.checksum = aggregation.checksum
+                    if aggregation:
+                        pl.checksum_method = aggregation.algorithm
+                        pl.checksum = aggregation.checksum
 
                     if pl.access_time is None:
                         access_time = datetime.now()
@@ -1670,6 +1636,9 @@ class CatalogConsumer(RMQC):
             )
             # returned results are Files, Transactions, Holdings
             files_to_commit = []
+            # reassign results if None to empty list
+            if results is None:
+                results = []
             for res in results:
                 file = res.File
                 # get the original path details from the path_details_list

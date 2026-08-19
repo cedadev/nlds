@@ -699,7 +699,7 @@ class Catalog(DBMixin):
             else:
                 result = file_q
 
-            if with_for_update:
+            if result and with_for_update:
                 result = result.with_for_update()
 
         except (IntegrityError, OperationalError) as e:

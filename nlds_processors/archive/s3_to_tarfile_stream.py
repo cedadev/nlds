@@ -226,7 +226,6 @@ class S3ToTarfileStream(BucketMixin):
 
                 else:
                     # Log successful
-                    self.log(f"Successfully archived {path_details.path}", RK.LOG_DEBUG)
                     completelist.append(path_details)
 
         return completelist, failedlist, file_object.checksum

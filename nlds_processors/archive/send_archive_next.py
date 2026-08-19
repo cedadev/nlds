@@ -62,9 +62,7 @@ def send_archive_next(holding_id: int):
             # Convert to PathDetails for JSON serialisation
             MSG.FILELIST: [],
         },
-        MSG.META: {
-            # Insert an empty meta dict
-        },
+        MSG.META: {},
         MSG.TYPE: MSG.TYPE_STANDARD,
     }
     # add the holding id if it exists
