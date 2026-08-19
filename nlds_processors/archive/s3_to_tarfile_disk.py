@@ -36,7 +36,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         s3_tenancy: str,
         s3_access_key: str,
         s3_secret_key: str,
-        disk_location: str,
+        tape_url: str,
         secure_fl: bool,
         http_timeout: int,
         logger,
@@ -52,7 +52,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         )
         # record and make the disk location directory if it doesn't exist
         try:
-            self.disk_loc = os.path.expanduser(disk_location)
+            self.disk_loc = os.path.expanduser(tape_url)
             os.mkdir(self.disk_loc)
         except FileExistsError:
             # it's okay if the path already exists

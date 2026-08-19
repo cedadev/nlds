@@ -10,8 +10,8 @@ __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple, Any
-import os
+from typing import List, Dict, Any
+from urllib import parse as urlparse
 
 from nlds_processors.transfer.base_transfer import BaseTransferConsumer
 from nlds_processors.utils.aggregations import bin_files
@@ -65,29 +65,30 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         If the tape_url first character is "/" then it is a disk location.
         If it is "root" then it is a tape location.
         """
-        if tape_url[0] == "/":
+        url = urlparse.urlparse(tape_url)
+
+        if url.scheme == "root" and url.netloc == "":
             from nlds_processors.archive.s3_to_tarfile_disk import S3ToTarfileDisk
 
-            disk_loc = os.path.expanduser(self.disktape_loc)
             self.log(
-                f"Starting connection between {disk_loc} and object store "
-                f"{tenancy}",
+                f"Starting connection between: {tape_url} on DISKTAPE and object store:"
+                f" {tenancy}",
                 RK.LOG_INFO,
             )
             streamer = S3ToTarfileDisk(
                 s3_tenancy=tenancy,
                 s3_access_key=access_key,
                 s3_secret_key=secret_key,
-                disk_location=disk_loc,
+                tape_url=url.path,
                 secure_fl=self.require_secure_fl,
                 http_timeout=self.http_timeout,
                 logger=self.log,
             )
-        elif tape_url[0:7] == "root://":
+        elif url.scheme == "root" and url.netloc != "":
             from nlds_processors.archive.s3_to_tarfile_tape import S3ToTarfileTape
 
             self.log(
-                f"Starting connecting between {tape_url} and object store "
+                f"Starting connecting between: {tape_url} on TAPE and object store: "
                 f"{tenancy}",
                 RK.LOG_INFO,
             )
