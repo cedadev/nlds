@@ -134,10 +134,10 @@ class CatalogConsumer(RMQC):
     _DB_OPTIONS_USER = "db_user"
     _DB_OPTIONS_PASSWD = "db_passwd"
     _DB_ECHO = "echo"
-    _DEFAULT_TENANCY = "default_tenancy"
-    _DEFAULT_TAPE_URL = "default_tape_url"
+    _TENANCY = "tenancy"
     _INGEST_DEADLINE = "archive_ingest_deadline"
     _FILELIST_MAX_LENGTH = "archive_filelist_max_length"
+    _USE_TAPE_POOLS = "use_tape_pools"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -147,18 +147,19 @@ class CatalogConsumer(RMQC):
             _DB_OPTIONS_PASSWD: "",
             _DB_ECHO: True,
         },
-        _DEFAULT_TENANCY: None,
-        _DEFAULT_TAPE_URL: None,
+        _TENANCY: None,
         _INGEST_DEADLINE: 86400,  # One day
         _FILELIST_MAX_LENGTH: 100000,
+        _USE_TAPE_POOLS: False,
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
 
-        self.default_tenancy = self.load_config_value(self._DEFAULT_TENANCY)
+        self.tenancy = self.load_config_value(self._TENANCY)
         self.ingest_deadline = self.load_config_value(self._INGEST_DEADLINE)
         self.filelist_max_length = self.load_config_value(self._FILELIST_MAX_LENGTH)
+        self.use_tape_pools = self.load_config_value(self._USE_TAPE_POOLS)
         self.catalog = None
         self.tapelist = []
 
@@ -279,7 +280,7 @@ class CatalogConsumer(RMQC):
         ):
             tenancy = body[MSG.DETAILS][MSG.TENANCY]
         else:
-            tenancy = self.default_tenancy
+            tenancy = self.tenancy
         return tenancy
 
     def _parse_metadata_vars(self, body: Dict) -> Tuple:
@@ -298,6 +299,12 @@ class CatalogConsumer(RMQC):
             md.limit,
             md.descending,
         )
+
+    def _parse_tape_pool(self, body: Dict) -> str:
+        tape_pool = None
+        if MSG.META in body and MSG.TAPE_POOL in body[MSG.META]:
+            tape_pool = body[MSG.META][MSG.TAPE_POOL]
+        return tape_pool
 
     def _parse_groupall(self, body: Dict) -> str:
         try:
@@ -1277,6 +1284,7 @@ class CatalogConsumer(RMQC):
         try:
             tenancy = self._parse_tenancy(body)
             _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
+            tape_pool = self._parse_tape_pool(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1292,12 +1300,19 @@ class CatalogConsumer(RMQC):
                 tenancy,
                 self.ingest_deadline,
             )
-            holding_id = next_holding.id
 
         # If no holdings left to archive then end the callback
         if not next_holding:
             self.log("No holdings found to archive, exiting callback.", RK.LOG_INFO)
             return
+
+        holding_id = next_holding.id
+        # determine which tape pool to use, if it has not been set in the message body
+        # and the config is set to use the tape_pools
+        # current system is to arrange tape pools by the year
+        if self.use_tape_pools and not tape_pool:
+            # the tape pool is the year of the very first transaction
+            tape_pool = str(next_holding.transactions[0].ingest_time.year)
 
         # reset completed lists
         self.reset()
@@ -1368,6 +1383,7 @@ class CatalogConsumer(RMQC):
         body[MSG.DETAILS][MSG.USER] = next_holding.user
         body[MSG.DETAILS][MSG.GROUP] = next_holding.group
         body[MSG.META][MSG.HOLDING_ID] = next_holding.id
+        body[MSG.META][MSG.TAPE_POOL] = tape_pool
 
         # initialise the monitor first
         monitor_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.INITIATE])
@@ -1496,7 +1512,7 @@ class CatalogConsumer(RMQC):
                     else:
                         access_time = datetime.fromtimestamp(pl.access_time)
                     # modify location as it has been created when the tape backup was
-                    # scheduled by catalog_archive_next
+                    # scheduled by catalog_archive_put
                     self.catalog.modify_location(
                         location,
                         url_scheme=pl.url_scheme,

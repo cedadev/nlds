@@ -53,6 +53,13 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # Create the S3 to tape or disk streamer
         try:
             tape_url = self._parse_tape_url(body_json)
+            # Add the extra tape pool directory if defined
+            # Only required for PUT - should be None for GET and DEL as the URL / path
+            # is fully qualified, including the tape pool, in the database path
+            tape_pool = self._parse_tape_pool(body_json)
+            if tape_pool:
+                tape_url += "/" + tape_pool
+
             streamer = self._create_streamer(
                 tenancy=tenancy,
                 access_key=access_key,

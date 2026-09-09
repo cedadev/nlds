@@ -31,12 +31,20 @@ import nlds.rabbit.message_keys as MSG
     type=int,
     help="The numeric id of an existing holding to put the file into.",
 )
-def send_archive_next(holding_id: int):
+@click.option(
+    "-p",
+    "--tape_pool",
+    default="",
+    type=str,
+    help="The tape pool to use to archive the files to.",
+)
+def send_archive_next(holding_id: int, tape_pool: str):
     CRONJOB_CONFIG_SECTION = "cronjob_publisher"
     DEFAULT_CONFIG = {
         MSG.ACCESS_KEY: None,
         MSG.SECRET_KEY: None,
         MSG.TAPE_URL: None,
+        MSG.TAPE_POOL: None,
         MSG.TENANCY: None,
     }
     # Load any cronjob config, if present
@@ -68,6 +76,8 @@ def send_archive_next(holding_id: int):
     # add the holding id if it exists
     if holding_id:
         msg_dict[MSG.META][MSG.HOLDING_ID] = holding_id
+    if tape_pool:
+        msg_dict[MSG.META][MSG.TAPE_POOL] = tape_pool
 
     routing_key = f"{RK.ROOT}.{RK.CATALOG_ARCHIVE_NEXT}.{RK.START}"
 

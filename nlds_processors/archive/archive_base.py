@@ -20,9 +20,10 @@ from nlds.details import PathDetails
 from nlds.rabbit.consumer import State
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
+from nlds.errors import MessageError
 
 
-class ArchiveError(Exception):
+class ArchiveError(MessageError):
     pass
 
 
@@ -44,7 +45,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         self.reset()
 
     def _parse_tape_url(self, body: Dict) -> str:
-        # Get the tape_url from message, if none found then use the configured default
+        # Get the tape_url from message, if none found then raise an Error
         if (
             MSG.TAPE_URL in body[MSG.DETAILS]
             and body[MSG.DETAILS][MSG.TAPE_URL] is not None
@@ -53,6 +54,13 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         else:
             raise ArchiveError("tape_url not found in message details.")
         return tape_url
+
+    def _parse_tape_pool(self, body: Dict) -> str:
+        # Get the tape pool from message, if None then return None
+        tape_pool = None
+        if MSG.META in body and MSG.TAPE_POOL in body[MSG.META]:
+            tape_pool = body[MSG.META][MSG.TAPE_POOL]
+        return tape_pool
 
     def _create_streamer(
         self,
@@ -65,9 +73,10 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
         If the tape_url first character is "/" then it is a disk location.
         If it is "root" then it is a tape location.
         """
+        # get the constituent parts of the url, scheme, netloc, etc.
         url = urlparse.urlparse(tape_url)
 
-        if url.scheme == "root" and url.netloc == "":
+        if url.scheme == "" and url.netloc == "":
             from nlds_processors.archive.s3_to_tarfile_disk import S3ToTarfileDisk
 
             self.log(
@@ -75,6 +84,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 f" {tenancy}",
                 RK.LOG_INFO,
             )
+            # if the tape pool is defined then add it as a directory to the path (for
+            # disktape)
             streamer = S3ToTarfileDisk(
                 s3_tenancy=tenancy,
                 s3_access_key=access_key,
@@ -92,6 +103,8 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
                 f"{tenancy}",
                 RK.LOG_INFO,
             )
+            # if the tape pool is defined then add it as a directory to the url (for
+            # actual tape).  This will form the last directory in the base_dir
             streamer = S3ToTarfileTape(
                 s3_tenancy=tenancy,
                 s3_access_key=access_key,
