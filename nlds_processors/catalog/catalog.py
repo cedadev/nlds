@@ -1076,12 +1076,12 @@ class Catalog(DBMixin):
                     File.path_type == PathType.FILE,
                     # At least one storage location is not TAPE
                     # Note that this could not have any details filled (url, root, etc.)
-                    # as files that are in the process of being sent to tape have an empty
-                    # TAPE storage location created for them.  This prevents them being
-                    # sent to tape again.
+                    # as files that are in the process of being sent to tape have an
+                    # emptyTAPE storage location created for them.  This prevents them
+                    # being sent to tape again.
                     ~File.locations.any(Location.storage_type == Storage.TAPE),
-                    # At least one storage location is OBJECT_STORAGE.  This indicates that
-                    # the file has been successfully transferred to object storage.
+                    # At least one storage location is OBJECT_STORAGE.  This indicates
+                    # that the file has been successfully transferred to object storage.
                     File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
                 )
                 .limit(limit)

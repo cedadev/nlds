@@ -137,7 +137,7 @@ class CatalogConsumer(RMQC):
     _TENANCY = "tenancy"
     _INGEST_DEADLINE = "archive_ingest_deadline"
     _FILELIST_MAX_LENGTH = "archive_filelist_max_length"
-    _USE_TAPE_POOLS = "use_tape_pools"
+    _TAPE_POOL_STRATEGY = "tape_pool_strategy"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -150,7 +150,7 @@ class CatalogConsumer(RMQC):
         _TENANCY: None,
         _INGEST_DEADLINE: 86400,  # One day
         _FILELIST_MAX_LENGTH: 100000,
-        _USE_TAPE_POOLS: False,
+        _TAPE_POOL_STRATEGY: [],
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -159,9 +159,33 @@ class CatalogConsumer(RMQC):
         self.tenancy = self.load_config_value(self._TENANCY)
         self.ingest_deadline = self.load_config_value(self._INGEST_DEADLINE)
         self.filelist_max_length = self.load_config_value(self._FILELIST_MAX_LENGTH)
-        self.use_tape_pools = self.load_config_value(self._USE_TAPE_POOLS)
+        self.tape_pool_strategy = self.load_config_value(self._TAPE_POOL_STRATEGY)
         self.catalog = None
         self.tapelist = []
+        # convert and validate the tape_pool_strategy
+        self._validate_tape_pool_strategy()
+
+    def _validate_tape_pool_strategy(self):
+        """
+        Current valid tape pool strategies are:
+            1. metadata: the user specifies a 'tapepool' tag in the holding with the
+               name of the pool as the key.
+            2. year: use the first ingest year according to the holding
+            3. none: no tape pool, just uses the default path / pool
+        Other strategies may be added later
+        """
+        # which strategies are valid?
+        strategies = ["metadata", "year", "none"]
+        # remove white space and hyphens
+        chars = "-_ "
+        table = str.maketrans("", "", chars)
+        self.tape_pool_strategy = [
+            t.translate(table).lower() for t in self.tape_pool_strategy
+        ]
+        # validate the entries
+        for t in self.tape_pool_strategy:
+            if t not in strategies:
+                raise CatalogError(f"Invalid tape pool strategy: {t}")
 
     @property
     def database(self):
@@ -1278,12 +1302,33 @@ class CatalogConsumer(RMQC):
         pd.holding_id = t.holding_id
         return pd
 
+    def _determine_tape_pool(self, next_holding: Holding) -> str:
+        """Determine which tape pool to use, based on the settings in the config file.
+        Setting is stored in `tape_pool_strategy`
+        """
+        if "metadata" in self.tape_pool_strategy:
+            # Metadata strategy requires the key "metadata" to be in the
+            # tape_pool_strategy list AND for the holding to contain a tag with
+            # "tapepool" as the key
+            for tag in next_holding.tags:
+                if tag.key == "tapepool":
+                    return tag.value
+
+        if "year" in self.tape_pool_strategy:
+            # Year returns the year of the first ingest (first transaction)
+            if len(next_holding.transactions) > 0:
+                tapepool = str(next_holding.transactions[0].ingest_time.year)
+                return tapepool
+
+        return None
+
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location for it and pass it
         for aggregating to the Archive Put process."""
         try:
             tenancy = self._parse_tenancy(body)
             _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
+            # get the tape_pool from the message
             tape_pool = self._parse_tape_pool(body)
         except CatalogError:
             # functions above handled message logging, here we just return
@@ -1308,11 +1353,9 @@ class CatalogConsumer(RMQC):
 
         holding_id = next_holding.id
         # determine which tape pool to use, if it has not been set in the message body
-        # and the config is set to use the tape_pools
-        # current system is to arrange tape pools by the year
-        if self.use_tape_pools and not tape_pool:
+        if not tape_pool:
             # the tape pool is the year of the very first transaction
-            tape_pool = str(next_holding.transactions[0].ingest_time.year)
+            tape_pool = self._determine_tape_pool(next_holding)
 
         # reset completed lists
         self.reset()

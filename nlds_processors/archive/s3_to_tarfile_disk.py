@@ -53,7 +53,10 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         # record and make the disk location directory if it doesn't exist
         try:
             self.disk_loc = os.path.expanduser(tape_url)
-            os.mkdir(self.disk_loc)
+            # NRM - 10/09/2026 - Don't create the DISKTAPE location, or the "tape_pool"
+            # locations below it, so we can test if the user specifying a bad tape pool
+            # fails in an elegant manner
+            # os.mkdir(self.disk_loc)
         except FileExistsError:
             # it's okay if the path already exists
             pass
