@@ -571,7 +571,7 @@ class RabbitMQPublisher:
                                 set to the name of a particular microservice,
                                 usually the one which instigated the log event
         :param str route:       Route that the message has taken. Optional, will
-                                be set to target if not specifed.
+                                be set to target if not specified.
 
         :return:    JSON encoded string in the proper format for message passing
 
