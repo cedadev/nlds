@@ -32,13 +32,20 @@ import nlds.rabbit.message_keys as MSG
     help="The numeric id of an existing holding to put the file into.",
 )
 @click.option(
+    "-t",
+    "--tenancy",
+    default=None,
+    type=str,
+    help="The object store tenancy to use to archive the files from.",
+)
+@click.option(
     "-p",
     "--tape_pool",
     default="",
     type=str,
     help="The tape pool to use to archive the files to.",
 )
-def send_archive_next(holding_id: int, tape_pool: str):
+def send_archive_next(holding_id: int, tape_pool: str, tenancy: str):
     CRONJOB_CONFIG_SECTION = "cronjob_publisher"
     DEFAULT_CONFIG = {
         MSG.ACCESS_KEY: None,
@@ -46,6 +53,7 @@ def send_archive_next(holding_id: int, tape_pool: str):
         MSG.TAPE_URL: None,
         MSG.TAPE_POOL: None,
         MSG.TENANCY: None,
+        MSG.TAPE_POOL_STRATEGY: None,
     }
     # Load any cronjob config, if present
     cronjob_config = DEFAULT_CONFIG
@@ -78,8 +86,13 @@ def send_archive_next(holding_id: int, tape_pool: str):
         msg_dict[MSG.META][MSG.HOLDING_ID] = holding_id
     if tape_pool:
         msg_dict[MSG.META][MSG.TAPE_POOL] = tape_pool
+    if tenancy:
+        msg_dict[MSG.DETAILS][MSG.TENANCY] = tenancy
 
     routing_key = f"{RK.ROOT}.{RK.CATALOG_ARCHIVE_NEXT}.{RK.START}"
+
+    # scrub the secret key to make an error on transfer
+    msg_dict[MSG.DETAILS][MSG.SECRET_KEY] = "****"
 
     click.echo(f"Sending message to {routing_key}: \n{json.dumps(msg_dict, indent=4)}")
     rabbit_publisher.publish_message(routing_key, msg_dict)

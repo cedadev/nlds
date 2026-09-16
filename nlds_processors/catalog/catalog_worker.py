@@ -155,15 +155,10 @@ class CatalogConsumer(RMQC):
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
-
-        self.tenancy = self.load_config_value(self._TENANCY)
         self.ingest_deadline = self.load_config_value(self._INGEST_DEADLINE)
         self.filelist_max_length = self.load_config_value(self._FILELIST_MAX_LENGTH)
-        self.tape_pool_strategy = self.load_config_value(self._TAPE_POOL_STRATEGY)
         self.catalog = None
         self.tapelist = []
-        # convert and validate the tape_pool_strategy
-        self._validate_tape_pool_strategy()
 
     def _validate_tape_pool_strategy(self):
         """
@@ -306,6 +301,16 @@ class CatalogConsumer(RMQC):
         else:
             tenancy = self.tenancy
         return tenancy
+
+    def _parse_tape_pool_strategy(self, body: Dict) -> list:
+        if (
+            MSG.TAPE_POOL_STRATEGY in body[MSG.DETAILS]
+            and body[MSG.DETAILS][MSG.TAPE_POOL_STRATEGY]
+        ):
+            tape_pool_strategy = body[MSG.DETAILS][MSG.TAPE_POOL_STRATEGY]
+        else:
+            tape_pool_strategy = []
+        return tape_pool_strategy
 
     def _parse_metadata_vars(self, body: Dict) -> Tuple:
         """Convenience function to prevent unnecessary code replication for
@@ -486,7 +491,7 @@ class CatalogConsumer(RMQC):
         if tags:
             for k in tags:
                 try:
-                    tag = self.catalog.get_tag(holding, k, with_for_update=True)
+                    _ = self.catalog.get_tag(holding, k, with_for_update=True)
                 except CatalogError:  # tag's key not found so create
                     self.catalog.create_tag(holding, k, tags[k])
                 else:
@@ -678,7 +683,6 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body, mandatory=True)
-            tenancy = self._parse_tenancy(body)
             label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError:
             # functions above handled message logging, here we just return
@@ -1330,6 +1334,9 @@ class CatalogConsumer(RMQC):
             _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
             # get the tape_pool from the message
             tape_pool = self._parse_tape_pool(body)
+            # get and validate the tape pool strategy
+            self.tape_pool_strategy = self._parse_tape_pool_strategy(body)
+            self._validate_tape_pool_strategy()
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1354,7 +1361,7 @@ class CatalogConsumer(RMQC):
         holding_id = next_holding.id
         # determine which tape pool to use, if it has not been set in the message body
         if not tape_pool:
-            # the tape pool is the year of the very first transaction
+            # needs self.tape_pool_strategy to be set
             tape_pool = self._determine_tape_pool(next_holding)
 
         # reset completed lists
@@ -1678,7 +1685,10 @@ class CatalogConsumer(RMQC):
         try:
             # check the holding exists
             _ = self._get_holding_with_retry(
-                user, group, holding_id=holding_id, with_for_update=True
+                user,
+                group,
+                holding_id=holding_id,
+                with_for_update=True,
             )
         except CatalogError as e:
             for f in path_details_list:
@@ -2410,7 +2420,9 @@ class CatalogConsumer(RMQC):
             elif rk_parts[1] == RK.CATALOG_REMOVE:
                 # the transfer to tape has failed so remove the TAPE location
                 self._catalog_remove_storage_locations(
-                    body_dict, rk_parts[0], Storage.TAPE
+                    body_dict,
+                    rk_parts[0],
+                    Storage.TAPE,
                 )
 
         elif api_method == RK.UNSTAGE:
@@ -2429,7 +2441,10 @@ class CatalogConsumer(RMQC):
                 # on tape yet - this needs to be fixed before UNSTAGE can go into
                 # production
                 self._catalog_remove_storage_locations(
-                    body_dict, rk_parts[0], Storage.OBJECT_STORAGE, force=True
+                    body_dict,
+                    rk_parts[0],
+                    Storage.OBJECT_STORAGE,
+                    force=True,
                 )
 
         # RPC methods follow - don't need to split any routing key for an RPC method
