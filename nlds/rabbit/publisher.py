@@ -76,9 +76,13 @@ class RabbitMQPublisher:
         # 30 mins in s
         self.keepalive = None
 
-        # setup the logger
+        # setup the logger - setup_logging_fl only set for logging consumer
+        self.log_enabled = False
         if setup_logging_fl:
             self.setup_logging()
+        # create the logging buffer list of log messages
+        # each message will be a 3-tuple of (date, log level, message)
+        self.log_buffer = []
 
     @retry(RabbitRetryError, tries=-1, delay=1, backoff=2, max_delay=60, logger=logger)
     def get_connection(self):
@@ -362,6 +366,9 @@ class RabbitMQPublisher:
         """
         # Do not configure logging if not enabled at the internal level (note
         # this can be overridden by consumer-specific config)
+        self.log_enabled = True
+        self.log_level_int = getattr(logging, log_level.upper())
+
         if not enable:
             return
 
@@ -489,6 +496,32 @@ class RabbitMQPublisher:
                             f"Failed to create log file for " f"{log_file}: {str(e)}"
                         )
 
+    def send_logging(self):
+        """
+        New logging method sends one log message per message received by the consumer,
+        rather than lots of little messages throughout the processing.
+        This uses a buffer to store the log strings - a dictionary with a key-string
+        pair for each log level.
+        This function sends the log string to the logging consumer.
+        This functions should be called at the bottom of the callback function for each
+        consumer.
+        """
+        # Check format of given target
+        target = self.name
+        if not (target[:5] == RK.LOGGER_PREFIX):
+            target = f"{RK.LOGGER_PREFIX}{target}"
+
+        if len(self.log_buffer) > 0:
+            routing_key = ".".join([RK.ROOT, RK.LOG, RK.LOG_ALL])
+            # build the log_message
+            log_message = ""
+            for m in self.log_buffer:
+                log_message += " - ".join(m) + "\n"
+            message = self.create_log_message(log_message, target)
+            self.publish_message(routing_key, message)
+            # zero the logging buffers
+            self.log_buffer = []
+
     def _log(
         self,
         log_message: str,
@@ -522,36 +555,38 @@ class RabbitMQPublisher:
             )
             return
 
-        # Check format of given target
-        if not (target[:5] == RK.LOGGER_PREFIX):
-            target = f"{RK.LOGGER_PREFIX}{target}"
-
         # First log message with local logger
         log_level_int = getattr(logging, log_level.upper())
         logger.log(log_level_int, log_message, **kwargs)
 
-        low_priority = (
-            log_level == RK.LOG_INFO
-            or log_level == RK.LOG_WARNING
-            or log_level == RK.LOG_DEBUG
+        # then add to buffer for sending later - add the logger header of date and
+        # level
+        nowtime = datetime.now().isoformat(sep=" ", timespec="milliseconds")
+        self.log_buffer.append(
+            (
+                nowtime,
+                "nlds." + target,
+                log_level.upper(),
+                log_message,
+            )
         )
-
-        routing_key = ".".join([RK.ROOT, RK.LOG, log_level.lower()])
-        message = self.create_log_message(log_message, target)
-        if not low_priority:
-            self.publish_message(routing_key, message)
 
     def log(
         self,
         log_message: str,
         log_level: str,
-        target: str = None,
         body_json: str = None,
         **kwargs,
     ) -> None:
-        # Attempt to log to publisher's name
-        if not target:
-            target = self.name
+        # don't log if disabled or log level is lower than self.log_level
+        if not self.log_enabled:
+            return
+        log_level_int = getattr(logging, log_level.upper())
+        if log_level_int < self.log_level_int:
+            return
+
+        # only ever use the class name as the target
+        target = self.name
         # convert string json to nice formatted json and append to message
         if body_json:
             log_message += f"\n{json.dumps(body_json, indent=4)}\n"

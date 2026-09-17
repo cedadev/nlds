@@ -308,8 +308,10 @@ class RabbitMQConsumer(ABC, RMQP):
         c_sub_id = body_json[MSG.DETAILS][MSG.SUB_ID]
         sub_id = self.create_sub_id(pathlist)
         if sub_id != c_sub_id:
+
             self.log(
-                f"Changing sub id from {c_sub_id} to {sub_id} with pathlist {pathlist}",
+                f"Changing sub id from {c_sub_id} to {sub_id} with pathlist: "
+                f"{','.join([p.original_path for p in pathlist])}",
                 RK.LOG_DEBUG,
             )
             # send a splitting message for the old sub id, as it has been split into
@@ -403,7 +405,6 @@ class RabbitMQConsumer(ABC, RMQP):
         # by the consumer-specific logging config
         if not enable:
             return
-
         return super().setup_logging(
             enable=enable,
             log_level=log_level,
@@ -560,8 +561,8 @@ class RabbitMQConsumer(ABC, RMQP):
             # NRM - changed back to acknowledge the message after processing
             self.acknowledge_message(ch, method.delivery_tag, connection)
             self.log(
-                f"Callback complete.  Acknowledged message with routing key "
-                f"{method.routing_key}",
+                f"Callback complete.  Acknowledged message with routing key: "
+                f"{method.routing_key}. ",
                 RK.LOG_INFO,
             )
 

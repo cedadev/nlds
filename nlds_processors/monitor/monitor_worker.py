@@ -224,7 +224,7 @@ class MonitorConsumer(RMQC):
         try:
             warnings = body[MSG.DETAILS][MSG.WARNING]
         except KeyError:
-            self.log("No warning found in message, continuing without", RK.LOG_DEBUG)
+            self.log("No warning found in message, continuing without. ", RK.LOG_DEBUG)
             warnings = []
         return warnings
 
@@ -785,7 +785,7 @@ class MonitorConsumer(RMQC):
         body: bytes,
         connection: Connection,
     ) -> None:
-        # Connect to database if not connected yet
+
         # Convert body from bytes to json for ease of manipulation
         body = self._deserialize(body)
 
@@ -843,7 +843,7 @@ class MonitorConsumer(RMQC):
         else:
             self.log("API method key did not specify a valid task.", RK.LOG_ERROR)
 
-        self.log("Callback complete!", RK.LOG_DEBUG)
+        self.send_logging()
 
     def attach_database(self, create_db_fl: bool = True):
         """Attach the Monitor to the consumer"""
@@ -860,12 +860,14 @@ class MonitorConsumer(RMQC):
             self.log(e.message, RK.LOG_CRITICAL)
         # start the session - just have one
         self.monitor.start_session()
+        self.send_logging()
 
     def detach_database(self):
         # rollback any pending
         self.monitor.session.rollback()
         # end the session
         self.monitor.end_session()
+        self.send_logging()
 
     def get_engine(self):
         # Method for making the db_engine available to alembic

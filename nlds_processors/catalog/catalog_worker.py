@@ -121,6 +121,14 @@ def format_datetime(date: datetime):
     return datetime_str
 
 
+def pathlist_to_string(pathlist: list[PathDetails]):
+    """Quick function to translate PathDetails values in a list into a string"""
+    strlist = []
+    for p in pathlist:
+        strlist.append(p.original_path)
+    return ", ".join(strlist)
+
+
 class CatalogConsumer(RMQC):
     DEFAULT_QUEUE_NAME = "catalog_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}.{RK.CATALOG}.{RK.WILD}"
@@ -663,7 +671,7 @@ class CatalogConsumer(RMQC):
             # failed
             rk_failed = ".".join([rk_origin, RK.CATALOG_SETUP, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_SETUP", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -788,7 +796,7 @@ class CatalogConsumer(RMQC):
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_PUT, RK.COMPLETE])
             self.log(f"Sending completed PathList from CATALOG_PUT", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -800,7 +808,7 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_PUT, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_PUT", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -970,7 +978,7 @@ class CatalogConsumer(RMQC):
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.COMPLETE])
             self.log(f"Sending completed PathList from CATALOG_UPDATE", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -981,7 +989,7 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_UPDATE", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1262,7 +1270,7 @@ class CatalogConsumer(RMQC):
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_GET, RK.COMPLETE])
             self.log(f"Sending completed PathList from CATALOG_GET", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1278,7 +1286,7 @@ class CatalogConsumer(RMQC):
                 f"retrieval",
                 RK.LOG_INFO,
             )
-            self.log(f"{self.tapelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.tapelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.tapelist,
                 routing_key=rk_restore,
@@ -1290,7 +1298,7 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_GET", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1444,7 +1452,7 @@ class CatalogConsumer(RMQC):
             self.log(
                 f"Sending completed PathList from CATALOG_ARCHIVE_PUT", RK.LOG_INFO
             )
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1596,7 +1604,7 @@ class CatalogConsumer(RMQC):
             self.log(
                 f"Sending completed PathList from CATALOG_ARCHIVE_UPDATE", RK.LOG_INFO
             )
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1609,7 +1617,7 @@ class CatalogConsumer(RMQC):
             self.log(
                 f"Sending failed PathList from CATALOG_ARCHIVE_UPDATE ", RK.LOG_INFO
             )
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1745,7 +1753,7 @@ class CatalogConsumer(RMQC):
 
         if len(self.completelist) > 0:
             self.log(f"Sending completed PathList from CATALOG_REMOVE ", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1755,7 +1763,7 @@ class CatalogConsumer(RMQC):
 
         if len(self.failedlist) > 0:
             self.log(f"Sending failed PathList from CATALOG_REMOVE ", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1830,7 +1838,7 @@ class CatalogConsumer(RMQC):
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_DEL, RK.COMPLETE])
             self.log(f"Sending completed PathList from CATALOG_DEL", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1841,7 +1849,7 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_DEL, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_DEL", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -2265,6 +2273,7 @@ class CatalogConsumer(RMQC):
         db_options = self.load_config_value(self._DB_OPTIONS)
         self.catalog = Catalog(db_engine, db_options)
 
+        # logging occurs just within this function
         try:
             db_connect = self.catalog.connect(create_db_fl=create_db_fl)
             if create_db_fl:
@@ -2274,11 +2283,14 @@ class CatalogConsumer(RMQC):
 
         # start a session - use it globally to minimise DB connections
         self.catalog.start_session()
+        self.send_logging()
 
     def detach_database(self) -> None:
+        # logging occurs just within this function
         self.catalog.session.rollback()
         # end the session
         self.catalog.end_session()
+        self.send_logging()
 
     def get_engine(self) -> None:
         # Method for making the db_engine available to alembic
@@ -2301,10 +2313,10 @@ class CatalogConsumer(RMQC):
         body: bytes,
         connection: Connection,
     ) -> None:
+
         # Reset member variables
         self.reset()
 
-        # Connect to database if not connected yet
         # Convert body from bytes to json for ease of manipulation
         body_dict = self._deserialize(body)
 
@@ -2462,6 +2474,8 @@ class CatalogConsumer(RMQC):
 
         elif api_method == RK.CANCEL:
             self._catalog_cancel(body_dict, properties)
+
+        self.send_logging()
 
 
 def main() -> None:

@@ -207,6 +207,7 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                 )
         else:
             raise TransferError(f"Unknown routing key {self.rk_parts[2]}")
+        self.send_logging()
 
     def get_objectstore_config(self, body_dict) -> Tuple:
         try:

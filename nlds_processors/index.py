@@ -190,6 +190,8 @@ class IndexerConsumer(StattingConsumer):
             else:
                 self._scan(filelist, rk_parts, body_json)
 
+        self.send_logging()
+
     def _index_r(
         self,
         item_path: PathDetails,

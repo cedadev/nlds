@@ -209,6 +209,7 @@ class BaseArchiveConsumer(BaseTransferConsumer, ABC):
             )
         else:
             raise ArchiveError(f"Unknown routing key {self.rk_parts[2]}")
+        self.send_logging()
 
     @classmethod
     def get_holding_prefix(cls, body: Dict[str, Any], holding_id: int = -1) -> str:

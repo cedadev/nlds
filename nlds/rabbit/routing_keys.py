@@ -84,4 +84,5 @@ LOG_RKS = (
     LOG_ERROR,
     LOG_CRITICAL,
 )
+LOG_ALL = "all"
 LOGGER_PREFIX = "nlds."
