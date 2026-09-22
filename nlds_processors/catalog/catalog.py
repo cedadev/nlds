@@ -692,7 +692,10 @@ class Catalog(DBMixin):
             else:
                 file_q = file_q.filter(File.original_path.in_(search_path))
 
-            if file_q.count() == 0:
+            # Use .first() to check if the query returned any results
+            # If .count() is used then we run up against the limit of PostgreSQL only
+            # allowing 65535 parameters per query
+            if file_q.first() is None:
                 result = None
             elif limit:
                 result = file_q.limit(limit)

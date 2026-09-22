@@ -1012,8 +1012,10 @@ class CatalogConsumer(RMQC):
         # 1. No files matching were found, returns a CatalogError, fail all files
         # 2. Some files were found, but not others - fail the files that were not
         #    found but allow those found to continue
-
-        if result is None or result.count() == 0:
+        # Use .first() is None, rather than .count() == 0 as the limit of parameters
+        # can be reached with 2nd method - PostgreSQL only allows 65535 parameters per
+        # query, and that can be reached with big datasets
+        if result is None or result.first() is None:
             err_msg = f"No matching files found"
             if holding_label:
                 err_msg += f" in holding with holding_label: {holding_label}"
@@ -1703,7 +1705,10 @@ class CatalogConsumer(RMQC):
                 f.failure_reason = e.message
                 self.failedlist.append(f)
         else:
-            # get the files from the holding
+            # get the files from the holding - need to slice the files into a subset
+            # of ~50000 per slice, as the maximum number of variables per transaction
+            # in postgresSQL is 65535
+
             results = self.catalog.get_files(
                 user=user,
                 group=group,
