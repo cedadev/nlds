@@ -584,6 +584,7 @@ class Catalog(DBMixin):
         holding_id: int = None,
         transaction_id: str = None,
         with_for_update: bool = False,
+        preload_locations: bool = False,
     ) -> Query[File]:
         """Get a list of file models from a transaction, where the original path
         matches the original path in the PathDetails, given a transaction and a list of
@@ -625,6 +626,11 @@ class Catalog(DBMixin):
                 file_q = file_q
         except NoResultFound:
             raise CatalogError(err_msg)
+
+        # preload the locations if requested
+        if preload_locations:
+            file_q = file_q.options(subqueryload(File.locations))
+
         return file_q
 
     def get_files(
@@ -1057,7 +1063,7 @@ class Catalog(DBMixin):
         self,
         holding: Holding,
         with_for_update: bool = False,
-        limit: int = 100000,
+        limit: int = 50000,
     ) -> Query:
         """The principal function for getting unarchived files to aggregate and
         send to archive put.
