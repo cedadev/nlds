@@ -997,7 +997,7 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
-    def _process_get_files_result(
+    def _check_get_files_result(
         self,
         result,
         user: str,
@@ -1012,10 +1012,7 @@ class CatalogConsumer(RMQC):
         # 1. No files matching were found, returns a CatalogError, fail all files
         # 2. Some files were found, but not others - fail the files that were not
         #    found but allow those found to continue
-        # Use .first() is None, rather than .count() == 0 as the limit of parameters
-        # can be reached with 2nd method - PostgreSQL only allows 65535 parameters per
-        # query, and that can be reached with big datasets
-        if result is None or result.first() is None:
+        if result is None or result.count() == 0:
             err_msg = f"No matching files found"
             if holding_label:
                 err_msg += f" in holding with holding_label: {holding_label}"
@@ -1131,7 +1128,7 @@ class CatalogConsumer(RMQC):
                 descending=True,
             )
             # process the returned file query for not found files, etc.
-            self._process_get_files_result(
+            self._check_get_files_result(
                 result,
                 user,
                 group,
@@ -2060,7 +2057,7 @@ class CatalogConsumer(RMQC):
                 descending=descending,
             )
             # raise any exceptions resulting from the query - e.g. no files found
-            self._process_get_files_result(
+            self._check_get_files_result(
                 query_result,
                 user,
                 group,
