@@ -2285,10 +2285,14 @@ class CatalogConsumer(RMQC):
         # Test whether the message should be split into smaller messages, if it exceeds
         # either the self.filelist_max_length or the
         # CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
-        filelist = self._parse_filelist(body)
         max_size = min(
             self.filelist_max_length, CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
         )
+        # check for empty filelist
+        try:
+            filelist = self._parse_filelist(body)
+        except CatalogError:
+            filelist = []
         if filelist:
             return len(filelist) > max_size
         return False
