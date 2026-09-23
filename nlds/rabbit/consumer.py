@@ -315,7 +315,7 @@ class RabbitMQConsumer(ABC, RMQP):
                 RK.LOG_DEBUG,
             )
             # send a splitting message for the old sub id, as it has been split into
-            # sub messagews
+            # sub messages
             body_json[MSG.DETAILS][MSG.STATE] = state.SPLIT.value
             self.publish_message(monitoring_rk, body_json, delay=delay)
             # reassign the sub_id
