@@ -144,7 +144,8 @@ class CatalogConsumer(RMQC):
     _DB_ECHO = "echo"
     _TENANCY = "tenancy"
     _INGEST_DEADLINE = "archive_ingest_deadline"
-    _FILELIST_MAX_LENGTH = "archive_filelist_max_length"
+    _ARCHIVE_FILELIST_MAX_LENGTH = "archive_filelist_max_length"
+    _FILELIST_MAX_LENGTH = "filelist_max_length"
     _TAPE_POOL_STRATEGY = "tape_pool_strategy"
 
     DEFAULT_CONSUMER_CONFIG = {
@@ -157,14 +158,24 @@ class CatalogConsumer(RMQC):
         },
         _TENANCY: None,
         _INGEST_DEADLINE: 86400,  # One day
-        _FILELIST_MAX_LENGTH: 100000,
+        _FILELIST_MAX_LENGTH: 10000,
+        _ARCHIVE_FILELIST_MAX_LENGTH: 50000,
         _TAPE_POOL_STRATEGY: [],
     }
+    # The PostgreSQL database backend has a maximum of 65535 parameters in any query
+    # sometimes a message could be passed with more than the _FILELIST_ABSOLUTE_LIMIT
+    # number of files in the message
+    # when this occurs the message is split into smaller messages so that the database
+    # can process the message successfully
+    _FILELIST_ABSOLUTE_LIMIT = 50000
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
         self.ingest_deadline = self.load_config_value(self._INGEST_DEADLINE)
         self.filelist_max_length = self.load_config_value(self._FILELIST_MAX_LENGTH)
+        self.archive_filelist_max_length = self.load_config_value(
+            self._ARCHIVE_FILELIST_MAX_LENGTH
+        )
         self.catalog = None
         self.tapelist = []
 
@@ -644,7 +655,6 @@ class CatalogConsumer(RMQC):
             except CatalogError as e:
                 # mark all as failed
                 holding = None
-                filelist = self._parse_filelist(body)
                 for f in filelist:
                     pd = PathDetails.from_dict(f)
                     pd.failure_reason = e.message
@@ -861,12 +871,14 @@ class CatalogConsumer(RMQC):
                 holding_id=holding_id,  # assume all same holding id
                 filelist=path_details_list,
                 with_for_update=True,
+                preload_locations=True,
             )
         elif transaction_id:
             files = self.catalog.get_files_from_filelist(
                 transaction_id=transaction_id,  # assume all same holding id
                 filelist=path_details_list,
                 with_for_update=True,
+                preload_locations=True,
             )
 
         # loop over the filelist
@@ -1377,7 +1389,7 @@ class CatalogConsumer(RMQC):
         filelist_q = self.catalog.get_unarchived_files(
             next_holding,
             with_for_update=True,
-            limit=self.filelist_max_length,
+            limit=self.archive_filelist_max_length,
         )
 
         # need a list of the created locations as they are now bulk uploaded
@@ -1535,6 +1547,7 @@ class CatalogConsumer(RMQC):
                 transaction_id=transaction.transaction_id,
                 filelist=path_details_list,
                 with_for_update=True,
+                preload_locations=True,
             )
             modify_location_list = []
             # we now have a list of all the files in a transaction that is part of a
@@ -2268,6 +2281,54 @@ class CatalogConsumer(RMQC):
             f"Successfully returned query via RPC message to api-server", RK.LOG_INFO
         )
 
+    def _should_split_message(self, body: dict):
+        # Test whether the message should be split into smaller messages, if it exceeds
+        # either the self.filelist_max_length or the
+        # CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
+        filelist = self._parse_filelist(body)
+        max_size = min(
+            self.filelist_max_length, CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
+        )
+        return len(filelist) > max_size
+
+    def _split_message(self, body: dict, rk_origin: str):
+        # need the state
+        # need the filelist in the format of a list of PathDetails
+        try:
+            filelist = [
+                PathDetails.from_dict(pd_dict)
+                for pd_dict in list(body[MSG.DATA][MSG.FILELIST])
+            ]
+        except TypeError as e:
+            self.log(
+                "Failed to reformat list into PathDetails objects. Filelist in "
+                "message does not appear to be in the correct format.",
+                RK.LOG_ERROR,
+            )
+            raise e
+
+        # checking the filelist size again - shouldn't need to but belt and braces
+        filelist_len = len(filelist)
+        max_size = min(
+            self.filelist_max_length, CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
+        )
+        if filelist_len > max_size:
+            self.log(
+                f"Filelist longer than allowed maximum length, splitting into "
+                f"batches of {max_size}",
+                RK.LOG_DEBUG,
+            )
+
+            # For each self.filelist_max_len files in the list resubmit with index as
+            # the action in the routing key
+            for i in range(0, filelist_len, max_size):
+                slc = slice(i, min(i + max_size, filelist_len))
+                self.send_pathlist(
+                    pathlist=filelist[slc],
+                    routing_key=rk_origin,
+                    body_json=body,
+                )
+
     def attach_database(self, create_db_fl: bool = True) -> None:
         """Attach the Catalog to the consumer"""
         # Load config options or fall back to default values.
@@ -2353,17 +2414,23 @@ class CatalogConsumer(RMQC):
         )
         body_dict = self.append_route_info(body_dict)
 
-        # check whether this is a GET or a PUT
-        if api_method in (RK.GETLIST, RK.GET):
-            # split the routing key
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
-                )
-                return
+        # split the routing key and get the rk_parts
+        # these are used for every api_method except for the RPC calls
+        try:
+            rk_parts = self.split_routing_key(method.routing_key)
+        except ValueError as e:
+            self.log(
+                "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
+            )
 
+        # check whether we should split the message based on the number of files
+        if self._should_split_message(body_dict):
+            # only do the split, any other processing will be picked up in next loop
+            self._split_message(body_dict, method.routing_key)
+
+        # check whether this is a GET or a PUT
+        elif api_method in (RK.GETLIST, RK.GET):
+            # use the split routing key from above
             if rk_parts[2] == RK.START:
                 if rk_parts[1] == RK.CATALOG_GET:
                     self._catalog_get(body_dict, rk_parts[0])
@@ -2383,15 +2450,7 @@ class CatalogConsumer(RMQC):
                     )
 
         elif api_method in (RK.PUTLIST, RK.PUT):
-            # split the routing key
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
-                )
-                return
-
+            # use the split routing key from above
             if rk_parts[2] == RK.START:
                 # Check the routing key worker section to determine which method
                 # to call, as a del could be being called from a failed
@@ -2414,14 +2473,7 @@ class CatalogConsumer(RMQC):
         # Archive put requires getting from the catalog
         elif api_method == RK.ARCHIVE_PUT:
             self.log("Starting an archive-put workflow", RK.LOG_DEBUG)
-            # split the routing key
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
-                )
-
+            # use the split routing key from above
             if rk_parts[1] == RK.CATALOG_ARCHIVE_NEXT:
                 self.log(
                     "Beginning preparation of next archive aggregation", RK.LOG_DEBUG
@@ -2441,25 +2493,19 @@ class CatalogConsumer(RMQC):
 
         elif api_method == RK.UNSTAGE:
             self.log("Starting an unstage workflow", RK.LOG_DEBUG)
-            # split the routing key
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
-                )
-
             if rk_parts[1] == RK.CATALOG_REMOVE:
                 # Unstage removes the OBJECT_STORAGE location
                 # !!! WARNING !!! - this currently deletes even if the file(s) are not
                 # on tape yet - this needs to be fixed before UNSTAGE can go into
                 # production
-                self._catalog_remove_storage_locations(
-                    body_dict,
-                    rk_parts[0],
-                    Storage.OBJECT_STORAGE,
-                    force=True,
-                )
+                # NRM - 23/09/2026 - disabled this
+                if False:
+                    self._catalog_remove_storage_locations(
+                        body_dict,
+                        rk_parts[0],
+                        Storage.OBJECT_STORAGE,
+                        force=True,
+                    )
 
         # RPC methods follow - don't need to split any routing key for an RPC method
         elif api_method == RK.LIST:
