@@ -2289,7 +2289,9 @@ class CatalogConsumer(RMQC):
         max_size = min(
             self.filelist_max_length, CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
         )
-        return len(filelist) > max_size
+        if filelist:
+            return len(filelist) > max_size
+        return False
 
     def _split_message(self, body: dict, rk_origin: str):
         # need the state
