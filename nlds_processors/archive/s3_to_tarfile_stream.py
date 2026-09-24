@@ -175,7 +175,6 @@ class S3ToTarfileStream(BucketMixin):
             failedlist = []
 
             for path_details in filelist:
-                bucket_name, _ = self._get_bucket_name_object_name(path_details)
                 self.log(
                     f"Streaming file {path_details.path} from object store to tape "
                     f"archive",
@@ -185,6 +184,7 @@ class S3ToTarfileStream(BucketMixin):
                 # Attempt to stream the object directly into the tarfile object
                 # NRM - chunk by chunk now
                 try:
+                    bucket_name, _ = self._get_bucket_name_object_name(path_details)
                     self._stream_write_chunk_by_chunk(
                         tar=tar, path_details=path_details, chunksize=chunk_size
                     )
