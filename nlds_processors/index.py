@@ -78,16 +78,16 @@ class IndexerConsumer(StattingConsumer):
                 RK.LOG_DEBUG,
             )
 
-            # For each self.filelist_max_len files in the list resubmit with index as
-            # the action in the routing key
-            for i in range(0, filelist_len, self.filelist_max_len):
-                slc = slice(i, min(i + self.filelist_max_len, filelist_len))
-                self.send_pathlist(
-                    filelist[slc],
-                    rk_index,
-                    body_json,
-                    state=State.SPLITTING,
-                )
+        # For each self.filelist_max_len files in the list resubmit with index as
+        # the action in the routing key
+        for i in range(0, filelist_len, self.filelist_max_len):
+            slc = slice(i, min(i + self.filelist_max_len, filelist_len))
+            self.send_pathlist(
+                filelist[slc],
+                rk_index,
+                body_json,
+                state=State.SPLITTING,
+            )
 
     def _scan(
         self,
