@@ -11,7 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 # SQLalchemy imports
 from sqlalchemy import func, Enum
-from sqlalchemy.orm import subqueryload, Query
+from sqlalchemy.orm import subqueryload, joinedload, Query
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
@@ -684,8 +684,6 @@ class Catalog(DBMixin):
                 File.transaction_id == Transaction.id,
                 Transaction.holding_id == Holding.id,
             )
-            # load in the Locations with the File to speed up the queries a lot
-            file_q = file_q.options(subqueryload(File.locations))
 
             if descending:
                 file_q = file_q.order_by(Transaction.ingest_time.desc())
@@ -698,15 +696,18 @@ class Catalog(DBMixin):
             else:
                 file_q = file_q.filter(File.original_path.in_(search_path))
 
-            # Use .first() to check if the query returned any results
-            # If .count() is used then we run up against the limit of PostgreSQL only
-            # allowing 65535 parameters per query
-            if file_q.first() is None:
+            # check that some files were found
+            if file_q.count() == 0:
                 result = None
             elif limit:
                 result = file_q.limit(limit)
             else:
                 result = file_q
+
+            # load in the Locations with the File to speed up the queries a lot
+            # note that a joinedload is required here, not a subqueryload, as it will
+            # preserve the key order
+            result = result.options(joinedload(File.locations))
 
             if result and with_for_update:
                 result = result.with_for_update()
