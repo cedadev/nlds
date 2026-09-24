@@ -687,8 +687,6 @@ class Catalog(DBMixin):
 
             if descending:
                 file_q = file_q.order_by(Transaction.ingest_time.desc())
-            else:
-                file_q = file_q.order_by(Transaction.ingest_time)
 
             if regex or search_path == ".*":
                 # will throw an exception here for bad regex
@@ -706,8 +704,14 @@ class Catalog(DBMixin):
 
             # load in the Locations with the File to speed up the queries a lot
             # note that a joinedload is required here, not a subqueryload, as it will
-            # preserve the key order
-            result = result.options(joinedload(File.locations))
+            # preserve the key order - but cannot be applied with for update
+            if with_for_update:
+                # we can use subqueryload if no limit is used and the order is not
+                # descending as the keys will be in order
+                if not limit and not descending:
+                    result = result.options(subqueryload(File.locations))
+            else:
+                result = result.options(joinedload(File.locations))
 
             if result and with_for_update:
                 result = result.with_for_update()
