@@ -1401,10 +1401,10 @@ class CatalogConsumer(RMQC):
             pl = pd.get_object_store()  # this returns a PathLocation object
             # get the access time of the object store to mirror to tape, or set to now
             # if no access_time present
-            if pl.access_time is None:
-                access_time = datetime.now()
-            else:
+            if pl and pl.access_time:
                 access_time = datetime.fromtimestamp(pl.access_time)
+            else:
+                access_time = datetime.now()
 
             try:
                 # create a mostly empty TAPE storage location - this does not create
