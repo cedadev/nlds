@@ -60,66 +60,6 @@ class Tertiary(enum.Enum):
         return ["TRUE", "FALSE", "DONT_CARE"][self.value]
 
 
-class Metadata:
-    """Container class for the meta section of the message body."""
-
-    label: str
-    holding_id: int
-    transaction_id: str
-    tags: Dict
-    groupall: bool
-    limit: int
-    descending: bool
-    storage_type: Storage
-
-    def __init__(self, body: Dict):
-        # Get the label from the metadata section of the message
-        try:
-            self.label = body[MSG.META][MSG.LABEL]
-        except KeyError:
-            self.label = None
-
-        # Get the holding_id from the metadata section of the message
-        try:
-            self.holding_id = body[MSG.META][MSG.HOLDING_ID]
-        except KeyError:
-            self.holding_id = None
-
-        # Get any tags that exist
-        try:
-            self.tags = body[MSG.META][MSG.TAG]
-        except KeyError:
-            self.tags = None
-
-        # get the transaction id from the metadata section of the message
-        try:
-            self.transaction_id = body[MSG.META][MSG.TRANSACT_ID]
-        except KeyError:
-            self.transaction_id = None
-
-        # get the limit from the metadata section of the message
-        try:
-            self.limit = body[MSG.META][MSG.LIMIT]
-        except KeyError:
-            self.limit = None
-
-        # get the ascending / descending from the metadata section of the message
-        try:
-            self.descending = body[MSG.META][MSG.DESCENDING]
-        except KeyError:
-            self.descending = False
-
-        # get the storage type
-        try:
-            self.storage_type = body[MSG.META][MSG.STORAGE_TYPE]
-        except KeyError:
-            self.storage_type = False
-
-    @property
-    def unpack(self) -> Tuple:
-        return (self.label, self.holding_id, self.tags, self.transaction_id)
-
-
 def format_datetime(date: datetime):
     try:
         datetime_str = date.isoformat()
@@ -178,7 +118,7 @@ class CatalogConsumer(RMQC):
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
-        self.ingest_deadline = self.load_config_value(self._INGEST_DEADLINE)
+        # self.ingest_deadline now comes from the archive_next message
         self.filelist_max_length = self.load_config_value(self._FILELIST_MAX_LENGTH)
         self.archive_filelist_max_length = self.load_config_value(
             self._ARCHIVE_FILELIST_MAX_LENGTH
@@ -196,7 +136,7 @@ class CatalogConsumer(RMQC):
         Other strategies may be added later
         """
         # which strategies are valid?
-        strategies = ["metadata", "year", "none"]
+        strategies = ["metadata", "user", "year", "none"]
         # remove white space and hyphens
         chars = "-_ "
         table = str.maketrans("", "", chars)
@@ -262,7 +202,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return group
 
-    def _parse_querygroup(self, body: Dict, user: str, group: str) -> str:
+    def _parse_querygroup(self, body: Dict, user: str, group: str) -> str | None:
         # get the desired group from the details section of the message
         try:
             query_group = body[MSG.DETAILS][MSG.GROUP_QUERY]
@@ -284,7 +224,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return query_group
 
-    def _parse_queryuser(self, body: Dict, user: str) -> None:
+    def _parse_queryuser(self, body: Dict, user: str) -> str | None:
         # get the desired user id to search for from the details section of the
         # message. this can be different than the user making the call
         try:
@@ -303,7 +243,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return query_user
 
-    def _parse_transaction_id(self, body: Dict, mandatory: bool = False) -> str:
+    def _parse_transaction_id(self, body: Dict, mandatory: bool = False) -> str | None:
         # get the transaction id from the details section of the message. It is
         # a mandatory variable for the PUT workflow
         try:
@@ -328,48 +268,94 @@ class CatalogConsumer(RMQC):
             tenancy = self.tenancy
         return tenancy
 
-    def _parse_tape_pool_strategy(self, body: Dict) -> list:
+    def _parse_tape_pool_strategy(self, body: dict) -> list[str]:
         if (
-            MSG.TAPE_POOL_STRATEGY in body[MSG.DETAILS]
-            and body[MSG.DETAILS][MSG.TAPE_POOL_STRATEGY]
+            MSG.TAPE_POOL_STRATEGY in body[MSG.META]
+            and body[MSG.META][MSG.TAPE_POOL_STRATEGY]
         ):
-            tape_pool_strategy = body[MSG.DETAILS][MSG.TAPE_POOL_STRATEGY]
+            tape_pool_strategy = body[MSG.META][MSG.TAPE_POOL_STRATEGY]
         else:
             tape_pool_strategy = []
         return tape_pool_strategy
 
-    def _parse_metadata_vars(self, body: Dict) -> Tuple:
-        """Convenience function to prevent unnecessary code replication for
-        extraction of metadata variables from the message body. This is
-        specifically for requesting particular holdings/transactions/labels/tags
-        in a given catalog function. Returns a tuple of label, holding_id and
-        tags, with each being None if not found.
-        """
-        md = Metadata(body)
-        return (
-            md.label,
-            md.holding_id,
-            md.tags,
-            md.transaction_id,
-            md.limit,
-            md.descending,
-            md.storage_type,
-        )
+    def _parse_meta_label(self, body: Dict) -> str | None:
+        # Get the label from the metadata section of the message
+        try:
+            label = body[MSG.META][MSG.LABEL]
+        except KeyError:
+            label = None
+        return label
 
-    def _parse_tape_pool(self, body: Dict) -> str:
-        tape_pool = None
-        if MSG.META in body and MSG.TAPE_POOL in body[MSG.META]:
+    def _parse_meta_holding_id(self, body: Dict) -> str | None:
+        # Get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[MSG.META][MSG.HOLDING_ID]
+        except KeyError:
+            holding_id = None
+        return holding_id
+
+    def _parse_meta_tags(self, body: Dict) -> str | None:
+        # Get any tags that exist
+        try:
+            tags = body[MSG.META][MSG.TAG]
+        except KeyError:
+            tags = None
+        return tags
+
+    def _parse_meta_transaction_id(self, body: Dict) -> str | None:
+        # get the transaction id from the metadata section of the message
+        try:
+            transaction_id = body[MSG.META][MSG.TRANSACT_ID]
+        except KeyError:
+            transaction_id = None
+        return transaction_id
+
+    def _parse_meta_limit(self, body: Dict) -> str | None:
+        # get the limit from the metadata section of the message
+        try:
+            limit = body[MSG.META][MSG.LIMIT]
+        except KeyError:
+            limit = None
+        return limit
+
+    def _parse_meta_descending(self, body: Dict) -> bool:
+        # get the ascending / descending from the metadata section of the message
+        try:
+            descending = body[MSG.META][MSG.DESCENDING]
+        except KeyError:
+            descending = False
+        return descending
+
+    def _parse_meta_storage_type(self, body: Dict) -> str | None:
+        # get the storage type
+        try:
+            storage_type = body[MSG.META][MSG.STORAGE_TYPE]
+        except KeyError:
+            storage_type = None
+        return storage_type
+
+    def _parse_meta_tape_pool(self, body: Dict) -> str | None:
+        try:
             tape_pool = body[MSG.META][MSG.TAPE_POOL]
+        except KeyError:
+            tape_pool = None
         return tape_pool
 
-    def _parse_groupall(self, body: Dict) -> str:
+    def _parse_meta_ingest_deadline(self, body: Dict) -> int | None:
+        try:
+            ingest_deadline = body[MSG.META][MSG.ARCHIVE_INGEST_DEADLINE]
+        except KeyError:
+            ingest_deadline = 24 * 60 * 60  # fallback to 24 hours
+        return ingest_deadline
+
+    def _parse_meta_groupall(self, body: Dict) -> bool:
         try:
             groupall = body[MSG.DETAILS][MSG.GROUPALL]
         except KeyError:
             groupall = False
         return groupall
 
-    def _parse_aggregation_id(self, body: Dict) -> str:
+    def _parse_meta_aggregation_id(self, body: Dict) -> str | None:
         # Parse aggregation and checksum info from message.
         try:
             aggregation_id = body[MSG.META][MSG.AGGREGATION_ID]
@@ -399,7 +385,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return transaction_records
 
-    def _parse_path(self, body: Dict) -> str:
+    def _parse_meta_path(self, body: Dict) -> str:
         # get the path from the metadata section of the message
         try:
             path = body[MSG.META][MSG.PATH]
@@ -407,7 +393,7 @@ class CatalogConsumer(RMQC):
             path = None
         return path
 
-    def _parse_regex(self, body: Dict) -> str:
+    def _parse_meta_regex(self, body: Dict) -> str:
         # get the REGEX flag from the metadata section of the message
         try:
             regex = body[MSG.META][MSG.REGEX]
@@ -593,7 +579,8 @@ class CatalogConsumer(RMQC):
             group = self._parse_group(body)
             filelist = self._parse_filelist(body)  # check if file list is empty
             transaction_id = self._parse_transaction_id(body, mandatory=True)
-            label, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
+            label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
         except CatalogError as e:
             self.log(e.message, RK.LOG_ERROR)
             for filepath in filelist:
@@ -709,7 +696,9 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body, mandatory=True)
-            label, holding_id, tags, _, _, _, _ = self._parse_metadata_vars(body)
+            label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            tags = self._parse_meta_tags(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -856,13 +845,14 @@ class CatalogConsumer(RMQC):
         contain the Object Storage location.
 
         Upon completion of an ARCHIVE_GET, the list of completed files is returned
-        back to the NLDS worker.  The information for each completed file is enough to  amend the OBJECT STORAGE location in the catalog database.
+        back to the NLDS worker.  The information for each completed file is enough to
+        amend the OBJECT STORAGE location in the catalog database.
         """
         # Parse the message body for required variables
         try:
             filelist = self._parse_filelist(body)
             transaction_id = self._parse_transaction_id(body)
-            _, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
+            holding_id = self._parse_meta_holding_id(body)
         except CatalogError as e:
             # functions above handled message logging, here we just return
             raise e
@@ -1096,11 +1086,12 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             tenancy = self._parse_tenancy(body)
-            holding_label, holding_id, holding_tag, transaction_id, _, _, _ = (
-                self._parse_metadata_vars(body)
-            )
-            groupall = self._parse_groupall(body)
-            regex = self._parse_regex(body)
+            holding_label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            holding_tag = self._parse_meta_tags(body)
+            transaction_id = self._parse_meta_transaction_id(body)
+            groupall = self._parse_meta_groupall(body)
+            regex = self._parse_meta_regex(body)
             # check that the filepath is not regex as well as holding_id or
             # holding_label being None, as this would get ALL files!
             if (
@@ -1356,16 +1347,20 @@ class CatalogConsumer(RMQC):
     def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
         """Get the next holding for archiving, create a new location for it and pass it
         for aggregating to the Archive Put process."""
+        print("££££")
         try:
             tenancy = self._parse_tenancy(body)
-            _, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
+            holding_id = self._parse_meta_holding_id(body)
             # get the tape_pool from the message
-            tape_pool = self._parse_tape_pool(body)
+            tape_pool = self._parse_meta_tape_pool(body)
             # get and validate the tape pool strategy
             self.tape_pool_strategy = self._parse_tape_pool_strategy(body)
             self._validate_tape_pool_strategy()
-        except CatalogError:
+            ingest_deadline = self._parse_meta_ingest_deadline(body)
+        except CatalogError as e:
             # functions above handled message logging, here we just return
+            if e.message:
+                self.log(e.message, RK.LOG_ERROR)
             return
 
         # Get the next Holding in the catalog, by id, which has any unarchived
@@ -1377,7 +1372,7 @@ class CatalogConsumer(RMQC):
         else:
             next_holding = self.catalog.get_next_unarchived_holding(
                 tenancy,
-                self.ingest_deadline,
+                ingest_deadline,
             )
 
         # If no holdings left to archive then end the callback
@@ -1513,10 +1508,9 @@ class CatalogConsumer(RMQC):
         # Parse the message body for required variables
         try:
             filelist = self._parse_filelist(body)
-            transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
-            _, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
+            holding_id = self._parse_meta_holding_id(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1700,10 +1694,9 @@ class CatalogConsumer(RMQC):
 
         try:
             filelist_ = self._parse_filelist(body)
-            transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
-            _, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
+            holding_id = self._parse_meta_holding_id(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1813,7 +1806,6 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body)
-            _, _, _, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1895,13 +1887,16 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, transaction_id, limit, descending, _ = (
-                self._parse_metadata_vars(body)
-            )
+            holding_label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            tag = self._parse_meta_tags(body)
+            transaction_id = self._parse_meta_transaction_id(body)
+            limit = self._parse_meta_limit(body)
+            descending = self._parse_meta_descending(body)
             query_user = self._parse_queryuser(body, user)
             query_group = self._parse_querygroup(body, user, group)
-            groupall = self._parse_groupall(body)
-            regex = self._parse_regex(body)
+            groupall = self._parse_meta_groupall(body)
+            regex = self._parse_meta_regex(body)
 
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -1977,10 +1972,8 @@ class CatalogConsumer(RMQC):
         """Get the labels for a list of transaction ids"""
         # Parse the message body for required variables
         try:
-            user = self._parse_user(body)
-            group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body)
-            label, _, _, _, _, _, _ = self._parse_metadata_vars(body)
+            label = self._parse_meta_label(body)
             transaction_records = self._parse_transaction_records(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -2043,17 +2036,20 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, transaction_id, limit, descending, _ = (
-                self._parse_metadata_vars(body)
-            )
-            groupall = self._parse_groupall(body)
+            holding_label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            tag = self._parse_meta_tags(body)
+            transaction_id = self._parse_meta_transaction_id(body)
+            limit = self._parse_meta_limit(body)
+            descending = self._parse_meta_descending(body)
+            groupall = self._parse_meta_groupall(body)
             query_user = self._parse_queryuser(body, user)
             query_group = self._parse_querygroup(body, user, group)
-            path = self._parse_path(body)
+            path = self._parse_meta_path(body)
             # path has to be a list
             if path is not None:
                 path = [PathDetails(original_path=path)]
-            regex = self._parse_regex(body)
+            regex = self._parse_meta_regex(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
             # message to the client via a RPC return
@@ -2174,7 +2170,9 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, _, _, _, _ = self._parse_metadata_vars(body)
+            holding_label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            tag = self._parse_meta_tags(body)
             new_label, new_tag, del_tag = self._parse_new_metadata_variables(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -2523,7 +2521,7 @@ class CatalogConsumer(RMQC):
                 # production
 
                 # get the storage type from the meta data
-                _, _, _, _, _, _, storage_type = self._parse_metadata_vars(body_dict)
+                storage_type = self._parse_meta_storage_type(body_dict)
                 storage = Storage.from_str(storage_type)
                 self._catalog_remove_storage_locations(
                     body_dict,
