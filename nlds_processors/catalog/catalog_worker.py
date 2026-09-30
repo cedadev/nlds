@@ -70,6 +70,7 @@ class Metadata:
     groupall: bool
     limit: int
     descending: bool
+    storage_type: Storage
 
     def __init__(self, body: Dict):
         # Get the label from the metadata section of the message
@@ -107,6 +108,12 @@ class Metadata:
             self.descending = body[MSG.META][MSG.DESCENDING]
         except KeyError:
             self.descending = False
+
+        # get the storage type
+        try:
+            self.storage_type = body[MSG.META][MSG.STORAGE_TYPE]
+        except KeyError:
+            self.storage_type = False
 
     @property
     def unpack(self) -> Tuple:
@@ -346,6 +353,7 @@ class CatalogConsumer(RMQC):
             md.transaction_id,
             md.limit,
             md.descending,
+            md.storage_type,
         )
 
     def _parse_tape_pool(self, body: Dict) -> str:
@@ -585,7 +593,7 @@ class CatalogConsumer(RMQC):
             group = self._parse_group(body)
             filelist = self._parse_filelist(body)  # check if file list is empty
             transaction_id = self._parse_transaction_id(body, mandatory=True)
-            label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
+            label, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError as e:
             self.log(e.message, RK.LOG_ERROR)
             for filepath in filelist:
@@ -701,7 +709,7 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body, mandatory=True)
-            label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
+            label, holding_id, tags, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -854,7 +862,7 @@ class CatalogConsumer(RMQC):
         try:
             filelist = self._parse_filelist(body)
             transaction_id = self._parse_transaction_id(body)
-            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
+            _, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError as e:
             # functions above handled message logging, here we just return
             raise e
@@ -1088,7 +1096,7 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             tenancy = self._parse_tenancy(body)
-            holding_label, holding_id, holding_tag, transaction_id, _, _ = (
+            holding_label, holding_id, holding_tag, transaction_id, _, _, _ = (
                 self._parse_metadata_vars(body)
             )
             groupall = self._parse_groupall(body)
@@ -1350,7 +1358,7 @@ class CatalogConsumer(RMQC):
         for aggregating to the Archive Put process."""
         try:
             tenancy = self._parse_tenancy(body)
-            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
+            _, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
             # get the tape_pool from the message
             tape_pool = self._parse_tape_pool(body)
             # get and validate the tape pool strategy
@@ -1399,6 +1407,15 @@ class CatalogConsumer(RMQC):
             pd = PathDetails.from_filemodel(f)
             pd.holding_id = next_holding.id
             pl = pd.get_object_store()  # this returns a PathLocation object
+            # check it returns an object store as some database optimisations /
+            # pre-loading caused the relations to become decoupled when using .limit
+            # NRM 30/09/2026 - should be fixed now with switching to selectinload, but
+            # will leave the check in to catch any future errors
+            if not pl:
+                message = "No OBJECT_STORE Storage Location found."
+                self.log(message, RK.LOG_ERROR)
+                self.failedlist.append(pd)
+                continue
             # get the access time of the object store to mirror to tape, or set to now
             # if no access_time present
             if pl and pl.access_time:
@@ -1457,6 +1474,8 @@ class CatalogConsumer(RMQC):
         # initialise the monitor first
         monitor_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.INITIATE])
         body[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
+        body[MSG.DETAILS][MSG.JOB_LABEL] = f"Holding id: {holding_id}"
+
         self.publish_message(monitor_routing_key, body)
 
         if len(self.completelist) > 0:
@@ -1497,7 +1516,7 @@ class CatalogConsumer(RMQC):
             transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
-            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
+            _, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1684,7 +1703,7 @@ class CatalogConsumer(RMQC):
             transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
-            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
+            _, holding_id, _, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1794,9 +1813,7 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body)
-            holding_label, holding_id, holding_tag, _, _, _ = self._parse_metadata_vars(
-                body
-            )
+            _, _, _, _, _, _, _ = self._parse_metadata_vars(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1878,7 +1895,7 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, transaction_id, limit, descending = (
+            holding_label, holding_id, tag, transaction_id, limit, descending, _ = (
                 self._parse_metadata_vars(body)
             )
             query_user = self._parse_queryuser(body, user)
@@ -1963,7 +1980,7 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body)
-            label, _, _, _, _, _ = self._parse_metadata_vars(body)
+            label, _, _, _, _, _, _ = self._parse_metadata_vars(body)
             transaction_records = self._parse_transaction_records(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -2026,7 +2043,7 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, transaction_id, limit, descending = (
+            holding_label, holding_id, tag, transaction_id, limit, descending, _ = (
                 self._parse_metadata_vars(body)
             )
             groupall = self._parse_groupall(body)
@@ -2157,7 +2174,7 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, _, _, _ = self._parse_metadata_vars(body)
+            holding_label, holding_id, tag, _, _, _, _ = self._parse_metadata_vars(body)
             new_label, new_tag, del_tag = self._parse_new_metadata_variables(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -2504,14 +2521,16 @@ class CatalogConsumer(RMQC):
                 # !!! WARNING !!! - this currently deletes even if the file(s) are not
                 # on tape yet - this needs to be fixed before UNSTAGE can go into
                 # production
-                # NRM - 23/09/2026 - disabled this
-                if False:
-                    self._catalog_remove_storage_locations(
-                        body_dict,
-                        rk_parts[0],
-                        Storage.OBJECT_STORAGE,
-                        force=True,
-                    )
+
+                # get the storage type from the meta data
+                _, _, _, _, _, _, storage_type = self._parse_metadata_vars(body_dict)
+                storage = Storage.from_str(storage_type)
+                self._catalog_remove_storage_locations(
+                    body_dict,
+                    rk_parts[0],
+                    storage,
+                    force=True,
+                )
 
         # RPC methods follow - don't need to split any routing key for an RPC method
         elif api_method == RK.LIST:
