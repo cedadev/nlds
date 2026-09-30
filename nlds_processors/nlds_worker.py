@@ -557,7 +557,6 @@ class NLDSWorkerConsumer(RMQC):
                 elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
                     self._process_rk_archive_get_failed(body_json)
 
-        self.log(f"Worker callback complete!", RK.LOG_DEBUG)
         self.send_logging()
 
     def publish_and_log_message(self, routing_key: str, msg: dict, log_fl=True) -> None:
