@@ -491,6 +491,9 @@ class MonitorConsumer(RMQC):
                 transaction_id=transaction_id,
                 with_for_update=True,
             )
+            # reassign the job label if job_label is in the message
+            if job_label:
+                trec.job_label = job_label
         except MonitorError as e:
             # fine to pass here as if transaction_record is not returned then it
             # will be created in the next step
