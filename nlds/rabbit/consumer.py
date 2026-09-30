@@ -311,7 +311,7 @@ class RabbitMQConsumer(ABC, RMQP):
 
             self.log(
                 f"Changing sub id from {c_sub_id} to {sub_id} with pathlist: "
-                f"{','.join([p.original_path for p in pathlist])}",
+                f"{', '.join([p.original_path for p in pathlist])}",
                 RK.LOG_DEBUG,
             )
             # send a splitting message for the old sub id, as it has been split into
@@ -562,7 +562,7 @@ class RabbitMQConsumer(ABC, RMQP):
             self.acknowledge_message(ch, method.delivery_tag, connection)
             self.log(
                 f"Callback complete.  Acknowledged message with routing key: "
-                f"{method.routing_key}. ",
+                f"{method.routing_key} ",
                 RK.LOG_INFO,
             )
 
