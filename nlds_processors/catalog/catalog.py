@@ -11,7 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 # SQLalchemy imports
 from sqlalchemy import func, Enum
-from sqlalchemy.orm import subqueryload, joinedload, Query
+from sqlalchemy.orm import selectinload, Query
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
@@ -141,8 +141,8 @@ class Catalog(DBMixin):
                 raise NoResultFound
 
             # pre-load the tags and transactions
-            holding_q = holding_q.options(subqueryload(Holding.transactions))
-            holding_q = holding_q.options(subqueryload(Holding.tags))
+            holding_q = holding_q.options(selectinload(Holding.transactions))
+            holding_q = holding_q.options(selectinload(Holding.tags))
             # if we are doing an update on the holding then lock the catalog database
             if with_for_update:
                 holding = holding_q.with_for_update().one()
@@ -629,7 +629,7 @@ class Catalog(DBMixin):
 
         # preload the locations if requested
         if preload_locations:
-            file_q = file_q.options(subqueryload(File.locations))
+            file_q = file_q.options(selectinload(File.locations))
 
         return file_q
 
@@ -703,18 +703,12 @@ class Catalog(DBMixin):
                 result = file_q
 
             # load in the Locations with the File to speed up the queries a lot
-            # note that a joinedload is required here, not a subqueryload, as it will
-            # preserve the key order - but cannot be applied with for update
-            if with_for_update:
-                # we can use subqueryload if no limit is used and the order is not
-                # descending as the keys will be in order
-                if not limit and not descending:
-                    result = result.options(subqueryload(File.locations))
-            else:
-                result = result.options(joinedload(File.locations))
-
-            if result and with_for_update:
-                result = result.with_for_update()
+            # selectinload seems to be the most flexible and performant
+            # it allows .limit to be used, as well as with_for_update
+            if result:
+                result = result.options(selectinload(File.locations))
+                if with_for_update:
+                    result = result.with_for_update()
 
         except (IntegrityError, OperationalError) as e:
             err_msg = f"Error in catalog.get_files, reason: {e}"
@@ -1100,8 +1094,10 @@ class Catalog(DBMixin):
                 )
                 .limit(limit)
             )
+            # selectinload seems the most flexible whilst still being performant
+            # it allows .limit and .with_for_update
             unarchived_files_q = unarchived_files_q.options(
-                subqueryload(File.locations)
+                selectinload(File.locations)
             )
             if with_for_update:
                 unarchived_files_q = unarchived_files_q.with_for_update()
