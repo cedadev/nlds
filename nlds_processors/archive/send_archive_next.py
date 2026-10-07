@@ -59,7 +59,6 @@ import nlds.rabbit.message_keys as MSG
 def send_archive_next(
     holding_id: int, tape_pool: str, tenancy: str, ingest_deadline: int
 ):
-    print(holding_id, tape_pool, tenancy, ingest_deadline)
     CRONJOB_CONFIG_SECTION = "cronjob_publisher"
     DEFAULT_CONFIG = {
         # MSG.DETAILS section
