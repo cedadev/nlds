@@ -864,16 +864,10 @@ class CatalogConsumer(RMQC):
         path_details_list = [PathDetails.from_dict(f) for f in filelist]
 
         # get all the files in the filelist as File objects from the database
-        if holding_id:
+        if holding_id or transaction_id:
             files = self.catalog.get_files_from_filelist(
                 holding_id=holding_id,  # assume all same holding id
-                filelist=path_details_list,
-                with_for_update=True,
-                preload_locations=True,
-            )
-        elif transaction_id:
-            files = self.catalog.get_files_from_filelist(
-                transaction_id=transaction_id,  # assume all same holding id
+                transaction_id=transaction_id,  # assume all same transaction id
                 filelist=path_details_list,
                 with_for_update=True,
                 preload_locations=True,
@@ -1344,50 +1338,14 @@ class CatalogConsumer(RMQC):
 
         return None
 
-    def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
-        """Get the next holding for archiving, create a new location for it and pass it
-        for aggregating to the Archive Put process."""
-        print("££££")
-        try:
-            tenancy = self._parse_tenancy(body)
-            holding_id = self._parse_meta_holding_id(body)
-            # get the tape_pool from the message
-            tape_pool = self._parse_meta_tape_pool(body)
-            # get and validate the tape pool strategy
-            self.tape_pool_strategy = self._parse_tape_pool_strategy(body)
-            self._validate_tape_pool_strategy()
-            ingest_deadline = self._parse_meta_ingest_deadline(body)
-        except CatalogError as e:
-            # functions above handled message logging, here we just return
-            if e.message:
-                self.log(e.message, RK.LOG_ERROR)
-            return
-
-        # Get the next Holding in the catalog, by id, which has any unarchived
-        # Files, i.e. any files which don't have a tape location
-        # Filter on Holdings that have not had any ingests for a set period
-        # (typically one day)
-        if holding_id:
-            next_holding = self.catalog.get_holding_from_id(holding_id)
-        else:
-            next_holding = self.catalog.get_next_unarchived_holding(
-                tenancy,
-                ingest_deadline,
-            )
-
-        # If no holdings left to archive then end the callback
-        if not next_holding:
-            self.log("No holdings found to archive, exiting callback.", RK.LOG_INFO)
-            return
-
-        holding_id = next_holding.id
-        # determine which tape pool to use, if it has not been set in the message body
-        if not tape_pool:
-            # needs self.tape_pool_strategy to be set
-            tape_pool = self._determine_tape_pool(next_holding)
-
-        # reset completed lists
+    def _create_tape_locations(self, next_holding: Holding):
+        """Create the locations required to archive a Holding to tape"""
+        # reset completed lists - we will loop over sub-sections of the holding's
+        # unarchived files, sending a message for each sub-section, which has the limit
+        # / size of archive_filelist_max_length
+        # loop from here
         self.reset()
+
         # get the list of unarchived files from that holding
         filelist_q = self.catalog.get_unarchived_files(
             next_holding,
@@ -1456,7 +1414,53 @@ class CatalogConsumer(RMQC):
         # fallback commit
         self.catalog.commit()
 
-        # Forward successful file details to archive for tape write
+        # return whether any locations were created
+        return len(created_locations) > 0
+
+    def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
+        """Get the next holding for archiving, create a new location for it and pass it
+        for aggregating to the Archive Put process."""
+        try:
+            tenancy = self._parse_tenancy(body)
+            holding_id = self._parse_meta_holding_id(body)
+            # get the tape_pool from the message
+            tape_pool = self._parse_meta_tape_pool(body)
+            # get and validate the tape pool strategy
+            self.tape_pool_strategy = self._parse_tape_pool_strategy(body)
+            self._validate_tape_pool_strategy()
+            ingest_deadline = self._parse_meta_ingest_deadline(body)
+        except CatalogError as e:
+            # functions above handled message logging, here we just return
+            if e.message:
+                self.log(e.message, RK.LOG_ERROR)
+            return
+
+        # Get the next Holding in the catalog, by id, which has any unarchived
+        # Files, i.e. any files which don't have a tape location
+        # Filter on Holdings that have not had any ingests for a set period
+        # (typically one day)
+        if holding_id:
+            next_holding = self.catalog.get_holding_from_id(holding_id)
+        else:
+            next_holding = self.catalog.get_next_unarchived_holding(
+                tenancy,
+                ingest_deadline,
+            )
+
+        # If no holdings left to archive then end the callback
+        if not next_holding:
+            self.log("No holdings found to archive, exiting callback.", RK.LOG_INFO)
+            return
+
+        holding_id = next_holding.id
+        # determine which tape pool to use, if it has not been set in the message body
+        if not tape_pool:
+            # needs self.tape_pool_strategy to be set
+            tape_pool = self._determine_tape_pool(next_holding)
+
+        # create the body part of the message here, so that it can be reused by each
+        # catalog_archive_next message
+        # Routing keys for complete and failed
         rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.FAILED])
 
@@ -1470,34 +1474,41 @@ class CatalogConsumer(RMQC):
         monitor_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.INITIATE])
         body[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
         body[MSG.DETAILS][MSG.JOB_LABEL] = f"Holding id: {holding_id}"
-
+        # publish the initial monitor message
         self.publish_message(monitor_routing_key, body)
 
-        if len(self.completelist) > 0:
-            self.log(
-                f"Sending completed PathList from CATALOG_ARCHIVE_PUT", RK.LOG_INFO
-            )
-            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
-            self.send_pathlist(
-                self.completelist,
-                routing_key=rk_complete,
-                body_json=body,
-                state=State.ARCHIVE_INIT,
-            )
-        else:
-            # The holding might not have had any files to archive (if it has been
-            # selected by the user / sys-admin).  We need to send failure in this case
-            self.log(
-                f"No files to send to archive in CATALOG_ARCHIVE_PUT",
-                RK.LOG_INFO,
-            )
-            pd = PathDetails(
-                original_path="",
-                failure_reason=f"No files to archive in Holding: {holding_id}",
-            )
-            self.send_pathlist(
-                [pd], routing_key=rk_failed, body_json=body, state=State.FAILED
-            )
+        # create the tape locations in the database and send a message for each one
+        iteration = 0
+        while self._create_tape_locations(next_holding):
+            # publish the completed message for this set of files
+            if len(self.completelist) > 0:
+                self.log(
+                    f"Sending completed PathList from CATALOG_ARCHIVE_PUT", RK.LOG_INFO
+                )
+                self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
+                self.send_pathlist(
+                    self.completelist,
+                    routing_key=rk_complete,
+                    body_json=body,
+                    state=State.ARCHIVE_INIT,
+                )
+            elif iteration == 0:
+                # The holding might not have had any files to archive (if it has been
+                # selected by the user / sys-admin).  We need to send failure in this
+                # case, but only if this is the first time around this loop
+                self.log(
+                    f"No files to send to archive in CATALOG_ARCHIVE_PUT",
+                    RK.LOG_INFO,
+                )
+                pd = PathDetails(
+                    original_path="",
+                    failure_reason=f"No files to archive in Holding: {holding_id}",
+                )
+                self.send_pathlist(
+                    [pd], routing_key=rk_failed, body_json=body, state=State.FAILED
+                )
+            # increment how many times we've been around this loop
+            iteration += 1
 
     def _catalog_archive_update(
         self, body: Dict, rk_origin: str, storage_type: Storage
