@@ -491,6 +491,8 @@ class MonitorConsumer(RMQC):
                 transaction_id=transaction_id,
                 with_for_update=True,
             )
+            if not trec:
+                raise MonitorError("No transaction")
             # reassign the job label if job_label is in the message
             if job_label:
                 trec.job_label = job_label

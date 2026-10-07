@@ -93,9 +93,9 @@ class Monitor(DBMixin):
                 TransactionRecord.group == group, TransactionRecord.user == user
             )
             if with_for_update:
-                trec = trec_q.with_for_update().one()
+                trec = trec_q.with_for_update().first()
             else:
-                trec = trec_q.one()
+                trec = trec_q.first()
         except (NoResultFound, KeyError, OperationalError):
             if idd:
                 raise MonitorError(
