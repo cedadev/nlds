@@ -596,11 +596,11 @@ class Catalog(DBMixin):
 
         try:
             filelist2 = [f.original_path for f in filelist]
-            err_msg = (
-                f"Files in pathlist: {filelist2} not found in holding with "
-                f"transaction_id: {transaction_id}"
-            )
             if holding_id:
+                err_msg = (
+                    f"Files in pathlist: {filelist2} not found in holding with "
+                    f"holding_id: {holding_id}"
+                )
                 file_q = (
                     self.session.query(File)
                     .select_from(Transaction)
@@ -609,6 +609,10 @@ class Catalog(DBMixin):
                     .filter(File.original_path.in_(filelist2))
                 )
             elif transaction_id:
+                err_msg = (
+                    f"Files in pathlist: {filelist2} not found in holding with "
+                    f"transaction_id: {transaction_id}"
+                )
                 file_q = (
                     self.session.query(File)
                     .select_from(Transaction)
@@ -1036,7 +1040,7 @@ class Catalog(DBMixin):
 
             next_holding_q = self.session.query(Holding).filter(
                 Transaction.holding_id == Holding.id,
-                # last ingest activity is longer ago than specified time
+                # first ingest activity is longer ago than specified time
                 ~Holding.transactions.any(Transaction.ingest_time > ingest_deadline),
                 # Files that match the Transaction (numerical) id
                 File.transaction_id == Transaction.id,
@@ -1047,13 +1051,14 @@ class Catalog(DBMixin):
                 # At least one location is OBJECT_STORAGE, i.e. the transfer has
                 # completed
                 File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                # File access time is greater than the ingest_deadline
+                ~File.locations.any(Location.access_time > ingest_deadline),
                 # tenancy is stored in url_netloc part of Location
                 File.locations.any(Location.url_netloc == tenancy),
             )
             # Order randomly so that if one archive fails, it won't prevent the others
             # from archiving
             next_holding = next_holding_q.order_by(func.random()).first()
-
         except (NoResultFound, KeyError):
             raise CatalogError(f"Couldn't get unarchived holdings")
         return next_holding
