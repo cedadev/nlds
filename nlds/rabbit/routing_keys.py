@@ -55,6 +55,7 @@ ARCHIVE_GET = "archive-get"
 ARCHIVE_RESTORE = "archive-restore"
 CATALOG_ARCHIVE_NEXT = "catalog-archive-next"
 CATALOG_ARCHIVE_UPDATE = "catalog-archive-update"
+UNSTAGE = "unstage"
 ROUTE = "route"
 LOG = "log"
 
@@ -83,4 +84,5 @@ LOG_RKS = (
     LOG_ERROR,
     LOG_CRITICAL,
 )
+LOG_ALL = "all"
 LOGGER_PREFIX = "nlds."

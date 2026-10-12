@@ -74,12 +74,12 @@ class IndexerConsumer(StattingConsumer):
         if filelist_len > self.filelist_max_len:
             self.log(
                 f"Filelist longer than allowed maximum length, splitting into "
-                "batches of {self.filelist_max_len}",
+                f"batches of {self.filelist_max_len}",
                 RK.LOG_DEBUG,
             )
 
-        # For each 1000 files in the list resubmit with index as the action
-        # in the routing key
+        # For each self.filelist_max_len files in the list resubmit with index as
+        # the action in the routing key
         for i in range(0, filelist_len, self.filelist_max_len):
             slc = slice(i, min(i + self.filelist_max_len, filelist_len))
             self.send_pathlist(
@@ -189,6 +189,8 @@ class IndexerConsumer(StattingConsumer):
                 self._split(filelist, rk_parts[0], body_json)
             else:
                 self._scan(filelist, rk_parts, body_json)
+
+        self.send_logging()
 
     def _index_r(
         self,

@@ -10,14 +10,14 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 import os
 from typing import List
-from zlib import adler32
 
 from nlds.details import PathDetails
 from nlds_processors.archive.s3_to_tarfile_stream import (
     S3ToTarfileStream,
     S3StreamError,
 )
-from nlds_processors.archive.adler32file import Adler32File
+from nlds_processors.archive.adler32file import Adler32File, calculate_checksum_adler32
+from nlds_processors.archive.md5file import MD5File, calculate_checksum_md5
 import nlds.rabbit.routing_keys as RK
 
 
@@ -36,7 +36,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         s3_tenancy: str,
         s3_access_key: str,
         s3_secret_key: str,
-        disk_location: str,
+        tape_url: str,
         secure_fl: bool,
         http_timeout: int,
         logger,
@@ -52,8 +52,11 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         )
         # record and make the disk location directory if it doesn't exist
         try:
-            self.disk_loc = os.path.expanduser(disk_location)
-            os.mkdir(self.disk_loc)
+            self.disk_loc = os.path.expanduser(tape_url)
+            # NRM - 10/09/2026 - Don't create the DISKTAPE location, or the "tape_pool"
+            # locations below it, so we can test if the user specifying a bad tape pool
+            # fails in an elegant manner
+            # os.mkdir(self.disk_loc)
         except FileExistsError:
             # it's okay if the path already exists
             pass
@@ -68,6 +71,7 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         filelist: List[PathDetails],
         chunk_size: int,
         num_parallel_uploads: int = 1,
+        checksum_method: str = "adler32",
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """Stream from Object Store to a tarfile on disk"""
         if self.filelist != []:
@@ -91,9 +95,17 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         try:
             # open the tarfile to write to
             with open(self.tarfile_diskpath, "wb") as file:
-                file_object = Adler32File(file, debug_fl=False)
+                # create the file_object type depending on checksum method
+                if checksum_method == "adler32":
+                    file_object = Adler32File(file, debug_fl=False)
+                elif checksum_method == "md5sum":
+                    file_object = MD5File(file, debug_fl=False)
+                else:
+                    raise S3StreamError(f"Unknown checksum method: {checksum_method}")
                 completelist, failedlist, checksum = self._stream_to_fileobject(
-                    file_object, self.filelist, chunk_size
+                    file_object,
+                    self.filelist,
+                    chunk_size,
                 )
         except FileExistsError:
             msg = (
@@ -124,7 +136,10 @@ class S3ToTarfileDisk(S3ToTarfileStream):
 
         # now verify the checksum
         try:
-            self._validate_tarfile_checksum(checksum)
+            self._validate_tarfile_checksum(
+                tarfile_checksum=checksum,
+                checksum_method=checksum_method,
+            )
         except S3StreamError as e:
             msg = (
                 f"Exception occurred during validation of tarfile "
@@ -136,6 +151,9 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             except S3StreamError as e:
                 msg += f" {e.message}"
             raise S3StreamError(msg)
+        # if the length of the completelist is zero then remove the tarfile
+        if len(completelist) == 0:
+            self._remove_tarfile_from_disktape()
         # add the location to the completelist
         for f in completelist:
             f.set_tape(
@@ -145,6 +163,13 @@ class S3ToTarfileDisk(S3ToTarfileStream):
             )
         return completelist, failedlist, self.tarfile_diskpath, checksum
 
+    def _tarfile(self, tarfile: str):
+        """Adapt the tarfile string to remove root:// from the beginning"""
+        prefix = "root://"
+        if tarfile[: len(prefix)] == prefix:
+            tarfile = tarfile[len(prefix) :]
+        return tarfile
+
     def get(
         self,
         holding_prefix: str,
@@ -152,16 +177,24 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         filelist: List[PathDetails],
         chunk_size: int,
         num_parallel_uploads: int = 1,
+        checksum_method="adler32",
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on disk to Object Store"""
         if self.filelist != []:
             raise S3StreamError(f"self.filelist is not Empty: {self.filelist[0]}")
         self.filelist = filelist
         self.holding_prefix = holding_prefix
+        tarfile = self._tarfile(tarfile)
         try:
             # open the tarfile to read from
             with open(tarfile, "rb") as file:
-                file_object = Adler32File(file, debug_fl=False)
+                # create a file_object, type depending on checksum method
+                if checksum_method == "adler32":
+                    file_object = Adler32File(file, debug_fl=False)
+                elif checksum_method == "md5sum":
+                    file_object = MD5File(file, debug_fl=False)
+                else:
+                    raise S3StreamError(f"Unknown checksum method: {checksum_method}")
                 completelist, failedlist = self._stream_to_s3object(
                     file_object,
                     self.filelist,
@@ -169,12 +202,12 @@ class S3ToTarfileDisk(S3ToTarfileStream):
                     num_parallel_uploads,
                 )
         except FileNotFoundError:
-            msg = f"Couldn't open tarfile ({self.tarfile_diskpath})."
+            msg = f"Couldn't open tarfile ({tarfile})."
             self.log(msg, RK.LOG_ERROR)
             raise S3StreamError(msg)
         except S3StreamError as e:
             msg = (
-                f"Exception occurred during read of tarfile {self.tarfile_diskpath}. "
+                f"Exception occurred during read of tarfile {tarfile}. "
                 f"Original Exception: {e}"
             )
 
@@ -191,14 +224,18 @@ class S3ToTarfileDisk(S3ToTarfileStream):
     def prepare_request(self, tarfilelist: List[str]) -> str:
         """Request the storage system for a file to be prepared"""
         for tarfile in tarfilelist:
+            tarfile = self._tarfile(tarfile)
             self.log(f"Preparing tarfile: {tarfile}", RK.LOG_INFO)
         S3ToTarfileDisk.prepare_id += 1
         return str(S3ToTarfileDisk.prepare_id)
 
     def prepare_complete(self, prepare_id: str, tarfilelist: List[str]) -> bool:
-        """Query the storage system whether the prepare for a file has been completed."""
+        """
+        Query the storage system whether the prepare for a file has been completed.
+        """
         # always return True for the disktape / faketape™
         for tarfile in tarfilelist:
+            tarfile = self._tarfile(tarfile)
             self.log(f"Prepare complete for tarfile: {tarfile}", RK.LOG_INFO)
         return True
 
@@ -217,32 +254,48 @@ class S3ToTarfileDisk(S3ToTarfileStream):
         return f"{self.disk_loc}/{self.holding_prefix}"
 
     @property
-    def tarfile_diskpath(self):
+    def tarfile_diskpath(self, tarfile=None):
         """Get the holding diskpath (i.e. the enclosing directory) on the DISKTAPE"""
         if not self.disk_loc:
             raise S3StreamError("self.disk_lock is None")
         if not self.holding_prefix:
             raise S3StreamError("self.holding_prefix is None")
-        if not self.filelist_hash:
-            raise S3StreamError("self.filelist_hash is None")
-        return f"{self.disk_loc}/{self.holding_prefix}/{self.filelist_hash}.tar"
+        if tarfile:
+            if tarfile[:7] == "root://":
+                tarfile_2 = tarfile[7:]
+            else:
+                tarfile_2 = tarfile
+            path = f"{self.disk_loc}/{self.holding_prefix}/{tarfile_2}"
+        else:
+            if not self.filelist_hash:
+                raise S3StreamError("self.filelist_hash is None")
+            path = f"{self.disk_loc}/{self.holding_prefix}/{self.filelist_hash}.tar"
+        return path
 
-    def _validate_tarfile_checksum(self, tarfile_checksum: str):
+    def _validate_tarfile_checksum(
+        self,
+        tarfile_checksum: str,
+        checksum_method: str = "adler32",
+    ):
         """Calculate the Adler32 checksum of the tarfile and compare it to the checksum
         calculated when streaming from the S3 server to the DISKTAPE"""
-        asum = 1
         with open(self.tarfile_diskpath, "rb") as fh:
-            while data := fh.read():
-                asum = adler32(data, asum)
-        if asum != tarfile_checksum:
+            if checksum_method == "adler32":
+                csum = calculate_checksum_adler32(fh)
+            elif checksum_method == "md5sum":
+                csum = calculate_checksum_md5(fh)
+            else:
+                raise S3StreamError(
+                    f"Checksum method: {checksum_method} not recognised."
+                )
+
+        if csum != tarfile_checksum:
             reason = (
-                f"Checksum {asum} differs from that calculated during streaming "
+                f"Checksum {csum} differs from that calculated during streaming "
                 f"upload {tarfile_checksum}."
             )
             self.log(reason, RK.LOG_ERROR)
-            raise S3StreamError(
-                f"Failure occurred during DISKTAPE-write " f"({reason})."
-            )
+            raise S3StreamError(f"Failure occurred during DISKTAPE-write ({reason}).")
 
     def _remove_tarfile_from_disktape(self):
         """On failure, remove tarfile from disk"""

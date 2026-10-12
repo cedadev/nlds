@@ -11,7 +11,7 @@ __contact__ = "neil.massey@stfc.ac.uk"
 
 # SQLalchemy imports
 from sqlalchemy import func, Enum
-from sqlalchemy.orm import subqueryload, Query
+from sqlalchemy.orm import selectinload, Query
 from sqlalchemy.exc import (
     IntegrityError,
     OperationalError,
@@ -141,8 +141,8 @@ class Catalog(DBMixin):
                 raise NoResultFound
 
             # pre-load the tags and transactions
-            holding_q = holding_q.options(subqueryload(Holding.transactions))
-            holding_q = holding_q.options(subqueryload(Holding.tags))
+            holding_q = holding_q.options(selectinload(Holding.transactions))
+            holding_q = holding_q.options(selectinload(Holding.tags))
             # if we are doing an update on the holding then lock the catalog database
             if with_for_update:
                 holding = holding_q.with_for_update().one()
@@ -292,15 +292,18 @@ class Catalog(DBMixin):
                 msg += f" with tags:{tag}."
             else:
                 msg += "."
+            self.session.rollback()
             raise CatalogError(msg)
         except DataError as e:
             if regex:
                 msg = f"Invalid regular expression: {label}"
             else:
                 msg = f"Error getting Holding: {e}"
+            self.session.rollback()
             raise CatalogError(msg)
 
         except OperationalError as e:
+            self.session.rollback()
             raise CatalogError(
                 f"Error when listing holding for user:{user} and group:{group}. "
                 f"Original error {e}"
@@ -577,10 +580,12 @@ class Catalog(DBMixin):
 
     def get_files_from_filelist(
         self,
-        transaction_id: str,
         filelist: list[PathDetails],
+        holding_id: int = None,
+        transaction_id: str = None,
         with_for_update: bool = False,
-    ) -> list[File]:
+        preload_locations: bool = False,
+    ) -> Query[File]:
         """Get a list of file models from a transaction, where the original path
         matches the original path in the PathDetails, given a transaction and a list of
         PathDetails.
@@ -591,19 +596,33 @@ class Catalog(DBMixin):
 
         try:
             filelist2 = [f.original_path for f in filelist]
-            err_msg = (
-                f"Files in pathlist: {filelist2} not found in holding with "
-                f"transaction_id: {transaction_id}"
-            )
-            file_q = (
-                self.session.query(File)
-                .select_from(Transaction)
-                .where(
-                    Transaction.transaction_id == transaction_id,
+            if holding_id:
+                err_msg = (
+                    f"Files in pathlist: {filelist2} not found in holding with "
+                    f"holding_id: {holding_id}"
                 )
-                .join(File)
-                .filter(File.original_path.in_(filelist2))
-            )
+                file_q = (
+                    self.session.query(File)
+                    .select_from(Transaction)
+                    .where(Transaction.holding_id == holding_id)
+                    .join(File)
+                    .filter(File.original_path.in_(filelist2))
+                )
+            elif transaction_id:
+                err_msg = (
+                    f"Files in pathlist: {filelist2} not found in holding with "
+                    f"transaction_id: {transaction_id}"
+                )
+                file_q = (
+                    self.session.query(File)
+                    .select_from(Transaction)
+                    .where(Transaction.transaction_id == transaction_id)
+                    .join(File)
+                    .filter(File.original_path.in_(filelist2))
+                )
+            else:
+                err_msg = "Holding id or Transaction id not supplied"
+                raise CatalogError(err_msg)
             # if we're going to update the file then use with_for_update
             if with_for_update:
                 file_q = file_q.with_for_update()
@@ -611,6 +630,11 @@ class Catalog(DBMixin):
                 file_q = file_q
         except NoResultFound:
             raise CatalogError(err_msg)
+
+        # preload the locations if requested
+        if preload_locations:
+            file_q = file_q.options(selectinload(File.locations))
+
         return file_q
 
     def get_files(
@@ -626,7 +650,8 @@ class Catalog(DBMixin):
         regex: bool = False,
         limit: int = None,
         descending: bool = False,
-    ) -> list:
+        with_for_update=False,
+    ) -> Query[File]:
         """Get a multitude of file details from the catalog database, given the user,
         group, label, holding_id, path (can be regex) or tag(s)"""
         if self.session is None:
@@ -663,13 +688,9 @@ class Catalog(DBMixin):
                 File.transaction_id == Transaction.id,
                 Transaction.holding_id == Holding.id,
             )
-            # load in the Locations with the File to speed up the queries a lot
-            file_q = file_q.options(subqueryload(File.locations))
 
             if descending:
                 file_q = file_q.order_by(Transaction.ingest_time.desc())
-            else:
-                file_q = file_q.order_by(Transaction.ingest_time)
 
             if regex or search_path == ".*":
                 # will throw an exception here for bad regex
@@ -677,12 +698,21 @@ class Catalog(DBMixin):
             else:
                 file_q = file_q.filter(File.original_path.in_(search_path))
 
+            # check that some files were found
             if file_q.count() == 0:
                 result = None
             elif limit:
                 result = file_q.limit(limit)
             else:
                 result = file_q
+
+            # load in the Locations with the File to speed up the queries a lot
+            # selectinload seems to be the most flexible and performant
+            # it allows .limit to be used, as well as with_for_update
+            if result:
+                result = result.options(selectinload(File.locations))
+                if with_for_update:
+                    result = result.with_for_update()
 
         except (IntegrityError, OperationalError) as e:
             err_msg = f"Error in catalog.get_files, reason: {e}"
@@ -922,7 +952,8 @@ class Catalog(DBMixin):
             aggregation = Aggregation(
                 tarname=tarname,
                 checksum=checksum,
-                algorithm=algorithm,
+                # convert checksum algorithm to upper case to maintain legacy records
+                algorithm=algorithm.upper(),
                 failed_fl=False,  # Aggregations fail before creation now
             )
             self.session.add(aggregation)
@@ -1009,7 +1040,7 @@ class Catalog(DBMixin):
 
             next_holding_q = self.session.query(Holding).filter(
                 Transaction.holding_id == Holding.id,
-                # last ingest activity is longer ago than specified time
+                # first ingest activity is longer ago than specified time
                 ~Holding.transactions.any(Transaction.ingest_time > ingest_deadline),
                 # Files that match the Transaction (numerical) id
                 File.transaction_id == Transaction.id,
@@ -1020,13 +1051,14 @@ class Catalog(DBMixin):
                 # At least one location is OBJECT_STORAGE, i.e. the transfer has
                 # completed
                 File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
+                # File access time is greater than the ingest_deadline
+                ~File.locations.any(Location.access_time > ingest_deadline),
                 # tenancy is stored in url_netloc part of Location
                 File.locations.any(Location.url_netloc == tenancy),
             )
             # Order randomly so that if one archive fails, it won't prevent the others
             # from archiving
             next_holding = next_holding_q.order_by(func.random()).first()
-
         except (NoResultFound, KeyError):
             raise CatalogError(f"Couldn't get unarchived holdings")
         return next_holding
@@ -1035,7 +1067,7 @@ class Catalog(DBMixin):
         self,
         holding: Holding,
         with_for_update: bool = False,
-        limit: int = 100000,
+        limit: int = 50000,
     ) -> Query:
         """The principal function for getting unarchived files to aggregate and
         send to archive put.
@@ -1057,18 +1089,20 @@ class Catalog(DBMixin):
                     File.path_type == PathType.FILE,
                     # At least one storage location is not TAPE
                     # Note that this could not have any details filled (url, root, etc.)
-                    # as files that are in the process of being sent to tape have an empty
-                    # TAPE storage location created for them.  This prevents them being
-                    # sent to tape again.
+                    # as files that are in the process of being sent to tape have an
+                    # emptyTAPE storage location created for them.  This prevents them
+                    # being sent to tape again.
                     ~File.locations.any(Location.storage_type == Storage.TAPE),
-                    # At least one storage location is OBJECT_STORAGE.  This indicates that
-                    # the file has been successfully transferred to object storage.
+                    # At least one storage location is OBJECT_STORAGE.  This indicates
+                    # that the file has been successfully transferred to object storage.
                     File.locations.any(Location.storage_type == Storage.OBJECT_STORAGE),
                 )
                 .limit(limit)
             )
+            # selectinload seems the most flexible whilst still being performant
+            # it allows .limit and .with_for_update
             unarchived_files_q = unarchived_files_q.options(
-                subqueryload(File.locations)
+                selectinload(File.locations)
             )
             if with_for_update:
                 unarchived_files_q = unarchived_files_q.with_for_update()

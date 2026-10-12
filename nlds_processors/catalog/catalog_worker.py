@@ -28,6 +28,7 @@ Requires these settings in the /etc/nlds/server_config file:
 from typing import Dict, Tuple
 from datetime import datetime
 import sys
+import enum
 
 from pika.channel import Channel
 from pika.connection import Connection
@@ -50,57 +51,13 @@ import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 
 
-class Metadata:
-    """Container class for the meta section of the message body."""
+class Tertiary(enum.Enum):
+    TRUE = 0
+    FALSE = 1
+    DONT_CARE = 2
 
-    label: str
-    holding_id: int
-    transaction_id: str
-    tags: Dict
-    groupall: bool
-    limit: int
-    descending: bool
-
-    def __init__(self, body: Dict):
-        # Get the label from the metadata section of the message
-        try:
-            self.label = body[MSG.META][MSG.LABEL]
-        except KeyError:
-            self.label = None
-
-        # Get the holding_id from the metadata section of the message
-        try:
-            self.holding_id = body[MSG.META][MSG.HOLDING_ID]
-        except KeyError:
-            self.holding_id = None
-
-        # Get any tags that exist
-        try:
-            self.tags = body[MSG.META][MSG.TAG]
-        except KeyError:
-            self.tags = None
-
-        # get the transaction id from the metadata section of the message
-        try:
-            self.transaction_id = body[MSG.META][MSG.TRANSACT_ID]
-        except KeyError:
-            self.transaction_id = None
-
-        # get the limit from the metadata section of the message
-        try:
-            self.limit = body[MSG.META][MSG.LIMIT]
-        except KeyError:
-            self.limit = None
-
-        # get the ascending / descending from the metadata section of the message
-        try:
-            self.descending = body[MSG.META][MSG.DESCENDING]
-        except KeyError:
-            self.descending = False
-
-    @property
-    def unpack(self) -> Tuple:
-        return (self.label, self.holding_id, self.tags, self.transaction_id)
+    def __str__(self):
+        return ["TRUE", "FALSE", "DONT_CARE"][self.value]
 
 
 def format_datetime(date: datetime):
@@ -111,24 +68,12 @@ def format_datetime(date: datetime):
     return datetime_str
 
 
-def build_retrieval_dict(filelist: list[PathDetails], fullpath: bool = False):
-    """Build a retrieval dict from the filelist.  The retrieval dict contains a
-    tarfile name, a holding id, and the list of files to retrieve from the tarfile.
-    """
-    retrieval_dict = {}
-    for file in filelist:
-        # get the tape location for File or FileSystem
-        tarfile = file.tape_name
-        # if it has not been added before then create a new record
-        if not tarfile in retrieval_dict:
-            retrieval_dict[tarfile] = {
-                "holding_id": file.holding_id,
-                "filelist": [file],
-            }
-        else:
-            # if it has been added before then append to the filelist
-            retrieval_dict[tarfile]["filelist"].append(file)
-    return retrieval_dict
+def pathlist_to_string(pathlist: list[PathDetails]):
+    """Quick function to translate PathDetails values in a list into a string"""
+    strlist = []
+    for p in pathlist:
+        strlist.append(p.original_path)
+    return ", ".join(strlist)
 
 
 class CatalogConsumer(RMQC):
@@ -144,10 +89,11 @@ class CatalogConsumer(RMQC):
     _DB_OPTIONS_USER = "db_user"
     _DB_OPTIONS_PASSWD = "db_passwd"
     _DB_ECHO = "echo"
-    _DEFAULT_TENANCY = "default_tenancy"
-    _DEFAULT_TAPE_URL = "default_tape_url"
+    _TENANCY = "tenancy"
     _INGEST_DEADLINE = "archive_ingest_deadline"
-    _FILELIST_MAX_LENGTH = "archive_filelist_max_length"
+    _ARCHIVE_FILELIST_MAX_LENGTH = "archive_filelist_max_length"
+    _FILELIST_MAX_LENGTH = "filelist_max_length"
+    _TAPE_POOL_STRATEGY = "tape_pool_strategy"
 
     DEFAULT_CONSUMER_CONFIG = {
         _DB_ENGINE: "sqlite",
@@ -157,21 +103,50 @@ class CatalogConsumer(RMQC):
             _DB_OPTIONS_PASSWD: "",
             _DB_ECHO: True,
         },
-        _DEFAULT_TENANCY: None,
-        _DEFAULT_TAPE_URL: None,
+        _TENANCY: None,
         _INGEST_DEADLINE: 86400,  # One day
-        _FILELIST_MAX_LENGTH: 100000,
+        _FILELIST_MAX_LENGTH: 10000,
+        _ARCHIVE_FILELIST_MAX_LENGTH: 50000,
+        _TAPE_POOL_STRATEGY: [],
     }
+    # The PostgreSQL database backend has a maximum of 65535 parameters in any query
+    # sometimes a message could be passed with more than the _FILELIST_ABSOLUTE_LIMIT
+    # number of files in the message
+    # when this occurs the message is split into smaller messages so that the database
+    # can process the message successfully
+    _FILELIST_ABSOLUTE_LIMIT = 50000
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
         super().__init__(queue=queue)
-
-        self.default_tape_url = self.load_config_value(self._DEFAULT_TAPE_URL)
-        self.default_tenancy = self.load_config_value(self._DEFAULT_TENANCY)
-        self.ingest_deadline = self.load_config_value(self._INGEST_DEADLINE)
+        # self.ingest_deadline now comes from the archive_next message
         self.filelist_max_length = self.load_config_value(self._FILELIST_MAX_LENGTH)
+        self.archive_filelist_max_length = self.load_config_value(
+            self._ARCHIVE_FILELIST_MAX_LENGTH
+        )
         self.catalog = None
         self.tapelist = []
+
+    def _validate_tape_pool_strategy(self):
+        """
+        Current valid tape pool strategies are:
+            1. metadata: the user specifies a 'tapepool' tag in the holding with the
+               name of the pool as the key.
+            2. year: use the first ingest year according to the holding
+            3. none: no tape pool, just uses the default path / pool
+        Other strategies may be added later
+        """
+        # which strategies are valid?
+        strategies = ["metadata", "user", "year", "none"]
+        # remove white space and hyphens
+        chars = "-_ "
+        table = str.maketrans("", "", chars)
+        self.tape_pool_strategy = [
+            t.translate(table).lower() for t in self.tape_pool_strategy
+        ]
+        # validate the entries
+        for t in self.tape_pool_strategy:
+            if t not in strategies:
+                raise CatalogError(f"Invalid tape pool strategy: {t}")
 
     @property
     def database(self):
@@ -227,7 +202,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return group
 
-    def _parse_querygroup(self, body: Dict, user: str, group: str) -> str:
+    def _parse_querygroup(self, body: Dict, user: str, group: str) -> str | None:
         # get the desired group from the details section of the message
         try:
             query_group = body[MSG.DETAILS][MSG.GROUP_QUERY]
@@ -249,7 +224,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return query_group
 
-    def _parse_queryuser(self, body: Dict, user: str) -> None:
+    def _parse_queryuser(self, body: Dict, user: str) -> str | None:
         # get the desired user id to search for from the details section of the
         # message. this can be different than the user making the call
         try:
@@ -268,7 +243,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return query_user
 
-    def _parse_transaction_id(self, body: Dict, mandatory: bool = False) -> str:
+    def _parse_transaction_id(self, body: Dict, mandatory: bool = False) -> str | None:
         # get the transaction id from the details section of the message. It is
         # a mandatory variable for the PUT workflow
         try:
@@ -290,45 +265,97 @@ class CatalogConsumer(RMQC):
         ):
             tenancy = body[MSG.DETAILS][MSG.TENANCY]
         else:
-            tenancy = self.default_tenancy
+            tenancy = self.tenancy
         return tenancy
 
-    def _parse_metadata_vars(self, body: Dict) -> Tuple:
-        """Convenience function to prevent unnecessary code replication for
-        extraction of metadata variables from the message body. This is
-        specifically for requesting particular holdings/transactions/labels/tags
-        in a given catalog function. Returns a tuple of label, holding_id and
-        tags, with each being None if not found.
-        """
-        md = Metadata(body)
-        return (
-            md.label,
-            md.holding_id,
-            md.tags,
-            md.transaction_id,
-            md.limit,
-            md.descending,
-        )
+    def _parse_tape_pool_strategy(self, body: dict) -> list[str]:
+        if (
+            MSG.TAPE_POOL_STRATEGY in body[MSG.META]
+            and body[MSG.META][MSG.TAPE_POOL_STRATEGY]
+        ):
+            tape_pool_strategy = body[MSG.META][MSG.TAPE_POOL_STRATEGY]
+        else:
+            tape_pool_strategy = []
+        return tape_pool_strategy
 
-    def _parse_groupall(self, body: Dict) -> str:
+    def _parse_meta_label(self, body: Dict) -> str | None:
+        # Get the label from the metadata section of the message
+        try:
+            label = body[MSG.META][MSG.LABEL]
+        except KeyError:
+            label = None
+        return label
+
+    def _parse_meta_holding_id(self, body: Dict) -> str | None:
+        # Get the holding_id from the metadata section of the message
+        try:
+            holding_id = body[MSG.META][MSG.HOLDING_ID]
+        except KeyError:
+            holding_id = None
+        return holding_id
+
+    def _parse_meta_tags(self, body: Dict) -> str | None:
+        # Get any tags that exist
+        try:
+            tags = body[MSG.META][MSG.TAG]
+        except KeyError:
+            tags = None
+        return tags
+
+    def _parse_meta_transaction_id(self, body: Dict) -> str | None:
+        # get the transaction id from the metadata section of the message
+        try:
+            transaction_id = body[MSG.META][MSG.TRANSACT_ID]
+        except KeyError:
+            transaction_id = None
+        return transaction_id
+
+    def _parse_meta_limit(self, body: Dict) -> str | None:
+        # get the limit from the metadata section of the message
+        try:
+            limit = body[MSG.META][MSG.LIMIT]
+        except KeyError:
+            limit = None
+        return limit
+
+    def _parse_meta_descending(self, body: Dict) -> bool:
+        # get the ascending / descending from the metadata section of the message
+        try:
+            descending = body[MSG.META][MSG.DESCENDING]
+        except KeyError:
+            descending = False
+        return descending
+
+    def _parse_meta_storage_type(self, body: Dict) -> str | None:
+        # get the storage type
+        try:
+            storage_type = body[MSG.META][MSG.STORAGE_TYPE]
+        except KeyError:
+            storage_type = None
+        return storage_type
+
+    def _parse_meta_tape_pool(self, body: Dict) -> str | None:
+        try:
+            tape_pool = body[MSG.META][MSG.TAPE_POOL]
+        except KeyError:
+            tape_pool = None
+        return tape_pool
+
+    def _parse_meta_ingest_deadline(self, body: Dict) -> int | None:
+        try:
+            ingest_deadline = body[MSG.META][MSG.ARCHIVE_INGEST_DEADLINE]
+        except KeyError:
+            ingest_deadline = 24 * 60 * 60  # fallback to 24 hours
+        return ingest_deadline
+
+    def _parse_meta_groupall(self, body: Dict) -> bool:
         try:
             groupall = body[MSG.DETAILS][MSG.GROUPALL]
         except KeyError:
             groupall = False
         return groupall
 
-    def _parse_tape_url(self, body: Dict) -> str:
-        # Get the tape_url from message, if none found then use the configured default
-        if (
-            MSG.TAPE_URL in body[MSG.DETAILS]
-            and body[MSG.DETAILS][MSG.TAPE_URL] is not None
-        ):
-            tape_url = body[MSG.DETAILS][MSG.TAPE_URL]
-        else:
-            tape_url = self.default_tape_url
-        return tape_url
-
-    def _parse_aggregation_id(self, body: Dict) -> str:
+    def _parse_meta_aggregation_id(self, body: Dict) -> str | None:
         # Parse aggregation and checksum info from message.
         try:
             aggregation_id = body[MSG.META][MSG.AGGREGATION_ID]
@@ -339,7 +366,7 @@ class CatalogConsumer(RMQC):
             aggregation_id = None
         return aggregation_id
 
-    def _parse_transaction_records(self, body: dict) -> list[str]:
+    def _parse_transaction_records(self, body: Dict) -> list[str]:
         # get the transaction_ids from the metadata section of the message
         try:
             transaction_records = body[MSG.DATA][MSG.RECORD_LIST]
@@ -358,7 +385,7 @@ class CatalogConsumer(RMQC):
             raise CatalogError(message=msg)
         return transaction_records
 
-    def _parse_path(self, body: dict) -> str:
+    def _parse_meta_path(self, body: Dict) -> str:
         # get the path from the metadata section of the message
         try:
             path = body[MSG.META][MSG.PATH]
@@ -366,7 +393,7 @@ class CatalogConsumer(RMQC):
             path = None
         return path
 
-    def _parse_regex(self, body: dict) -> str:
+    def _parse_meta_regex(self, body: Dict) -> str:
         # get the REGEX flag from the metadata section of the message
         try:
             regex = body[MSG.META][MSG.REGEX]
@@ -374,7 +401,7 @@ class CatalogConsumer(RMQC):
             regex = False
         return regex
 
-    def _parse_new_metadata_variables(self, body: dict) -> tuple[str, str, str]:
+    def _parse_new_metadata_variables(self, body: Dict) -> tuple[str, str, str]:
         # get the new label from the new meta section of the message
         try:
             new_label = body[MSG.META][MSG.NEW_META][MSG.LABEL]
@@ -477,7 +504,7 @@ class CatalogConsumer(RMQC):
         if tags:
             for k in tags:
                 try:
-                    tag = self.catalog.get_tag(holding, k, with_for_update=True)
+                    _ = self.catalog.get_tag(holding, k, with_for_update=True)
                 except CatalogError:  # tag's key not found so create
                     self.catalog.create_tag(holding, k, tags[k])
                 else:
@@ -552,7 +579,8 @@ class CatalogConsumer(RMQC):
             group = self._parse_group(body)
             filelist = self._parse_filelist(body)  # check if file list is empty
             transaction_id = self._parse_transaction_id(body, mandatory=True)
-            label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
+            label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
         except CatalogError as e:
             self.log(e.message, RK.LOG_ERROR)
             for filepath in filelist:
@@ -622,7 +650,6 @@ class CatalogConsumer(RMQC):
             except CatalogError as e:
                 # mark all as failed
                 holding = None
-                filelist = self._parse_filelist(body)
                 for f in filelist:
                     pd = PathDetails.from_dict(f)
                     pd.failure_reason = e.message
@@ -649,7 +676,7 @@ class CatalogConsumer(RMQC):
             # failed
             rk_failed = ".".join([rk_origin, RK.CATALOG_SETUP, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_SETUP", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -669,8 +696,9 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body, mandatory=True)
-            tenancy = self._parse_tenancy(body)
-            label, holding_id, tags, _, _, _ = self._parse_metadata_vars(body)
+            label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            tags = self._parse_meta_tags(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -775,7 +803,7 @@ class CatalogConsumer(RMQC):
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_PUT, RK.COMPLETE])
             self.log(f"Sending completed PathList from CATALOG_PUT", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -787,7 +815,7 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_PUT, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_PUT", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -806,7 +834,9 @@ class CatalogConsumer(RMQC):
                 warning=tag_warnings,
             )
 
-    def _catalog_update(self, body: Dict, rk_origin: str, create: bool) -> None:
+    def _catalog_update_storage_locations(
+        self, body: Dict, rk_origin: str, create: bool
+    ) -> None:
         """Upon completion of a TRANSFER_PUT, the list of completed files is returned
         back to the NLDS worker, but with location on Object Storage of the files
         appended to each PathDetails JSON object.
@@ -815,12 +845,14 @@ class CatalogConsumer(RMQC):
         contain the Object Storage location.
 
         Upon completion of an ARCHIVE_GET, the list of completed files is returned
-        back to the NLDS worker.  The information for each completed file is enough to  amend the OBJECT STORAGE location in the catalog database.
+        back to the NLDS worker.  The information for each completed file is enough to
+        amend the OBJECT STORAGE location in the catalog database.
         """
         # Parse the message body for required variables
         try:
             filelist = self._parse_filelist(body)
             transaction_id = self._parse_transaction_id(body)
+            holding_id = self._parse_meta_holding_id(body)
         except CatalogError as e:
             # functions above handled message logging, here we just return
             raise e
@@ -832,11 +864,14 @@ class CatalogConsumer(RMQC):
         path_details_list = [PathDetails.from_dict(f) for f in filelist]
 
         # get all the files in the filelist as File objects from the database
-        files = self.catalog.get_files_from_filelist(
-            transaction_id=transaction_id,  # assume all same holding id
-            filelist=path_details_list,
-            with_for_update=True,
-        )
+        if holding_id or transaction_id:
+            files = self.catalog.get_files_from_filelist(
+                holding_id=holding_id,  # assume all same holding id
+                transaction_id=transaction_id,  # assume all same transaction id
+                filelist=path_details_list,
+                with_for_update=True,
+                preload_locations=True,
+            )
 
         # loop over the filelist
         create_location_list = []
@@ -868,13 +903,15 @@ class CatalogConsumer(RMQC):
 
                 # input storage type
                 st = Storage.from_str(pl.storage_type)
+                location = None
                 if len(f.locations) != 0:
                     # modify location - get it first via loop on locations
                     for l in f.locations:
                         if l.storage_type == st:
                             location = l
                             break
-
+                # location was found so modify
+                if location:
                     # check empty or equivalent storage location - warn for equivalent
                     if location.url_scheme != "" or location.url_netloc != "":
                         if (
@@ -884,8 +921,7 @@ class CatalogConsumer(RMQC):
                             self.log(
                                 f"Reassigning {pl.storage_type} for file "
                                 f"{pd.original_path} to matching url_scheme: "
-                                f"{pl.url_scheme} and "
-                                f"url_netloc: {pl.url_netloc}",
+                                f"{pl.url_scheme} and url_netloc: {pl.url_netloc}",
                                 RK.LOG_WARNING,
                             )
                         else:
@@ -907,6 +943,7 @@ class CatalogConsumer(RMQC):
                     self.catalog.defer(location)
                     # mark as completed - assuming the bulk commit works correctly
                     self.completelist.append(pd)
+                # not found so create if create flag is true
                 elif create:
                     # add to the list to bulk create later
                     location = self.catalog.create_location(
@@ -945,7 +982,7 @@ class CatalogConsumer(RMQC):
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.COMPLETE])
             self.log(f"Sending completed PathList from CATALOG_UPDATE", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -956,7 +993,7 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_UPDATE, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_UPDATE", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -964,7 +1001,7 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
-    def _process_get_files_result(
+    def _check_get_files_result(
         self,
         result,
         user: str,
@@ -979,7 +1016,6 @@ class CatalogConsumer(RMQC):
         # 1. No files matching were found, returns a CatalogError, fail all files
         # 2. Some files were found, but not others - fail the files that were not
         #    found but allow those found to continue
-
         if result is None or result.count() == 0:
             err_msg = f"No matching files found"
             if holding_label:
@@ -1044,11 +1080,12 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             tenancy = self._parse_tenancy(body)
-            holding_label, holding_id, holding_tag, transaction_id, _, _ = (
-                self._parse_metadata_vars(body)
-            )
-            groupall = self._parse_groupall(body)
-            regex = self._parse_regex(body)
+            holding_label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            holding_tag = self._parse_meta_tags(body)
+            transaction_id = self._parse_meta_transaction_id(body)
+            groupall = self._parse_meta_groupall(body)
+            regex = self._parse_meta_regex(body)
             # check that the filepath is not regex as well as holding_id or
             # holding_label being None, as this would get ALL files!
             if (
@@ -1096,7 +1133,7 @@ class CatalogConsumer(RMQC):
                 descending=True,
             )
             # process the returned file query for not found files, etc.
-            self._process_get_files_result(
+            self._check_get_files_result(
                 result,
                 user,
                 group,
@@ -1158,7 +1195,7 @@ class CatalogConsumer(RMQC):
                     # transfer to OBJECT STORAGE
                     reason = (
                         f"No Storage Location found for file with original path: "
-                        f"{pd.original_path}.  Has it completed transfer_put?"
+                        f"{pd.original_path}"
                     )
                     raise CatalogError(reason)
 
@@ -1174,9 +1211,17 @@ class CatalogConsumer(RMQC):
                         self.completelist.append(pd)
 
                 elif pd.locations.has_storage_type(MSG.TAPE):
-                    # get the aggregation
+                    # get the tarfile name via the path details
                     pl = pd.get_tape()
                     tr = self.catalog.get_transaction(f.transaction_id)
+                    # get the checksum and the checksum algorithm from
+                    aggregation = self.catalog.get_aggregation(
+                        aggregation_id=pl.aggregation_id
+                    )
+                    if aggregation:
+                        pl.checksum_method = aggregation.algorithm
+                        pl.checksum = aggregation.checksum
+
                     if pl.access_time is None:
                         access_time = datetime.now()
                     else:
@@ -1229,7 +1274,7 @@ class CatalogConsumer(RMQC):
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_GET, RK.COMPLETE])
             self.log(f"Sending completed PathList from CATALOG_GET", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1245,7 +1290,7 @@ class CatalogConsumer(RMQC):
                 f"retrieval",
                 RK.LOG_INFO,
             )
-            self.log(f"{self.tapelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.tapelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.tapelist,
                 routing_key=rk_restore,
@@ -1257,7 +1302,7 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_GET, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_GET", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1267,44 +1312,45 @@ class CatalogConsumer(RMQC):
 
     def _filemodel_to_path_details(self, file: File) -> PathDetails:
         pd = PathDetails.from_filemodel(file)
+        # Get the holding id from the original transaction.  This is needed for get,
+        # etc.
         t = self.catalog.get_transaction(id=file.transaction_id)
         pd.holding_id = t.holding_id
         return pd
 
-    def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
-        """Get the next holding for archiving, create a new location for it and pass it
-        for aggregating to the Archive Put process."""
-        try:
-            tenancy = self._parse_tenancy(body)
-            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
-        except CatalogError:
-            # functions above handled message logging, here we just return
-            return
+    def _determine_tape_pool(self, next_holding: Holding) -> str:
+        """Determine which tape pool to use, based on the settings in the config file.
+        Setting is stored in `tape_pool_strategy`
+        """
+        if "metadata" in self.tape_pool_strategy:
+            # Metadata strategy requires the key "metadata" to be in the
+            # tape_pool_strategy list AND for the holding to contain a tag with
+            # "tapepool" as the key
+            for tag in next_holding.tags:
+                if tag.key == "tapepool":
+                    return tag.value
 
-        # Get the next Holding in the catalog, by id, which has any unarchived
-        # Files, i.e. any files which don't have a tape location
-        # Filter on Holdings that have not had any ingests for a set period
-        # (typically one day)
-        if holding_id:
-            next_holding = self.catalog.get_holding_from_id(holding_id)
-        else:
-            next_holding = self.catalog.get_next_unarchived_holding(
-                tenancy,
-                self.ingest_deadline,
-            )
+        if "year" in self.tape_pool_strategy:
+            # Year returns the year of the first ingest (first transaction)
+            if len(next_holding.transactions) > 0:
+                tapepool = str(next_holding.transactions[0].ingest_time.year)
+                return tapepool
 
-        # If no holdings left to archive then end the callback
-        if not next_holding:
-            self.log("No holdings found to archive, exiting callback.", RK.LOG_INFO)
-            return
+        return None
 
-        # reset completed lists
+    def _create_tape_locations(self, next_holding: Holding):
+        """Create the locations required to archive a Holding to tape"""
+        # reset completed lists - we will loop over sub-sections of the holding's
+        # unarchived files, sending a message for each sub-section, which has the limit
+        # / size of archive_filelist_max_length
+        # loop from here
         self.reset()
+
         # get the list of unarchived files from that holding
         filelist_q = self.catalog.get_unarchived_files(
             next_holding,
             with_for_update=True,
-            limit=self.filelist_max_length,
+            limit=self.archive_filelist_max_length,
         )
 
         # need a list of the created locations as they are now bulk uploaded
@@ -1314,12 +1360,21 @@ class CatalogConsumer(RMQC):
             pd = PathDetails.from_filemodel(f)
             pd.holding_id = next_holding.id
             pl = pd.get_object_store()  # this returns a PathLocation object
+            # check it returns an object store as some database optimisations /
+            # pre-loading caused the relations to become decoupled when using .limit
+            # NRM 30/09/2026 - should be fixed now with switching to selectinload, but
+            # will leave the check in to catch any future errors
+            if not pl:
+                message = "No OBJECT_STORE Storage Location found."
+                self.log(message, RK.LOG_ERROR)
+                self.failedlist.append(pd)
+                continue
             # get the access time of the object store to mirror to tape, or set to now
             # if no access_time present
-            if pl.access_time is None:
-                access_time = datetime.now()
-            else:
+            if pl and pl.access_time:
                 access_time = datetime.fromtimestamp(pl.access_time)
+            else:
+                access_time = datetime.now()
 
             try:
                 # create a mostly empty TAPE storage location - this does not create
@@ -1359,30 +1414,101 @@ class CatalogConsumer(RMQC):
         # fallback commit
         self.catalog.commit()
 
-        # Forward successful file details to archive for tape write
+        # return whether any locations were created
+        return len(created_locations) > 0
+
+    def _catalog_archive_put(self, body: Dict, rk_origin: str) -> None:
+        """Get the next holding for archiving, create a new location for it and pass it
+        for aggregating to the Archive Put process."""
+        try:
+            tenancy = self._parse_tenancy(body)
+            holding_id = self._parse_meta_holding_id(body)
+            # get the tape_pool from the message
+            tape_pool = self._parse_meta_tape_pool(body)
+            # get and validate the tape pool strategy
+            self.tape_pool_strategy = self._parse_tape_pool_strategy(body)
+            self._validate_tape_pool_strategy()
+            ingest_deadline = self._parse_meta_ingest_deadline(body)
+        except CatalogError as e:
+            # functions above handled message logging, here we just return
+            if e.message:
+                self.log(e.message, RK.LOG_ERROR)
+            return
+
+        # Get the next Holding in the catalog, by id, which has any unarchived
+        # Files, i.e. any files which don't have a tape location
+        # Filter on Holdings that have not had any ingests for a set period
+        # (typically one day)
+        if holding_id:
+            next_holding = self.catalog.get_holding_from_id(holding_id)
+        else:
+            next_holding = self.catalog.get_next_unarchived_holding(
+                tenancy,
+                ingest_deadline,
+            )
+
+        # If no holdings left to archive then end the callback
+        if not next_holding:
+            self.log("No holdings found to archive, exiting callback.", RK.LOG_INFO)
+            return
+
+        holding_id = next_holding.id
+        # determine which tape pool to use, if it has not been set in the message body
+        if not tape_pool:
+            # needs self.tape_pool_strategy to be set
+            tape_pool = self._determine_tape_pool(next_holding)
+
+        # create the body part of the message here, so that it can be reused by each
+        # catalog_archive_next message
+        # Routing keys for complete and failed
         rk_complete = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.COMPLETE])
+        rk_failed = ".".join([rk_origin, RK.CATALOG_ARCHIVE_NEXT, RK.FAILED])
 
         # the user and group need to be set here
         body[MSG.DETAILS][MSG.USER] = next_holding.user
         body[MSG.DETAILS][MSG.GROUP] = next_holding.group
         body[MSG.META][MSG.HOLDING_ID] = next_holding.id
+        body[MSG.META][MSG.TAPE_POOL] = tape_pool
 
         # initialise the monitor first
         monitor_routing_key = ".".join([RK.ROOT, RK.MONITOR_PUT, RK.INITIATE])
         body[MSG.DETAILS][MSG.STATE] = State.ROUTING.value
+        body[MSG.DETAILS][MSG.JOB_LABEL] = f"Holding id: {holding_id}"
+        # publish the initial monitor message
         self.publish_message(monitor_routing_key, body)
 
-        if len(self.completelist) > 0:
-            self.log(
-                f"Sending completed PathList from CATALOG_ARCHIVE_PUT", RK.LOG_INFO
-            )
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
-            self.send_pathlist(
-                self.completelist,
-                routing_key=rk_complete,
-                body_json=body,
-                state=State.ARCHIVE_INIT,
-            )
+        # create the tape locations in the database and send a message for each one
+        iteration = 0
+        while self._create_tape_locations(next_holding):
+            # publish the completed message for this set of files
+            if len(self.completelist) > 0:
+                self.log(
+                    f"Sending completed PathList from CATALOG_ARCHIVE_PUT", RK.LOG_INFO
+                )
+                self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
+                self.send_pathlist(
+                    self.completelist,
+                    routing_key=rk_complete,
+                    body_json=body,
+                    state=State.ARCHIVE_INIT,
+                )
+            elif iteration == 0:
+                # The holding might not have had any files to archive (if it has been
+                # selected by the user / sys-admin).  We need to send failure in this
+                # case, but only if this is the first time around this loop
+                self.log(
+                    f"No files to send to archive in CATALOG_ARCHIVE_PUT",
+                    RK.LOG_INFO,
+                )
+                pd = PathDetails(
+                    original_path="",
+                    failure_reason=f"No files to archive in Holding: {holding_id}",
+                )
+                self.send_pathlist(
+                    [pd], routing_key=rk_failed, body_json=body, state=State.FAILED
+                )
+            # increment how many times we've been around this loop
+            iteration += 1
 
     def _catalog_archive_update(
         self, body: Dict, rk_origin: str, storage_type: Storage
@@ -1393,10 +1519,9 @@ class CatalogConsumer(RMQC):
         # Parse the message body for required variables
         try:
             filelist = self._parse_filelist(body)
-            transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
-            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
+            holding_id = self._parse_meta_holding_id(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1410,6 +1535,7 @@ class CatalogConsumer(RMQC):
 
         try:
             checksum = body[MSG.DATA][MSG.CHECKSUM]
+            algorithm = body[MSG.DATA][MSG.CHECKSUM_METHOD]
         except KeyError:
             msg = "Checksum not in message and is required."
             self.log(msg, RK.LOG_ERROR)
@@ -1423,7 +1549,7 @@ class CatalogConsumer(RMQC):
         try:
             # the only route in now is to create an aggregation at this point
             aggregation = self.catalog.create_aggregation(
-                tarname=tarfile_name, checksum=checksum, algorithm="ADLER32"
+                tarname=tarfile_name, checksum=checksum, algorithm=algorithm
             )
         except CatalogError as e:
             msg = f"Could not create aggregation in _catalog_archive_update: {e}"
@@ -1445,6 +1571,7 @@ class CatalogConsumer(RMQC):
                 transaction_id=transaction.transaction_id,
                 filelist=path_details_list,
                 with_for_update=True,
+                preload_locations=True,
             )
             modify_location_list = []
             # we now have a list of all the files in a transaction that is part of a
@@ -1478,7 +1605,8 @@ class CatalogConsumer(RMQC):
                         access_time = datetime.now()
                     else:
                         access_time = datetime.fromtimestamp(pl.access_time)
-
+                    # modify location as it has been created when the tape backup was
+                    # scheduled by catalog_archive_put
                     self.catalog.modify_location(
                         location,
                         url_scheme=pl.url_scheme,
@@ -1488,10 +1616,10 @@ class CatalogConsumer(RMQC):
                         access_time=access_time,
                         aggregation_id=aggregation.id,
                     )
+                    # defer update to do as a bulk update later
                     modify_location_list.append(location)
                     self.catalog.defer(location)
                     self.completelist.append(pd)
-
                 except CatalogError as e:
                     # the file wasn't found or the location couldn't be created
                     pd.failure_reason = e.message
@@ -1503,7 +1631,7 @@ class CatalogConsumer(RMQC):
             # modifications followed by a safety commit later
             if len(modify_location_list) > 0:
                 self.catalog.bulk_commit(modify_location_list)
-
+        # catch any other commits
         self.catalog.commit()
 
         if len(self.completelist) > 0:
@@ -1512,7 +1640,7 @@ class CatalogConsumer(RMQC):
             self.log(
                 f"Sending completed PathList from CATALOG_ARCHIVE_UPDATE", RK.LOG_INFO
             )
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1525,7 +1653,7 @@ class CatalogConsumer(RMQC):
             self.log(
                 f"Sending failed PathList from CATALOG_ARCHIVE_UPDATE ", RK.LOG_INFO
             )
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1533,8 +1661,42 @@ class CatalogConsumer(RMQC):
                 state=State.FAILED,
             )
 
-    def _catalog_remove_storage_location(
-        self, body: Dict, rk_origin: str, storage_type: Storage
+    def _remove_storage_location(
+        self,
+        file: File,
+        storage_type: Storage,
+        pd: PathDetails,
+        force=False,
+    ) -> Tertiary:
+        # remove a single storage location
+        try:
+            # delete location - get it first via loop on locations
+            loc = None
+            for l in file.locations:
+                if l.storage_type == storage_type:
+                    loc = l
+                    break
+            # delete location if all details are empty
+            if loc:
+                if force or (
+                    loc.url_scheme == "" and loc.url_netloc == "" and loc.root == ""
+                ):
+                    self.catalog.delete_location(file=file, storage_type=storage_type)
+                    return Tertiary.TRUE
+                else:
+                    pd.failure_reason = (
+                        f"{str(storage_type.name)} location has existing "
+                        f"non-empty details"
+                    )
+                    return Tertiary.FALSE
+        except (CatalogError, IndexError) as e:
+            pd.failure_reason = e.message
+            return Tertiary.FALSE
+        # tertiary so we don't have to do anything if the location was not found
+        return Tertiary.DONT_CARE
+
+    def _catalog_remove_storage_locations(
+        self, body: Dict, rk_origin: str, storage_type: Storage, force=False
     ) -> None:
         """Remove an empty storage_type storage Location if archive_put has failed."""
         # routing keys
@@ -1543,10 +1705,9 @@ class CatalogConsumer(RMQC):
 
         try:
             filelist_ = self._parse_filelist(body)
-            transaction_id = self._parse_transaction_id(body)
             user = self._parse_user(body)
             group = self._parse_group(body)
-            _, holding_id, _, _, _, _ = self._parse_metadata_vars(body)
+            holding_id = self._parse_meta_holding_id(body)
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1562,57 +1723,75 @@ class CatalogConsumer(RMQC):
         self.reset()
 
         # convert the JSON filelist into a list of PathDetails
-        filelist = [PathDetails.from_dict(f) for f in filelist_]
+        path_details_list = [PathDetails.from_dict(f) for f in filelist_]
 
         try:
-            holding = self._get_holding_with_retry(
-                user, group, holding_id=holding_id, with_for_update=True
+            # check the holding exists
+            _ = self._get_holding_with_retry(
+                user,
+                group,
+                holding_id=holding_id,
+                with_for_update=True,
             )
         except CatalogError as e:
-            for f in filelist:
+            for f in path_details_list:
                 f.failure_reason = e.message
                 self.failedlist.append(f)
         else:
-            # files = self.catalog.get_files_from_filelist(
-            #     transaction_id=transaction.transaction_id,
-            #     filelist=path_details_list,
-            #     with_for_update=True,
-            # )
+            # get the files from the holding - need to slice the files into a subset
+            # of ~50000 per slice, as the maximum number of variables per transaction
+            # in postgresSQL is 65535
 
-            for f in filelist:
-                try:
-                    file = self.catalog.get_file(
-                        holding_id=holding_id,
-                        original_path=f.original_path,
-                        with_for_update=True,
+            results = self.catalog.get_files(
+                user=user,
+                group=group,
+                holding_id=holding_id,
+                filelist=path_details_list,
+                with_for_update=True,
+            )
+            # returned results are Files, Transactions, Holdings
+            files_to_commit = []
+            # reassign results if None to empty list
+            if results is None:
+                results = []
+            for res in results:
+                file = res.File
+                # get the original path details from the path_details_list
+                pd = path_details_list[
+                    path_details_list.index(
+                        PathDetails(original_path=file.original_path)
                     )
-                    loc = self.catalog.get_location(
-                        file, storage_type, with_for_update=True
-                    )
-                    # delete location if all details are empty
-                    if loc is not None and loc.storage_type == storage_type:
-                        if (
-                            loc.url_scheme == ""
-                            and loc.url_netloc == ""
-                            and loc.root == ""
-                        ):
-                            self.catalog.delete_location(file, storage_type)
-                            self.completelist.append(f)
-                        else:
-                            f.failure_reason = (
-                                f"{str(storage_type.name)} location not empty details"
-                            )
-                            self.failedlist.append(f)
+                ]
+                rfirst = self._remove_storage_location(file, storage_type, pd, force)
+                if rfirst == Tertiary.TRUE:
+                    # if the location is TAPE and the NoSuchKey or NoSuchBucket is in
+                    # the failure_reason, then this means that the file is also missing
+                    # from the Object Storage, so we want to delete that storage
+                    # location as well
+                    if storage_type == Storage.TAPE and (
+                        "NoSuchKey" in pd.failure_reason
+                        or "NoSuchBucket" in pd.failure_reason
+                    ):
+                        _ = self._remove_storage_location(
+                            file, Storage.OBJECT_STORAGE, pd, force=True
+                        )
+                    # defer update to do bulk commit later
+                    self.catalog.defer(file)
+                    files_to_commit.append(file)
+                    self.completelist.append(pd)
+                elif rfirst == Tertiary.FALSE:
+                    self.failedlist.append(pd)
 
-                except (CatalogError, IndexError) as e:
-                    f.failure_reason = e.message
-                    self.failedlist.append(f)
-            # commit
+            # bulk commit to DB
+            if len(files_to_commit) > 0:
+                self.catalog.bulk_commit(files_to_commit)
+
+            # catch any other commits
             self.catalog.commit()
 
         if len(self.completelist) > 0:
             self.log(f"Sending completed PathList from CATALOG_REMOVE ", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1622,7 +1801,7 @@ class CatalogConsumer(RMQC):
 
         if len(self.failedlist) > 0:
             self.log(f"Sending failed PathList from CATALOG_REMOVE ", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1638,9 +1817,6 @@ class CatalogConsumer(RMQC):
             user = self._parse_user(body)
             group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body)
-            holding_label, holding_id, holding_tag, _, _, _ = self._parse_metadata_vars(
-                body
-            )
         except CatalogError:
             # functions above handled message logging, here we just return
             return
@@ -1685,6 +1861,11 @@ class CatalogConsumer(RMQC):
                 self.failedlist.append(pd)
                 self.log(e.message, RK.LOG_ERROR)
                 continue
+
+        # bulk commit to DB
+        if len(files_to_commit) > 0:
+            self.catalog.bulk_commit(files_to_commit)
+
         self.catalog.commit()
 
         # log the successful and non-successful catalog dels
@@ -1692,7 +1873,7 @@ class CatalogConsumer(RMQC):
         if len(self.completelist) > 0:
             rk_complete = ".".join([rk_origin, RK.CATALOG_DEL, RK.COMPLETE])
             self.log(f"Sending completed PathList from CATALOG_DEL", RK.LOG_INFO)
-            self.log(f"{self.completelist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.completelist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.completelist,
                 routing_key=rk_complete,
@@ -1703,7 +1884,7 @@ class CatalogConsumer(RMQC):
         if len(self.failedlist) > 0:
             rk_failed = ".".join([rk_origin, RK.CATALOG_DEL, RK.FAILED])
             self.log(f"Sending failed PathList from CATALOG_DEL", RK.LOG_INFO)
-            self.log(f"{self.failedlist}", RK.LOG_DEBUG)
+            self.log(f"{pathlist_to_string(self.failedlist)}", RK.LOG_DEBUG)
             self.send_pathlist(
                 self.failedlist,
                 routing_key=rk_failed,
@@ -1717,13 +1898,16 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, transaction_id, limit, descending = (
-                self._parse_metadata_vars(body)
-            )
+            holding_label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            tag = self._parse_meta_tags(body)
+            transaction_id = self._parse_meta_transaction_id(body)
+            limit = self._parse_meta_limit(body)
+            descending = self._parse_meta_descending(body)
             query_user = self._parse_queryuser(body, user)
             query_group = self._parse_querygroup(body, user, group)
-            groupall = self._parse_groupall(body)
-            regex = self._parse_regex(body)
+            groupall = self._parse_meta_groupall(body)
+            regex = self._parse_meta_regex(body)
 
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -1799,10 +1983,8 @@ class CatalogConsumer(RMQC):
         """Get the labels for a list of transaction ids"""
         # Parse the message body for required variables
         try:
-            user = self._parse_user(body)
-            group = self._parse_group(body)
             transaction_id = self._parse_transaction_id(body)
-            label, _, _, _, _, _ = self._parse_metadata_vars(body)
+            label = self._parse_meta_label(body)
             transaction_records = self._parse_transaction_records(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -1865,17 +2047,20 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, transaction_id, limit, descending = (
-                self._parse_metadata_vars(body)
-            )
-            groupall = self._parse_groupall(body)
+            holding_label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            tag = self._parse_meta_tags(body)
+            transaction_id = self._parse_meta_transaction_id(body)
+            limit = self._parse_meta_limit(body)
+            descending = self._parse_meta_descending(body)
+            groupall = self._parse_meta_groupall(body)
             query_user = self._parse_queryuser(body, user)
             query_group = self._parse_querygroup(body, user, group)
-            path = self._parse_path(body)
+            path = self._parse_meta_path(body)
             # path has to be a list
             if path is not None:
                 path = [PathDetails(original_path=path)]
-            regex = self._parse_regex(body)
+            regex = self._parse_meta_regex(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
             # message to the client via a RPC return
@@ -1909,7 +2094,7 @@ class CatalogConsumer(RMQC):
                 descending=descending,
             )
             # raise any exceptions resulting from the query - e.g. no files found
-            self._process_get_files_result(
+            self._check_get_files_result(
                 query_result,
                 user,
                 group,
@@ -1996,7 +2181,9 @@ class CatalogConsumer(RMQC):
         try:
             user = self._parse_user(body)
             group = self._parse_group(body)
-            holding_label, holding_id, tag, _, _, _ = self._parse_metadata_vars(body)
+            holding_label = self._parse_meta_label(body)
+            holding_id = self._parse_meta_holding_id(body)
+            tag = self._parse_meta_tags(body)
             new_label, new_tag, del_tag = self._parse_new_metadata_variables(body)
         except CatalogError as ce:
             # functions above handled message logging, here we just return a failure
@@ -2120,6 +2307,60 @@ class CatalogConsumer(RMQC):
             f"Successfully returned query via RPC message to api-server", RK.LOG_INFO
         )
 
+    def _should_split_message(self, body: dict):
+        # Test whether the message should be split into smaller messages, if it exceeds
+        # either the self.filelist_max_length or the
+        # CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
+        max_size = min(
+            self.filelist_max_length, CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
+        )
+        # check for empty filelist
+        try:
+            filelist = self._parse_filelist(body)
+        except CatalogError:
+            filelist = []
+        if filelist:
+            return len(filelist) > max_size
+        return False
+
+    def _split_message(self, body: dict, rk_origin: str):
+        # need the state
+        # need the filelist in the format of a list of PathDetails
+        try:
+            filelist = [
+                PathDetails.from_dict(pd_dict)
+                for pd_dict in list(body[MSG.DATA][MSG.FILELIST])
+            ]
+        except TypeError as e:
+            self.log(
+                "Failed to reformat list into PathDetails objects. Filelist in "
+                "message does not appear to be in the correct format.",
+                RK.LOG_ERROR,
+            )
+            raise e
+
+        # checking the filelist size again - shouldn't need to but belt and braces
+        filelist_len = len(filelist)
+        max_size = min(
+            self.filelist_max_length, CatalogConsumer._FILELIST_ABSOLUTE_LIMIT
+        )
+        if filelist_len > max_size:
+            self.log(
+                f"Filelist longer than allowed maximum length, splitting into "
+                f"batches of {max_size}",
+                RK.LOG_DEBUG,
+            )
+
+            # For each self.filelist_max_len files in the list resubmit with index as
+            # the action in the routing key
+            for i in range(0, filelist_len, max_size):
+                slc = slice(i, min(i + max_size, filelist_len))
+                self.send_pathlist(
+                    pathlist=filelist[slc],
+                    routing_key=rk_origin,
+                    body_json=body,
+                )
+
     def attach_database(self, create_db_fl: bool = True) -> None:
         """Attach the Catalog to the consumer"""
         # Load config options or fall back to default values.
@@ -2127,6 +2368,7 @@ class CatalogConsumer(RMQC):
         db_options = self.load_config_value(self._DB_OPTIONS)
         self.catalog = Catalog(db_engine, db_options)
 
+        # logging occurs just within this function
         try:
             db_connect = self.catalog.connect(create_db_fl=create_db_fl)
             if create_db_fl:
@@ -2136,11 +2378,14 @@ class CatalogConsumer(RMQC):
 
         # start a session - use it globally to minimise DB connections
         self.catalog.start_session()
+        self.send_logging()
 
     def detach_database(self) -> None:
+        # logging occurs just within this function
         self.catalog.session.rollback()
         # end the session
         self.catalog.end_session()
+        self.send_logging()
 
     def get_engine(self) -> None:
         # Method for making the db_engine available to alembic
@@ -2163,16 +2408,16 @@ class CatalogConsumer(RMQC):
         body: bytes,
         connection: Connection,
     ) -> None:
+
         # Reset member variables
         self.reset()
 
-        # Connect to database if not connected yet
         # Convert body from bytes to json for ease of manipulation
-        body = self._deserialize(body)
+        body_dict = self._deserialize(body)
 
         # Get the API method and decide what to do with it
         try:
-            api_method = body[MSG.DETAILS][MSG.API_ACTION]
+            api_method = body_dict[MSG.DETAILS][MSG.API_ACTION]
         except KeyError:
             self.log(
                 f"Message did not contain an appropriate api_action, "
@@ -2182,7 +2427,7 @@ class CatalogConsumer(RMQC):
             return
 
         # Check for system status
-        if self._is_system_status_check(body_json=body, properties=properties):
+        if self._is_system_status_check(body_json=body_dict, properties=properties):
             return
 
         # Only print the message contents when we're not statting, the message
@@ -2191,7 +2436,7 @@ class CatalogConsumer(RMQC):
             self.log(
                 f"Received from {self.queues[0].name} ({method.routing_key})",
                 RK.LOG_DEBUG,
-                body_json=body,
+                body_json=body_dict,
             )
 
         self.log(
@@ -2199,88 +2444,120 @@ class CatalogConsumer(RMQC):
             f"{self.DEFAULT_REROUTING_INFO} ",
             RK.LOG_DEBUG,
         )
-        body = self.append_route_info(body)
+        body_dict = self.append_route_info(body_dict)
+
+        # split the routing key and get the rk_parts
+        # these are used for every api_method except for the RPC calls
+        try:
+            rk_parts = self.split_routing_key(method.routing_key)
+        except ValueError as e:
+            self.log(
+                "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
+            )
+
+        # check whether we should split the message based on the number of files
+        if self._should_split_message(body_dict):
+            # only do the split, any other processing will be picked up in next loop
+            self._split_message(body_dict, method.routing_key)
 
         # check whether this is a GET or a PUT
-        if api_method in (RK.GETLIST, RK.GET):
-            # split the routing key
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
-                )
-                return
+        elif api_method in (RK.GETLIST, RK.GET):
+            # use the split routing key from above
             if rk_parts[2] == RK.START:
                 if rk_parts[1] == RK.CATALOG_GET:
-                    self._catalog_get(body, rk_parts[0])
+                    self._catalog_get(body_dict, rk_parts[0])
+
                 elif rk_parts[1] == RK.CATALOG_REMOVE:
-                    self._catalog_remove_storage_location(
-                        body, rk_parts[0], Storage.OBJECT_STORAGE
+                    self._catalog_remove_storage_locations(
+                        body_dict,
+                        rk_parts[0],
+                        Storage.OBJECT_STORAGE,
                     )
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
                     # this catalog update occurs when the file is retrieved from tape
-                    self._catalog_update(body, rk_parts[0], create=False)
+                    # the object storage has been deleted by then, so it needs
+                    # recreating
+                    self._catalog_update_storage_locations(
+                        body_dict, rk_parts[0], create=True
+                    )
 
         elif api_method in (RK.PUTLIST, RK.PUT):
-            # split the routing key
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
-                )
-                return
+            # use the split routing key from above
             if rk_parts[2] == RK.START:
                 # Check the routing key worker section to determine which method
                 # to call, as a del could be being called from a failed
                 # transfer_put
                 if rk_parts[1] == RK.CATALOG_PUT:
-                    self._catalog_put(body, rk_parts[0])
+                    self._catalog_put(body_dict, rk_parts[0])
+
                 elif rk_parts[1] == RK.CATALOG_DEL:
-                    self._catalog_delete_files(body, rk_parts[0])
+                    self._catalog_delete_files(body_dict, rk_parts[0])
+
                 elif rk_parts[1] == RK.CATALOG_UPDATE:
-                    self._catalog_update(body, rk_parts[0], create=True)
+                    # The location has been created in _catalog_put so here it just
+                    # needs updating
+                    self._catalog_update_storage_locations(
+                        body_dict, rk_parts[0], create=True
+                    )
                 elif rk_parts[1] == RK.CATALOG_SETUP:
-                    self._catalog_setup(body, rk_parts[0])
+                    self._catalog_setup(body_dict, rk_parts[0])
 
         # Archive put requires getting from the catalog
         elif api_method == RK.ARCHIVE_PUT:
             self.log("Starting an archive-put workflow", RK.LOG_DEBUG)
-            # split the routing key
-            try:
-                rk_parts = self.split_routing_key(method.routing_key)
-            except ValueError as e:
-                self.log(
-                    "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
-                )
-
+            # use the split routing key from above
             if rk_parts[1] == RK.CATALOG_ARCHIVE_NEXT:
                 self.log(
                     "Beginning preparation of next archive aggregation", RK.LOG_DEBUG
                 )
-                self._catalog_archive_put(body, rk_parts[0])
+                self._catalog_archive_put(body_dict, rk_parts[0])
 
             elif rk_parts[1] == RK.CATALOG_ARCHIVE_UPDATE:
-                self._catalog_archive_update(body, rk_parts[0], Storage.TAPE)
+                self._catalog_archive_update(body_dict, rk_parts[0], Storage.TAPE)
+
             elif rk_parts[1] == RK.CATALOG_REMOVE:
-                self._catalog_remove_storage_location(body, rk_parts[0], Storage.TAPE)
+                # the transfer to tape has failed so remove the TAPE location
+                self._catalog_remove_storage_locations(
+                    body_dict,
+                    rk_parts[0],
+                    Storage.TAPE,
+                )
+
+        elif api_method == RK.UNSTAGE:
+            self.log("Starting an unstage workflow", RK.LOG_DEBUG)
+            if rk_parts[1] == RK.CATALOG_REMOVE:
+                # Unstage removes the OBJECT_STORAGE location
+                # !!! WARNING !!! - this currently deletes even if the file(s) are not
+                # on tape yet - this needs to be fixed before UNSTAGE can go into
+                # production
+
+                # get the storage type from the meta data
+                storage_type = self._parse_meta_storage_type(body_dict)
+                storage = Storage.from_str(storage_type)
+                self._catalog_remove_storage_locations(
+                    body_dict,
+                    rk_parts[0],
+                    storage,
+                    force=True,
+                )
 
         # RPC methods follow - don't need to split any routing key for an RPC method
         elif api_method == RK.LIST:
-            self._catalog_list(body, properties)
+            self._catalog_list(body_dict, properties)
 
         elif api_method == RK.FIND:
-            self._catalog_find(body, properties)
+            self._catalog_find(body_dict, properties)
 
         elif api_method == RK.META:
-            self._catalog_meta(body, properties)
+            self._catalog_meta(body_dict, properties)
 
         elif api_method == RK.STAT:
-            self._catalog_stat(body, properties)
+            self._catalog_stat(body_dict, properties)
 
         elif api_method == RK.CANCEL:
-            self._catalog_cancel(body, properties)
+            self._catalog_cancel(body_dict, properties)
+
+        self.send_logging()
 
 
 def main() -> None:

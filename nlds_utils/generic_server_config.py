@@ -64,7 +64,6 @@ def get_config_dictionary():
         "log_file_location": "fake_log",
         "tenancy": "fake_tenancy",
         "tape_url": "fake_url",
-        "tape_pool": None,
         "chunk_size": 500 * 1024 * 1024,
         "filelist_max_length": 1000,
         "filelist_max_size": 16 * 1024 * 1024,

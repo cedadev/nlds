@@ -65,9 +65,11 @@ class PathLocation(BaseModel):
     path: Optional[str] = None
     access_time: Optional[float] = None
     aggregation_id: Optional[int] = None
+    checksum: Optional[str] = None
+    checksum_method: Optional[str] = None
 
     def to_dict(self) -> Dict:
-        return {
+        ret_dict = {
             "storage_type": self.storage_type,  # e.g. OBJECT_STORAGE or TAPE
             "url_scheme": self.url_scheme,  # e.g. http://
             "url_netloc": self.url_netloc,  # e.g. cedadev-o (tenancy)
@@ -75,10 +77,15 @@ class PathLocation(BaseModel):
             "path": self.path,  # e.g. /gws/cedaproc/file1.txt
             "access_time": self.access_time,
         }
+        if self.checksum:
+            ret_dict["checksum"] = self.checksum
+        if self.checksum_method:
+            ret_dict["checksum_method"] = self.checksum_method
+        return ret_dict
 
     @classmethod
     def from_dict(cls, dictionary: Dict[str, Any]):
-        return cls(
+        loc = cls(
             storage_type=dictionary["storage_type"],
             url_scheme=dictionary["url_scheme"],
             url_netloc=dictionary["url_netloc"],
@@ -86,6 +93,13 @@ class PathLocation(BaseModel):
             path=dictionary["path"],
             access_time=dictionary["access_time"],
         )
+        if "checksum" in dictionary:
+            loc.checksum = dictionary["checksum"]
+        if "checksum_method" in dictionary:
+            # convert to lower case to maintain compatibility with codebase, even
+            # though in database it is stored in uppercase (!!)
+            loc.checksum_method = dictionary["checksum_method"].lower()
+        return loc
 
     @classmethod
     def from_locationmodel(cls, location: BaseModel):
@@ -393,12 +407,30 @@ class PathDetails(BaseModel):
         return self._get_location(MSG.TAPE)
 
     @property
+    def tape_url(self) -> str:
+        pl = self._get_location(MSG.TAPE)
+        if pl is None:
+            return None
+        tape_url = ""
+        if pl.url_scheme:
+            tape_url += f"{pl.url_scheme}://"
+        if pl.url_netloc:
+            tape_url += f"{pl.url_netloc}/"
+        if pl.root:
+            tape_url += f"{pl.root}/"
+        return tape_url
+
+    @property
     def tape_name(self) -> str:
         pl = self._get_location(MSG.TAPE)
         if pl is None:
             return None
         else:
-            tape_name = f"{pl.url_scheme}://{pl.url_netloc}/{pl.root}/{pl.path}"
+            # Build bit by bit to support some tape systems having components marked as
+            # None / empty string
+            tape_name = self.tape_url
+            if tape_name != None:
+                tape_name += f"{pl.path}"
             return tape_name
 
     def __eq__(self, item) -> bool:

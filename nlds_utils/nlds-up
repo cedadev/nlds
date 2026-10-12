@@ -55,7 +55,7 @@ elif [ $1 = 'archive_put_q' ]; then
 elif [ $1 = 'archive_get_q' ]; then
     $USER_CMD archive_get_q
 elif [ $1 = 'archive_next' ]; then
-    $USER_CMD send_archive_next -h $2
+    $USER_CMD send_archive_next $2 $3
 elif [ $1 = 'nlds-api' ]; then
     $USER_CMD uvicorn nlds.main:nlds --log-level=trace --port=8000
 elif [ $1 = 'catalog_q_user' ]; then

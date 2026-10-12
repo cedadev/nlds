@@ -104,6 +104,11 @@ class BucketTransferConsumer(BaseTransferConsumer, BucketMixin, ABC):
                     body_json=body_json,
                     state=State.FAILED,
                 )
+            self.log(
+                f"Failed to create bucket on tenancy: {tenancy} with name: "
+                f"{bucket_name}.  Reason: {e.message}.",
+                RK.LOG_ERROR,
+            )
 
         # either all files fail or it completes
         if len(self.failedlist) > 0:

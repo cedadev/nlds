@@ -27,6 +27,7 @@ from nlds_processors.archive.s3_to_tarfile_stream import (
     S3StreamError,
 )
 from nlds_processors.archive.adler32file import Adler32XRDFile
+from nlds_processors.archive.md5file import MD5XRDFile
 import nlds.rabbit.routing_keys as RK
 
 
@@ -64,8 +65,8 @@ class S3ToTarfileTape(S3ToTarfileStream):
         # get the location of the tape server and the base directory from the tape_url
         self.tape_server_url, self.tape_base_dir = self._split_tape_url(tape_url)
         self.log(
-            f"Tape url:{tape_url} split into tape server:{self.tape_server_url} "
-            f"and tape base directory:{self.tape_base_dir}.",
+            f"Tape url: {tape_url} split into tape server: {self.tape_server_url} "
+            f"and tape base directory: {self.tape_base_dir}",
             RK.LOG_INFO,
         )
 
@@ -92,6 +93,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         filelist: List[PathDetails],
         chunk_size: int,
         num_parallel_uploads: int = 1,
+        checksum_method: str = "adler32",
     ) -> tuple[List[PathDetails], List[PathDetails], str, int]:
         """
         Put the filelist to the tape server using the already created S3 client and
@@ -125,7 +127,14 @@ class S3ToTarfileTape(S3ToTarfileStream):
                         f"Failed to open file {self.tarfile_absolute_tapepath} for "
                         "writing."
                     )
-                file_object = Adler32XRDFile(XRD_file, debug_fl=False)
+                # create a streaming file based on which checksum method is being used
+                if checksum_method == "adler32":
+                    file_object = Adler32XRDFile(XRD_file, debug_fl=False)
+                elif checksum_method == "md5sum":
+                    file_object = MD5XRDFile(XRD_file, debug_fl=False)
+                else:
+                    raise S3StreamError(f"Unknown checksum method: {checksum_method}")
+
                 completelist, failedlist, checksum = self._stream_to_fileobject(
                     file_object,
                     filelist,
@@ -146,7 +155,10 @@ class S3ToTarfileTape(S3ToTarfileStream):
             raise S3StreamError(msg)
         # now verify the checksum
         try:
-            self._validate_tarfile_checksum(checksum)
+            self._validate_tarfile_checksum(
+                tarfile_checksum=checksum,
+                checksum_method=checksum_method,
+            )
         except S3StreamError as e:
             msg = (
                 f"Exception occurred during validation of tarfile "
@@ -158,6 +170,9 @@ class S3ToTarfileTape(S3ToTarfileStream):
             except S3StreamError as e:
                 msg += f" {e.message}"
             raise S3StreamError(msg)
+        # if the length of the completelist is zero then remove the tarfile from tape
+        if len(completelist) == 0:
+            self._remove_tarfile_from_tape()
         # add the location to the completelist
         for f in completelist:
             f.set_tape(
@@ -174,6 +189,7 @@ class S3ToTarfileTape(S3ToTarfileStream):
         filelist: List[PathDetails],
         chunk_size: int,
         num_parallel_uploads: int = 1,
+        checksum_method: str = "adler32",
     ) -> tuple[List[PathDetails], List[PathDetails]]:
         """Stream from a tarfile on tape to Object Store"""
         if self.filelist != []:
@@ -183,15 +199,22 @@ class S3ToTarfileTape(S3ToTarfileStream):
         self.holding_prefix = holding_prefix
         try:
             # open the tar file to read from
-            with XRDClient.File() as file:
+            with XRDClient.File() as XRD_file:
                 # open on the XRD system
-                status, _ = file.open(tarfile, OpenFlags.READ)
+                status, _ = XRD_file.open(tarfile, OpenFlags.READ)
                 if not status.ok:
                     raise S3StreamError(
                         f"Could not open tarfile on XRootD: {tarfile}. "
                         f"Reason: {status}"
                     )
-                file_object = Adler32XRDFile(file, debug_fl=True)
+                # create a streaming file based on which checksum method is being used
+                if checksum_method == "adler32":
+                    file_object = Adler32XRDFile(XRD_file, debug_fl=False)
+                elif checksum_method == "md5sum":
+                    file_object = MD5XRDFile(XRD_file, debug_fl=False)
+                else:
+                    raise S3StreamError(f"Unknown checksum method: {checksum_method}")
+
                 completelist, failedlist = self._stream_to_s3object(
                     file_object,
                     self.filelist,
@@ -222,7 +245,9 @@ class S3ToTarfileTape(S3ToTarfileStream):
         return [S3ToTarfileTape.__relative_tarfile(t) for t in tarfile_list]
 
     def prepare_required(self, tarfile: str) -> bool:
-        """Query the storage system as to whether a file needs to be prepared (staged)."""
+        """
+        Query the storage system as to whether a file needs to be prepared (staged).
+        """
         tarfile_path = S3ToTarfileTape.__relative_tarfile(tarfile)
         # XrootD use the .stat method on the FileSystem client
         status, response = self.tape_client.stat(tarfile_path)
@@ -434,13 +459,17 @@ class S3ToTarfileTape(S3ToTarfileStream):
                 RK.LOG_INFO,
             )
 
-    def _validate_tarfile_checksum(self, tarfile_checksum: str):
+    def _validate_tarfile_checksum(
+        self,
+        tarfile_checksum: str,
+        checksum_method: str = "adler32",
+    ):
         """Validate the checksum of the tarfile by querying what the tape server
         calculated"""
         # Need to specify the type of checksum
         status, result = self.tape_client.query(
             QueryCode.CHECKSUM,
-            f"{self.tarfile_tapepath}?cks.type=adler32",
+            f"{self.tarfile_tapepath}?cks.type={checksum_method}",
         )
         if status.status != 0:
             self.log(
@@ -451,8 +480,11 @@ class S3ToTarfileTape(S3ToTarfileStream):
         else:
             try:
                 method, value = result.decode().split()
-                if method != "adler32":
-                    raise S3StreamError("method is not adler32")
+                if method != checksum_method:
+                    raise S3StreamError(
+                        f"checksum method: {method} does not match recorded method"
+                        f"{checksum_method}"
+                    )
                 # Convert checksum from hex to int for comparison
                 checksum = int(value[:8], 16)
                 if checksum != tarfile_checksum:

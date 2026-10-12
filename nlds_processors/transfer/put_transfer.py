@@ -115,7 +115,7 @@ class PutTransferConsumer(BucketTransferConsumer):
             # Add this to the PathDetails as the StorageLocation
             pl = path_details.set_object_store(tenancy=tenancy, bucket=transaction_id)
             try:
-                result = self.s3_client.fput_object(
+                _ = self.s3_client.fput_object(
                     bucket_name,
                     pl.path,
                     path_details.original_path,

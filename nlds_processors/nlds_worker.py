@@ -302,8 +302,8 @@ class NLDSWorkerConsumer(RMQC):
         self, rk_parts: List, body_json: Dict
     ) -> None:
         self.log(
-            f"Next archivable holding aggregated, sending aggregations "
-            f"for archive-write",
+            f"Next archivable holding aggregated, sending aggregations for "
+            f"archive-write",
             RK.LOG_INFO,
         )
 
@@ -324,8 +324,8 @@ class NLDSWorkerConsumer(RMQC):
 
     def _process_rk_archive_put_complete(self, rk_parts: List, body_json: Dict) -> None:
         self.log(
-            "Aggregation successfully written to tape, sending checksum "
-            "info back to catalog",
+            "Aggregation successfully written to tape, sending checksum info back to "
+            "catalog",
             RK.LOG_INFO,
         )
 
@@ -447,7 +447,6 @@ class NLDSWorkerConsumer(RMQC):
         body: bytes,
         connection: Connection,
     ) -> None:
-
         # Convert body from bytes to string for ease of manipulation
         body_json = self._deserialize(body)
 
@@ -535,8 +534,8 @@ class NLDSWorkerConsumer(RMQC):
                         rk_parts, body_json
                     )
 
-            # If a archive-restore has happened from the catalog then we need to get from
-            # archive before we can do the transfer from object store.
+            # If a archive-restore has happened from the catalog then we need to get
+            # from archive before we can do the transfer from object store.
             elif rk_parts[2] == f"{RK.ARCHIVE_RESTORE}":
                 self._process_rk_catalog_get_archive_restore(rk_parts, body_json)
 
@@ -558,7 +557,7 @@ class NLDSWorkerConsumer(RMQC):
                 elif rk_parts[1] == f"{RK.ARCHIVE_GET}":
                     self._process_rk_archive_get_failed(body_json)
 
-        self.log(f"Worker callback complete!", RK.LOG_DEBUG)
+        self.send_logging()
 
     def publish_and_log_message(self, routing_key: str, msg: dict, log_fl=True) -> None:
         """
@@ -570,7 +569,7 @@ class NLDSWorkerConsumer(RMQC):
 
         if log_fl:
             # Additionally send same message to logging with debug priority.
-            self.log(msg, RK.LOG_DEBUG)
+            self.log("", RK.LOG_DEBUG, body_json=msg)
 
 
 def main():

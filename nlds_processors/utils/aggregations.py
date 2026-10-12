@@ -43,9 +43,7 @@ def bin_files_1(
         mean_size = total_size / count
         if total_size < target_bin_size:
             # If it's less that a single target bin size then just do a single bin
-            return [
-                filelist,
-            ]
+            return [filelist]
         # TODO: Need to think this conditional through a bit more. This is
         # the condition for if all the files are about the size of the
         # target_bin_size, in which case we could end up with
@@ -114,7 +112,7 @@ def bin_files_2(
         raise ValueError("target_bin_size must have some value, the default is 5GB")
 
     # sort the filelist into size order
-    filelist_sorted = sorted(filelist, reverse=True, key=lambda f: f.size)
+    filelist_sorted = sorted(filelist, reverse=False, key=lambda f: f.size)
 
     # Make 2 lists, one being a list of lists dictating the bins, the
     # other being their sizes, so we're not continually recalculating it
