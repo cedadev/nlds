@@ -367,7 +367,6 @@ class RabbitMQPublisher:
         # Do not configure logging if not enabled at the internal level (note
         # this can be overridden by consumer-specific config)
         self.log_enabled = True
-        self.log_level_int = getattr(logging, log_level.upper())
 
         if not enable:
             return
@@ -394,6 +393,7 @@ class RabbitMQPublisher:
         if log_level is None:
             log_level = global_logging_config[CFG.LOGGING_CONFIG_LEVEL]
         logger.setLevel(getattr(logging, log_level.upper()))
+        self.log_level_int = getattr(logging, log_level.upper())
 
         # Add formatting, using the kwarg as a priority
         if log_format is None:
