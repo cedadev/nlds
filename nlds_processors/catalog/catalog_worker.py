@@ -1573,6 +1573,8 @@ class CatalogConsumer(RMQC):
                 with_for_update=True,
                 preload_locations=True,
             )
+            # lists to hold when a location is created or modified
+            create_location_list = []
             modify_location_list = []
             # we now have a list of all the files in a transaction that is part of a
             # holding
@@ -1599,7 +1601,6 @@ class CatalogConsumer(RMQC):
                             if l.storage_type == st:
                                 location = l
                                 break
-
                     # set access time to now if no access time set in PathLocation
                     if pl.access_time is None:
                         access_time = datetime.now()
@@ -1607,18 +1608,31 @@ class CatalogConsumer(RMQC):
                         access_time = datetime.fromtimestamp(pl.access_time)
                     # modify location as it has been created when the tape backup was
                     # scheduled by catalog_archive_put
-                    self.catalog.modify_location(
-                        location,
-                        url_scheme=pl.url_scheme,
-                        url_netloc=pl.url_netloc,
-                        root=pl.root,
-                        path=pl.path,
-                        access_time=access_time,
-                        aggregation_id=aggregation.id,
-                    )
-                    # defer update to do as a bulk update later
-                    modify_location_list.append(location)
-                    self.catalog.defer(location)
+                    if location:
+                        self.catalog.modify_location(
+                            location,
+                            url_scheme=pl.url_scheme,
+                            url_netloc=pl.url_netloc,
+                            root=pl.root,
+                            path=pl.path,
+                            access_time=access_time,
+                            aggregation_id=aggregation.id,
+                        )
+                        # defer update to do as a bulk update later
+                        modify_location_list.append(location)
+                        self.catalog.defer(location)
+                    else:
+                        location = self.catalog.create_location(
+                            file_=f,
+                            storage_type=st,
+                            url_scheme=pl.url_scheme,
+                            url_netloc=pl.url_netloc,
+                            root=pl.root,
+                            path=pl.path,
+                            access_time=access_time,
+                        )
+                        create_location_list.append(location)
+                    # mark as completed for either create or modify
                     self.completelist.append(pd)
                 except CatalogError as e:
                     # the file wasn't found or the location couldn't be created
@@ -1631,6 +1645,9 @@ class CatalogConsumer(RMQC):
             # modifications followed by a safety commit later
             if len(modify_location_list) > 0:
                 self.catalog.bulk_commit(modify_location_list)
+            if len(create_location_list) > 0:
+                self.catalog.bulk_commit(create_location_list)
+
         # catch any other commits
         self.catalog.commit()
 
