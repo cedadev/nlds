@@ -1592,7 +1592,7 @@ class CatalogConsumer(RMQC):
                     # PathLocation and assign the aggregation
                     # input storage type
                     st = Storage.from_str(pl.storage_type)
-
+                    location = None  # clear any previous location
                     if len(f.locations) != 0:
                         # modify location - get it first via loop on locations
                         for l in f.locations:
