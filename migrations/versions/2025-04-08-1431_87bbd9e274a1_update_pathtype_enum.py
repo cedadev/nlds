@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from enum import Enum as PyEnum
 
-
 # revision identifiers, used by Alembic.
 revision = "87bbd9e274a1"
 down_revision = "c7648694325f"

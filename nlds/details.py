@@ -2,9 +2,10 @@
 """
 details.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -64,9 +65,11 @@ class PathLocation(BaseModel):
     path: Optional[str] = None
     access_time: Optional[float] = None
     aggregation_id: Optional[int] = None
+    checksum: Optional[str] = None
+    checksum_method: Optional[str] = None
 
     def to_dict(self) -> Dict:
-        return {
+        ret_dict = {
             "storage_type": self.storage_type,  # e.g. OBJECT_STORAGE or TAPE
             "url_scheme": self.url_scheme,  # e.g. http://
             "url_netloc": self.url_netloc,  # e.g. cedadev-o (tenancy)
@@ -74,10 +77,15 @@ class PathLocation(BaseModel):
             "path": self.path,  # e.g. /gws/cedaproc/file1.txt
             "access_time": self.access_time,
         }
+        if self.checksum:
+            ret_dict["checksum"] = self.checksum
+        if self.checksum_method:
+            ret_dict["checksum_method"] = self.checksum_method
+        return ret_dict
 
     @classmethod
     def from_dict(cls, dictionary: Dict[str, Any]):
-        return cls(
+        loc = cls(
             storage_type=dictionary["storage_type"],
             url_scheme=dictionary["url_scheme"],
             url_netloc=dictionary["url_netloc"],
@@ -85,6 +93,25 @@ class PathLocation(BaseModel):
             path=dictionary["path"],
             access_time=dictionary["access_time"],
         )
+        if "checksum" in dictionary:
+            loc.checksum = dictionary["checksum"]
+        if "checksum_method" in dictionary:
+            # convert to lower case to maintain compatibility with codebase, even
+            # though in database it is stored in uppercase (!!)
+            loc.checksum_method = dictionary["checksum_method"].lower()
+        return loc
+
+    @classmethod
+    def from_locationmodel(cls, location: BaseModel):
+        pl = cls()
+        pl.storage_type = location.storage_type.to_json()
+        pl.url_scheme = location.url_scheme
+        pl.url_netloc = location.url_netloc
+        pl.root = location.root
+        pl.path = location.path
+        pl.access_time = location.access_time.timestamp()
+        pl.aggregation_id = location.aggregation_id
+        return pl
 
     @property
     def url(self):
@@ -183,18 +210,20 @@ class PathDetails(BaseModel):
             locations = PathLocations.from_dict(json_contents)
         else:
             locations = PathLocations()
-        return cls(original_path = json_contents["file_details"]["original_path"],
-                   path_type = json_contents["file_details"]["path_type"],
-                   link_path = json_contents["file_details"]["link_path"],
-                   size = json_contents["file_details"]["size"],
-                   user = json_contents["file_details"]["user"],
-                   group = json_contents["file_details"]["group"],
-                   permissions = json_contents["file_details"]["permissions"],
-                   mode = json_contents["file_details"]["mode"],
-                   access_time = json_contents["file_details"]["access_time"],
-                   failure_reason = json_contents["file_details"]["failure_reason"],
-                   holding_id = json_contents["file_details"]["holding_id"],
-                   locations=locations)
+        return cls(
+            original_path=json_contents["file_details"]["original_path"],
+            path_type=json_contents["file_details"]["path_type"],
+            link_path=json_contents["file_details"]["link_path"],
+            size=json_contents["file_details"]["size"],
+            user=json_contents["file_details"]["user"],
+            group=json_contents["file_details"]["group"],
+            permissions=json_contents["file_details"]["permissions"],
+            mode=json_contents["file_details"]["mode"],
+            access_time=json_contents["file_details"]["access_time"],
+            failure_reason=json_contents["file_details"]["failure_reason"],
+            holding_id=json_contents["file_details"]["holding_id"],
+            locations=locations,
+        )
 
     @classmethod
     def from_path(cls, path: str):
@@ -217,15 +246,8 @@ class PathDetails(BaseModel):
 
         # copy the storage locations
         pd.locations = PathLocations()
-        for fl in file.locations:
-            pl = PathLocation()
-            pl.storage_type = fl.storage_type.to_json()
-            pl.url_scheme = fl.url_scheme
-            pl.url_netloc = fl.url_netloc
-            pl.root = fl.root
-            pl.path = fl.path
-            pl.access_time = fl.access_time.timestamp()
-            pl.aggregation_id = fl.aggregation_id
+        for location in file.locations:
+            pl = PathLocation.from_locationmodel(location)
             pd.locations.add(pl)
 
         return pd
@@ -254,7 +276,7 @@ class PathDetails(BaseModel):
         self.link_path = None
         if stat.S_ISLNK(self.mode):
             self.path_type = PathType.LINK
-            self.link_path = self.path.resolve().as_posix() # convert this to a string
+            self.link_path = self.path.resolve().as_posix()  # convert this to a string
         elif stat.S_ISDIR(self.mode):
             self.path_type = PathType.DIRECTORY
         elif stat.S_ISREG(self.mode):
@@ -336,7 +358,11 @@ class PathDetails(BaseModel):
         if pl is None:
             return None
         else:
-            bucket_name = f"nlds.{pl.root}"
+            # this is a weird error, but it must have been added twice somewhere
+            if pl.root[0:5] == "nlds.":
+                bucket_name = f"{pl.root}"
+            else:
+                bucket_name = f"nlds.{pl.root}"
             return bucket_name
 
     @property
@@ -381,10 +407,37 @@ class PathDetails(BaseModel):
         return self._get_location(MSG.TAPE)
 
     @property
+    def tape_url(self) -> str:
+        pl = self._get_location(MSG.TAPE)
+        if pl is None:
+            return None
+        tape_url = ""
+        if pl.url_scheme:
+            tape_url += f"{pl.url_scheme}://"
+        if pl.url_netloc:
+            tape_url += f"{pl.url_netloc}/"
+        if pl.root:
+            tape_url += f"{pl.root}/"
+        return tape_url
+
+    @property
     def tape_name(self) -> str:
         pl = self._get_location(MSG.TAPE)
         if pl is None:
             return None
         else:
-            tape_name = f"{pl.url_scheme}://{pl.url_netloc}/{pl.root}/{pl.path}"
+            # Build bit by bit to support some tape systems having components marked as
+            # None / empty string
+            tape_name = self.tape_url
+            if tape_name != None:
+                tape_name += f"{pl.path}"
             return tape_name
+
+    def __eq__(self, item) -> bool:
+        return self.original_path == item.original_path
+
+    def __hash__(self) -> hash:
+        return hash(self.original_path)
+
+    def __contains__(self, item) -> bool:
+        return self.original_path == item.original_path

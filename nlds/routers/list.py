@@ -2,9 +2,10 @@
 """
 list.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -58,7 +59,8 @@ async def get(
     transaction_id: Optional[str] = None,
     tag: Optional[str] = None,
     limit: Optional[int] = None,
-    descending: Optional[bool] = None,
+    descending: Optional[bool] = False,
+    regex: Optional[bool] = False,
 ):
     # create the message dictionary
     api_action = f"{RK.LIST}"
@@ -101,11 +103,13 @@ async def get(
             )
         else:
             meta_dict[MSG.TAG] = tag_dict
+    if regex:
+        meta_dict[MSG.REGEX] = True
     if len(meta_dict) > 0:
         msg_dict[MSG.META] = meta_dict
 
     # call RPC function
-    routing_key = "catalog_q"
+    routing_key = RK.CATALOG_Q_USER
     response = await rpc_publisher.call(msg_dict=msg_dict, routing_key=routing_key)
     # Check if response is valid or whether the request timed out
     if response is not None:

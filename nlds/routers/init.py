@@ -2,9 +2,10 @@
 """
 init.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -49,6 +50,7 @@ async def get():
         oauth_token_url = os.environ["OAUTH_TOKEN_URL"]
         oauth_scopes = os.environ["OAUTH_SCOPES"]
         enc_key = os.environ["SYM_KEY"].encode()
+        os_tenancy = os.environ["OS_TENANCY"]
     except KeyError as e:
         response_error = ResponseError(
             loc=["init", "get"], msg="Unable to get api keys.", type="Failed request."
@@ -60,10 +62,15 @@ async def get():
 
     api_info_bytes = json.dumps(
         {
-            "oauth_client_id": oauth_id,
-            "oauth_client_secret": oauth_secret,
-            "oauth_token_url": oauth_token_url,
-            "oauth_scopes": oauth_scopes,
+            "authentication": {
+                "oauth_client_id": oauth_id,
+                "oauth_client_secret": oauth_secret,
+                "oauth_token_url": oauth_token_url,
+                "oauth_scopes": oauth_scopes,
+            },
+            "object_storage": {
+                "tenancy": os_tenancy,
+            },
         }
     ).encode()
 

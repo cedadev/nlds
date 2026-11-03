@@ -2,9 +2,10 @@
 """
 index.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -39,10 +40,10 @@ class IndexerConsumer(StattingConsumer):
 
     DEFAULT_CONSUMER_CONFIG = {
         _FILELIST_MAX_LENGTH: 1000,
-        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,  # in bytes, default = 16MB
+        _FILELIST_MAX_SIZE: 16 * 1024 * 1024,  # in bytes, default = 16MB
         _PRINT_TRACEBACKS: False,
         _CHECK_FILESIZE: True,
-        _MAX_FILESIZE: (500 * 1000 * 1000),  # in bytes, default=500MB
+        _MAX_FILESIZE: (500 * 1024 * 1024),  # in bytes, default=500MB
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -73,12 +74,12 @@ class IndexerConsumer(StattingConsumer):
         if filelist_len > self.filelist_max_len:
             self.log(
                 f"Filelist longer than allowed maximum length, splitting into "
-                "batches of {self.filelist_max_len}",
+                f"batches of {self.filelist_max_len}",
                 RK.LOG_DEBUG,
             )
 
-        # For each 1000 files in the list resubmit with index as the action
-        # in the routing key
+        # For each self.filelist_max_len files in the list resubmit with index as
+        # the action in the routing key
         for i in range(0, filelist_len, self.filelist_max_len):
             slc = slice(i, min(i + self.filelist_max_len, filelist_len))
             self.send_pathlist(
@@ -113,6 +114,42 @@ class IndexerConsumer(StattingConsumer):
         self.index(filelist, rk_parts[0], body_json)
         self.log(f"Scan finished.", RK.LOG_INFO)
 
+    def _filter(
+        self,
+        filelist: List[PathDetails],
+    ) -> List[PathDetails]:
+        """This filters out any filepaths in the filelist where the directory for that
+        filepath already exists in the filelist.
+        e.g.:
+            /home/user/path
+            /home/user/path/file1
+            /home/user/path/file2
+        will just return
+            /home/user/path
+
+        This is like the inverse of a scan, and is necessary as users quite often submit
+        the output of a find command, which lists all directories and files, so some
+        files will be scanned multiple times.
+        This causes the indexer to do extra work, and may cause an attempt to add them
+        to the catalog more than once - leading to an error.
+        consumer.dedup_filelist will not catch this as the indexer splits filelists as
+        it goes, so will only trap if the duplicate files are in the same message.
+        """
+        out_list = []
+        # build a list of Path objects from the filelist passed in
+        paths = [pathlib.Path(fp.original_path) for fp in filelist]
+        # for each path check in the filelist the parent is not in the paths list
+        for fp in filelist:
+            path = pathlib.Path(fp.original_path)
+            in_parent = False
+            # path.parents provides a list of paths up to the root directory
+            for p in path.parents:
+                if p in paths:
+                    in_parent = True
+            if not in_parent:
+                out_list.append(fp)
+        return out_list
+
     def callback(self, ch, method, properties, body, connection):
         self.reset()
         body_json = self._deserialize(body)
@@ -137,7 +174,9 @@ class IndexerConsumer(StattingConsumer):
             return
 
         # parse the input filelist from the JSON passed in via the HTTP body
-        filelist = self.parse_filelist(body_json)
+        filelist_in = self.parse_filelist(body_json)
+        # filter the filelist to remove repeated directories and sub-files
+        filelist = self._filter(filelist_in)
         filelist_len = len(filelist)
 
         # Upon initiation, split the filelist into manageable chunks
@@ -151,6 +190,8 @@ class IndexerConsumer(StattingConsumer):
             else:
                 self._scan(filelist, rk_parts, body_json)
 
+        self.send_logging()
+
     def _index_r(
         self,
         item_path: PathDetails,
@@ -161,10 +202,28 @@ class IndexerConsumer(StattingConsumer):
         """Recursively index the item_path"""
         # check that there is sufficient permission to access the item_path
         try:
+            # store / generate the error message just once
+            inaccessible_err_msg = (
+                f"Path: {item_path.path} is inaccessible. Please check the "
+                f"permissions of the path."
+            )
+            not_found_err_msg = f"Path: {item_path.path} does not exist."
+            if not self.check_path_exists(item_path.path):
+                raise IndexError(not_found_err_msg)
             if not self.check_path_access(item_path.path):
-                error_reason = f"Path:{item_path.path} is inaccessible."
-                raise IndexError(message=error_reason)
+                raise IndexError(inaccessible_err_msg)
+
             if item_path.path.is_dir():
+                # change directory to try to overcome bug with auto-mounter
+                # only do it if the current directory is not the path
+                if os.getcwd() != item_path.path.as_posix():
+                    self.log(f"Changing directory to {item_path.path}", RK.LOG_INFO)
+                    try:
+                        os.chdir(item_path.path)
+                    except FileNotFoundError:
+                        raise IndexError(not_found_err_msg)
+                    except PermissionError:
+                        raise IndexError(inaccessible_err_msg)
                 # check if item is a link and just add as a link entry if it is
                 # do not recurse into linked directories!
                 item_path.stat()
@@ -179,7 +238,12 @@ class IndexerConsumer(StattingConsumer):
 
                 else:
                     # item is a directory - list what is in the directory
-                    sub_file_list = os.listdir(item_path.path)
+                    try:
+                        sub_file_list = os.listdir(item_path.path)
+                    except FileNotFoundError:
+                        raise IndexError(not_found_err_msg)
+                    except PermissionError:
+                        raise IndexError(inaccessible_err_msg)
                     # process and send via recursion
                     for sf in sub_file_list:
                         root_path = pathlib.Path(item_path.path)
@@ -195,15 +259,20 @@ class IndexerConsumer(StattingConsumer):
 
             elif item_path.path.is_file():
                 # item is a file - stat it - calls the PathDetails member function
-                item_path.stat()
+                try:
+                    item_path.stat()
+                except FileNotFoundError:
+                    raise IndexError(not_found_err_msg)
+                except PermissionError:
+                    raise IndexError(inaccessible_err_msg)
                 # check the filesize
                 if self.check_filesize_fl and item_path.size > self.max_filesize:
                     error_reason = (
-                        f"Filesize: {item_path.size / (1000*1000)}MB for path: "
+                        f"Filesize: {item_path.size / (1024*1024)}MB for path: "
                         f"{item_path.path}"
                         f" is too big for the NLDS tape system."
                         f" The max allowed file size is "
-                        f"{self.max_filesize / (1000*1000)}MB."
+                        f"{self.max_filesize / (1024*1024)}MB."
                     )
 
                     raise IndexError(message=error_reason)
@@ -258,9 +327,40 @@ class IndexerConsumer(StattingConsumer):
         rk_failed = ".".join([rk_origin, RK.INDEX, RK.FAILED])
 
         for item_path in raw_filelist:
-            # all errors will now be handled by raising an IndexError in the _index_r
-            # function
-            self._index_r(item_path, rk_complete, rk_failed, body_json=body_json)
+            # change directory to parent directory to work-around the automounter not
+            # always working correctly
+            try:
+                if item_path.path.is_dir():
+                    chpath = item_path.path
+                else:
+                    chpath = item_path.path.parent
+                if os.getcwd() != chpath.as_posix():
+                    self.log(f"Changing directory to {chpath}", RK.LOG_INFO)
+                    os.chdir(chpath)
+                failed = False
+            except FileNotFoundError:
+                message = f"Path: {item_path.path} does not exist."
+                failed = True
+            except PermissionError:
+                message = (
+                    f"Path: {item_path.path} is inaccessible.  Please check the "
+                    f"permissions of the path."
+                )
+                failed = True
+            else:
+                # all errors will now be handled by raising an IndexError in the
+                # _index_r function
+                self._index_r(item_path, rk_complete, rk_failed, body_json=body_json)
+            finally:
+                if failed:
+                    item_path.failure_reason = message
+                    self.append_and_send(
+                        self.failedlist,
+                        item_path,
+                        routing_key=rk_failed,
+                        body_json=body_json,
+                        state=State.FAILED,
+                    )
 
         # finalise the pathlists - anything left in the completed and failed lists
         if len(self.completelist) > 0:

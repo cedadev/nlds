@@ -6,7 +6,7 @@ catalog_models.py
 """
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -30,7 +30,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 
 
-from nlds.details import PathType
+from nlds.details import PathType, PathDetails
 from nlds_processors.catalog.catalog_error import CatalogError
 import nlds.rabbit.message_keys as MSG
 
@@ -84,7 +84,7 @@ class Transaction(CatalogBase):
     consist of many transactions."""
 
     __tablename__ = "transaction"
-    # primay key / integer id
+    # primary key / integer id
     id = Column(Integer, primary_key=True)
     # transaction id - this will be the String of the UUID
     transaction_id = Column(String, nullable=False, index=True)
@@ -141,6 +141,25 @@ class File(CatalogBase):
     # relationship for checksum (one to one)
     checksums = relationship("Checksum", cascade="delete, delete-orphan")
 
+    @classmethod
+    def from_pathdetails(cls, pd: PathDetails):
+        return cls(
+            transaction_id=0,
+            original_path=pd.original_path,
+            path_type=pd.path_type,
+            link_path=pd.link_path,
+            size=pd.size,
+            user=pd.user,
+            group=pd.group,
+            file_permissions=pd.permissions,
+        )
+
+    def get_object_store(self):
+        for l in self.locations:
+            if l.storage_type == Storage.OBJECT_STORAGE:
+                return l
+        return None
+
 
 class Storage(enum.Enum):
     OBJECT_STORAGE = 1
@@ -196,18 +215,37 @@ class Location(CatalogBase):
         url = f"{}
         """
         if self.storage_type == Storage.OBJECT_STORAGE:
-            # only object storage returns a URL
+            # this is a bit of a weird hack, but it mirrors that in PathDetails as well
+            # check if `nlds.` already prepended to the root (bucket) and, if not, then
+            # add it to the root / bucket
+            if self.root[0:5] == "nlds.":
+                bucket = self.root
+            else:
+                bucket = "nlds." + self.root
+
             return urlunsplit(
                 (
                     self.url_scheme,
                     self.url_netloc,
-                    f"nlds.{self.root}/{self.path}",
+                    f"{bucket}/{self.path}",
                     "",
                     "",
                 )
             )
-        else:
-            return ""
+        elif self.storage_type == Storage.TAPE:
+            if self.url_scheme and self.url_netloc:
+                url = urlunsplit(
+                    (
+                        self.url_scheme,
+                        self.url_netloc,
+                        f"{self.root}/{self.path}",
+                        "",
+                        "",
+                    )
+                )
+            else:
+                url = ""
+            return url
 
 
 class Checksum(CatalogBase):

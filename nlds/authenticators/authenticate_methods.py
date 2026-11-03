@@ -2,9 +2,10 @@
 """
 authenticate_methods.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -52,6 +53,13 @@ async def authenticate_user(user: str, token: str = Depends(oauth2_scheme)):
     """Check the user by calling the authenticator's authenticate_user
     method."""
     try:
+        # generic ResponseError
+        response_error = ResponseError(
+            loc=["authenticate_methods", "authenticate_user"],
+            msg="Cannot reach authentication server.",
+            type="Resource not found.",
+        )
+
         if token is None:
             response_error = ResponseError(
                 loc=["authenticate_methods", "authenticate_user"],
@@ -81,6 +89,11 @@ async def authenticate_group(group: str, token: str = Depends(oauth2_scheme)):
     """Check the group by calling the authenticator's authenticate_user
     method."""
     try:
+        response_error = ResponseError(
+            loc=["authenticate_methods", "authenticate_user"],
+            msg="Cannot reach authentication server.",
+            type="Resource not found.",
+        )
         if token is None:
             response_error = ResponseError(
                 loc=["authenticate_methods", "authenticate_group"],

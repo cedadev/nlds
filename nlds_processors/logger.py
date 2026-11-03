@@ -2,9 +2,10 @@
 """
 logger.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -31,6 +32,7 @@ class LoggingConsumer(RMQP):
         RK.LOG_WARNING,
         RK.LOG_ERROR,
         RK.LOG_CRITICAL,
+        RK.LOG_ALL,
     )
     _logging_modes = {
         RK.LOG_NONE: 0,
@@ -60,15 +62,16 @@ class LoggingConsumer(RMQP):
         # Print certain outputs to global logger output depending on the stdout
         # log level.
         logger.info(
-            f"Received message with route " f"{body_json[MSG.DETAILS][MSG.ROUTE]}"
+            f"Received message with route {body_json[MSG.DETAILS][MSG.ROUTE]}"
+            f" and level {rk_parts[2]}"
         )
 
         # The log level should be in the routing key, the logger to use should
         # be in the message body under MSG.DETAILS:MSG.LOG_TARGET
         if rk_parts[2] not in self._logging_levels:
             logger.error(
-                f"Invalid routing key provided, log_level is set to an"
-                f"invalid value ({rk_parts[2]})\n"
+                f"Invalid routing key provided, log_level is set to an invalid value "
+                f"({rk_parts[2]})\n"
                 f"Should be one of {self._logging_levels}."
             )
             logger.debug(traceback.format_exc())
@@ -121,10 +124,9 @@ class LoggingConsumer(RMQP):
         if MSG.ERROR in body_json[MSG.DATA]:
             exc_info = body_json[MSG.DATA][MSG.ERROR]
 
+        print(log_message)
         # Finally, log the message
         logging_func(log_message, exc_info=exc_info)
-
-        logger.info(f"Callback finished. \n")
 
     @staticmethod
     def get_logging_func(log_level: str, logger_like: logging.Logger = logger):
@@ -145,6 +147,7 @@ class LoggingConsumer(RMQP):
             RK.LOG_WARNING: logger_like.warning,
             RK.LOG_ERROR: logger_like.error,
             RK.LOG_CRITICAL: logger_like.critical,
+            RK.LOG_ALL: logger_like.info,
         }
         return logging_function[log_level]
 

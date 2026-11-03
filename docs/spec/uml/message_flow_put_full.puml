@@ -66,6 +66,68 @@ activate qw
 qw -> work : key=""nlds-api.route.put""
 deactivate qw
 
+/'
+Create the holding
+'/
+activate work
+work -> wex : key=""nlds-api.catalog-put.setup""
+deactivate work
+
+activate wex
+wex -> qc : key=""nlds-api.catalog-put.setup""
+deactivate wex
+
+activate qc
+qc -> catalog : key=""nlds-api.catalog-put.setup""
+deactivate qc
+
+activate catalog
+group #LightGreen
+    catalog -> catalog_db : add holding to database
+    alt #MintCream holding could not be created
+        catalog -> catalog : add file record to //failed_list//
+    end
+end
+
+catalog -> wex : key=""nlds-api.catalog-put.failed""
+catalog -> wex : key=""nlds-api.catalog-put.setup-complete""
+deactivate catalog
+
+activate wex
+wex -> qw : key=""nlds-api.catalog-put.setup-complete""
+deactivate wex
+
+activate qw
+qw -> work : key=""nlds-api.catalog-put.setup-complete""
+deactivate qw
+
+/'
+Create the bucket
+'/
+activate work
+work -> wex : key=""nlds-api.transfer-put.setup""
+deactivate work
+activate wex
+wex -> qt : key=""nlds-api.transfer-put.setup""
+deactivate wex
+activate qt
+qt -> transfer_puts : key=""nlds-api.transfer-put.setup""
+deactivate qt
+activate transfer_puts
+group #Gold
+    transfer_puts -> obj : create bucket
+    alt #MintCream bucket could not be created
+        transfer_puts -> transfer_puts : add file record to //failed_list//
+    end
+end
+transfer_puts -> wex : key=""nlds-api.transfer-put.setup-complete""
+transfer_puts -> wex : key=""nlds-api.transfer-put.failed""
+deactivate transfer_puts
+
+activate wex
+wex -> work : key=""nlds-api.transfer-put.setup-complete""
+deactivate wex
+
 activate work
 work -> wex : key=""nlds-api.index.init""
 deactivate work

@@ -2,9 +2,10 @@
 """
 get_transfer.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -13,7 +14,6 @@ from pathlib import Path
 import os
 import subprocess
 
-import minio
 from minio.error import S3Error
 from retry import retry
 
@@ -23,20 +23,19 @@ from nlds.details import PathDetails, PathType
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
 from nlds_processors.transfer.transfer_error import TransferError
-from nlds_processors.bucket_mixin import BucketMixin, BucketError
+from nlds_processors.transfer.bucket_transfer import BucketTransferConsumer
+from nlds_processors.bucket_mixin import BucketError
 
 
-class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
+class GetTransferConsumer(BucketTransferConsumer):
     DEFAULT_QUEUE_NAME = "transfer_get_q"
     DEFAULT_ROUTING_KEY = f"{RK.ROOT}." f"{RK.TRANSFER_GET}." f"{RK.WILD}"
     DEFAULT_STATE = State.TRANSFER_GETTING
 
     _CHOWN_COMMAND = "chown_cmd"
-    _CHOWN_FL = "chown_fl"
-    _CHOWN_USER = "nlds"
+    _CHOWN_USER = "chown_user"
     TRANSFER_GET_CONSUMER_CONFIG = {
         _CHOWN_COMMAND: "chown",
-        _CHOWN_FL: False,
         _CHOWN_USER: "nlds",
     }
     DEFAULT_CONSUMER_CONFIG = (
@@ -47,7 +46,6 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         super().__init__(queue=queue)
 
         self.chown_cmd = self.load_config_value(self._CHOWN_COMMAND)
-        self.chown_fl = self.load_config_value(self._CHOWN_FL)
         self.chown_user = self.load_config_value(self._CHOWN_USER)
         self.s3_client = None
 
@@ -56,8 +54,15 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         target = body_json[MSG.DETAILS][MSG.TARGET]
         if target:
             target_path = Path(target)
+            if not self.check_path_exists(target_path):
+                msg = f"Unable to copy, target path {target_path} does not exist."
+                self.log(msg, RK.LOG_ERROR)
+                raise TransferError(msg)
             if not self.check_path_access(target_path, access=os.W_OK):
-                msg = f"Unable to copy, target path {target_path} is inaccessible."
+                msg = (
+                    f"Unable to copy, target path {target_path} is inaccessible. "
+                    f"Please check the permissions of the path."
+                )
                 self.log(msg, RK.LOG_ERROR)
                 raise TransferError(msg)
         else:
@@ -70,9 +75,15 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             # In the case of no given target, we just download the files
             # back to their original location.
             download_path = path_details.path
+            # Check the parent folder of the download path exists
+            if not self.check_path_exists(path_details.path.parent):
+                reason = (
+                    f"Unable to download {download_path}. Target path does not exist."
+                )
+                self.log(f"{reason}. Adding to failed list.", RK.LOG_INFO)
+                raise TransferError(message=reason)
             # Check we have permission to write to the parent folder of the
-            # original location. If the parent folder doesn't exist this
-            # will fail.
+            # original location.
             if not self.check_path_access(path_details.path.parent, access=os.W_OK):
                 reason = (
                     f"Unable to download {download_path}. Target path is inaccesible."
@@ -94,10 +105,13 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         return download_path
 
     def _get_linked_path(self, path_details, target_path):
-        # If there is no target_path then the it is just the link path converted to
+        # If there is no target_path then it is just the link path converted to
         # a path object
         if not target_path:
             linked_path = Path(path_details.link_path)
+            if not self.check_path_exists(path_details.path.parent):
+                reason = f"Unable to access {linked_path}. Directory does not exist."
+                raise TransferError(message=reason)
             if not self.check_path_access(path_details.path.parent, access=os.W_OK):
                 reason = f"Unable to access {linked_path}. Linked path is inaccesible."
                 raise TransferError(message=reason)
@@ -120,6 +134,11 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         download_path_str = str(download_path)
         # Attempt the download!
         try:
+            # make any parent directories first
+            # fget_object will make parent directories, but the permissions will be
+            # masked by the users current permissions.
+            # We will have to change the permissions for all of the created parent
+            # directories later
             resp = self.s3_client.fget_object(
                 bucket_name,
                 object_name,
@@ -134,7 +153,7 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
             )
             raise TransferError(message=reason)
 
-    def _change_permissions(self, download_path, path_details):
+    def _change_permissions(self, download_path: str, path_details: PathDetails):
         """Change the permission of the downloaded file"""
         download_path_str = str(download_path)
         self.log(
@@ -147,16 +166,22 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         except (KeyError, PermissionError) as e:
             self.log("Couldn't change permissions of downloaded file", RK.LOG_WARNING)
             self.log(f"Original error: {e}", RK.LOG_DEBUG)
-        self._change_owner(download_path_str)
+        self._change_owner(download_path_str, path_details.user, path_details.group)
 
-    def _change_owner(self, path_str):
+    def _change_owner(self, path_str: str, uid: int = -1, gid: int = -1):
         # Attempt to chown the path back to the requesting user using the
         # configured binary/command.
+        # assign default uid / gid if not passed in
+        if uid == -1:
+            uid = self.uid
+        if gid == -1:
+            gid = self.gids[0]
+
         try:
             cmd = [
                 self.chown_cmd,
-                str(self.uid),
-                str(self.gids[0]),
+                str(uid),
+                str(gid),
                 path_str,
             ]
             try:
@@ -166,7 +191,7 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 raise TransferError(
                     f"Could not change owner of downloaded file: {path_str}"
                 )
-        except (KeyError, PermissionError) as e:
+        except (KeyError, PermissionError, FileNotFoundError) as e:
             self.log("Couldn't change owner of downloaded file", RK.LOG_WARNING)
             self.log(f"Original error: {e}", RK.LOG_DEBUG)
 
@@ -200,19 +225,10 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         # build the routing keys
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
-        # set the ids for the files
-        if self.chown_fl:
-            try:
-                self.set_ids(body_json)
-            except KeyError as e:
-                msg = "Problem running set_ids in _transfer_files"
-                self.log(msg, RK.LOG_ERROR)
-                self._fail_all(self.filelist, self.rk_parts, self.body_json, msg)
-                return
 
         # Create client
-        self.s3_client = minio.Minio(
-            tenancy,
+        self.s3_client = self._create_s3_client(
+            tenancy=tenancy,
             access_key=access_key,
             secret_key=secret_key,
             secure=self.require_secure_fl,
@@ -238,7 +254,7 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                         f"_transfer_files"
                     )
                 self.log(
-                    f"Attempting to get file {object_name} from {bucket_name}",
+                    f"Starting to get file {object_name} from {bucket_name}",
                     RK.LOG_DEBUG,
                 )
                 download_path = self._get_download_path(path_details, target_path)
@@ -254,11 +270,24 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                     state=State.FAILED,
                 )
             else:
-                # change ownership and permissions
+                # This is where we change the permissions for all of the created parent
+                # directories
+                # get the parent directories all the way up to the target_path
+                par_dirs = self._get_parent_dirs(download_path, target_path)
+                for p in par_dirs:
+                    if p not in created_paths:
+                        # change the permissions to allow other files to be downloaded
+                        # into the created directories
+                        os.chmod(p, 0o770)
+                        created_paths.append(p)
                 try:
+                    # change ownership and permissions.
+                    # This might have to be move to an additional process.
                     self._change_permissions(download_path, path_details)
                 except TransferError as e:
-                    self.log(f"Error downloading: {e}", RK.LOG_ERROR)
+                    self.log(
+                        f"Error changing file owner and permissions: {e}", RK.LOG_ERROR
+                    )
                 # all finished successfully!
                 self.log(f"Successfully got {path_details.original_path}", RK.LOG_DEBUG)
                 self.append_and_send(
@@ -268,13 +297,8 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                     body_json=body_json,
                     state=State.TRANSFER_GETTING,
                 )
-                # get the parent directories all the way up to the target_path
-                par_dirs = self._get_parent_dirs(download_path, target_path)
-                for p in par_dirs:
-                    if p not in created_paths:
-                        created_paths.append(p)
 
-        # change the permissions on the created paths
+        # change the owner on the created paths
         for cp in created_paths:
             try:
                 self._change_owner(cp)
@@ -319,10 +343,10 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
                 routing_key=rk_failed,
                 body_json=body_json,
                 state=State.FAILED,
-                warning=link_warnings
+                warning=link_warnings,
             )
 
-    @retry(S3Error, tries=5, delay=10, backoff=10, logger=None)
+    @retry(S3Error, tries=5, delay=1, backoff=2, logger=None)
     def transfer(
         self,
         transaction_id: str,
@@ -337,6 +361,15 @@ class GetTransferConsumer(BaseTransferConsumer, BucketMixin):
         # build the routing keys
         rk_complete = ".".join([rk_origin, RK.TRANSFER_GET, RK.COMPLETE])
         rk_failed = ".".join([rk_origin, RK.TRANSFER_GET, RK.FAILED])
+
+        # set the ids for the files
+        try:
+            self.set_ids(body_json)
+        except KeyError as e:
+            msg = "Problem running set_ids in _transfer_files"
+            self.log(msg, RK.LOG_ERROR)
+            self._fail_all(self.filelist, self.rk_parts, self.body_json, msg)
+            return
 
         # get the target directory and fail all the transfers if it cannot be created
         try:

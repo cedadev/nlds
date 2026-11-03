@@ -4,7 +4,7 @@ test_bucket_mixin.py
 
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "07 Apr 2025"
-__copyright__ = "Copyright 2025 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -32,14 +32,16 @@ def get_keys(key_path: str):
     fh.close()
     return access_key, secret_key
 
+
 def log(msg: str, level: int):
     """Dummy log function"""
     print(msg)
 
+
 if __name__ == "__main__":
     tenancy = "nlds-staging-o.s3.jc.rl.ac.uk"
     bucket = "nlds.4829e19d-bf69-4a0e-a71d-c0ddfd8eb713"
-    #bucket = "nlds.5eac7a13-084b-4927-aa6b-cdeb11ddf508"
+    # bucket = "nlds.5eac7a13-084b-4927-aa6b-cdeb11ddf508"
     key_path = "~/.nlds-staging-o-keys.json"
     group = "cedaproc"
 
@@ -49,6 +51,6 @@ if __name__ == "__main__":
     bucket_mixin.s3_client = client
     bucket_mixin.tenancy = tenancy
     bucket_mixin.log = log
-    for i in range(0,10):
-        bucket_mixin._set_access_policies(bucket, group)    
+    for i in range(0, 10):
+        bucket_mixin._set_access_policies(bucket, group)
         print(bucket_mixin._get_bucket_policy(bucket))

@@ -2,9 +2,10 @@
 """
 routing_keys.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "08 Apr 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -29,25 +30,33 @@ ROOT = "nlds-api"
 WILD = "*"
 
 # Exchange routing key parts – queues
+NLDS_Q = "nlds_q"
 INDEX = "index"
 CATALOG = "catalog"
+CATALOG_Q = "catalog_q"
 CATALOG_PUT = "catalog-put"
 CATALOG_GET = "catalog-get"
 CATALOG_DEL = "catalog-del"
 CATALOG_UPDATE = "catalog-update"
 CATALOG_REMOVE = "catalog-remove"
+CATALOG_SETUP = "catalog-setup"
+CATALOG_Q_USER = "catalog_q_user"
 MONITOR = "monitor"
 MONITOR_PUT = "monitor-put"
 MONITOR_GET = "monitor-get"
+MONITOR_Q = "monitor_q"
+MONITOR_Q_USER = "monitor_q_user"
 TRANSFER = "transfer"
 TRANSFER_PUT = "transfer-put"
 TRANSFER_GET = "transfer-get"
+TRANSFER_SETUP = "transfer-setup"
 ARCHIVE = "archive"
 ARCHIVE_PUT = "archive-put"
 ARCHIVE_GET = "archive-get"
 ARCHIVE_RESTORE = "archive-restore"
 CATALOG_ARCHIVE_NEXT = "catalog-archive-next"
 CATALOG_ARCHIVE_UPDATE = "catalog-archive-update"
+UNSTAGE = "unstage"
 ROUTE = "route"
 LOG = "log"
 
@@ -59,6 +68,7 @@ FAILED = "failed"
 NEXT = "next"
 PREPARE = "prepare"
 PREPARE_CHECK = "prepare-check"
+CANCEL = "cancel"
 
 # Exchange routing key parts – monitoring levels
 LOG_NONE = "none"
@@ -75,4 +85,5 @@ LOG_RKS = (
     LOG_ERROR,
     LOG_CRITICAL,
 )
+LOG_ALL = "all"
 LOGGER_PREFIX = "nlds."

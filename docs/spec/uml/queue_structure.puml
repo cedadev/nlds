@@ -23,22 +23,29 @@ wq -> work : prefetch=1
 
 together {
     queue sq as "Index Q" #lightblue
-    queue tq as "Transfer Q" #gold
+    queue tq as "Transfer Put Q" #gold
 }
 together {
     queue mq as "Monitor Q" #tomato
     queue cq as "Catalog Q" #springgreen
 }
 
+<<<<<<< HEAD
 pex --> sq : key=*.index.init
 pex --> sq : key=*.index.start
 pex --> tq : key=*.tran.*
 pex --> cq : key=*.cat.*
+=======
+pex --> sq : key=#.index.init
+pex --> sq : key=#.index.start
+pex --> tq : key=#.transfer-put.*
+pex --> cq : key=#.catalog.*
+>>>>>>> main
 
 work --> pex : key=nlds-api.index.*
-work --> pex : key=nlds-api.tran.*
-work --> pex : key=nlds-api.mon.*
-work --> pex : key=nlds-api.cat.*
+work --> pex : key=nlds-api.transfer-put.*
+work --> pex : key=nlds-api.monitor.*
+work --> pex : key=nlds-api.catalog.*
 
 queue lq as "Logging Q" #hotpink
 
@@ -79,8 +86,8 @@ together {
 
 api_server -> pex : key=nlds-api.nlds.*
 
-sq --> scan1 : prefetch=1
-sq --> scan2 : prefetch=1
+sq ---> scan1 : prefetch=1
+sq ---> scan2 : prefetch=1
 tq --> tran1 : prefetch=1
 cq --> cat1 : prefetch=1
 
@@ -90,11 +97,19 @@ lq --> log1
 ' mon1 -> user
 sysadmin <- log1
 
+<<<<<<< HEAD
 scan1 --> pex : key=*.index.complete
 scan1 --> pex : key=*.index.init
 
 note right of scan1
     `*` here denotes the application
+=======
+scan1 --> pex : key=#.index.complete
+scan1 --> pex : key=#.index.init
+
+note right of scan1
+    # here denotes the application
+>>>>>>> main
     part of the calling key, which 
     is used by the worker to form 
     the application part of the

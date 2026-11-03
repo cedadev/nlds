@@ -2,9 +2,10 @@
 """
 rpc_publisher.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -56,7 +57,7 @@ class RabbitMQRPCPublisher(RMQP):
                 "must be True or False."
             )
 
-    @retry(ChannelClosedByBroker, tries=5, backoff=1, delay=0)
+    @retry(ChannelClosedByBroker, tries=5, backoff=2, delay=1)
     def declare_bindings(self) -> None:
         # Declare an exclusive queue to receive our reply back on. Here we use
         # the hostname of the machine running the Publisher and the pid of the
@@ -122,5 +123,6 @@ class RabbitMQRPCPublisher(RMQP):
             ),
             exchange={"name": ""},
         )
-        self.connection.process_data_events(time_limit=time_limit)
+        while self.response is None:
+            self.connection.process_data_events(time_limit=time_limit)
         return self.response

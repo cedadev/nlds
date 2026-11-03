@@ -2,13 +2,16 @@
 """
 monitor.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "15 Sep 2022"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError, NoResultFound
+from sqlalchemy.orm import selectinload
+
 
 from nlds_processors.monitor.monitor_models import MonitorBase, TransactionRecord
 from nlds_processors.monitor.monitor_models import SubRecord, FailedFile, Warning
@@ -53,9 +56,6 @@ class Monitor(DBMixin):
             )
 
             self.session.add(transaction_record)
-            self.session.commit()
-            # commit early to update the transaction_record.id and prevent contention
-            # with any other monitor worker processes
         except (IntegrityError, KeyError) as e:
             raise MonitorError(
                 f"Transaction record with transaction_id {transaction_id} "
@@ -69,6 +69,7 @@ class Monitor(DBMixin):
         group: str,
         idd: int = None,
         transaction_id: str = None,
+        job_label: str = None,
         with_for_update: bool = False,
     ) -> TransactionRecord:
         """Fast version of get_transaction_record for internal messaging"""
@@ -78,26 +79,43 @@ class Monitor(DBMixin):
                 trec_q = self.session.query(TransactionRecord).filter(
                     TransactionRecord.id == idd
                 )
-            else:
+            elif transaction_id:
                 trec_q = self.session.query(TransactionRecord).filter(
                     TransactionRecord.transaction_id == transaction_id,
                 )
+            elif job_label:
+                trec_q = self.session.query(TransactionRecord).filter(
+                    TransactionRecord.job_label == job_label,
+                )
+
             # filter on user and group
             trec_q = trec_q.filter(
                 TransactionRecord.group == group, TransactionRecord.user == user
             )
             if with_for_update:
-                trec = trec_q.with_for_update().one()
+                trec = trec_q.with_for_update().first()
             else:
-                trec = trec_q.one()
+                trec = trec_q.first()
         except (NoResultFound, KeyError, OperationalError):
             if idd:
-                raise MonitorError(f"TransactionRecord with id:{idd} not found")
+                raise MonitorError(
+                    f"TransactionRecord with id:{idd} not found for user:{user} and "
+                    f"group:{group}"
+                )
+            elif transaction_id:
+                raise MonitorError(
+                    f"TransactionRecord with transaction_id:{transaction_id} not found "
+                    f"for user:{user} and group:{group}"
+                )
             else:
                 raise MonitorError(
-                    f"TransactionRecord with transaction_id:{transaction_id} "
-                    f"not found"
+                    f"No TransactionRecords found for user:{user} and group:{group}"
                 )
+        except Exception as e:
+            if self.session:
+                self.session.rollback()
+            raise e
+
         return trec
 
     def get_transaction_records(
@@ -111,11 +129,15 @@ class Monitor(DBMixin):
         exclude_api_action: list[str] = None,
         job_label: str = None,
         regex: bool = False,
+        state: list[State] = None,
         limit: int = None,
+        offset: int = None,
         descending: bool = False,
     ) -> list:
         """Gets a list of TransactionRecords from the DB from the given a whole host of
-        information.  Only used for user queries."""
+        information.  Only used for user queries.
+        This function is only used via user interaction.
+        """
         if transaction_id:
             transaction_search = transaction_id
             transaction_regex = False
@@ -125,54 +147,64 @@ class Monitor(DBMixin):
 
         try:
             if idd:
-                trec = self.session.query(TransactionRecord).filter(
+                trec_q = self.session.query(TransactionRecord).filter(
                     TransactionRecord.id == idd
                 )
             elif job_label:
                 if regex:
-                    trec = self.session.query(TransactionRecord).filter(
+                    trec_q = self.session.query(TransactionRecord).filter(
                         TransactionRecord.job_label.regexp_match(job_label),
                     )
                 else:
-                    trec = self.session.query(TransactionRecord).filter(
+                    trec_q = self.session.query(TransactionRecord).filter(
                         TransactionRecord.job_label == job_label,
                     )
 
             else:
                 if transaction_regex:
-                    trec = self.session.query(TransactionRecord).filter(
+                    trec_q = self.session.query(TransactionRecord).filter(
                         TransactionRecord.transaction_id.regexp_match(
                             transaction_search
                         ),
                     )
                 else:
-                    trec = self.session.query(TransactionRecord).filter(
+                    trec_q = self.session.query(TransactionRecord).filter(
                         TransactionRecord.transaction_id == transaction_search,
                     )
+            # api_action and exclude_api_action
             if api_action:
-                trec = trec.filter(TransactionRecord.api_action.in_(api_action))
+                trec_q = trec_q.filter(TransactionRecord.api_action.in_(api_action))
             if exclude_api_action:
-                trec = trec.filter(
+                trec_q = trec_q.filter(
                     TransactionRecord.api_action.not_in(exclude_api_action)
                 )
             # group filter
             if group != "**all**":
-                trec = trec.filter(TransactionRecord.group == group)
+                trec_q = trec_q.filter(TransactionRecord.group == group)
             # user filter
             if not groupall and user != "**all**":
-                trec = trec.filter(TransactionRecord.user == user)
+                trec_q = trec_q.filter(TransactionRecord.user == user)
             # Order up or down
             if descending:
-                trec = trec.order_by(TransactionRecord.creation_time.desc())
+                trec_q = trec_q.order_by(TransactionRecord.creation_time.desc())
             else:
-                trec = trec.order_by(TransactionRecord.creation_time)
-            # limit for speed - but how many sub-records (where the api-action is stored)
-            if limit:
-                trecs = trec.limit(limit).all()
-            else:
-                trecs = trec.all()
+                trec_q = trec_q.order_by(TransactionRecord.creation_time)
 
-            if len(trecs) == 0:
+            # Filter on any sub record having the required state
+            # I think this is probably good enough to cut down a lot of extra CPU time
+            if state:
+                trec_q = trec_q.filter(
+                    TransactionRecord.sub_records.any(SubRecord.state.in_(state))
+                )
+
+            # offset and limit for speed and paging
+            if offset:
+                trec_q = trec_q.offset(offset)
+
+            if limit:
+                trec_q = trec_q.limit(limit)
+
+            if trec_q.count() == 0:
                 raise KeyError
 
         except (IntegrityError, KeyError, OperationalError):
@@ -180,19 +212,57 @@ class Monitor(DBMixin):
                 raise MonitorError(f"TransactionRecord with id:{idd} not found")
             elif job_label:
                 raise MonitorError(
-                    f"TransactionRecord with job_label:{job_label} " f"not found"
+                    f"TransactionRecord with job_label:{job_label} not found for "
+                    f"user:{user} and group:{group}"
+                )
+            elif transaction_id:
+                raise MonitorError(
+                    f"TransactionRecord with transaction_id:{transaction_id} "
+                    f"not found for user:{user} and group:{group}"
                 )
             else:
                 raise MonitorError(
-                    f"TransactionRecord with transaction_id:{transaction_id} "
-                    f"not found"
+                    f"No TransactionRecords found for user:{user} and group:{group}"
                 )
         except DataError as e:
             if regex:
                 raise MonitorError(f"Invalid regular expression: {transaction_search}")
             else:
                 raise MonitorError(f"Error getting transaction_record: {e}")
-        return trecs
+        # load the sub-records and the warnings.  This speeds things up for the loops
+        # over the sub-records and warnings.
+        trec_q = trec_q.options(selectinload(TransactionRecord.sub_records))
+        trec_q = trec_q.options(selectinload(TransactionRecord.warnings))
+        return trec_q
+
+    def delete_transaction_record(
+        self,
+        user: str,
+        group: str,
+        idd: int = None,
+        job_label: str = None,
+        transaction_id: str = None,
+    ) -> None:
+        """Delete a transaction record."""
+        try:
+            trec = self.get_transaction_record(
+                user,
+                group,
+                idd=idd,
+                transaction_id=transaction_id,
+                job_label=job_label,
+                with_for_update=True,
+            )
+            for srec in trec.sub_records:
+                self.session.delete(srec)
+            self.session.delete(trec)
+            self.commit()
+        except (IntegrityError, KeyError, OperationalError) as e:
+            err_msg = (
+                f"Transaction with transaction_id:{transaction_id} could not be "
+                f"deleted from the monitor. Reason: {e._message}"
+            )
+            raise MonitorError(err_msg)
 
     def create_sub_record(
         self, transaction_record: TransactionRecord, sub_id: str, state: State = None
@@ -212,9 +282,6 @@ class Monitor(DBMixin):
                 transaction_record_id=transaction_record.id,
             )
             self.session.add(sub_record)
-            # need to flush to update the transaction_record.id
-            # and prevent contention with any other monitor worker processes
-            self.session.flush()
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"SubRecord for transaction_record_id:{transaction_record.id} "
@@ -238,8 +305,6 @@ class Monitor(DBMixin):
                 sub_record_id=sub_record.id,
             )
             self.session.add(failed_file)
-            # flush to prevent contention with any other monitor worker processes
-            self.session.flush()
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"FailedFile for sub_record_id:{sub_record.id} could not be "
@@ -261,6 +326,8 @@ class Monitor(DBMixin):
                 .filter(SubRecord.transaction_record_id == transaction_record.id)
                 .filter(SubRecord.sub_id == sub_id)
             )
+            # pre-load the failed files
+            srec_q = srec_q.options(selectinload(SubRecord.failed_files))
             if with_for_update:
                 srec = srec_q.with_for_update().one()
             else:
@@ -286,6 +353,7 @@ class Monitor(DBMixin):
             query = self.session.query(SubRecord).filter(
                 SubRecord.transaction_record_id == transaction_record.id
             )
+            query = query.options(selectinload(SubRecord.failed_files))
 
             # apply filters one at a time if present. Results in a big 'and' query
             # of the passed flags
@@ -328,8 +396,6 @@ class Monitor(DBMixin):
                 f"Attempted {sub_record.state}->{new_state}"
             )
         sub_record.state = new_state
-        self.session.flush()
-        # flush to prevent contention with any other monitor worker processes
 
     def check_completion(self, transaction_record: TransactionRecord) -> None:
         """Get the complete list of sub records from a transaction record and
@@ -379,8 +445,6 @@ class Monitor(DBMixin):
                 warning=warning, transaction_record_id=transaction_record.id
             )
             self.session.add(warning)
-            self.session.flush()
-            # flush to prevent contention with any other monitor worker processes
         except (IntegrityError, KeyError):
             raise MonitorError(
                 f"Warning for transaction_record:{transaction_record.id} could "

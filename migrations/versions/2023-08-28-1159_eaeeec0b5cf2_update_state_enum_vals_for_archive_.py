@@ -17,7 +17,6 @@ from sqlalchemy.orm import declarative_base, Session, relationship
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import text
 
-
 # revision identifiers, used by Alembic.
 revision = "eaeeec0b5cf2"
 down_revision = "fa9f4b687d19"

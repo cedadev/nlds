@@ -4,9 +4,10 @@ archive_put.py
 NOTE: This module is imported into a revision, and so should be very defensive
 with how it imports external modules (like xrootd).
 """
+
 __author__ = "Jack Leland and Neil Massey"
 __date__ = "30 Nov 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -18,6 +19,7 @@ from retry import retry
 from nlds_processors.archive.archive_base import BaseArchiveConsumer
 
 from nlds_processors.archive.s3_to_tarfile_stream import S3StreamError
+from nlds_processors.archive.archive_base import ArchiveError
 
 from nlds.rabbit.consumer import State
 from nlds.details import PathDetails
@@ -40,7 +42,6 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         tenancy: str,
         access_key: str,
         secret_key: str,
-        tape_url: str,
         filelist: List[PathDetails],
         rk_origin: str,
         body_json: Dict[str, str],
@@ -51,13 +52,21 @@ class PutArchiveConsumer(BaseArchiveConsumer):
 
         # Create the S3 to tape or disk streamer
         try:
+            tape_url = self._parse_tape_url(body_json)
+            # Add the extra tape pool directory if defined
+            # Only required for PUT - should be None for GET and DEL as the URL / path
+            # is fully qualified, including the tape pool, in the database path
+            tape_pool = self._parse_tape_pool(body_json)
+            if tape_pool:
+                tape_url += "/" + tape_pool
+
             streamer = self._create_streamer(
                 tenancy=tenancy,
                 access_key=access_key,
                 secret_key=secret_key,
                 tape_url=tape_url,
             )
-        except S3StreamError as e:
+        except (S3StreamError, ArchiveError) as e:
             # if a S3StreamError occurs then all files have failed
             for path_details in filelist:
                 path_details.failure_reason = e.message
@@ -70,9 +79,13 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             holding_prefix = self.get_holding_prefix(body_json)
             try:
                 self.completelist, self.failedlist, tarfile, checksum = streamer.put(
-                    holding_prefix, filelist, self.chunk_size
+                    holding_prefix=holding_prefix,
+                    filelist=filelist,
+                    chunk_size=self.chunk_size,
+                    num_parallel_uploads=self.num_parallel_uploads,
+                    checksum_method=self.checksum_method,
                 )
-            except S3StreamError as e:
+            except (S3StreamError, ArchiveError) as e:
                 # if a S3StreamError occurs then all files have failed
                 for path_details in filelist:
                     path_details.failure_reason = e.message
@@ -83,6 +96,7 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         # and its checksum
         body_json[MSG.DATA][MSG.CHECKSUM] = checksum
         body_json[MSG.DATA][MSG.TARFILE] = tarfile
+        body_json[MSG.DATA][MSG.CHECKSUM_METHOD] = self.checksum_method
 
         # Send whatever remains after all items have been put
         if len(self.completelist) > 0:
@@ -95,7 +109,8 @@ class PutArchiveConsumer(BaseArchiveConsumer):
             )
 
         if len(self.failedlist) > 0:
-            # Send message back to worker so catalog can be scrubbed of failed puts
+            # Send message back to worker so catalog can be scrubbed of tape records
+            # for failed puts
             self.send_pathlist(
                 self.failedlist,
                 rk_failed,
@@ -129,6 +144,18 @@ class PutArchiveConsumer(BaseArchiveConsumer):
         body_json: Dict[str, str],
     ):
         """Put shouldn't have a prepare check method"""
+        raise NotImplementedError
+
+    def setup(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
         raise NotImplementedError
 
 

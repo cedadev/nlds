@@ -2,6 +2,7 @@
 """
 permissions.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
 __copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
@@ -11,7 +12,6 @@ __contact__ = "neil.massey@stfc.ac.uk"
 import os
 from typing import List
 from os import stat_result
-
 
 ACCESSES = (
     os.R_OK,  # =4
@@ -52,11 +52,11 @@ def check_permissions(
         return bool((access) & mode)
     elif uid != stat_result.st_uid and stat_result.st_gid in gids:
         # Check group permissions, Multiplied by 8 to shift the access bit 1
-        # place to the left in octary (e.g. 040 for group read)
+        # place to the left in octal (e.g. 040 for group read)
         return bool((access * 8) & mode)
     elif uid == stat_result.st_uid:
         # Check user permissions. Multiplied by 64 to shift the access bit 2
-        # places to the left in octary (e.g. 400 for group read)
+        # places to the left in octal (e.g. 400 for group read)
         return bool((access * 64) & mode)
     else:
         # I don't think it's possible to end up here but return false just in

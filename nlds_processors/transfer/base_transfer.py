@@ -2,14 +2,14 @@
 """
 base_transfer.py
 """
+
 __author__ = "Jack Leland and Neil Massey"
 __date__ = "30 Nov 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
 from abc import ABC, abstractmethod
-import json
 import os
 from typing import List, NamedTuple, Dict, Tuple
 import pathlib as pth
@@ -31,13 +31,21 @@ class BaseTransferConsumer(StattingConsumer, ABC):
     _TENANCY = "tenancy"
     _REQUIRE_SECURE = "require_secure_fl"
     _PRINT_TRACEBACKS = "print_tracebacks_fl"
+    _CHUNK_SIZE = "chunk_size"
+    _PARALLEL_UPLOADS = "num_parallel_uploads"
     _FILELIST_MAX_LENGTH = "filelist_max_length"
+    _HTTP_TIMEOUT = "http_timeout"
+    _CHECKSUM_METHOD = "checksum_method"
     DEFAULT_CONSUMER_CONFIG = {
         _TENANCY: None,
         _REQUIRE_SECURE: True,
         _PRINT_TRACEBACKS: False,
         _FILELIST_MAX_LENGTH: 1000,
-        StattingConsumer._FILELIST_MAX_SIZE: 16 * 1000 * 1000,
+        _CHUNK_SIZE: 5 * (1024**2),  # Default to 5 MiB
+        _PARALLEL_UPLOADS: 1,
+        _HTTP_TIMEOUT: 24 * 60 * 60,  # Default to 24 hours
+        StattingConsumer._FILELIST_MAX_SIZE: 16 * 1024 * 1024,
+        _CHECKSUM_METHOD: "adler32",
     }
 
     def __init__(self, queue=DEFAULT_QUEUE_NAME):
@@ -48,6 +56,10 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self.print_tracebacks_fl = self.load_config_value(self._PRINT_TRACEBACKS)
         self.filelist_max_len = self.load_config_value(self._FILELIST_MAX_LENGTH)
         self.filelist_max_size = self.load_config_value(self._FILELIST_MAX_SIZE)
+        self.chunk_size = int(self.load_config_value(self._CHUNK_SIZE))
+        self.num_parallel_uploads = int(self.load_config_value(self._PARALLEL_UPLOADS))
+        self.http_timeout = int(self.load_config_value(self._HTTP_TIMEOUT))
+        self.checksum_method = self.load_config_value(self._CHECKSUM_METHOD)
         self.reset()
 
     def _callback_common(self, cm, method, properties, body, connection):
@@ -75,7 +87,6 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                 "Routing key inappropriate length, exiting callback.", RK.LOG_ERROR
             )
             return
-
         ###
         # Verify and load message contents
         try:
@@ -91,21 +102,13 @@ class BaseTransferConsumer(StattingConsumer, ABC):
             return
 
         try:
-            (self.access_key, self.secret_key, self.tenancy) = (
+            self.access_key, self.secret_key, self.tenancy = (
                 self.get_objectstore_config(self.body_json)
             )
         except TransferError:
-            self.log("Objectstore config unobtainable, exiting callback.", RK.LOG_ERROR)
-            return
-
-        # Set uid and gid from message contents
-        self.log("Setting uid and gids now.", RK.LOG_INFO)
-        try:
-            self.set_ids(self.body_json)
-        except (KeyError, ValueError):
-            # reset uid and gid for deletion process
-            msg = "Problem running set_ids in _callback_common, exiting"
-            self.log(msg, RK.LOG_ERROR)
+            self.log(
+                "Object Store config unobtainable, exiting callback.", RK.LOG_ERROR
+            )
             return
 
         # Append route info to message to track the route of the message
@@ -174,20 +177,37 @@ class BaseTransferConsumer(StattingConsumer, ABC):
                     state=new_state,
                 )
         elif self.rk_parts[2] == RK.START:
-            # Start transfer - this is implementation specific and handled by
-            # child classes
-            self.log(f"Starting object store transfer with {self.tenancy}", RK.LOG_INFO)
-            self.transfer(
-                self.transaction_id,
-                self.tenancy,
-                self.access_key,
-                self.secret_key,
-                self.filelist,
-                self.rk_parts[0],
-                self.body_json,
-            )
+            if self.rk_parts[1] == RK.TRANSFER_SETUP:
+                self.log(
+                    f"Starting object store setup with {self.tenancy}", RK.LOG_INFO
+                )
+                self.setup(
+                    self.transaction_id,
+                    self.tenancy,
+                    self.access_key,
+                    self.secret_key,
+                    self.filelist,
+                    self.rk_parts[0],
+                    self.body_json,
+                )
+            else:
+                # Start transfer - this is implementation specific and handled by
+                # child classes
+                self.log(
+                    f"Starting object store transfer with {self.tenancy}", RK.LOG_INFO
+                )
+                self.transfer(
+                    self.transaction_id,
+                    self.tenancy,
+                    self.access_key,
+                    self.secret_key,
+                    self.filelist,
+                    self.rk_parts[0],
+                    self.body_json,
+                )
         else:
             raise TransferError(f"Unknown routing key {self.rk_parts[2]}")
+        self.send_logging()
 
     def get_objectstore_config(self, body_dict) -> Tuple:
         try:
@@ -222,6 +242,22 @@ class BaseTransferConsumer(StattingConsumer, ABC):
         self, path: pth.Path, stat_result: NamedTuple = None, access: int = os.R_OK
     ) -> bool:
         return super().check_path_access(path, stat_result, access)
+
+    def check_path_exists(self, path: pth.Path) -> bool:
+        return super().check_path_exists(path)
+
+    @abstractmethod
+    def setup(
+        self,
+        transaction_id: str,
+        tenancy: str,
+        access_key: str,
+        secret_key: str,
+        filelist: List[PathDetails],
+        rk_origin: str,
+        body_json: Dict[str, str],
+    ):
+        raise NotImplementedError
 
     @abstractmethod
     def transfer(

@@ -4,7 +4,7 @@ bucket_mixin.py
 
 __author__ = "Neil Massey"
 __date__ = "27 Feb 2025"
-__copyright__ = "Copyright 2025 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -46,19 +46,18 @@ class BucketMixin:
 
         if bucket_name is None:
             raise BucketError(message="Transaction id is None")
-
         # Check that bucket exists, and create if not
         try:
             if not self.s3_client.bucket_exists(bucket_name):
                 self.s3_client.make_bucket(bucket_name)
                 self.log(
-                    f"Creating bucket ({bucket_name}) for this transaction",
+                    f"Creating bucket {bucket_name} for this transaction",
                     RK.LOG_INFO,
                 )
                 return True
             else:
                 self.log(
-                    f"Bucket ({bucket_name}) already exists",
+                    f"Bucket {bucket_name} already exists",
                     RK.LOG_INFO,
                 )
                 return False
@@ -173,7 +172,7 @@ class BucketMixin:
         return grp_details.gr_name
 
     # write the policy setting functions below
-    def _set_access_policies(self, bucket_name: str, group: str|int):
+    def _set_access_policies(self, bucket_name: str, group: str | int):
         """Set the access policies for a bucket.
         These are stored in the /etc/nlds-config file, in the
         `object_store_access_policy` section, under the `nlds_user` and `group` keys.

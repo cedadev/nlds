@@ -26,7 +26,6 @@ from sqlalchemy.sql import func
 from nlds_processors.catalog.catalog_models import Storage
 from nlds.details import PathType
 
-
 # revision identifiers, used by Alembic.
 revision = "991b6f8cf6be"
 down_revision = None

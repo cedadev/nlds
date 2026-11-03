@@ -2,7 +2,7 @@ from test_aggregations import MockFile
 from random import uniform
 import os.path
 from uuid import uuid4
-from nlds_processors.utils.aggregations import bin_files_1, bin_files_2, bin_files
+from nlds_processors.utils.aggregations import bin_files
 from time import perf_counter
 
 
@@ -100,7 +100,7 @@ def run_test_small_and_large_files():
     target_bin_size = 5000000000  # (5 GB) - this is from the NLDS config settings
     target_bin_count = 1000
     st = perf_counter()
-    bins = bin_files_2(
+    bins = bin_files(
         flist, target_bin_size=target_bin_size, target_bin_count=target_bin_count
     )
     print("run_test_small_and_large_files")

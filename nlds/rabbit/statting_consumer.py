@@ -2,19 +2,20 @@
 """
 statting_consumer.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
-from typing import Dict, Union, List, NamedTuple, Any
+from typing import Dict, List, NamedTuple, Any
 import grp
 import pwd
 import pathlib as pth
 import os
-from uuid import uuid4
-from copy import copy
+
+from retry import retry
 
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 import nlds.rabbit.message_keys as MSG
@@ -46,8 +47,8 @@ class StattingConsumer(RMQC):
 
     # The corresponding default values
     DEFAULT_CONSUMER_CONFIG = {
-        _FILELIST_MAX_SIZE: 16 * 1000 * 1000,
-        _FILELIST_MAX_LENGTH: 1000,
+        _FILELIST_MAX_SIZE: 16 * 1024 * 1024,
+        _FILELIST_MAX_LENGTH: 1024,
         _CHECK_FILESIZE: True,
     }
 
@@ -106,8 +107,16 @@ class StattingConsumer(RMQC):
         # Select correct pathlist and append the given PathDetails object
         pathlist.append(path_details)
 
+        # The default message cap is the length of the pathlist. This applies
+        # to failed or problem lists by default
+        if len(pathlist) >= self.filelist_max_len:
+            # Send directly to exchange and reset filelist
+            self.send_pathlist(pathlist, routing_key, body_json, state=state)
+            pathlist.clear()
+            self.completelist_size = 0
+
         # If filesize has been passed then use total list size as message cap
-        if path_details.size:
+        elif path_details.size:
             self.completelist_size += path_details.size
 
             # Send directly to exchange and reset filelist
@@ -116,28 +125,7 @@ class StattingConsumer(RMQC):
                 pathlist.clear()
                 self.completelist_size = 0
 
-        # The default message cap is the length of the pathlist. This applies
-        # to failed or problem lists by default
-        elif len(pathlist) >= self.filelist_max_len:
-            # Send directly to exchange and reset filelist
-            self.send_pathlist(pathlist, routing_key, body_json, state=state)
-            pathlist.clear()
-            self.completelist_size = 0
-
-    def _fail_all(
-        self,
-        filelist: List[PathDetails],
-        rk_parts: List[str],
-        body_json: Dict[str, Any],
-        msg: str,
-    ):
-        # fail all the files in the filelist
-        rk_transfer_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
-        for file in filelist:
-            file.failure_reason = msg
-
-        self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
-
+    @retry((KeyError, ValueError), tries=5, delay=2, backoff=2, max_delay=60)
     def set_ids(
         self,
         body_json: Dict[str, str],
@@ -147,7 +135,11 @@ class StattingConsumer(RMQC):
         on each file in a filelist can be checked.
 
         """
-        # Attempt to get uid from, given username, in password db
+        # Use the retry mechanism to loop while trying to set the uids and gids.
+        # This is to get around the pods in the Kubernetes Cluster taking a while to
+        # read the LDAP configurations.
+
+        # Attempt to get uid from, given username, in password db.
         try:
             username = body_json[MSG.DETAILS][MSG.USER]
             pwddata = pwd.getpwnam(username)
@@ -158,10 +150,10 @@ class StattingConsumer(RMQC):
             raise e
 
         # Get list of groups containing the given username
-        gids = {g.gr_gid for g in grp.getgrall() if username in g.gr_mem}
-        # Add the gid from the pwd call.
-        gids.add(pwd_gid)
-        gids = list(gids)
+        gids = [g.gr_gid for g in grp.getgrall() if username in g.gr_mem]
+        # Add the gid from the pwd call.  This is the default gid, so we put it at the
+        # beginning
+        gids.insert(0, pwd_gid)
 
         # Check for list validity
         if len(gids) == 0:
@@ -203,3 +195,17 @@ class StattingConsumer(RMQC):
         except PermissionError:
             check_path = False
         return check_path
+
+    def check_path_exists(self, path: pth.Path) -> bool:
+        if self.uid is None or self.gids is None or not isinstance(self.gids, list):
+            raise ValueError("uid and gid not set properly.")
+
+        if not isinstance(path, pth.Path):
+            raise ValueError("No valid path object was given.")
+
+        try:
+            return path.exists()
+        except PermissionError:
+            # return True as the path exists but the check_path_access should follow
+            # this call and return False
+            return True

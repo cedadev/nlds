@@ -5,7 +5,7 @@ state.py
 
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "08 Apr 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -58,11 +58,6 @@ class State(Enum):
     def get_final_states(cls):
         final_states = (
             # Make final states explicit
-            # cls.TRANSFER_GETTING,
-            # cls.CATALOG_UPDATING,
-            # cls.CATALOG_ARCHIVE_UPDATING,
-            # cls.CATALOG_DELETING,
-            # cls.CATALOG_REMOVING,
             cls.FAILED,
             cls.COMPLETE,
         )

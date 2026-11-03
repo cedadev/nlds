@@ -2,9 +2,10 @@
 """
 monitor_worker.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "15 Sep 2022"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -25,6 +26,7 @@ Requires these settings in the /etc/nlds/server_config file:
 """
 
 from typing import Dict
+import sys
 
 from retry.api import retry_call
 
@@ -36,11 +38,40 @@ from pika.frame import Header
 from nlds.rabbit.consumer import RabbitMQConsumer as RMQC
 from nlds.rabbit.consumer import State
 from nlds_processors.monitor.monitor import Monitor, MonitorError
-from nlds_processors.monitor.monitor_models import orm_to_dict
+from nlds_processors.monitor.monitor_models import (
+    orm_to_dict,
+    TransactionRecord,
+    SubRecord,
+)
 from nlds_processors.db_mixin import DBError
 
 import nlds.rabbit.routing_keys as RK
 import nlds.rabbit.message_keys as MSG
+
+
+def _trec_to_dict(tr: TransactionRecord):
+    t_rec = {
+        MSG.ID: tr.id,
+        MSG.TRANSACT_ID: tr.transaction_id,
+        MSG.USER: tr.user,
+        MSG.GROUP: tr.group,
+        MSG.JOB_LABEL: tr.job_label,
+        MSG.API_ACTION: tr.api_action,
+        "creation_time": tr.creation_time.isoformat(),
+        "warnings": [w.warning for w in tr.warnings],
+        MSG.SUB_RECORD_LIST: [],
+    }
+    return t_rec
+
+
+def _srec_to_dict(sr: SubRecord):
+    s_rec = {
+        MSG.ID: sr.id,
+        MSG.SUB_ID: sr.sub_id,
+        MSG.STATE: sr.state.name,
+        "last_updated": sr.last_updated.isoformat(),
+    }
+    return s_rec
 
 
 class MonitorConsumer(RMQC):
@@ -193,7 +224,7 @@ class MonitorConsumer(RMQC):
         try:
             warnings = body[MSG.DETAILS][MSG.WARNING]
         except KeyError:
-            self.log("No warning found in message, continuing without", RK.LOG_DEBUG)
+            self.log("No warning found in message, continuing without. ", RK.LOG_DEBUG)
             warnings = []
         return warnings
 
@@ -271,6 +302,14 @@ class MonitorConsumer(RMQC):
             limit = None
         return limit
 
+    def _parse_offset(self, body: dict) -> str:
+        # get an integer offset from the metadata section of the message
+        try:
+            offset = body[MSG.META][MSG.OFFSET]
+        except KeyError:
+            offset = None
+        return offset
+
     def _parse_descending(self, body: dict) -> str:
         # get whether to sort ascending or descending
         try:
@@ -344,7 +383,6 @@ class MonitorConsumer(RMQC):
                 srec = self.monitor.create_sub_record(trec, sub_id, state)
             except MonitorError as e:
                 self.log(e.message, RK.LOG_ERROR)
-
         # consistency check
         if srec.transaction_record_id != trec.id:
             msg = (
@@ -380,18 +418,21 @@ class MonitorConsumer(RMQC):
             RK.LOG_INFO,
         )
 
-        # start the database transactions
-        self.monitor.start_session()
         # create the transaction record
         try:
             trec = self.monitor.create_transaction_record(
-                user, group, transaction_id, job_label, api_action
+                user=user,
+                group=group,
+                transaction_id=transaction_id,
+                job_label=job_label,
+                api_action=api_action,
             )
+
+            # commit early as it is the top of the tree
+            self.monitor.commit()
         except MonitorError as e:
             self.log(e.message, RK.LOG_ERROR)
         # save and end the sessions
-        self.monitor.save()
-        self.monitor.end_session()
         self.log(
             f"... Successfully created monitoring record",
             RK.LOG_INFO,
@@ -425,7 +466,6 @@ class MonitorConsumer(RMQC):
             f"last process {route_parts[-1]}.",
             RK.LOG_INFO,
         )
-
         # get the filelist
         filelist = self.parse_filelist(body)
         # start the database transactions
@@ -451,6 +491,11 @@ class MonitorConsumer(RMQC):
                 transaction_id=transaction_id,
                 with_for_update=True,
             )
+            if not trec:
+                raise MonitorError("No transaction")
+            # reassign the job label if job_label is in the message
+            if job_label:
+                trec.job_label = job_label
         except MonitorError as e:
             # fine to pass here as if transaction_record is not returned then it
             # will be created in the next step
@@ -470,24 +515,20 @@ class MonitorConsumer(RMQC):
             )
         except MonitorError as e:
             # Function above handled message logging, here we just return
-            # don't ack - try again
             return False
-
+        # flush to update the srec id
+        self.monitor.session.flush()
         # Update subrecord to match new monitoring data
         try:
             self.monitor.update_sub_record(srec, state)
         except MonitorError as e:
-            # If the state update is invalid then rollback session and exit
-            # callback
             self.log(e.message, RK.LOG_ERROR)
-            # session.rollback() # rollback needed?
-            # don't ack - try again
             return False
 
         # Create failed_files if necessary
         if state in State.get_failed_states():
             self.log(
-                "Creating FailedFiles records as transaction appears to have failed",
+                "Creating FailedFiles records as the Transaction has failed",
                 RK.LOG_INFO,
             )
             try:
@@ -514,11 +555,10 @@ class MonitorConsumer(RMQC):
                 self.log(e.message, RK.LOG_ERROR)
                 return False
 
-        # Commit all transactions when we're sure everything is as it should be.
-        self.monitor.save()
-        self.monitor.end_session()
+        self.monitor.commit()
+
         self.log(
-            f"... Successfully commited monitoring update",
+            f"... Successfully committed monitoring update",
             RK.LOG_INFO,
         )
         return True
@@ -531,7 +571,6 @@ class MonitorConsumer(RMQC):
         scale out database reads separately from database writes - which at the
         moment need to be done one at a time to avoid clashes.
         """
-
         # get the required details from the message
         try:
             transaction_id = self._parse_transaction_id(body, mandatory=False)
@@ -548,9 +587,19 @@ class MonitorConsumer(RMQC):
             idd = self._parse_idd(body)
             regex = self._parse_regex(body)
             limit = self._parse_limit(body)
+            offset = self._parse_offset(body)
             descending = self._parse_descending(body)
-        except MonitorError:
+        except MonitorError as me:
             # Functions above handled message logging, here we just return
+            # a message to the RPC caller
+            body[MSG.DETAILS][MSG.FAILURE] = me.message
+            body[MSG.DATA][MSG.RECORD_LIST] = []
+            self.publish_message(
+                properties.reply_to,
+                msg_dict=body,
+                exchange={"name": ""},
+                correlation_id=properties.correlation_id,
+            )
             return
 
         # start a SQL alchemy session
@@ -565,6 +614,15 @@ class MonitorConsumer(RMQC):
         else:
             query_user = user
             query_group = group
+            # exclude the 'archive-put' api action for normal users as they don't
+            # really need to know what's going on with the tape archive and it fills
+            # their stat return with TMI
+            list_archive_put = api_action and "archive-put" in api_action
+            if not list_archive_put:
+                if exclude_api_action:
+                    exclude_api_action.append("archive-put")
+                else:
+                    exclude_api_action = ["archive-put"]
 
         try:
             trecs = self.monitor.get_transaction_records(
@@ -577,7 +635,9 @@ class MonitorConsumer(RMQC):
                 exclude_api_action=exclude_api_action,
                 job_label=job_label,
                 regex=regex,
+                state=state,
                 limit=limit,
+                offset=offset,
                 descending=descending,
             )
         except MonitorError as e:
@@ -601,49 +661,117 @@ class MonitorConsumer(RMQC):
             # Note that state is used to filter on the final state, not the state of
             # each sub record - so return the sub records no matter what state they
             # are in
-            srecs = self.monitor.get_sub_records(
-                transaction_record=tr,
-                sub_id=sub_id,
-                user=query_user,
-                group=query_group,
-                state=None,
-                api_action=api_action,
-            )
-
             if tr.id in trecs_dict:
                 t_rec = trecs_dict[tr.id]
             else:
-                t_rec = {
-                    "id": tr.id,
-                    "transaction_id": tr.transaction_id,
-                    "user": tr.user,
-                    "group": tr.group,
-                    "job_label": tr.job_label,
-                    "api_action": tr.api_action,
-                    "creation_time": tr.creation_time.isoformat(),
-                    "warnings": tr.get_warnings(),
-                    "sub_records": [],
-                }
+                t_rec = _trec_to_dict(tr)
                 trecs_dict[tr.id] = t_rec
 
-            for sr in srecs:
-                s_rec = {
-                    "id": sr.id,
-                    "sub_id": sr.sub_id,
-                    "state": sr.state.name,
-                    "last_updated": sr.last_updated.isoformat(),
-                    "failed_files": [orm_to_dict(ff) for ff in sr.failed_files],
-                }
-                t_rec["sub_records"].append(s_rec)
+            for sr in tr.sub_records:
+                s_rec = _srec_to_dict(sr)
+                # get failed files
+                if idd or job_label or transaction_id:
+                    s_rec["failed_files"] = [orm_to_dict(ff) for ff in sr.failed_files]
 
-        self.monitor.end_session()
+                t_rec[MSG.SUB_RECORD_LIST].append(s_rec)
 
         ret_list = []
         for id_ in trecs_dict:
-            if len(trecs_dict[id_]["sub_records"]) > 0:
-                ret_list.append(trecs_dict[id_])
+            # NRM - return all trecs, even if they are empty - the client will interpret
+            # them correctly
+            ret_list.append(trecs_dict[id_])
+        body[MSG.DATA][MSG.RECORD_LIST] = ret_list
+        self.publish_message(
+            properties.reply_to,
+            msg_dict=body,
+            exchange={"name": ""},
+            correlation_id=properties.correlation_id,
+        )
+        self.log(
+            f"Successfully returned query via RPC message to api-server", RK.LOG_INFO
+        )
+
+    def _monitor_cancel(self, body: Dict[str, str], properties: Header) -> None:
+        """
+        Cancel a monitoring record, if the state is still at QUEUED
+        """
+        try:
+            user = self._parse_user(body)
+            group = self._parse_group(body)
+            transaction_id = self._parse_transaction_id(body, mandatory=False)
+            idd = self._parse_idd(body)
+            job_label = self._parse_job_label(body)
+            if not (transaction_id or idd or job_label):
+                raise MonitorError(
+                    "No method of finding the TransactionRecord has been supplied.  "
+                    "Use id, transaction_id, or job_label."
+                )
+        except MonitorError as me:
+            # there is an error - set transaction_record to None s
+            body[MSG.DETAILS][MSG.FAILURE] = me.message
+            trec = None
+        else:
+            # get the transaction record
+            try:
+                trec = self.monitor.get_transaction_record(
+                    user=user,
+                    group=group,
+                    idd=idd,
+                    job_label=job_label,
+                    transaction_id=transaction_id,
+                )
+            except MonitorError as me:
+                # transaction record not found
+                body[MSG.DETAILS][MSG.FAILURE] = me.message
+                trec = None
+
+        # check the transaction record is still in the QUEUED state
+        # (QUEUED is called SEARCHING in the server code for some reason!)
+        ret_list = []
+        if trec:
+            c_state = trec.get_state()
+            # state can be NONE or State.SEARCHING
+            if c_state and c_state != State.SEARCHING:
+                body[MSG.DETAILS][MSG.FAILURE] = (
+                    "TransactionRecord is not in the QUEUED state. It is too late to "
+                    "cancel it."
+                )
+            else:
+                if len(trec.sub_records) != 0:
+                    body[MSG.DETAILS][
+                        MSG.FAILURE
+                    ] = "TransactionRecord has SubRecords. This should not occur."
+                else:
+                    # load the return message with the details needed by the catalog
+                    # cancel command - the transaction id, primarily, and the api method
+                    body[MSG.DETAILS][MSG.TRANSACT_ID] = trec.transaction_id
+                    body[MSG.DETAILS][MSG.JOB_LABEL] = trec.job_label
+                    body[MSG.DETAILS][MSG.API_ACTION] = trec.api_action
+                    try:
+                        t_rec_ret = _trec_to_dict(trec)
+                        for sr in trec.sub_records:
+                            s_rec = _srec_to_dict(sr)
+                            # get failed files
+                            if idd or job_label or transaction_id:
+                                s_rec["failed_files"] = [
+                                    orm_to_dict(ff) for ff in sr.failed_files
+                                ]
+                            t_rec_ret[MSG.SUB_RECORD_LIST].append(s_rec)
+                        ret_list.append(t_rec_ret)
+                        # cancel the transaction
+                        self.monitor.delete_transaction_record(
+                            user=user,
+                            group=group,
+                            idd=trec.id,
+                            job_label=trec.job_label,
+                            transaction_id=trec.transaction_id,
+                        )
+                    except MonitorError as me:
+                        # Something went wrong - what?
+                        body[MSG.DETAILS][MSG.FAILURE] = me.message
 
         body[MSG.DATA][MSG.RECORD_LIST] = ret_list
+        # publish the RPC return message - this could have success or failure in it
         self.publish_message(
             properties.reply_to,
             msg_dict=body,
@@ -662,7 +790,7 @@ class MonitorConsumer(RMQC):
         body: bytes,
         connection: Connection,
     ) -> None:
-        # Connect to database if not connected yet
+
         # Convert body from bytes to json for ease of manipulation
         body = self._deserialize(body)
 
@@ -684,11 +812,13 @@ class MonitorConsumer(RMQC):
             )
             return
 
-        # check whether this is a GET or a PUT
+        # RPC actions go first
         if api_method == RK.STAT:
             self.log("Starting stat from monitoring db.", RK.LOG_INFO)
             self._monitor_get(body, properties)
-
+        elif api_method == RK.CANCEL:
+            self._monitor_cancel(body, properties)
+        # check whether this is a GET or a PUT or a ARCHIVE action
         elif api_method in (
             RK.PUT,
             RK.PUTLIST,
@@ -706,14 +836,19 @@ class MonitorConsumer(RMQC):
                 )
                 return
             # Check whether this is init or put (put is also update)
-            if rk_parts[2] == RK.INITIATE:
-                self._monitor_init(body)
-            elif rk_parts[2] == RK.START:
-                self._monitor_put(body)
+            try:
+                if rk_parts[2] == RK.INITIATE:
+                    self._monitor_init(body)
+                elif rk_parts[2] == RK.START:
+                    self._monitor_put(body)
+            except Exception as e:
+                self.monitor.session.rollback()
+                raise Exception(e)
+
         else:
             self.log("API method key did not specify a valid task.", RK.LOG_ERROR)
 
-        self.log("Callback complete!", RK.LOG_DEBUG)
+        self.send_logging()
 
     def attach_database(self, create_db_fl: bool = True):
         """Attach the Monitor to the consumer"""
@@ -728,6 +863,16 @@ class MonitorConsumer(RMQC):
                 self.log(f"db_connect string is {db_connect}", RK.LOG_DEBUG)
         except DBError as e:
             self.log(e.message, RK.LOG_CRITICAL)
+        # start the session - just have one
+        self.monitor.start_session()
+        self.send_logging()
+
+    def detach_database(self):
+        # rollback any pending
+        self.monitor.session.rollback()
+        # end the session
+        self.monitor.end_session()
+        self.send_logging()
 
     def get_engine(self):
         # Method for making the db_engine available to alembic
@@ -744,7 +889,11 @@ class MonitorConsumer(RMQC):
 
 
 def main():
-    consumer = MonitorConsumer()
+    if len(sys.argv) > 1:
+        queue_name = sys.argv[1]
+    else:
+        queue_name = MonitorConsumer.DEFAULT_QUEUE_NAME
+    consumer = MonitorConsumer(queue=queue_name)
     # connect to message queue early so that we can send logging messages about
     # connecting to the database
     consumer.get_connection()
@@ -752,6 +901,8 @@ def main():
     consumer.attach_database()
     # run the loop
     consumer.run()
+    # detach DB
+    consumer.detach_database()
 
 
 if __name__ == "__main__":

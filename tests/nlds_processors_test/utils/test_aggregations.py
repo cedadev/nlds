@@ -2,9 +2,10 @@
 """
 test_aggregations.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "07 Dec 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -121,7 +122,7 @@ class TestAggregationsLargeFiles:
         compare_total_length(sample_large_files, result)
 
     def test_aggregate_files_custom_target_size_10MB(self, sample_large_files):
-        target_size = 10 * (1000**2)  # 10MB
+        target_size = 10 * (1024**2)  # 10MB
         result = bin_files(sample_large_files, target_bin_size=target_size)
         assert len(result) == 5
         assert len(result[0]) == 1
@@ -132,7 +133,7 @@ class TestAggregationsLargeFiles:
         compare_total_length(sample_large_files, result)
 
     def test_aggregate_files_custom_target_size_10GB(self, sample_large_files):
-        target_size = 10 * (1000**3)  # 10GB
+        target_size = 10 * (1024**3)  # 10GB
         result = bin_files(sample_large_files, target_bin_size=target_size)
 
         # This is unchanged from the above as it's only controlled by the number

@@ -82,9 +82,7 @@ Running the Server
 1.  The NLDS API requires something to serve the API, usually uvicorn in a local 
     development environment:
 
-    ```
-    uvicorn nlds.main:nlds --reload
-    ```
+    ``uvicorn nlds.main:nlds --reload``
 
     This will create a local NLDS API server at `<http://127.0.0.1:8000/>`_. 
     FastAPI displays automatically generated documentation for the REST-API, to 

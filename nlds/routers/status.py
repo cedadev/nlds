@@ -2,9 +2,10 @@
 """
 status.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -34,10 +35,12 @@ router = APIRouter()
 class StatusResponse(BaseModel):
     holdings: List[Dict]
 
+
 class StatBody(BaseModel):
     api_action: Optional[List[str]] = None
     exclude_api_action: Optional[List[str]] = None
     state: Optional[List[str]] = None
+
 
 ############################ GET METHOD ############################
 @router.get(
@@ -68,9 +71,9 @@ async def get(
 ):
     # create the message dictionary
     search_api_action = stat_options.api_action
-    api_action = f"{RK.STAT}"   # this is overwriting the api_action we want to
-                                # filter on, so we have saved it above - we will
-                                # put it in the META section of the message
+    api_action = f"{RK.STAT}"  # this is overwriting the api_action we want to
+    # filter on, so we have saved it above - we will
+    # put it in the META section of the message
 
     # Validate state at this point.
     states = []
@@ -94,7 +97,8 @@ async def get(
                     type="Incomplete request.",
                 )
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=response_error.json()
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=response_error.json(),
                 )
             states.append(state)
 
@@ -158,7 +162,7 @@ async def get(
         msg_dict[MSG.META] = meta_dict
 
     # call RPC function
-    routing_key = "monitor_q"
+    routing_key = RK.MONITOR_Q_USER
     response = await rpc_publisher.call(msg_dict=msg_dict, routing_key=routing_key)
     # Check if response is valid or whether the request timed out
     if response is not None:
@@ -176,11 +180,10 @@ async def get(
         transaction_response = None
         # Only continue if the response actually had any transactions in it
         if transaction_records is not None and len(transaction_records) > 0:
-            routing_key = "catalog_q"
+            routing_key = RK.CATALOG_Q_USER
             transaction_response = await rpc_publisher.call(
                 msg_dict=response_dict, routing_key=routing_key
             )
-
         if transaction_response is not None:
             response = transaction_response
 

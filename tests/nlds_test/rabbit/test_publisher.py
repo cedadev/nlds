@@ -2,9 +2,10 @@
 """
 test_publisher.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -35,7 +36,7 @@ def mock_load_config(template_config):
 def default_publisher(monkeypatch, template_config):
     # Ensure template is loaded instead of .server_config
     monkeypatch.setattr(
-        publ, "load_config", functools.partial(mock_load_config, template_config)
+        CFG, "load_config", functools.partial(mock_load_config, template_config)
     )
 
     # Check that the publisher with callback can be created
@@ -69,10 +70,17 @@ def message_assertions(message):
 def test_constructor(default_publisher):
     # Check that the publisher with callback can be created
     assert (
+<<<<<<< HEAD
         default_publisher.whole_config["authentication"]["jasmin_authenticator"][
             "user_profile_url"
         ]
         == "{{ user_profile_url }}"
+=======
+        default_publisher.whole_config["authentication"]["fake_authenticator"][
+            "user_profile_url"
+        ]
+        == "fake_user_profile_url"
+>>>>>>> main
     )
 
 

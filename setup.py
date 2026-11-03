@@ -2,9 +2,10 @@
 """
 setup.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -27,6 +28,7 @@ setup(
         "anyio",
         "asgiref",
         "certifi",
+        "cffi",
         "charset-normalizer",
         "click",
         "cryptography",
@@ -41,6 +43,7 @@ setup(
         "pika",
         "py",
         "pydantic",
+        "psycopg",
         "requests",
         "retry",
         "sniffio",

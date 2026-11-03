@@ -2,9 +2,10 @@
 """
 test_consumer.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -41,9 +42,7 @@ def default_consumer(monkeypatch, template_config):
     return MockConsumer()
 
 
-@pytest.mark.parametrize(
-    "queue_param", ["catalog_q", "index_q", "transfer_get_q"]
-)
+@pytest.mark.parametrize("queue_param", ["catalog_q", "index_q", "transfer_get_q"])
 def test_constructor(monkeypatch, template_config, queue_param):
     # Ensure template is loaded instead of
     monkeypatch.setattr(

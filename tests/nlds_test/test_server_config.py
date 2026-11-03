@@ -2,9 +2,10 @@
 """
 test_server_config.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -29,9 +30,7 @@ from nlds.server_config import (
 
 from nlds_utils.generate_server_config import generate_server_config
 
-TEMPLATE_CONFIG_PATH = os.path.join(
-    os.path.dirname(__file__), "server_config.json"
-)
+TEMPLATE_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "server_config.json")
 
 
 def test_load_config():

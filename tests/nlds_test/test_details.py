@@ -2,9 +2,10 @@
 """
 test_details.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -24,7 +25,7 @@ def test_path_location():
         url_netloc="cedadev-o",
         root="neils-bucket",
         path="file",
-        access_time=datetime.now().timestamp()
+        access_time=datetime.now().timestamp(),
     )
 
     loc_dict = location.to_dict()
@@ -115,7 +116,7 @@ def test_serialisation():
         url_netloc="cedadev-o",
         root="neils-bucket",
         path="file",
-        access_time=datetime.now().timestamp()
+        access_time=datetime.now().timestamp(),
     )
 
     # add the location
@@ -142,11 +143,12 @@ def test_object_name():
         url_netloc="cedadev-o",
         root="neils-bucket",
         path="file",
-        access_time=datetime.now().timestamp()
+        access_time=datetime.now().timestamp(),
     )
     pd.locations.add(location)
-    os_loc = pd.bucket_name+":"+pd.object_name
-    assert(os_loc == "nlds.neils-bucket:file")
+    os_loc = pd.bucket_name + ":" + pd.object_name
+    assert os_loc == "nlds.neils-bucket:file"
+
 
 if __name__ == "__main__":
     test_path_details()

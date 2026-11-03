@@ -2,9 +2,10 @@
 """
 monitor_models.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "19 Jun 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -15,7 +16,6 @@ from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 
 from nlds.rabbit.consumer import State
-
 
 """Declarative base class, containing the Metadata object"""
 MonitorBase = declarative_base()
@@ -102,10 +102,11 @@ class SubRecord(MonitorBase):
         'final' state, i.e. is no longer going to change and the transaction can
         therefore be marked as COMPLETE.
 
-        Checks whether all states have gotten to the final stage of a workflow
-        (CATALOG_PUT or TRANSFER_GET) OR have failed. This should cover all bases.
+        Checks whether all states have got to the final stage of a workflow
+        (COMPLETE OR FAILED) This is now explicit, a COMPLETE or FAILED message has to
+        be sent to the monitor by the process.
         """
-        return (self.state in State.get_final_states()) or self.state == State.FAILED
+        return self.state in State.get_final_states()
 
 
 class FailedFile(MonitorBase):

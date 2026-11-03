@@ -5,7 +5,7 @@ server_config/ directory"""
 
 __author__ = "Neil Massey"
 __date__ = "27 Nov 2024"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 

@@ -2,9 +2,10 @@
 """
 consumer.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "07 Dec 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -81,7 +82,7 @@ def deserialize(body: str) -> dict:
             decompressed_string = zlib.decompress(base64.b64decode(byte_string))
             body_dict[MSG.DATA] = json.loads(decompressed_string)
             logger.debug(
-                f"Decompressing message, compressed size {len(byte_string)}, "
+                f"Decompressed message, compressed size {len(byte_string)}, "
                 f" actual size {len(decompressed_string)}"
             )
         # specify that the message is now decompressed, in case it gets passed through
@@ -97,7 +98,6 @@ class RabbitMQConsumer(ABC, RMQP):
     DEFAULT_REROUTING_INFO = "->"
 
     DEFAULT_CONSUMER_CONFIG: Dict[str, Any] = dict()
-
     # The state associated with finishing the consumer, must be set but can be
     # overridden
     DEFAULT_STATE = State.ROUTING
@@ -257,20 +257,17 @@ class RabbitMQConsumer(ABC, RMQP):
         return filelist
 
     def dedup_filelist(self, filelist: List[PathDetails]) -> List[PathDetails]:
-        """De-duplicate filelist"""
-        new_filelist = []
-        pathlist = []
-        for pd in filelist:
-            if not pd.original_path in pathlist:
-                new_filelist.append(pd)
-                pathlist.append(pd.original_path)
-
+        """De-duplicate filelist - just use sets as they are way quicker
+        Needs __eq__ method defined for PathDetails"""
+        new_filelist = list(set(filelist))
         return new_filelist
 
-    def create_sub_id(self, filelist: List[PathDetails]) -> List[PathDetails]:
+    def create_sub_id(self, filelist: List[PathDetails]) -> str:
         """Sub id is now created by hashing the paths from the filelist"""
         if filelist != []:
             filenames = [f.original_path for f in filelist]
+            # sort the filenames to ensure hashes match!
+            filenames.sort()
             filelist_hash = md5("".join(filenames).encode()).hexdigest()
             sub_id = UUID(filelist_hash)
         else:
@@ -299,8 +296,6 @@ class RabbitMQConsumer(ABC, RMQP):
         # monitoring routing
         monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
         # shouldn't send empty pathlist
-        if len(pathlist) == 0:
-            raise MessageError("Pathlist is empty")
         # If necessary values not set at this point then use default values
         if state is None:
             state = self.DEFAULT_STATE
@@ -309,12 +304,14 @@ class RabbitMQConsumer(ABC, RMQP):
         c_sub_id = body_json[MSG.DETAILS][MSG.SUB_ID]
         sub_id = self.create_sub_id(pathlist)
         if sub_id != c_sub_id:
+
             self.log(
-                f"Changing sub id from {c_sub_id} to {sub_id} with pathlist {pathlist}",
+                f"Changing sub id from {c_sub_id} to {sub_id} with pathlist: "
+                f"{', '.join([p.original_path for p in pathlist])}",
                 RK.LOG_DEBUG,
             )
             # send a splitting message for the old sub id, as it has been split into
-            # sub messagews
+            # sub messages
             body_json[MSG.DETAILS][MSG.STATE] = state.SPLIT.value
             self.publish_message(monitoring_rk, body_json, delay=delay)
             # reassign the sub_id
@@ -330,16 +327,35 @@ class RabbitMQConsumer(ABC, RMQP):
         if warning and len(warning) > 0:
             body_json[MSG.DETAILS][MSG.WARNING] = warning
 
+        if len(pathlist) == 0:
+            warning_msg = "No files in pathlist"
+            if (
+                MSG.WARNING in body_json[MSG.DETAILS]
+                and len(body_json[MSG.DETAILS][MSG.WARNING]) > 0
+            ):
+                body_json[MSG.DETAILS][MSG.WARNING].append(warning_msg)
+            else:
+                body_json[MSG.DETAILS][MSG.WARNING] = [warning_msg]
+
         # added the delay back in for the PREPARE method, but now works differently
         self.publish_message(monitoring_rk, body_json, delay=delay)
 
     def send_complete(
         self,
-        routing_key: str,
+        rk_parts: List[str],
         body_json: Dict[str, Any],
     ):
         body_json[MSG.DETAILS][MSG.STATE] = State.COMPLETE
-        monitoring_rk = ".".join([routing_key.split(".")[0], RK.MONITOR_PUT, RK.START])
+        monitoring_rk = ".".join([rk_parts[0], RK.MONITOR_PUT, RK.START])
+        self.publish_message(monitoring_rk, body_json)
+
+    def send_failed(
+        self,
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+    ):
+        body_json[MSG.DETAILS][MSG.STATE] = State.FAILED
+        monitoring_rk = ".".join([rk_parts[0], RK.MONITOR_PUT, RK.START])
         self.publish_message(monitoring_rk, body_json)
 
     def setup_logging(
@@ -385,7 +401,6 @@ class RabbitMQConsumer(ABC, RMQP):
         # by the consumer-specific logging config
         if not enable:
             return
-
         return super().setup_logging(
             enable=enable,
             log_level=log_level,
@@ -396,6 +411,20 @@ class RabbitMQConsumer(ABC, RMQP):
             log_max_bytes=log_max_bytes,
             log_backup_count=log_backup_count,
         )
+
+    def _fail_all(
+        self,
+        filelist: List[PathDetails],
+        rk_parts: List[str],
+        body_json: Dict[str, Any],
+        msg: str,
+    ):
+        # fail all the files in the filelist
+        rk_transfer_failed = ".".join([rk_parts[0], rk_parts[1], RK.FAILED])
+        for file in filelist:
+            file.failure_reason = msg
+
+        self.send_pathlist(filelist, rk_transfer_failed, body_json, state=State.FAILED)
 
     #######
     # Callback wrappers
@@ -512,25 +541,26 @@ class RabbitMQConsumer(ABC, RMQP):
         This should be performed on all consumers and should be left untouched
         in child implementations.
         """
-        ack_fl = None
-        # Begin the
         self.keepalive.start_polling()
 
         # Wrap callback with a try-except catching a selection of common
         # errors which can be caught without stopping consumption.
         # NRM - this has changed to stop on all exceptions!
+        self.setup_signal_handling()
         try:
-            ack_fl = self.callback(ch, method, properties, body, connection)
+            self.callback(ch, method, properties, body, connection)
         except Exception as e:
-            # this is very unsatisfactory - it's basically crash and burn!
-            raise Exception(e)
-        finally:
-            # Only ack message if the message has not been flagged for nacking
-            # in the callback with a `return False`
-            if ack_fl is False:
-                self.nack_message(ch, method.delivery_tag, connection)
-            else:
-                self.acknowledge_message(ch, method.delivery_tag, connection)
+            # nack the message so it is sent again
+            self.nack_message(ch, method.delivery_tag, connection)
+            raise Exception("Unhandled exception " + str(e))
+        else:
+            # NRM - changed back to acknowledge the message after processing
+            self.acknowledge_message(ch, method.delivery_tag, connection)
+            self.log(
+                f"Callback complete.  Acknowledged message with routing key: "
+                f"{method.routing_key} ",
+                RK.LOG_INFO,
+            )
 
         # Clear the consuming event so the keepalive stops polling the connection
         self.keepalive.stop_polling()
@@ -610,6 +640,12 @@ class RabbitMQConsumer(ABC, RMQP):
     def exit(self, *args):
         raise SigTermError
 
+    def setup_signal_handling(self):
+        # set up SigTerm handler
+        signal.signal(signal.SIGTERM, self.exit)
+        # set up SigHup handler
+        signal.signal(signal.SIGHUP, self.exit)
+
     def run(self):
         """
         Method to run when thread is started. Creates an AMQP connection
@@ -620,45 +656,39 @@ class RabbitMQConsumer(ABC, RMQP):
 
         :return:
         """
-
-        # set up SigTerm handler
-        signal.signal(signal.SIGTERM, self.exit)
-        # set up SigHup handler
-        signal.signal(signal.SIGHUP, self.exit)
+        self.setup_signal_handling()
 
         while self.loop:
-            self.get_connection()
-
             try:
                 startup_message = f"{self.DEFAULT_QUEUE_NAME} - READY"
                 logger.info(startup_message)
+                self.get_connection()
                 self.channel.start_consuming()
 
             except KeyboardInterrupt:
                 self.loop = False
-                break
 
             except SigTermError:
                 self.loop = False
-                break
 
             except (StreamLostError, AMQPConnectionError) as e:
                 # Log problem
                 logger.error("Connection lost, reconnecting", exc_info=e)
-                continue
 
             except Exception as e:
                 # Catch all other exceptions and log them as critical.
                 tb = traceback.format_exc()
                 self.log(tb, RK.LOG_CRITICAL, exc_info=e)
                 self.loop = False
-                break
 
-        self.channel.stop_consuming()
+            # if the loop reaches this point then the consuming has stopped
+            # If any threads are running then wait for all threads to complete
+            # (threads are not currently used)
+            # TODO: what happens if we try to sigterm?
+            for t in self.threads:
+                t.join()
 
-        # Wait for all threads to complete
-        # TODO: what happens if we try to sigterm?
-        for t in self.threads:
-            t.join()
-
-        self.connection.close()
+        if self.connection and self.connection.is_open:
+            if self.channel and self.channel.is_open:
+                self.channel.stop_consuming()
+            self.connection.close()

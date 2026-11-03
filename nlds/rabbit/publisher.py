@@ -2,9 +2,10 @@
 """
 publisher.py
 """
+
 __author__ = "Neil Massey and Jack Leland"
 __date__ = "30 Nov 2021"
-__copyright__ = "Copyright 2024 United Kingdom Research and Innovation"
+__copyright__ = "Copyright 2021-2026 United Kingdom Research and Innovation"
 __license__ = "BSD - see LICENSE file in top-level package directory"
 __contact__ = "neil.massey@stfc.ac.uk"
 
@@ -71,12 +72,17 @@ class RabbitMQPublisher:
         self.connection = None
         self.channel = None
         self.heartbeat = self.config.get(CFG.RABBIT_CONFIG_HEARTBEAT) or 300
-        self.timeout = self.config.get(CFG.RABBIT_CONFIG_TIMEOUT) or 1800  # 30 mins
+        self.timeout = self.config.get(CFG.RABBIT_CONFIG_TIMEOUT) or 1800
+        # 30 mins in s
         self.keepalive = None
 
-        # setup the logger
+        # setup the logger - setup_logging_fl only set for logging consumer
+        self.log_enabled = False
         if setup_logging_fl:
             self.setup_logging()
+        # create the logging buffer list of log messages
+        # each message will be a 3-tuple of (date, log level, message)
+        self.log_buffer = []
 
     @retry(RabbitRetryError, tries=-1, delay=1, backoff=2, max_delay=60, logger=logger)
     def get_connection(self):
@@ -127,7 +133,8 @@ class RabbitMQPublisher:
         """Go through list of exchanges from config file and declare each."""
         for exchange in self.exchanges:
             self.channel.exchange_declare(
-                exchange=exchange["name"], exchange_type=exchange["type"]
+                exchange=exchange["name"],
+                exchange_type=exchange["type"],
             )
 
     @staticmethod
@@ -137,9 +144,7 @@ class RabbitMQPublisher:
 
         """
         if "name" not in exchange or "type" not in exchange:
-            raise ValueError(
-                "Exchange in config file incomplete, cannot be declared."
-            )
+            raise ValueError("Exchange in config file incomplete, cannot be declared.")
 
     def _get_default_properties(self) -> pika.BasicProperties:
         return pika.BasicProperties(
@@ -168,7 +173,7 @@ class RabbitMQPublisher:
                 zlib.compress(byte_string, level=1)
             ).decode("ascii")
             logger.debug(
-                f"Compressing message, original size: {len(byte_string)}, "
+                f"Compressed message, original size: {len(byte_string)}, "
                 f" compressed size: {len(msg_dict_out[MSG.DATA])}"
             )
         else:
@@ -186,9 +191,9 @@ class RabbitMQPublisher:
         mandatory_fl: bool = True,
     ):
         """
-           Publish to the queue in the thread.
-           Opens its own connection and channel.
-           Replicates a very shortened and specialized part of "get_connection"
+        Publish to the queue in the thread.
+        Opens its own connection and channel.
+        Replicates a very shortened and specialized part of "get_connection"
         """
         try:
             # Start the rabbitMQ connection
@@ -203,16 +208,13 @@ class RabbitMQPublisher:
                     blocked_connection_timeout=self.timeout,
                 )
             )
-
             # Create a new channel with basic qos
             channel = connection.channel()
             channel.basic_qos(prefetch_count=1)
             channel.confirm_delivery()
             # add the exchanges from the config
             for e in self.exchanges:
-                channel.exchange_declare(
-                    exchange=e["name"], exchange_type=e["type"]
-                )
+                channel.exchange_declare(exchange=e["name"], exchange_type=e["type"])
             channel.basic_publish(
                 exchange=exchange,
                 routing_key=routing_key,
@@ -220,7 +222,10 @@ class RabbitMQPublisher:
                 body=body,
                 mandatory=mandatory_fl,
             )
-            channel.close()
+            if connection.is_open:
+                if channel.is_open:
+                    channel.close()
+                connection.close()
             logger.debug(f"Sending message with key: {routing_key}")
         except (AMQPConnectionError, ChannelWrongStateError) as e:
             logger.error(
@@ -301,10 +306,12 @@ class RabbitMQPublisher:
             logger.debug(f"{type(e).__name__}: {e}")
             # NOTE: don't reraise in this case, can cause an infinite loop as
             # the message will never be sent.
+            # is it the use case for a dead-letter queue?
             # raise RabbitRetryError(str(e), ampq_exception=e)
 
     def close_connection(self) -> None:
-        self.connection.close()
+        if self.connection and self.connection.is_open:
+            self.connection.close()
 
     _default_logging_conf = {
         CFG.LOGGING_CONFIG_ENABLE: True,
@@ -359,6 +366,8 @@ class RabbitMQPublisher:
         """
         # Do not configure logging if not enabled at the internal level (note
         # this can be overridden by consumer-specific config)
+        self.log_enabled = True
+
         if not enable:
             return
 
@@ -384,6 +393,7 @@ class RabbitMQPublisher:
         if log_level is None:
             log_level = global_logging_config[CFG.LOGGING_CONFIG_LEVEL]
         logger.setLevel(getattr(logging, log_level.upper()))
+        self.log_level_int = getattr(logging, log_level.upper())
 
         # Add formatting, using the kwarg as a priority
         if log_format is None:
@@ -486,7 +496,39 @@ class RabbitMQPublisher:
                             f"Failed to create log file for " f"{log_file}: {str(e)}"
                         )
 
-    def _log(self, log_message: str, log_level: str, target: str, **kwargs) -> None:
+    def send_logging(self):
+        """
+        New logging method sends one log message per message received by the consumer,
+        rather than lots of little messages throughout the processing.
+        This uses a buffer to store the log strings - a dictionary with a key-string
+        pair for each log level.
+        This function sends the log string to the logging consumer.
+        This functions should be called at the bottom of the callback function for each
+        consumer.
+        """
+        # Check format of given target
+        target = self.name
+        if not (target[:5] == RK.LOGGER_PREFIX):
+            target = f"{RK.LOGGER_PREFIX}{target}"
+
+        if len(self.log_buffer) > 0:
+            routing_key = ".".join([RK.ROOT, RK.LOG, RK.LOG_ALL])
+            # build the log_message
+            log_message = ""
+            for m in self.log_buffer:
+                log_message += " - ".join(m) + "\n"
+            message = self.create_log_message(log_message, target)
+            self.publish_message(routing_key, message)
+            # zero the logging buffers
+            self.log_buffer = []
+
+    def _log(
+        self,
+        log_message: str,
+        log_level: str,
+        target: str,
+        **kwargs,
+    ) -> None:
         """
         Catch-all function to log a message, both sending it to the local logger
         and sending a message to the exchange en-route to the logger
@@ -500,6 +542,7 @@ class RabbitMQPublisher:
         :param str target:          The intended target log on the logging
                                     microservice. Must be one of the configured
                                     logging handlers
+        :param bool remote:         Log with the remote logger via message
         :param kwargs:              Optional. Keyword args to pass into the call
                                     to logging.log()
         """
@@ -512,30 +555,38 @@ class RabbitMQPublisher:
             )
             return
 
-        # Check format of given target
-        if not (target[:5] == RK.LOGGER_PREFIX):
-            target = f"{RK.LOGGER_PREFIX}{target}"
-
         # First log message with local logger
         log_level_int = getattr(logging, log_level.upper())
         logger.log(log_level_int, log_message, **kwargs)
 
-        # Then assemble a message to send to the logging consumer
-        routing_key = ".".join([RK.ROOT, RK.LOG, log_level.lower()])
-        message = self.create_log_message(log_message, target)
-        self.publish_message(routing_key, message)
+        # then add to buffer for sending later - add the logger header of date and
+        # level
+        nowtime = datetime.now().isoformat(sep=" ", timespec="milliseconds")
+        self.log_buffer.append(
+            (
+                nowtime,
+                "nlds." + target,
+                log_level.upper(),
+                log_message,
+            )
+        )
 
     def log(
         self,
         log_message: str,
         log_level: str,
-        target: str = None,
         body_json: str = None,
         **kwargs,
     ) -> None:
-        # Attempt to log to publisher's name
-        if not target:
-            target = self.name
+        # don't log if disabled or log level is lower than self.log_level
+        if not self.log_enabled:
+            return
+        log_level_int = getattr(logging, log_level.upper())
+        if log_level_int < self.log_level_int:
+            return
+
+        # only ever use the class name as the target
+        target = self.name
         # convert string json to nice formatted json and append to message
         if body_json:
             log_message += f"\n{json.dumps(body_json, indent=4)}\n"
@@ -555,7 +606,7 @@ class RabbitMQPublisher:
                                 set to the name of a particular microservice,
                                 usually the one which instigated the log event
         :param str route:       Route that the message has taken. Optional, will
-                                be set to target if not specifed.
+                                be set to target if not specified.
 
         :return:    JSON encoded string in the proper format for message passing
 
