@@ -1074,6 +1074,7 @@ class CatalogConsumer(RMQC):
         for retrieval to object store cache."""
         # Parse the message body for required variables
         filelist = []  # empty filelist in case _parse_filelist fails
+        input_path_list = []  # empty filelist in case _parse_filelist fails
         try:
             filelist = self._parse_filelist(body)
             input_path_list = [PathDetails.from_dict(f) for f in filelist]
