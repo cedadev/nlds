@@ -98,8 +98,10 @@ class IndexerConsumer(StattingConsumer):
         # First change user and group so file permissions can be checked
         try:
             self.set_ids(body_json)
-        except (KeyError, ValueError):
-            msg = "Problem running set_ids, exiting _scan."
+        except (KeyError, ValueError) as e:
+            msg = (
+                f"Problem running set_ids, reason: {str(e)}, in: IndexConsumer::_scan."
+            )
             self.log(msg, RK.LOG_ERROR)
             self._fail_all(filelist, rk_parts, body_json, msg)
             return
