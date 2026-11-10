@@ -48,7 +48,10 @@ class PutTransferConsumer(BucketTransferConsumer):
         try:
             self.set_ids(body_json)
         except KeyError as e:
-            msg = "Problem running set_ids in _transfer_files"
+            msg = (
+                f"Problem running set_ids, reason: {str(e)}, in: "
+                "PutTransferConsumer::_transfer_files"
+            )
             self.log(msg, RK.LOG_ERROR)
             self._fail_all(self.filelist, self.rk_parts, self.body_json, msg)
             return
