@@ -166,10 +166,21 @@ class BucketMixin:
                 )
             statements.append(group_statement)
 
-    def _get_group_name_from_group_id(self, gid: int):
+    def _get_group_name_from_group_id(self, gid: int) -> str:
         """Get a group name from the group id using the linux database."""
         grp_details = grp.getgrgid(gid)
         return grp_details.gr_name
+
+    def _get_linux_group_name(self, group_name: str, prefix="gws_") -> str:
+        """Get a true Linux group name from the passed in group name.
+        The Linux group name may not be a straight match but should contain the passed
+        in group name."""
+        # get all the groups
+        groups = [g.gr_name for g in grp.getgrall()]
+        for g in groups:
+            if group_name in g and prefix in g:
+                return g
+        return ""
 
     # write the policy setting functions below
     def _set_access_policies(self, bucket_name: str, group: str | int):
@@ -184,11 +195,23 @@ class BucketMixin:
         if type(group) is int:
             # convert the integer group to a group name
             try:
-                group = self._get_group_name_from_group_id(group)
+                use_group = self._get_group_name_from_group_id(group)
             except KeyError:
                 raise BucketError(
                     message=f"Could not find the group name for group id {group}"
                 )
+        elif type(group) is str:
+            # the user has passed in a string group, which equals the name of the
+            # authenticated group.  This group may not be the same as the LDAP or Linux
+            # group that the bucket needs to grant access to
+            use_group = self._get_linux_group_name(group)
+            # default to the passed in group
+            if not use_group:
+                use_group = group
+        else:
+            raise BucketError(
+                message=(f"Unsupported group type for {group}, type is {type(group)}")
+            )
 
         # get the section from the config
         try:
@@ -209,7 +232,7 @@ class BucketMixin:
         # edit the user policy
         self._edit_nlds_user_policy()
         # edit the group policy
-        self._edit_group_policy(group)
+        self._edit_group_policy(use_group)
 
         # set the bucket policy
         try:
